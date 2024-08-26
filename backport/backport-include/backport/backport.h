@@ -5,6 +5,7 @@
 #include <backport/autoconf.h>
 #endif
 #include <linux/kconfig.h>
+#include <backport/backport_auto.h>
 
 #ifndef __ASSEMBLY__
 #define LINUX_BACKPORT(__sym) backport_ ##__sym

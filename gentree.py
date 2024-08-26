@@ -43,7 +43,7 @@ class Bp_Identity(object):
         self.full_prefix = kconfig_prefix + project_prefix
         self.full_prefix_resafe = re.escape(self.full_prefix)
         self.project_dir = project_dir
-        self.target_dir = target_dir
+        self.target_dir = target_dir+"/src"
         self.target_dir_name = target_dir_name
         self.kconfig_source_var = kconfig_source_var
         if self.kconfig_source_var:
@@ -833,7 +833,6 @@ def process(kerneldir, copy_list_file, git_revision=None,
         'Kconfig.package.hacks',
         'scripts/',
         '.blacklist.map',
-        '.gitignore',
         'Makefile.build'] ]
     backport_package_files += [
             ('Kconfig.package', 'Kconfig'),
@@ -842,6 +841,23 @@ def process(kerneldir, copy_list_file, git_revision=None,
         'Kconfig.sources',
         'compat/',
         'backport-include/',
+        'docs/',
+    ]]
+
+    gitignore_dir = [(x, x) for x in [
+        '.gitignore'
+    ]]
+
+    autotools_dir = [(x, x) for x in [
+        'AUTHORS',
+        'ChangeLog',
+        'configure.ac',
+        'COPYING',
+        'INSTALL',
+        'm4/',
+        'Makefile.am',
+        'NEWS',
+        'README',
     ]]
 
     if not bpid.integrate:
@@ -861,7 +877,7 @@ def process(kerneldir, copy_list_file, git_revision=None,
         return ret
 
     # validate output directory
-    check_output_dir(bpid.target_dir, args.clean)
+    check_output_dir(bpid.project_dir, args.clean)
 
     if not args.git_revision:
         logwrite('Copy original source files ...')
@@ -872,6 +888,14 @@ def process(kerneldir, copy_list_file, git_revision=None,
     copy_files(source_dir, [('README', 'README')], bpid.target_dir)
 
     git_debug_init(args)
+
+    # copies autotools folder to target directory
+    copy_files(os.path.join(source_dir, 'autotools'), autotools_dir, bpid.project_dir)
+
+    git_debug_snapshot(args, 'Add Autotools Directory')
+
+    # Copy .gitignore file
+    copy_files(os.path.join(source_dir, 'backport'), gitignore_dir, bpid.project_dir)
 
     if not args.git_revision:
         copy_files(args.kerneldir, copy_list, bpid.target_dir)

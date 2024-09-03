@@ -1,0 +1,73 @@
+From 5f1bcd992ebe5e35394520768be0ae84c3eb2765 Mon Sep 17 00:00:00 2001
+From: Akshata Jahagirdar <akshata.jahagirdar@intel.com>
+Date: Wed, 17 Jul 2024 21:10:02 +0000
+Subject: [PATCH 08/76] drm/xe/migrate: Handle clear ccs logic for xe2 dgfx
+
+For Xe2 dGPU, we clear the bo by modifying the VRAM using an
+uncompressed pat index which then indirectly updates the
+compression status as uncompressed i.e zeroed CCS.
+So xe_migrate_clear() should be updated for BMG to not
+emit CCS surf copy commands.
+
+v2: Moved xe_device_needs_ccs_emit() to xe_migrate.c and changed
+name to xe_migrate_needs_ccs_emit() since its very specific to
+migration.(Matt)
+
+Signed-off-by: Akshata Jahagirdar <akshata.jahagirdar@intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/8dd869dd8dda5e17ace28c04f1a48675f5540874.1721250309.git.akshata.jahagirdar@intel.com
+(cherry picked from commit 108c972a11c5f6e37be58207460d9bcac06698db)
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
+---
+ drivers/gpu/drm/xe/xe_migrate.c | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index c9f5673353ee..c1b8dea19e31 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -348,6 +348,11 @@ static u32 xe_migrate_usm_logical_mask(struct xe_gt *gt)
+ 	return logical_mask;
+ }
+ 
++static bool xe_migrate_needs_ccs_emit(struct xe_device *xe)
++{
++	return xe_device_has_flat_ccs(xe) && !(GRAPHICS_VER(xe) >= 20 && IS_DGFX(xe));
++}
++
+ /**
+  * xe_migrate_init() - Initialize a migrate context
+  * @tile: Back-pointer to the tile we're initializing for.
+@@ -421,7 +426,7 @@ struct xe_migrate *xe_migrate_init(struct xe_tile *tile)
+ 		return ERR_PTR(err);
+ 
+ 	if (IS_DGFX(xe)) {
+-		if (xe_device_has_flat_ccs(xe))
++		if (xe_migrate_needs_ccs_emit(xe))
+ 			/* min chunk size corresponds to 4K of CCS Metadata */
+ 			m->min_chunk_size = SZ_4K * SZ_64K /
+ 				xe_device_ccs_bytes(xe, SZ_64K);
+@@ -1035,7 +1040,7 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
+ 					clear_system_ccs ? 0 : emit_clear_cmd_len(gt), 0,
+ 					avail_pts);
+ 
+-		if (xe_device_has_flat_ccs(xe))
++		if (xe_migrate_needs_ccs_emit(xe))
+ 			batch_size += EMIT_COPY_CCS_DW;
+ 
+ 		/* Clear commands */
+@@ -1063,7 +1068,7 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
+ 		if (!clear_system_ccs)
+ 			emit_clear(gt, bb, clear_L0_ofs, clear_L0, XE_PAGE_SIZE, clear_vram);
+ 
+-		if (xe_device_has_flat_ccs(xe)) {
++		if (xe_migrate_needs_ccs_emit(xe)) {
+ 			emit_copy_ccs(gt, bb, clear_L0_ofs, true,
+ 				      m->cleared_mem_ofs, false, clear_L0);
+ 			flush_flags = MI_FLUSH_DW_CCS;
+-- 
+2.46.0
+

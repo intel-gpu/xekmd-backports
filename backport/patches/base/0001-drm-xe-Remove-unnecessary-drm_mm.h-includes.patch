@@ -1,0 +1,60 @@
+From 5bef2fa9985cdacfe4d7341b3cd6a2fce4b4bb70 Mon Sep 17 00:00:00 2001
+From: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Date: Wed, 21 Aug 2024 15:38:33 -0400
+Subject: [PATCH 58/76] drm/xe: Remove unnecessary drm_mm.h includes
+
+These includes are no longer necessary, and where appropriate
+are replaced by the linux/types.h one.
+
+Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/20240821193842.352557-3-rodrigo.vivi@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry picked from commit df99acc7ba1be9f111debdb75e00539fed8ad21a)
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
+---
+ drivers/gpu/drm/xe/xe_migrate.h        | 2 +-
+ drivers/gpu/drm/xe/xe_res_cursor.h     | 1 -
+ drivers/gpu/drm/xe/xe_ttm_stolen_mgr.c | 1 -
+ 3 files changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.h b/drivers/gpu/drm/xe/xe_migrate.h
+index 951f19318ea4..438d8f2890be 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.h
++++ b/drivers/gpu/drm/xe/xe_migrate.h
+@@ -6,7 +6,7 @@
+ #ifndef _XE_MIGRATE_
+ #define _XE_MIGRATE_
+ 
+-#include <drm/drm_mm.h>
++#include <linux/types.h>
+ 
+ struct dma_fence;
+ struct iosys_map;
+diff --git a/drivers/gpu/drm/xe/xe_res_cursor.h b/drivers/gpu/drm/xe/xe_res_cursor.h
+index 655af89b31a9..dca374b6521c 100644
+--- a/drivers/gpu/drm/xe/xe_res_cursor.h
++++ b/drivers/gpu/drm/xe/xe_res_cursor.h
+@@ -26,7 +26,6 @@
+ 
+ #include <linux/scatterlist.h>
+ 
+-#include <drm/drm_mm.h>
+ #include <drm/ttm/ttm_placement.h>
+ #include <drm/ttm/ttm_range_manager.h>
+ #include <drm/ttm/ttm_resource.h>
+diff --git a/drivers/gpu/drm/xe/xe_ttm_stolen_mgr.c b/drivers/gpu/drm/xe/xe_ttm_stolen_mgr.c
+index f46fd2df84de..f7113cf6109d 100644
+--- a/drivers/gpu/drm/xe/xe_ttm_stolen_mgr.c
++++ b/drivers/gpu/drm/xe/xe_ttm_stolen_mgr.c
+@@ -5,7 +5,6 @@
+  */
+ 
+ #include <drm/drm_managed.h>
+-#include <drm/drm_mm.h>
+ 
+ #include <drm/ttm/ttm_device.h>
+ #include <drm/ttm/ttm_placement.h>
+-- 
+2.46.0
+

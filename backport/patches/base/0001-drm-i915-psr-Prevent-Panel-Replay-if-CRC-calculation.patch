@@ -1,0 +1,43 @@
+From 636dcbe5784da14bf78df92096605fc52383b1d2 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jouni=20H=C3=B6gander?= <jouni.hogander@intel.com>
+Date: Mon, 19 Aug 2024 12:25:49 +0300
+Subject: [PATCH 41/76] drm/i915/psr: Prevent Panel Replay if CRC calculation
+ is enabled
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Similarly as for PSR2 CRC calculation seems to timeout when Panel Replay is
+enabled. Fix this by falling back to PSR if CRC calculation is enabled.
+
+Closes: https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/2266
+Signed-off-by: Jouni Högander <jouni.hogander@intel.com>
+Reviewed-by: Mika Kahola <mika.kahola@intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/20240819092549.1298233-1-jouni.hogander@intel.com
+(cherry picked from commit a8efd8ce280996fe29f2564f705e96e18da3fa62)
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
+---
+ drivers/gpu/drm/i915/display/intel_psr.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/gpu/drm/i915/display/intel_psr.c b/drivers/gpu/drm/i915/display/intel_psr.c
+index 9cb1cdaaeefa..572dcdf77453 100644
+--- a/drivers/gpu/drm/i915/display/intel_psr.c
++++ b/drivers/gpu/drm/i915/display/intel_psr.c
+@@ -1586,6 +1586,12 @@ _panel_replay_compute_config(struct intel_dp *intel_dp,
+ 	if (!alpm_config_valid(intel_dp, crtc_state, true))
+ 		return false;
+ 
++	if (crtc_state->crc_enabled) {
++		drm_dbg_kms(&i915->drm,
++			    "Panel Replay not enabled because it would inhibit pipe CRC calculation\n");
++		return false;
++	}
++
+ 	return true;
+ }
+ 
+-- 
+2.46.0
+

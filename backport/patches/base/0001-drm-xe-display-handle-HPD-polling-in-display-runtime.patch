@@ -1,0 +1,135 @@
+From 409ddf7bafd8a2c59f2dff05199aee5fe3f4611c Mon Sep 17 00:00:00 2001
+From: Vinod Govindapillai <vinod.govindapillai@intel.com>
+Date: Fri, 23 Aug 2024 14:21:48 +0300
+Subject: [PATCH 75/76] drm/xe/display: handle HPD polling in display runtime
+ suspend/resume
+
+In XE, display runtime suspend / resume routines are called only
+if d3cold is allowed. This makes the driver unable to detect any
+HPDs once the device goes into runtime suspend state in platforms
+like LNL. Update the display runtime suspend / resume routines
+to include HPD polling regardless of d3cold status.
+
+While xe_display_pm_suspend/resume() performs steps during runtime
+suspend/resume that shouldn't happen, like suspending MST and they
+are missing other steps like enabling DC9, this patchset is meant
+to keep the current behavior wrt. these, leaving the corresponding
+updates for a follow-up
+
+v2: have a separate function for display runtime s/r (Rodrigo)
+
+v3: better streamlining of system s/r and runtime s/r calls (Imre)
+
+v4: rebased
+
+Reviewed-by: Arun R Murthy <arun.r.murthy@intel.com>
+Signed-off-by: Vinod Govindapillai <vinod.govindapillai@intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/20240823112148.327015-4-vinod.govindapillai@intel.com
+(cherry picked from commit 66a0f6b9f5fc205272035b6ffa4830be51e3f787)
+[ Fix silent conflict due to s/enable_display/probe_display/ ]
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
+---
+ drivers/gpu/drm/xe/display/xe_display.c | 23 +++++++++++++++++++++++
+ drivers/gpu/drm/xe/display/xe_display.h |  4 ++++
+ drivers/gpu/drm/xe/xe_pm.c              |  8 +++++---
+ 3 files changed, 32 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/display/xe_display.c b/drivers/gpu/drm/xe/display/xe_display.c
+index 1ab94fe7bfb3..2a9d247d31c5 100644
+--- a/drivers/gpu/drm/xe/display/xe_display.c
++++ b/drivers/gpu/drm/xe/display/xe_display.c
+@@ -304,6 +304,18 @@ static void xe_display_flush_cleanup_work(struct xe_device *xe)
+ 	}
+ }
+ 
++/* TODO: System and runtime suspend/resume sequences will be sanitized as a follow-up. */
++void xe_display_pm_runtime_suspend(struct xe_device *xe)
++{
++	if (!xe->info.enable_display)
++		return;
++
++	if (xe->d3cold.allowed)
++		xe_display_pm_suspend(xe, true);
++
++	intel_hpd_poll_enable(xe);
++}
++
+ void xe_display_pm_suspend(struct xe_device *xe, bool runtime)
+ {
+ 	bool s2idle = suspend_to_idle();
+@@ -349,6 +361,17 @@ void xe_display_pm_suspend_late(struct xe_device *xe)
+ 	intel_display_power_suspend_late(xe);
+ }
+ 
++void xe_display_pm_runtime_resume(struct xe_device *xe)
++{
++	if (!xe->info.enable_display)
++		return;
++
++	intel_hpd_poll_disable(xe);
++
++	if (xe->d3cold.allowed)
++		xe_display_pm_resume(xe, true);
++}
++
+ void xe_display_pm_resume_early(struct xe_device *xe)
+ {
+ 	if (!xe->info.enable_display)
+diff --git a/drivers/gpu/drm/xe/display/xe_display.h b/drivers/gpu/drm/xe/display/xe_display.h
+index 000fb5799df5..53d727fd792b 100644
+--- a/drivers/gpu/drm/xe/display/xe_display.h
++++ b/drivers/gpu/drm/xe/display/xe_display.h
+@@ -38,6 +38,8 @@ void xe_display_pm_suspend(struct xe_device *xe, bool runtime);
+ void xe_display_pm_suspend_late(struct xe_device *xe);
+ void xe_display_pm_resume_early(struct xe_device *xe);
+ void xe_display_pm_resume(struct xe_device *xe, bool runtime);
++void xe_display_pm_runtime_suspend(struct xe_device *xe);
++void xe_display_pm_runtime_resume(struct xe_device *xe);
+ 
+ #else
+ 
+@@ -67,6 +69,8 @@ static inline void xe_display_pm_suspend(struct xe_device *xe, bool runtime) {}
+ static inline void xe_display_pm_suspend_late(struct xe_device *xe) {}
+ static inline void xe_display_pm_resume_early(struct xe_device *xe) {}
+ static inline void xe_display_pm_resume(struct xe_device *xe, bool runtime) {}
++static inline void xe_display_pm_runtime_suspend(struct xe_device *xe) {}
++static inline void xe_display_pm_runtime_resume(struct xe_device *xe) {}
+ 
+ #endif /* CONFIG_DRM_XE_DISPLAY */
+ #endif /* _XE_DISPLAY_H_ */
+diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
+index 9a3f618d22dc..0f6f0526efbc 100644
+--- a/drivers/gpu/drm/xe/xe_pm.c
++++ b/drivers/gpu/drm/xe/xe_pm.c
+@@ -362,9 +362,9 @@ int xe_pm_runtime_suspend(struct xe_device *xe)
+ 		xe_bo_runtime_pm_release_mmap_offset(bo);
+ 	mutex_unlock(&xe->mem_access.vram_userfault.lock);
+ 
+-	if (xe->d3cold.allowed) {
+-		xe_display_pm_suspend(xe, true);
++	xe_display_pm_runtime_suspend(xe);
+ 
++	if (xe->d3cold.allowed) {
+ 		err = xe_bo_evict_all(xe);
+ 		if (err)
+ 			goto out;
+@@ -426,12 +426,14 @@ int xe_pm_runtime_resume(struct xe_device *xe)
+ 	for_each_gt(gt, xe, id)
+ 		xe_gt_resume(gt);
+ 
++	xe_display_pm_runtime_resume(xe);
++
+ 	if (xe->d3cold.allowed) {
+-		xe_display_pm_resume(xe, true);
+ 		err = xe_bo_restore_user(xe);
+ 		if (err)
+ 			goto out;
+ 	}
++
+ out:
+ 	lock_map_release(&xe_pm_runtime_lockdep_map);
+ 	xe_pm_write_callback_task(xe, NULL);
+-- 
+2.46.0
+

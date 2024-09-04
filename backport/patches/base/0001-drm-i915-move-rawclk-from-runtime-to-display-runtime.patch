@@ -1,8 +1,7 @@
-From d436b9e66df2a08ab69c9764aab29a0bf48d20ef Mon Sep 17 00:00:00 2001
+From da29bcf292bcadd109e7349d1a1c761a72e1473b Mon Sep 17 00:00:00 2001
 From: Jani Nikula <jani.nikula@intel.com>
 Date: Tue, 20 Aug 2024 12:07:01 +0300
-Subject: [PATCH 39/76] drm/i915: move rawclk from runtime to display runtime
- info
+Subject: drm/i915: move rawclk from runtime to display runtime info
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -18,7 +17,7 @@ Cc: Ville Syrjälä <ville.syrjala@linux.intel.com>
 Reviewed-by: Maarten Lankhorst <maarten.lankhorst@linux.intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/39330d09c48509e013f01fd0247a9b7c291173e2.1724144570.git.jani.nikula@intel.com
 Signed-off-by: Jani Nikula <jani.nikula@intel.com>
-(cherry picked from commit a9556637a23311dea96f27fa3c3e5bfba0b38ae4)
+(cherry picked from commit a9556637a23311dea96f27fa3c3e5bfba0b38ae4 linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---
@@ -169,7 +168,7 @@ index 0918eb218fc8..68141af4da54 100644
  	enum port port = dp_to_dig_port(intel_dp)->base.port;
  	const struct edp_power_seq *seq = &intel_dp->pps.pps_delays;
 diff --git a/drivers/gpu/drm/i915/intel_device_info.c b/drivers/gpu/drm/i915/intel_device_info.c
-index d26de37719a7..91acbf99574c 100644
+index eede5417cb3f..01a650253050 100644
 --- a/drivers/gpu/drm/i915/intel_device_info.c
 +++ b/drivers/gpu/drm/i915/intel_device_info.c
 @@ -124,7 +124,6 @@ void intel_device_info_print(const struct intel_device_info *info,
@@ -180,7 +179,7 @@ index d26de37719a7..91acbf99574c 100644
  }
  
  #define ID(id) (id)
-@@ -370,10 +369,6 @@ void intel_device_info_runtime_init(struct drm_i915_private *dev_priv)
+@@ -377,10 +376,6 @@ void intel_device_info_runtime_init(struct drm_i915_private *dev_priv)
  			 "Disabling ppGTT for VT-d support\n");
  		runtime->ppgtt_type = INTEL_PPGTT_NONE;
  	}
@@ -192,10 +191,10 @@ index d26de37719a7..91acbf99574c 100644
  
  /*
 diff --git a/drivers/gpu/drm/i915/intel_device_info.h b/drivers/gpu/drm/i915/intel_device_info.h
-index d1a2abc7e513..fb8a08623eb0 100644
+index df73ef94615d..643ff1bf74ee 100644
 --- a/drivers/gpu/drm/i915/intel_device_info.h
 +++ b/drivers/gpu/drm/i915/intel_device_info.h
-@@ -204,8 +204,6 @@ struct intel_runtime_info {
+@@ -207,8 +207,6 @@ struct intel_runtime_info {
  
  	u16 device_id;
  

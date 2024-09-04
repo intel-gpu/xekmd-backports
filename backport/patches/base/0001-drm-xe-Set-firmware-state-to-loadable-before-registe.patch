@@ -1,8 +1,7 @@
-From 1811f4316b75c9259dfc04caae10ac007a2bb44d Mon Sep 17 00:00:00 2001
+From ce3b8378d8ea5d1d24e612ac32649a6da58a29f3 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Tue, 20 Aug 2024 10:29:54 -0700
-Subject: [PATCH 69/76] drm/xe: Set firmware state to loadable before
- registering guc_fini_hw
+Subject: drm/xe: Set firmware state to loadable before registering guc_fini_hw
 
 The guc_fini_hw registered calls __xe_uc_fw_status which is only
 expected to be called after initializing fw state. Move this before
@@ -11,7 +10,7 @@ registering guc_fini_hw.
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240820172958.1095143-3-matthew.brost@intel.com
-(cherry picked from commit b5de6a5ced074910b8fe57d3b0ab7f8843f85a3a)
+(cherry picked from commit b5de6a5ced074910b8fe57d3b0ab7f8843f85a3a linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

@@ -1,7 +1,7 @@
-From 7ff7b0d1c3b86dcc78e87f1a314c53de115b9fd7 Mon Sep 17 00:00:00 2001
+From 1ecc435398949305ea1e6157c12ae15333db20f8 Mon Sep 17 00:00:00 2001
 From: Lucas De Marchi <lucas.demarchi@intel.com>
 Date: Mon, 8 Jul 2024 14:29:06 -0700
-Subject: [PATCH 05/76] drm/xe: Generate oob before compiling anything
+Subject: drm/xe: Generate oob before compiling anything
 
 Instead of keep adding more dependencies as WAs are needed in different
 places of the driver, just add a rule with all the objects so the code
@@ -14,7 +14,7 @@ v2: Prefix $(obj) when declaring dependency
 Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240708213041.1734028-1-lucas.demarchi@intel.com
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-(cherry picked from commit ea74bf9ccba9ae80fc0766c07c4abaef927e9e63)
+(cherry picked from commit ea74bf9ccba9ae80fc0766c07c4abaef927e9e63 linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

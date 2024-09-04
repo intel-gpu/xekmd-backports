@@ -1,8 +1,7 @@
-From 5d695046f63e0d227117ad8b2d997d04361252bc Mon Sep 17 00:00:00 2001
+From 0fd866a4878cac4029a4746ab6ea558e437fb22f Mon Sep 17 00:00:00 2001
 From: Mitul Golani <mitulkumar.ajitkumar.golani@intel.com>
 Date: Mon, 8 Jul 2024 14:02:46 +0530
-Subject: [PATCH 06/76] drm/i915/display: WA for Re-initialize dispcnlunitt1
- xosc clock
+Subject: drm/i915/display: WA for Re-initialize dispcnlunitt1 xosc clock
 
 The dispcnlunit1_cp_xosc_clk should be de-asserted in display off
 and only asserted in display on. As part of this workaround, Display
@@ -25,7 +24,7 @@ Reviewed-by: Nemesa Garg <nemesa.garg@intel.com>
 Reviewed-by: Suraj Kandpal <suraj.kandpal@intel.com>
 Signed-off-by: Suraj Kandpal <suraj.kandpal@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240708083247.2611258-1-mitulkumar.ajitkumar.golani@intel.com
-(cherry picked from commit 7fbad577c82c5dd6db7217855c26f51554e53d85)
+(cherry picked from commit 7fbad577c82c5dd6db7217855c26f51554e53d85 linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

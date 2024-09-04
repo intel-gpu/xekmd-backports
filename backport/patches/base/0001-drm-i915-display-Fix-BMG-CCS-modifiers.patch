@@ -1,0 +1,35 @@
+From 18c1eb503d04b3b558ef1133b9e988b70f1f4cf4 Mon Sep 17 00:00:00 2001
+From: Juha-Pekka Heikkila <juhapekka.heikkila@gmail.com>
+Date: Mon, 2 Sep 2024 10:40:21 +0300
+Subject: drm/i915/display: Fix BMG CCS modifiers
+
+Let I915_FORMAT_MOD_4_TILED_BMG_CCS show up as supported modifier
+
+Fixes: 97c6efb36497 ("drm/i915/display: Plane capability for 64k phys alignment")
+Signed-off-by: Juha-Pekka Heikkila <juhapekka.heikkila@gmail.com>
+Reviewed-by: Maarten Lankhorst <maarten.lankhorst@linux.intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/20240902074021.459480-1-juhapekka.heikkila@gmail.com
+Signed-off-by: Maarten Lankhorst,,, <maarten.lankhorst@linux.intel.com>
+(cherry picked from commit c4d37c54c3739530f8585ccf064fb712913f8375 drm-tip)
+Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
+---
+ drivers/gpu/drm/i915/display/skl_universal_plane.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/gpu/drm/i915/display/skl_universal_plane.c b/drivers/gpu/drm/i915/display/skl_universal_plane.c
+index 9452cad41d07..17d4c880ecc4 100644
+--- a/drivers/gpu/drm/i915/display/skl_universal_plane.c
++++ b/drivers/gpu/drm/i915/display/skl_universal_plane.c
+@@ -2453,6 +2453,9 @@ static u8 skl_get_plane_caps(struct drm_i915_private *i915,
+ 	if (gen12_plane_has_mc_ccs(i915, plane_id))
+ 		caps |= INTEL_PLANE_CAP_CCS_MC;
+ 
++	if (DISPLAY_VER(i915) >= 14 && IS_DGFX(i915))
++		caps |= INTEL_PLANE_CAP_NEED64K_PHYS;
++
+ 	return caps;
+ }
+ 
+-- 
+2.46.0
+

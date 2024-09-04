@@ -1,8 +1,7 @@
-From 56a06a2fef58d5eec5b07dbb7751603327279722 Mon Sep 17 00:00:00 2001
+From 9f2313c540765cae17f2ce9622ee80135faf38eb Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Tue, 20 Aug 2024 10:29:58 -0700
-Subject: [PATCH 72/76] drm/xe: Update xe_sa to use
- xe_managed_bo_create_pin_map
+Subject: drm/xe: Update xe_sa to use xe_managed_bo_create_pin_map
 
 Preferred way to create kernel BOs is xe_managed_bo_create_pin_map, use
 it.
@@ -10,7 +9,7 @@ it.
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240820172958.1095143-7-matthew.brost@intel.com
-(cherry picked from commit 501d94389310bb282915e730386d1150b13ae321)
+(cherry picked from commit 501d94389310bb282915e730386d1150b13ae321 linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

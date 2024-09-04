@@ -1,8 +1,7 @@
-From 1d6aebb8064af73dfb851ff70d0bea3d7c61a154 Mon Sep 17 00:00:00 2001
+From 620684393a4dccc4523062ebdaedeef494f9685c Mon Sep 17 00:00:00 2001
 From: Mitul Golani <mitulkumar.ajitkumar.golani@intel.com>
 Date: Tue, 30 Jul 2024 09:39:40 +0530
-Subject: [PATCH 23/76] drm/i915/display/dp: Compute AS SDP when vrr is also
- enabled
+Subject: drm/i915/display/dp: Compute AS SDP when vrr is also enabled
 
 AS SDP should be computed when VRR timing generator is also enabled.
 Correct the compute condition to compute params of Adaptive sync SDP
@@ -22,7 +21,7 @@ Reviewed-by: Ankit Nautiyal <ankit.k.nautiyal@intel.com>
 Signed-off-by: Ankit Nautiyal <ankit.k.nautiyal@intel.com>
 (added prefix drm in subject)
 Link: https://patchwork.freedesktop.org/patch/msgid/20240730040941.396862-1-mitulkumar.ajitkumar.golani@intel.com
-(cherry picked from commit eb53e5b933b9ff315087305b3dc931af3067d19c)
+(cherry picked from commit eb53e5b933b9ff315087305b3dc931af3067d19c linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---
@@ -30,7 +29,7 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/i915/display/intel_dp.c b/drivers/gpu/drm/i915/display/intel_dp.c
-index 2ce173d841b1..d005e867488a 100644
+index 5e0afce09dd9..2296ce4eabc0 100644
 --- a/drivers/gpu/drm/i915/display/intel_dp.c
 +++ b/drivers/gpu/drm/i915/display/intel_dp.c
 @@ -2617,7 +2617,7 @@ static void intel_dp_compute_as_sdp(struct intel_dp *intel_dp,

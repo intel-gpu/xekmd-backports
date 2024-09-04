@@ -1,7 +1,7 @@
-From 2bc8b468659b77edc22cfbf736997ca53fc65065 Mon Sep 17 00:00:00 2001
+From a8f6267db02e52a79ce05250b613706a8c4016a5 Mon Sep 17 00:00:00 2001
 From: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Date: Wed, 21 Aug 2024 15:38:35 -0400
-Subject: [PATCH 60/76] drm/xe: Encapsulate drm_mm_node inside xe_ggtt_node
+Subject: drm/xe: Encapsulate drm_mm_node inside xe_ggtt_node
 
 The xe_ggtt component uses drm_mm to manage the GGTT.
 The drm_mm_node is just a node inside drm_mm, but in Xe we use that
@@ -18,7 +18,7 @@ v2: Fix includes and typos (Michal and Brost)
 Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240821193842.352557-5-rodrigo.vivi@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
-(cherry picked from commit 6062ea9398d3ec09c521774f9d81f604d1a85fbd)
+(cherry picked from commit 6062ea9398d3ec09c521774f9d81f604d1a85fbd linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

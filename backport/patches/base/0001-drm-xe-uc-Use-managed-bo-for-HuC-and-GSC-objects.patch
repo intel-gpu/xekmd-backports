@@ -1,7 +1,7 @@
-From 80355856e76684732c575d8e891edf91fdf72f5d Mon Sep 17 00:00:00 2001
+From cb2d0a4186eacccdec823c39be2b8d15ca0790bf Mon Sep 17 00:00:00 2001
 From: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Date: Thu, 15 Aug 2024 16:05:39 -0700
-Subject: [PATCH 36/76] drm/xe/uc: Use managed bo for HuC and GSC objects
+Subject: drm/xe/uc: Use managed bo for HuC and GSC objects
 
 Drmm actions are not the right ones to clean up BOs and we should use
 devm instead. However, we can also instead just allocate the objects
@@ -19,7 +19,7 @@ Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Matthew Auld <matthew.auld@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240815230541.3828206-1-lucas.demarchi@intel.com
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-(cherry picked from commit 2e5d47fe7839298fa096970e184aac9bf82c3bd3)
+(cherry picked from commit 2e5d47fe7839298fa096970e184aac9bf82c3bd3 linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

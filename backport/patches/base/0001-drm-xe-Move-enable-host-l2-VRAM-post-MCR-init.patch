@@ -1,7 +1,7 @@
-From fa2f4912ddcd8658f74b15987cc078681e5ca1ff Mon Sep 17 00:00:00 2001
+From a89b26af2d8174eb6fdfde3497c358e4a53e4446 Mon Sep 17 00:00:00 2001
 From: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Date: Wed, 14 Aug 2024 15:26:12 +0530
-Subject: [PATCH 31/76] drm/xe: Move enable host l2 VRAM post MCR init
+Subject: drm/xe: Move enable host l2 VRAM post MCR init
 
 xe_gt_enable_host_l2_vram() is reading the XE2_GAMREQSTRM_CTRL register
 that is currently missing the MCR annotation. However, just adding the
@@ -26,7 +26,7 @@ Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
 Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240814095614.909774-2-tejas.upadhyay@intel.com
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-(cherry picked from commit ab0d6ef864c5fa820e894ee1a07f861e63851664)
+(cherry picked from commit ab0d6ef864c5fa820e894ee1a07f861e63851664 linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

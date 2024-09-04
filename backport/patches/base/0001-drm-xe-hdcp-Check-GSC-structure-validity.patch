@@ -1,7 +1,7 @@
-From 79aa0aa483b60e988d8f2314a3e9f943ed49dcbc Mon Sep 17 00:00:00 2001
+From 8632ac39ff9d4e803a2e2c8b88cf2ecffe86f257 Mon Sep 17 00:00:00 2001
 From: Suraj Kandpal <suraj.kandpal@intel.com>
 Date: Mon, 22 Jul 2024 12:14:51 +0530
-Subject: [PATCH 17/76] drm/xe/hdcp: Check GSC structure validity
+Subject: drm/xe/hdcp: Check GSC structure validity
 
 Sometimes xe_gsc is not initialized when checked at HDCP capability
 check. Add gsc structure check to avoid null pointer error.
@@ -9,7 +9,7 @@ check. Add gsc structure check to avoid null pointer error.
 Signed-off-by: Suraj Kandpal <suraj.kandpal@intel.com>
 Reviewed-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240722064451.3610512-4-suraj.kandpal@intel.com
-(cherry picked from commit b4224f6bae3801d589f815672ec62800a1501b0d)
+(cherry picked from commit b4224f6bae3801d589f815672ec62800a1501b0d linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

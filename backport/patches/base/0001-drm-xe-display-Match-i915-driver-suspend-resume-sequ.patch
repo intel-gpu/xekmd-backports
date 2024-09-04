@@ -1,8 +1,7 @@
-From d07aeee23b413d35661433a1bc392f9076d91ead Mon Sep 17 00:00:00 2001
+From af3b42c4e44a932df3ec045d4057a4ac4d4e0ac2 Mon Sep 17 00:00:00 2001
 From: Maarten Lankhorst <maarten.lankhorst@linux.intel.com>
 Date: Tue, 6 Aug 2024 12:50:43 +0200
-Subject: [PATCH 38/76] drm/xe/display: Match i915 driver suspend/resume
- sequences better
+Subject: drm/xe/display: Match i915 driver suspend/resume sequences better
 
 Suspend fbdev sooner, and disable user access before suspending to
 prevent some races. I've noticed this when comparing xe suspend to
@@ -23,7 +22,7 @@ Cc: Imre Deak <imre.deak@intel.com>
 Reviewed-by: Uma Shankar <uma.shankar@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240806105044.596842-2-maarten.lankhorst@linux.intel.com
 Signed-off-by: Maarten Lankhorst,,, <maarten.lankhorst@linux.intel.com>
-(cherry picked from commit 492be2a070f023c66aaef6ebd664567fda28c2a6)
+(cherry picked from commit 492be2a070f023c66aaef6ebd664567fda28c2a6 linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

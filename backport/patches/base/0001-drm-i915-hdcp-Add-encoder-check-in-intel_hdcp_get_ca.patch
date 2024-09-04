@@ -1,8 +1,7 @@
-From b961ec48c70ed64a062f0b7d9944d745ea295731 Mon Sep 17 00:00:00 2001
+From 2db3d9a7dfd6ad81fe4f354312c1a25e2c397c85 Mon Sep 17 00:00:00 2001
 From: Suraj Kandpal <suraj.kandpal@intel.com>
 Date: Mon, 22 Jul 2024 12:14:49 +0530
-Subject: [PATCH 15/76] drm/i915/hdcp: Add encoder check in
- intel_hdcp_get_capability
+Subject: drm/i915/hdcp: Add encoder check in intel_hdcp_get_capability
 
 Sometimes during hotplug scenario or suspend/resume scenario encoder is
 not always initialized when intel_hdcp_get_capability add
@@ -11,7 +10,7 @@ a check to avoid kernel null pointer dereference.
 Signed-off-by: Suraj Kandpal <suraj.kandpal@intel.com>
 Reviewed-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240722064451.3610512-2-suraj.kandpal@intel.com
-(cherry picked from commit 31b42af516afa1e184d1a9f9dd4096c54044269a)
+(cherry picked from commit 31b42af516afa1e184d1a9f9dd4096c54044269a linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

@@ -1,7 +1,7 @@
-From 5f1bcd992ebe5e35394520768be0ae84c3eb2765 Mon Sep 17 00:00:00 2001
+From a2c8a971f5305f16c613eeda0e22c8565705f623 Mon Sep 17 00:00:00 2001
 From: Akshata Jahagirdar <akshata.jahagirdar@intel.com>
 Date: Wed, 17 Jul 2024 21:10:02 +0000
-Subject: [PATCH 08/76] drm/xe/migrate: Handle clear ccs logic for xe2 dgfx
+Subject: drm/xe/migrate: Handle clear ccs logic for xe2 dgfx
 
 For Xe2 dGPU, we clear the bo by modifying the VRAM using an
 uncompressed pat index which then indirectly updates the
@@ -18,7 +18,7 @@ Reviewed-by: Matthew Auld <matthew.auld@intel.com>
 Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/8dd869dd8dda5e17ace28c04f1a48675f5540874.1721250309.git.akshata.jahagirdar@intel.com
-(cherry picked from commit 108c972a11c5f6e37be58207460d9bcac06698db)
+(cherry picked from commit 108c972a11c5f6e37be58207460d9bcac06698db linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

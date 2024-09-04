@@ -1,8 +1,7 @@
-From c471b9411c614753349e9e3b4d1a6f8120990ccc Mon Sep 17 00:00:00 2001
+From dd5fb091abf21369dab3eadf6d521065f97a0b72 Mon Sep 17 00:00:00 2001
 From: Mitul Golani <mitulkumar.ajitkumar.golani@intel.com>
 Date: Thu, 4 Jul 2024 13:56:38 +0530
-Subject: [PATCH 04/76] drm/i915/display: Cache adpative sync caps to use it
- later
+Subject: drm/i915/display: Cache adpative sync caps to use it later
 
 Add new member to struct intel_dp to cache support of Adaptive Sync
 SDP capabilities and use it whenever required to avoid HW access
@@ -15,7 +14,7 @@ Signed-off-by: Mitul Golani <mitulkumar.ajitkumar.golani@intel.com>
 Reviewed-by: Arun R Murthy <arun.r.murthy@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240704082638.2302092-2-mitulkumar.ajitkumar.golani@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
-(cherry picked from commit b2013783c4458a1fe8b25c0b249d2e878bcf6999)
+(cherry picked from commit b2013783c4458a1fe8b25c0b249d2e878bcf6999 linmx-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---
@@ -52,7 +51,7 @@ index 8713835e2307..a9d2acdc51a4 100644
  	struct drm_dp_tunnel *tunnel;
  	bool tunnel_suspended:1;
 diff --git a/drivers/gpu/drm/i915/display/intel_dp.c b/drivers/gpu/drm/i915/display/intel_dp.c
-index 59f11af3b0a1..d4b1b18453dc 100644
+index dc75a929d3ed..2d58842418a7 100644
 --- a/drivers/gpu/drm/i915/display/intel_dp.c
 +++ b/drivers/gpu/drm/i915/display/intel_dp.c
 @@ -129,14 +129,6 @@ bool intel_dp_is_edp(struct intel_dp *intel_dp)
@@ -96,7 +95,7 @@ index 59f11af3b0a1..d4b1b18453dc 100644
  static int
  intel_dp_detect(struct drm_connector *connector,
  		struct drm_modeset_acquire_ctx *ctx,
-@@ -5960,6 +5960,8 @@ intel_dp_detect(struct drm_connector *connector,
+@@ -5972,6 +5972,8 @@ intel_dp_detect(struct drm_connector *connector,
  
  	intel_dp_detect_dsc_caps(intel_dp, intel_connector);
  

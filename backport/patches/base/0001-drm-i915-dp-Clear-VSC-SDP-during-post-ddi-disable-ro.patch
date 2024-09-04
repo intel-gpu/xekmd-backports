@@ -1,8 +1,7 @@
-From a9fdfc618e81075bb7abf23c47e741297d0dfc16 Mon Sep 17 00:00:00 2001
+From d5711ff9e5d3d2a30fdb2ef21450a4958f453028 Mon Sep 17 00:00:00 2001
 From: Suraj Kandpal <suraj.kandpal@intel.com>
 Date: Wed, 24 Jul 2024 22:07:43 +0530
-Subject: [PATCH 18/76] drm/i915/dp: Clear VSC SDP during post ddi disable
- routine
+Subject: drm/i915/dp: Clear VSC SDP during post ddi disable routine
 
 Clear VSC SDP if intel_dp_set_infoframes is called from post ddi disable
 routine i.e with the variable of enable as false. This is to avoid
@@ -18,7 +17,7 @@ infoframes.enable which causes a mismatch.
 Signed-off-by: Suraj Kandpal <suraj.kandpal@intel.com>
 Reviewed-by: Ankit Nautiyal <ankit.k.nautiyal@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240724163743.3668407-1-suraj.kandpal@intel.com
-(cherry picked from commit 3e307d6c28e7bc7d94b5699d0ed7fe07df6db094)
+(cherry picked from commit 3e307d6c28e7bc7d94b5699d0ed7fe07df6db094 linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---
@@ -26,7 +25,7 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  1 file changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/i915/display/intel_dp.c b/drivers/gpu/drm/i915/display/intel_dp.c
-index d4b1b18453dc..2ce173d841b1 100644
+index 2d58842418a7..5e0afce09dd9 100644
 --- a/drivers/gpu/drm/i915/display/intel_dp.c
 +++ b/drivers/gpu/drm/i915/display/intel_dp.c
 @@ -4374,8 +4374,11 @@ void intel_dp_set_infoframes(struct intel_encoder *encoder,

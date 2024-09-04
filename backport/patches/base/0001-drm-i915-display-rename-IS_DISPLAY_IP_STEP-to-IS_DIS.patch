@@ -1,7 +1,7 @@
-From 5c0658ae0f73303188a8e8391099963b7161661e Mon Sep 17 00:00:00 2001
-From: Jani Nikula <jani.nikula@intel.com>
-Date: Tue, 20 Aug 2024 22:00:39 +0300
-Subject: [PATCH 51/76] drm/i915/display: rename IS_DISPLAY_IP_STEP() to
+From 250146a14b6e987b882e81c5e8e92bae6e9191c8 Mon Sep 17 00:00:00 2001
+From: Lucas De Marchi <lucas.demarchi@intel.com>
+Date: Fri, 30 Aug 2024 09:34:04 -0700
+Subject: drm/i915/display: rename IS_DISPLAY_IP_STEP() to
  IS_DISPLAY_VER_STEP()
 
 Unify macro naming on VER.
@@ -10,6 +10,7 @@ Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
 Acked-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/6861e02f3adf15d56e89890000eb195070c33c9b.1724180287.git.jani.nikula@intel.com
 Signed-off-by: Jani Nikula <jani.nikula@intel.com>
+(backported from commit 5a48d67ac336436ed4a79c1c9e036a409b502329 linux-next)
 [ Conflicts:
 	drivers/gpu/drm/i915/display/intel_fbc.c ]
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>

@@ -1,7 +1,7 @@
-From 3342033a5f59c3953756ed8cc3e1126138a93592 Mon Sep 17 00:00:00 2001
+From b329cf6d0c35d0cdb57cb3e25627e08d184b12fd Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Tue, 20 Aug 2024 10:29:53 -0700
-Subject: [PATCH 68/76] drm/xe: Move ggtt_fini to devm managed
+Subject: drm/xe: Move ggtt_fini to devm managed
 
 ggtt->scratch is destroyed via devm, ggtt_fini sets ggtt->scratch to
 NULL, ggtt->scratch in GGTT clears, so ensure ggtt->scratch is set NULL
@@ -10,7 +10,7 @@ before the BO is destroyed.
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240820172958.1095143-2-matthew.brost@intel.com
-(cherry picked from commit 5b993d00d7f0c970a5e5d34c1031069fb13b6986)
+(cherry picked from commit 5b993d00d7f0c970a5e5d34c1031069fb13b6986 linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

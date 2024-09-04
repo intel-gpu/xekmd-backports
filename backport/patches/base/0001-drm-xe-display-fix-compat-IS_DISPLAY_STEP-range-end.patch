@@ -1,7 +1,7 @@
-From a8dc0eb485cd0043abd8a12325bee21ffe895053 Mon Sep 17 00:00:00 2001
+From ac7fffe0862312dabf0cc7aca9bbea5854de67e0 Mon Sep 17 00:00:00 2001
 From: Jani Nikula <jani.nikula@intel.com>
 Date: Tue, 20 Aug 2024 22:00:34 +0300
-Subject: [PATCH 46/76] drm/xe/display: fix compat IS_DISPLAY_STEP() range end
+Subject: drm/xe/display: fix compat IS_DISPLAY_STEP() range end
 
 It's supposed to be an open range at the end like in i915. Fingers
 crossed that nobody relies on this definition.
@@ -12,7 +12,7 @@ Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
 Acked-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/fe8743770694e429f6902491cdb306c97bdf701a.1724180287.git.jani.nikula@intel.com
 Signed-off-by: Jani Nikula <jani.nikula@intel.com>
-(cherry picked from commit 453afb1a439994deeacb8d9ecbb48c1f2348ea0a)
+(cherry picked from commit 453afb1a439994deeacb8d9ecbb48c1f2348ea0a linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

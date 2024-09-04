@@ -1,7 +1,7 @@
-From 9a70cb6d9a0a081907a2eea9f0d9732a5451ff63 Mon Sep 17 00:00:00 2001
+From c768bd9768f4455eff41bf6ac7c3a79be72f8360 Mon Sep 17 00:00:00 2001
 From: Suraj Kandpal <suraj.kandpal@intel.com>
 Date: Tue, 13 Aug 2024 09:58:07 +0530
-Subject: [PATCH 34/76] drm/i915/pps: Disable DPLS_GATING around pps sequence
+Subject: drm/i915/pps: Disable DPLS_GATING around pps sequence
 
 Disable bit 29 of SCLKGATE_DIS register around pps sequence
 when we turn panel power on.
@@ -23,7 +23,7 @@ Bspec: 49304
 Signed-off-by: Suraj Kandpal <suraj.kandpal@intel.com>
 Reviewed-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240813042807.4015214-1-suraj.kandpal@intel.com
-(cherry picked from commit c7085d08c7e53d9aef0cdd4b20798356f6f5d469)
+(cherry picked from commit c7085d08c7e53d9aef0cdd4b20798356f6f5d469 linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

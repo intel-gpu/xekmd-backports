@@ -1,8 +1,7 @@
-From b021e9d01d2d2f7dad630446a25e46a76cb066ba Mon Sep 17 00:00:00 2001
+From 4a87a56b0cc13bef5f767c7eee5a305edf1aecf4 Mon Sep 17 00:00:00 2001
 From: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Date: Wed, 21 Aug 2024 15:38:34 -0400
-Subject: [PATCH 59/76] drm/{i915, xe}: Avoid direct inspection of dpt_vma from
- outside dpt
+Subject: drm/{i915, xe}: Avoid direct inspection of dpt_vma from outside dpt
 
 DPT code is so dependent on i915 vma implementation and it is not
 ported yet to Xe.
@@ -16,7 +15,7 @@ Cc: Juha-Pekka Heikkila <juhapekka.heikkila@gmail.com>
 Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240821193842.352557-4-rodrigo.vivi@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
-(cherry picked from commit 6dbd43dcedf3b58a18eb3518e5c19e38a97aa68a)
+(cherry picked from commit 6dbd43dcedf3b58a18eb3518e5c19e38a97aa68a linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

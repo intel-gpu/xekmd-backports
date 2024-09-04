@@ -1,7 +1,7 @@
-From 16c03684da4ebeb6b78d5329b31688ccee38c075 Mon Sep 17 00:00:00 2001
+From 6e28a39899a657d28cbcb7e70b6fe0eba8cbb24b Mon Sep 17 00:00:00 2001
 From: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Date: Wed, 21 Aug 2024 15:38:41 -0400
-Subject: [PATCH 66/76] drm/xe: Make xe_ggtt_node struct independent
+Subject: drm/xe: Make xe_ggtt_node struct independent
 
 In some rare cases, the drm_mm node cannot be removed synchronously
 due to runtime PM conditions. In this situation, the node removal will
@@ -37,7 +37,7 @@ Cc: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240821193842.352557-11-rodrigo.vivi@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
-(cherry picked from commit 34e804220f693fe6bb1c4e50f27dd855e9313f0c)
+(cherry picked from commit 34e804220f693fe6bb1c4e50f27dd855e9313f0c linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

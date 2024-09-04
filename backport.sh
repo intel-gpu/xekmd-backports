@@ -1,6 +1,6 @@
 #!/bin/sh
 
-KERNEL="linux-6.11-rc5"
+KERNEL="linux-6.11-rc6"
 # Linux
 wget=/usr/bin/wget
 tar=/bin/tar

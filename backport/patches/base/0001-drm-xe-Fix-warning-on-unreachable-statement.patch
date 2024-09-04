@@ -1,7 +1,7 @@
-From 723e211dcb503051bacc1809d381ff645a464631 Mon Sep 17 00:00:00 2001
+From fe9ec4d3868c43b6f9983e771d7f94e6602dc261 Mon Sep 17 00:00:00 2001
 From: Lucas De Marchi <lucas.demarchi@intel.com>
 Date: Fri, 19 Jul 2024 12:15:34 -0700
-Subject: [PATCH 14/76] drm/xe: Fix warning on unreachable statement
+Subject: drm/xe: Fix warning on unreachable statement
 
 eu_type_to_str() relies on -Wswitch to warn (and -Werror) to make sure
 it handles all enum values. However it's perfectly legal to pass an int
@@ -31,7 +31,7 @@ Tested-by: Nathan Chancellor <nathan@kernel.org>
 Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240719191534.3845469-1-lucas.demarchi@intel.com
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-(cherry picked from commit 7e0fe233aa0849de8a0a5e60cb0d71dfb359664f)
+(cherry picked from commit 7e0fe233aa0849de8a0a5e60cb0d71dfb359664f linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

@@ -1,7 +1,7 @@
-From 59bc414b0803c8785987eed74659239fc61fbd9e Mon Sep 17 00:00:00 2001
+From 2b2fbd69d46a9928812b923d324a6ff28dbce9e6 Mon Sep 17 00:00:00 2001
 From: Jani Nikula <jani.nikula@intel.com>
 Date: Tue, 20 Aug 2024 22:00:41 +0300
-Subject: [PATCH 53/76] drm/i915/display: switch to display detected steppings
+Subject: drm/i915/display: switch to display detected steppings
 
 Move the stepping related macros over to display. We can proceed to
 remove the compat macros from xe.
@@ -15,7 +15,7 @@ Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
 Acked-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/ce8bb94e1a801d3c345f1810837bdd1964c3af75.1724180287.git.jani.nikula@intel.com
 Signed-off-by: Jani Nikula <jani.nikula@intel.com>
-(cherry picked from commit dfc88eac97e2177844e5dfa877f2ff60c73bf507)
+(cherry picked from commit dfc88eac97e2177844e5dfa877f2ff60c73bf507 linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---
@@ -57,7 +57,7 @@ index 4615c3ba60aa..dfb0c8bf5ca2 100644
  	enum intel_display_platform platform;
  	enum intel_display_subplatform subplatform;
 diff --git a/drivers/gpu/drm/i915/i915_drv.h b/drivers/gpu/drm/i915/i915_drv.h
-index d7723dd11c80..b10952c9fba8 100644
+index 110340e02a02..01234406b146 100644
 --- a/drivers/gpu/drm/i915/i915_drv.h
 +++ b/drivers/gpu/drm/i915/i915_drv.h
 @@ -408,15 +408,10 @@ static inline struct intel_gt *to_gt(const struct drm_i915_private *i915)
@@ -77,7 +77,7 @@ index d7723dd11c80..b10952c9fba8 100644
  	(drm_WARN_ON(&(__i915)->drm, INTEL_GRAPHICS_STEP(__i915) == STEP_NONE), \
  	 INTEL_GRAPHICS_STEP(__i915) >= (since) && INTEL_GRAPHICS_STEP(__i915) < (until))
 diff --git a/drivers/gpu/drm/i915/intel_device_info.c b/drivers/gpu/drm/i915/intel_device_info.c
-index 91acbf99574c..d92b3050ac78 100644
+index 01a650253050..d92b51b38a0e 100644
 --- a/drivers/gpu/drm/i915/intel_device_info.c
 +++ b/drivers/gpu/drm/i915/intel_device_info.c
 @@ -108,7 +108,6 @@ void intel_device_info_print(const struct intel_device_info *info,

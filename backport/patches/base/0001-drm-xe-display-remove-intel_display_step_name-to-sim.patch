@@ -1,8 +1,7 @@
-From 16ea1d24b2db8feaece03bbd8cce95da118f5f5f Mon Sep 17 00:00:00 2001
+From 6454baf587f8719eac19a9b82d6fbb0c670004fb Mon Sep 17 00:00:00 2001
 From: Jani Nikula <jani.nikula@intel.com>
 Date: Tue, 20 Aug 2024 22:00:35 +0300
-Subject: [PATCH 47/76] drm/xe/display: remove intel_display_step_name() to
- simplify
+Subject: drm/xe/display: remove intel_display_step_name() to simplify
 
 The intel_display_step_name() is an unnecessary extra
 indirection. Simplify by just adding a macro to map intel_step_name() to
@@ -14,7 +13,7 @@ Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
 Acked-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/cbea7def331cc9d2438da49ae344b9987f27cd12.1724180287.git.jani.nikula@intel.com
 Signed-off-by: Jani Nikula <jani.nikula@intel.com>
-(cherry picked from commit fa509a33e34849cce6c17f969991dc87a864fbde)
+(cherry picked from commit fa509a33e34849cce6c17f969991dc87a864fbde linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

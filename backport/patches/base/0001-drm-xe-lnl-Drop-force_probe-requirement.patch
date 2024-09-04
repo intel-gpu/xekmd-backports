@@ -1,0 +1,46 @@
+From e861d482a6fda1fc4a086d833c7e6501272bf7b9 Mon Sep 17 00:00:00 2001
+From: Lucas De Marchi <lucas.demarchi@intel.com>
+Date: Thu, 22 Aug 2024 15:46:15 -0700
+Subject: drm/xe/lnl: Drop force_probe requirement
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Lunar Lake has been usable for a while in a desktop setup. Bugs are
+sporadically showing up in CI, but being promptly fixed. Nothing very
+concerning.
+
+All the uapi changes related to fundamental platform usage have been
+finalized.
+
+Remove the force_probe requirement and enable the platform by default.
+
+Cc: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Jani Nikula <jani.nikula@intel.com>
+Reviewed-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/20240822224615.793540-1-lucas.demarchi@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(cherry picked from commit 9c57bc08652a7c8e0e355c52c023fddc090fe9bb linux-next)
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index b42aa304c4e9..071a50f667bb 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -338,7 +338,6 @@ static const struct xe_device_desc mtl_desc = {
+ static const struct xe_device_desc lnl_desc = {
+ 	PLATFORM(LUNARLAKE),
+ 	.has_display = true,
+-	.require_force_probe = true,
+ };
+ 
+ static const struct xe_device_desc bmg_desc = {
+-- 
+2.46.0
+

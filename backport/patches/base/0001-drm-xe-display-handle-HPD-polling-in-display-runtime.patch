@@ -1,8 +1,7 @@
-From 409ddf7bafd8a2c59f2dff05199aee5fe3f4611c Mon Sep 17 00:00:00 2001
+From cb379f65d9953f589ef3939cc3f7dcc499d41f23 Mon Sep 17 00:00:00 2001
 From: Vinod Govindapillai <vinod.govindapillai@intel.com>
 Date: Fri, 23 Aug 2024 14:21:48 +0300
-Subject: [PATCH 75/76] drm/xe/display: handle HPD polling in display runtime
- suspend/resume
+Subject: drm/xe/display: handle HPD polling in display runtime suspend/resume
 
 In XE, display runtime suspend / resume routines are called only
 if d3cold is allowed. This makes the driver unable to detect any
@@ -25,7 +24,7 @@ v4: rebased
 Reviewed-by: Arun R Murthy <arun.r.murthy@intel.com>
 Signed-off-by: Vinod Govindapillai <vinod.govindapillai@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240823112148.327015-4-vinod.govindapillai@intel.com
-(cherry picked from commit 66a0f6b9f5fc205272035b6ffa4830be51e3f787)
+(backported from commit 66a0f6b9f5fc205272035b6ffa4830be51e3f787 linux-next)
 [ Fix silent conflict due to s/enable_display/probe_display/ ]
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>

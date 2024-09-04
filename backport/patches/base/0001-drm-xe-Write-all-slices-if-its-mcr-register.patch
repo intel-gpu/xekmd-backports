@@ -1,7 +1,7 @@
-From 20aabe1e78e842c10fc3d3179384cd8ddf9f2aca Mon Sep 17 00:00:00 2001
+From 82a9ae8acac90b88fd62150f8e22ff4aa73b32fa Mon Sep 17 00:00:00 2001
 From: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Date: Wed, 14 Aug 2024 15:26:13 +0530
-Subject: [PATCH 32/76] drm/xe: Write all slices if its mcr register
+Subject: drm/xe: Write all slices if its mcr register
 
 Register GAMREQSTRM_CTRL should be considered mcr register
 which should write to all slices as per documentation.
@@ -12,7 +12,7 @@ Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
 Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240814095614.909774-3-tejas.upadhyay@intel.com
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-(cherry picked from commit f0ffa657e9f3913c7921cbd4d876343401f15f52)
+(cherry picked from commit f0ffa657e9f3913c7921cbd4d876343401f15f52 linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---

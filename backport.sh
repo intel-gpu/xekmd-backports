@@ -35,7 +35,7 @@ create_kernel_tree () {
 
 	#check if tree is alreday created
 	if [ -d "kernel" ]; then
-		read -p "WARNING: Tree alreday exist do you want to overwrite? (y/n) " yn
+		read -p "WARNING: Tree already exists, do you want to overwrite? (y/n) " yn
 		case $yn in
 			[yY] ) echo ok, we will proceed;
 				rm -rf kernel;
@@ -48,7 +48,7 @@ create_kernel_tree () {
 
 	# wget to download tarball
 	if [ -f  "$KERNEL.tar.gz" ]; then
-		echo "Using alreday downloaded $KERNEL.tar.gz" >&2
+		echo "Using already downloaded $KERNEL.tar.gz" >&2
 	elif ! $wget "$KERNEL_BASE$KERNEL.tar.gz" ; then
 		echo "ERROR: can't find source" >&2
 		exit 1
@@ -91,7 +91,7 @@ delete_kernel_tree () {
 }
 
 if [ ! $# -gt 0 ]; then
-	echo "No option Provided  so proceeding with create-tree"
+	echo "No option provided, so proceeding with create-tree"
         create_kernel_tree
 fi
 

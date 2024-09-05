@@ -69,6 +69,10 @@ create_kernel_tree () {
 
 	echo "Applying local patches"
 	while read p; do
+		case "$p" in \#*)
+			echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
+			continue;;
+		esac
 		git am -q -s "$p"
 		if [ $? -ne 0 ]; then
 			echo "Failed to apply patch $p"

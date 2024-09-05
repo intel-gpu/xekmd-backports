@@ -1,0 +1,228 @@
+From f5dbb31457cc9ef6b5d729d561080a9d7e0e6890 Mon Sep 17 00:00:00 2001
+From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
+Date: Fri, 26 May 2023 12:30:42 +0200
+Subject: drm/xe/eudebug: hw enablement for eudebug
+
+In order to turn on debug capabilities, (i.e. breakpoints), TD_CTL
+and some other registers needs to be programmed. Implement eudebug
+mode enabling including eudebug related workarounds.
+
+v2: Move workarounds to xe_wa_oob. Use reg_sr directly instead of
+xe_rtp as it suits better for dynamic manipulation of those register we
+do later in the series.
+
+Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+(cherry picked from commit 154655ed37c89b812ffe81646d08eeedfbf24186 eudebug-dev-prelim)
+Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_engine_regs.h |  4 ++
+ drivers/gpu/drm/xe/regs/xe_gt_regs.h     | 10 ++++
+ drivers/gpu/drm/xe/xe_eudebug.c          | 70 ++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_eudebug.h          |  3 +
+ drivers/gpu/drm/xe/xe_hw_engine.c        |  2 +
+ drivers/gpu/drm/xe/xe_wa_oob.rules       |  2 +
+ 6 files changed, 91 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_engine_regs.h b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
+index 81b71903675e..e004423a66bf 100644
+--- a/drivers/gpu/drm/xe/regs/xe_engine_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
+@@ -115,6 +115,10 @@
+ 
+ #define INDIRECT_RING_STATE(base)		XE_REG((base) + 0x108)
+ 
++#define CS_DEBUG_MODE2(base)			XE_REG((base) + 0xd8, XE_REG_OPTION_MASKED)
++#define   INST_STATE_CACHE_INVALIDATE		REG_BIT(6)
++#define   GLOBAL_DEBUG_ENABLE			REG_BIT(5)
++
+ #define RING_BBADDR(base)			XE_REG((base) + 0x140)
+ #define RING_BBADDR_UDW(base)			XE_REG((base) + 0x168)
+ 
+diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+index 16b7f6aa2b6b..f7f6e52173af 100644
+--- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+@@ -427,6 +427,14 @@
+ #define   DG2_DISABLE_ROUND_ENABLE_ALLOW_FOR_SSLA	REG_BIT(15)
+ #define   CLEAR_OPTIMIZATION_DISABLE			REG_BIT(6)
+ 
++#define TD_CTL					XE_REG_MCR(0xe400)
++#define   TD_CTL_FEH_AND_FEE_ENABLE		REG_BIT(7) /* forced halt and exception */
++#define   TD_CTL_FORCE_EXTERNAL_HALT		REG_BIT(6)
++#define   TD_CTL_FORCE_THREAD_BREAKPOINT_ENABLE	REG_BIT(4)
++#define   TD_CTL_FORCE_EXCEPTION		REG_BIT(3)
++#define   TD_CTL_BREAKPOINT_ENABLE		REG_BIT(2)
++#define   TD_CTL_GLOBAL_DEBUG_ENABLE		REG_BIT(0) /* XeHP */
++
+ #define CACHE_MODE_SS				XE_REG_MCR(0xe420, XE_REG_OPTION_MASKED)
+ #define   DISABLE_ECC				REG_BIT(5)
+ #define   ENABLE_PREFETCH_INTO_IC		REG_BIT(3)
+@@ -453,11 +461,13 @@
+ #define   MDQ_ARBITRATION_MODE			REG_BIT(12)
+ #define   STALL_DOP_GATING_DISABLE		REG_BIT(5)
+ #define   EARLY_EOT_DIS				REG_BIT(1)
++#define   STALL_DOP_GATING_DISABLE		REG_BIT(5)
+ 
+ #define ROW_CHICKEN2				XE_REG_MCR(0xe4f4, XE_REG_OPTION_MASKED)
+ #define   DISABLE_READ_SUPPRESSION		REG_BIT(15)
+ #define   DISABLE_EARLY_READ			REG_BIT(14)
+ #define   ENABLE_LARGE_GRF_MODE			REG_BIT(12)
++#define   XEHPC_DISABLE_BTB			REG_BIT(11)
+ #define   PUSH_CONST_DEREF_HOLD_DIS		REG_BIT(8)
+ #define   DISABLE_TDL_SVHS_GATING		REG_BIT(1)
+ #define   DISABLE_DOP_GATING			REG_BIT(0)
+diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
+index 27ad278ab569..8c0599a10a3c 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/xe_eudebug.c
+@@ -11,11 +11,19 @@
+ 
+ #include <drm/drm_managed.h>
+ 
++#include <generated/xe_wa_oob.h>
++
++#include "regs/xe_gt_regs.h"
++#include "regs/xe_engine_regs.h"
++
+ #include "xe_device.h"
+ #include "xe_assert.h"
+ #include "xe_macros.h"
+ #include "xe_vm.h"
+ #include "xe_exec_queue.h"
++#include "xe_reg_sr.h"
++#include "xe_rtp.h"
++#include "xe_wa.h"
+ 
+ #include "xe_eudebug_types.h"
+ #include "xe_eudebug.h"
+@@ -930,6 +938,68 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
+ 	return ret;
+ }
+ 
++#undef XE_REG_MCR
++#define XE_REG_MCR(...)     XE_REG(__VA_ARGS__, .mcr = 1)
++
++void xe_eudebug_init_hw_engine(struct xe_hw_engine *hwe)
++{
++	struct xe_gt *gt = hwe->gt;
++	struct xe_device *xe = gt_to_xe(gt);
++
++	if (!xe->eudebug.available)
++		return;
++
++	if (!xe_rtp_match_first_render_or_compute(gt, hwe))
++		return;
++
++	if (XE_WA(gt, 18022722726)) {
++		struct xe_reg_sr_entry sr_entry = {
++			.reg = ROW_CHICKEN,
++			.clr_bits = STALL_DOP_GATING_DISABLE,
++			.set_bits = STALL_DOP_GATING_DISABLE,
++			.read_mask = STALL_DOP_GATING_DISABLE,
++		};
++
++		xe_reg_sr_add(&hwe->reg_sr, &sr_entry, gt);
++	}
++
++	if (XE_WA(gt, 14015474168)) {
++		struct xe_reg_sr_entry sr_entry = {
++			.reg = ROW_CHICKEN2,
++			.clr_bits = XEHPC_DISABLE_BTB,
++			.set_bits = XEHPC_DISABLE_BTB,
++			.read_mask = XEHPC_DISABLE_BTB,
++		};
++
++		xe_reg_sr_add(&hwe->reg_sr, &sr_entry, gt);
++	}
++
++	if (xe->info.graphics_verx100 >= 1200) {
++		u32 mask = TD_CTL_BREAKPOINT_ENABLE |
++			   TD_CTL_FORCE_THREAD_BREAKPOINT_ENABLE |
++			   TD_CTL_FEH_AND_FEE_ENABLE;
++		struct xe_reg_sr_entry sr_entry = {
++			.reg = TD_CTL,
++			.clr_bits = mask,
++			.set_bits = mask,
++			.read_mask = mask,
++		};
++
++		xe_reg_sr_add(&hwe->reg_sr, &sr_entry, gt);
++	}
++
++	if (xe->info.graphics_verx100 >= 1250) {
++		struct xe_reg_sr_entry sr_entry = {
++			.reg = TD_CTL,
++			.clr_bits = TD_CTL_GLOBAL_DEBUG_ENABLE,
++			.set_bits = TD_CTL_GLOBAL_DEBUG_ENABLE,
++			.read_mask = TD_CTL_GLOBAL_DEBUG_ENABLE,
++		};
++
++		xe_reg_sr_add(&hwe->reg_sr, &sr_entry, gt);
++	}
++}
++
+ void xe_eudebug_init(struct xe_device *xe)
+ {
+ 	spin_lock_init(&xe->eudebug.lock);
+diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
+index 326ddbd50651..3cd6bc7bb682 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug.h
++++ b/drivers/gpu/drm/xe/xe_eudebug.h
+@@ -11,6 +11,7 @@ struct xe_device;
+ struct xe_file;
+ struct xe_vm;
+ struct xe_exec_queue;
++struct xe_hw_engine;
+ 
+ #if IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)
+ 
+@@ -20,6 +21,7 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
+ 
+ void xe_eudebug_init(struct xe_device *xe);
+ void xe_eudebug_fini(struct xe_device *xe);
++void xe_eudebug_init_hw_engine(struct xe_hw_engine *hwe);
+ 
+ void xe_eudebug_file_open(struct xe_file *xef);
+ void xe_eudebug_file_close(struct xe_file *xef);
+@@ -38,6 +40,7 @@ static inline int xe_eudebug_connect_ioctl(struct drm_device *dev,
+ 
+ static inline void xe_eudebug_init(struct xe_device *xe) { }
+ static inline void xe_eudebug_fini(struct xe_device *xe) { }
++static inline void xe_eudebug_init_hw_engine(struct xe_hw_engine *hwe) { }
+ 
+ static inline void xe_eudebug_file_open(struct xe_file *xef) { }
+ static inline void xe_eudebug_file_close(struct xe_file *xef) { }
+diff --git a/drivers/gpu/drm/xe/xe_hw_engine.c b/drivers/gpu/drm/xe/xe_hw_engine.c
+index f1e69ef2e27d..9ed992adb136 100644
+--- a/drivers/gpu/drm/xe/xe_hw_engine.c
++++ b/drivers/gpu/drm/xe/xe_hw_engine.c
+@@ -15,6 +15,7 @@
+ #include "xe_assert.h"
+ #include "xe_bo.h"
+ #include "xe_device.h"
++#include "xe_eudebug.h"
+ #include "xe_execlist.h"
+ #include "xe_force_wake.h"
+ #include "xe_gsc.h"
+@@ -530,6 +531,7 @@ static void hw_engine_init_early(struct xe_gt *gt, struct xe_hw_engine *hwe,
+ 	xe_tuning_process_engine(hwe);
+ 	xe_wa_process_engine(hwe);
+ 	hw_engine_setup_default_state(hwe);
++	xe_eudebug_init_hw_engine(hwe);
+ 
+ 	xe_reg_sr_init(&hwe->reg_whitelist, hwe->name, gt_to_xe(gt));
+ 	xe_reg_whitelist_process_engine(hwe);
+diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
+index 5cf27ff27ce6..be73ef87f747 100644
+--- a/drivers/gpu/drm/xe/xe_wa_oob.rules
++++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
+@@ -35,3 +35,5 @@
+ 		GRAPHICS_VERSION(2001)
+ 22019338487_display	PLATFORM(LUNARLAKE)
+ 16023588340	GRAPHICS_VERSION(2001)
++18022722726	GRAPHICS_VERSION_RANGE(1250, 1274)
++14015474168	PLATFORM(PVC)
+-- 
+2.34.1
+

@@ -1,0 +1,105 @@
+From 99e603bbb4c4c2629fe552d1321d9f29b48d25fa Mon Sep 17 00:00:00 2001
+From: Andrzej Hajda <andrzej.hajda@intel.com>
+Date: Mon, 5 Aug 2024 18:54:21 +0200
+Subject: drm/xe/eudebug: implement userptr_vma access
+
+Debugger needs to read/write program's vmas including userptr_vma.
+Since hmm_range_fault is used to pin userptr vmas, it is possible
+to map those vmas from debugger context.
+
+v2: pin pages vs notifier, move to vm.c (Matthew)
+
+Signed-off-by: Andrzej Hajda <andrzej.hajda@intel.com>
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
+(cherry picked from commit aaab8ff5bf34bcc05ec3664203651b49d0ada502 eudebug-dev-prelim)
+Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+---
+ drivers/gpu/drm/xe/xe_eudebug.c |  2 +-
+ drivers/gpu/drm/xe/xe_vm.c      | 47 +++++++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_vm.h      |  3 +++
+ 3 files changed, 51 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
+index 7f645d689fd3..523ffb627539 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/xe_eudebug.c
+@@ -2945,7 +2945,7 @@ static int xe_eudebug_vma_access(struct xe_vma *vma, u64 offset,
+ 	if (bo)
+ 		return xe_eudebug_bovma_access(bo, offset, buf, bytes, write);
+ 
+-	return -EOPNOTSUPP;
++	return xe_uvma_access(to_userptr_vma(vma), offset, buf, bytes, write);
+ }
+ 
+ static int xe_eudebug_vm_access(struct xe_vm *vm, u64 offset,
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index 634af1c36c60..f420cc4380f5 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -3443,3 +3443,50 @@ void xe_vm_snapshot_free(struct xe_vm_snapshot *snap)
+ 	}
+ 	kvfree(snap);
+ }
++
++int xe_uvma_access(struct xe_userptr_vma *uvma, u64 offset,
++		   void *buf, u64 len, bool write)
++{
++	struct xe_vm *vm = xe_vma_vm(&uvma->vma);
++	struct xe_userptr *up = &uvma->userptr;
++	struct xe_res_cursor cur = {};
++	int cur_len, ret = 0;
++
++	while (true) {
++		down_read(&vm->userptr.notifier_lock);
++		if (!xe_vma_userptr_check_repin(uvma))
++			break;
++
++		spin_lock(&vm->userptr.invalidated_lock);
++		list_del_init(&uvma->userptr.invalidate_link);
++		spin_unlock(&vm->userptr.invalidated_lock);
++
++		up_read(&vm->userptr.notifier_lock);
++		ret = xe_vma_userptr_pin_pages(uvma);
++		if (ret)
++			return ret;
++	}
++
++	if (!up->sg) {
++		ret = -EINVAL;
++		goto out_unlock_notifier;
++	}
++
++	for (xe_res_first_sg(up->sg, offset, len, &cur); cur.remaining;
++	     xe_res_next(&cur, cur_len)) {
++		void *ptr = kmap_local_page(sg_page(cur.sgl)) + cur.start;
++
++		cur_len = min(cur.size, cur.remaining);
++		if (write)
++			memcpy(ptr, buf, cur_len);
++		else
++			memcpy(buf, ptr, cur_len);
++		kunmap_local(ptr);
++		buf += cur_len;
++	}
++	ret = len;
++
++out_unlock_notifier:
++	up_read(&vm->userptr.notifier_lock);
++	return ret;
++}
+diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
+index c864dba35e1d..99b9a9b011de 100644
+--- a/drivers/gpu/drm/xe/xe_vm.h
++++ b/drivers/gpu/drm/xe/xe_vm.h
+@@ -281,3 +281,6 @@ struct xe_vm_snapshot *xe_vm_snapshot_capture(struct xe_vm *vm);
+ void xe_vm_snapshot_capture_delayed(struct xe_vm_snapshot *snap);
+ void xe_vm_snapshot_print(struct xe_vm_snapshot *snap, struct drm_printer *p);
+ void xe_vm_snapshot_free(struct xe_vm_snapshot *snap);
++
++int xe_uvma_access(struct xe_userptr_vma *uvma, u64 offset,
++		   void *buf, u64 len, bool write);
+-- 
+2.34.1
+

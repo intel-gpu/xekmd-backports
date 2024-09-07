@@ -85,7 +85,7 @@ create_kernel_tree () {
 			fi
 			;;
 		esac
-		git am -q -s "$p"
+		git am -q -s "$WORKING_DIR/$p"
 		if [ $? -ne 0 ]; then
 			echo "Failed to apply patch $p"
 			exit 1;

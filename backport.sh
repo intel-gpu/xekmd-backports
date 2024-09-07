@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 KERNEL="linux-6.11-rc6"
 # Linux
@@ -8,17 +8,20 @@ WORKING_DIR="$PWD"
 
 KERNEL_BASE="https://git.kernel.org/torvalds/t/"
 
-SHORT=c,d,h
-LONG=create-tree,delete-tree,help
+SHORT=c,d,h,b:
+LONG=create-tree,delete-tree,help,backport:
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
+
+flavor="base"
 
 usage () {
           echo ""
-          echo "Usage: $0 [-c|--create-tree] [-d|--delete-tree]"
+          echo "Usage: $0 [-c|--create-tree] [-b | backport <base/features>] [-d|--delete-tree]"
           echo ""
           echo "Options:"
-          echo "  -c, --create-tree    Creates the kernel tree and apply the backport patches"
-          echo "  -d, --delete-tree    Delete the tree"
+          echo "  -c, --create-tree                   	Creates the kernel tree and apply the backport patches"
+          echo "  -b, --backport <base/features>      	backport options: default <base>"
+          echo "  -d, --delete-tree    	      		Delete the tree"
           exit 1
 }
 
@@ -39,7 +42,7 @@ create_kernel_tree () {
 		case $yn in
 			[yY] ) echo ok, we will proceed;
 				rm -rf kernel;
-				break;;
+				;;
 			* ) echo exiting;
 				exit;;
 		esac
@@ -70,8 +73,17 @@ create_kernel_tree () {
 	echo "Applying local patches"
 	while read p; do
 		case "$p" in \#*)
-			echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
-			continue;;
+			if [ ! -z "$flavor" ]; then
+				echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
+				if [[ "$flavor" == "base" ]]; then
+					echo "Only base patches will be  applied"
+					flavor=""
+				fi
+				continue
+			else
+				break
+			fi
+			;;
 		esac
 		git am -q -s "$p"
 		if [ $? -ne 0 ]; then
@@ -111,6 +123,12 @@ while [ $# -gt 0 ]; do
                         delete_kernel_tree
                         shift
                         ;;
+		-b|--backport)
+			flavor="$2"
+			echo "$2 backport"
+			create_kernel_tree
+			shift 2
+			;;
                 -h|--help)
                         usage
                         shift

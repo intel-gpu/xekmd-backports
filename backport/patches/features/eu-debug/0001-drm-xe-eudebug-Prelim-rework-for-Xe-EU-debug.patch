@@ -1,4 +1,4 @@
-From 8878f492c59ac46316fb900f3a0fac2d0b2bd327 Mon Sep 17 00:00:00 2001
+From 2af3d2877c2555de7bb1d71323857a0bcd02b2cc Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Wed, 20 Mar 2024 12:20:35 +0100
 Subject: drm/xe/eudebug: Prelim rework for Xe EU debug
@@ -16,13 +16,11 @@ Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
  .../drm/xe/{ => prelim}/xe_debug_metadata.c   |  34 +-
  drivers/gpu/drm/xe/prelim/xe_debug_metadata.h |  25 ++
  .../xe/{ => prelim}/xe_debug_metadata_types.h |   2 +-
- drivers/gpu/drm/xe/{ => prelim}/xe_eudebug.c  | 326 +++++++++---------
+ drivers/gpu/drm/xe/{ => prelim}/xe_eudebug.c  | 324 +++++++++---------
  drivers/gpu/drm/xe/prelim/xe_eudebug.h        |  87 +++++
  .../drm/xe/{ => prelim}/xe_eudebug_types.h    |   0
  drivers/gpu/drm/xe/{ => prelim}/xe_gt_debug.c |  26 +-
  drivers/gpu/drm/xe/prelim/xe_gt_debug.h       |  27 ++
- .../drm/xe/tests/{ => prelim}/xe_eudebug.c    |   0
- drivers/gpu/drm/xe/tests/xe_live_test_mod.c   |   2 +-
  drivers/gpu/drm/xe/xe_debug_metadata.h        |  25 --
  drivers/gpu/drm/xe/xe_device.c                |  22 +-
  drivers/gpu/drm/xe/xe_eudebug.h               |  87 -----
@@ -35,7 +33,7 @@ Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
  include/uapi/drm/xe_drm.h                     |  95 +----
  include/uapi/drm/xe_drm_eudebug.h             | 225 ------------
  include/uapi/drm/xe_drm_prelim.h              | 302 ++++++++++++++++
- 24 files changed, 681 insertions(+), 695 deletions(-)
+ 22 files changed, 679 insertions(+), 693 deletions(-)
  rename drivers/gpu/drm/xe/{ => prelim}/xe_debug_metadata.c (67%)
  create mode 100644 drivers/gpu/drm/xe/prelim/xe_debug_metadata.h
  rename drivers/gpu/drm/xe/{ => prelim}/xe_debug_metadata_types.h (92%)
@@ -44,14 +42,13 @@ Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
  rename drivers/gpu/drm/xe/{ => prelim}/xe_eudebug_types.h (100%)
  rename drivers/gpu/drm/xe/{ => prelim}/xe_gt_debug.c (72%)
  create mode 100644 drivers/gpu/drm/xe/prelim/xe_gt_debug.h
- rename drivers/gpu/drm/xe/tests/{ => prelim}/xe_eudebug.c (100%)
  delete mode 100644 drivers/gpu/drm/xe/xe_debug_metadata.h
  delete mode 100644 drivers/gpu/drm/xe/xe_eudebug.h
  delete mode 100644 drivers/gpu/drm/xe/xe_gt_debug.h
  delete mode 100644 include/uapi/drm/xe_drm_eudebug.h
 
 diff --git a/drivers/gpu/drm/xe/Kconfig b/drivers/gpu/drm/xe/Kconfig
-index 23f34e8e3151..fc3cab510405 100644
+index 23f34e8e3..fc3cab510 100644
 --- a/drivers/gpu/drm/xe/Kconfig
 +++ b/drivers/gpu/drm/xe/Kconfig
 @@ -85,7 +85,7 @@ config DRM_XE_FORCE_PROBE
@@ -64,7 +61,7 @@ index 23f34e8e3151..fc3cab510405 100644
  	depends on DRM_XE
  	default y
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index e2aa65d4fa42..d4c47453f347 100644
+index e2aa65d4f..d4c47453f 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -29,7 +29,7 @@ xe-y += xe_bb.o \
@@ -98,7 +95,7 @@ diff --git a/drivers/gpu/drm/xe/xe_debug_metadata.c b/drivers/gpu/drm/xe/prelim/
 similarity index 67%
 rename from drivers/gpu/drm/xe/xe_debug_metadata.c
 rename to drivers/gpu/drm/xe/prelim/xe_debug_metadata.c
-index 31e943248cfc..a3b3b9c7bd06 100644
+index 31e943248..a3b3b9c7b 100644
 --- a/drivers/gpu/drm/xe/xe_debug_metadata.c
 +++ b/drivers/gpu/drm/xe/prelim/xe_debug_metadata.c
 @@ -2,32 +2,32 @@
@@ -208,7 +205,7 @@ index 31e943248cfc..a3b3b9c7bd06 100644
  }
 diff --git a/drivers/gpu/drm/xe/prelim/xe_debug_metadata.h b/drivers/gpu/drm/xe/prelim/xe_debug_metadata.h
 new file mode 100644
-index 000000000000..70c04d3eb694
+index 000000000..70c04d3eb
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/prelim/xe_debug_metadata.h
 @@ -0,0 +1,25 @@
@@ -241,7 +238,7 @@ diff --git a/drivers/gpu/drm/xe/xe_debug_metadata_types.h b/drivers/gpu/drm/xe/p
 similarity index 92%
 rename from drivers/gpu/drm/xe/xe_debug_metadata_types.h
 rename to drivers/gpu/drm/xe/prelim/xe_debug_metadata_types.h
-index 508f2fdbbc42..d8443aa5dd17 100644
+index 508f2fdbb..d8443aa5d 100644
 --- a/drivers/gpu/drm/xe/xe_debug_metadata_types.h
 +++ b/drivers/gpu/drm/xe/prelim/xe_debug_metadata_types.h
 @@ -8,7 +8,7 @@
@@ -257,7 +254,7 @@ diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eude
 similarity index 88%
 rename from drivers/gpu/drm/xe/xe_eudebug.c
 rename to drivers/gpu/drm/xe/prelim/xe_eudebug.c
-index fbf8213c9b8d..1965cdeb101a 100644
+index 22e920cd2..eefe86d29 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
 @@ -28,7 +28,7 @@
@@ -1347,7 +1344,7 @@ index fbf8213c9b8d..1965cdeb101a 100644
  	if (XE_IOCTL_DBG(xe, !d_ref)) {
  		mutex_unlock(&d->xe->files.lock);
  		return -EINVAL;
-@@ -3794,11 +3794,11 @@ xe_eudebug_vm_open_ioctl(struct xe_eudebug *d, unsigned long arg)
+@@ -3794,7 +3794,7 @@ xe_eudebug_vm_open_ioctl(struct xe_eudebug *d, unsigned long arg)
  out_vm_put:
  	xe_vm_put(vm);
  out_eudebug_put:
@@ -1356,14 +1353,9 @@ index fbf8213c9b8d..1965cdeb101a 100644
  
  	return ret;
  }
- 
- #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
--#include "tests/xe_eudebug.c"
-+#include "tests/prelim/xe_eudebug.c"
- #endif
 diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.h b/drivers/gpu/drm/xe/prelim/xe_eudebug.h
 new file mode 100644
-index 000000000000..1d264c1a688c
+index 000000000..1d264c1a6
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.h
 @@ -0,0 +1,87 @@
@@ -1462,7 +1454,7 @@ diff --git a/drivers/gpu/drm/xe/xe_gt_debug.c b/drivers/gpu/drm/xe/prelim/xe_gt_
 similarity index 72%
 rename from drivers/gpu/drm/xe/xe_gt_debug.c
 rename to drivers/gpu/drm/xe/prelim/xe_gt_debug.c
-index fcf32c7c77d8..c0bf2a0a7f2f 100644
+index fcf32c7c7..c0bf2a0a7 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug.c
 +++ b/drivers/gpu/drm/xe/prelim/xe_gt_debug.c
 @@ -8,12 +8,12 @@
@@ -1565,7 +1557,7 @@ index fcf32c7c77d8..c0bf2a0a7f2f 100644
  
 diff --git a/drivers/gpu/drm/xe/prelim/xe_gt_debug.h b/drivers/gpu/drm/xe/prelim/xe_gt_debug.h
 new file mode 100644
-index 000000000000..d047ceb9090a
+index 000000000..d047ceb90
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/prelim/xe_gt_debug.h
 @@ -0,0 +1,27 @@
@@ -1596,26 +1588,9 @@ index 000000000000..d047ceb9090a
 +			      unsigned int bitmap_size);
 +
 +#endif
-diff --git a/drivers/gpu/drm/xe/tests/xe_eudebug.c b/drivers/gpu/drm/xe/tests/prelim/xe_eudebug.c
-similarity index 100%
-rename from drivers/gpu/drm/xe/tests/xe_eudebug.c
-rename to drivers/gpu/drm/xe/tests/prelim/xe_eudebug.c
-diff --git a/drivers/gpu/drm/xe/tests/xe_live_test_mod.c b/drivers/gpu/drm/xe/tests/xe_live_test_mod.c
-index e95b1c6f5695..26c58eea7a4c 100644
---- a/drivers/gpu/drm/xe/tests/xe_live_test_mod.c
-+++ b/drivers/gpu/drm/xe/tests/xe_live_test_mod.c
-@@ -4,7 +4,7 @@
-  */
- #include <linux/module.h>
- 
--#if IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)
-+#if IS_ENABLED(CONFIG_PRELIM_DRM_XE_EUDEBUG)
- extern struct kunit_suite xe_eudebug_test_suite;
- kunit_test_suite(xe_eudebug_test_suite);
- #endif
 diff --git a/drivers/gpu/drm/xe/xe_debug_metadata.h b/drivers/gpu/drm/xe/xe_debug_metadata.h
 deleted file mode 100644
-index deca24fa2cba..000000000000
+index deca24fa2..000000000
 --- a/drivers/gpu/drm/xe/xe_debug_metadata.h
 +++ /dev/null
 @@ -1,25 +0,0 @@
@@ -1645,7 +1620,7 @@ index deca24fa2cba..000000000000
 -				    struct drm_file *file);
 -#endif
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index ed56ec080b90..447397ced909 100644
+index ed56ec080..447397ced 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -24,7 +24,7 @@
@@ -1733,7 +1708,7 @@ index ed56ec080b90..447397ced909 100644
  
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
 deleted file mode 100644
-index 1ebc0e48c902..000000000000
+index 1ebc0e48c..000000000
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ /dev/null
 @@ -1,87 +0,0 @@
@@ -1825,7 +1800,7 @@ index 1ebc0e48c902..000000000000
 -
 -#endif
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 1c4287a764fa..2897e5d2e2ce 100644
+index 1c4287a76..2897e5d2e 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -22,7 +22,7 @@
@@ -1901,7 +1876,7 @@ index 1c4287a764fa..2897e5d2e2ce 100644
  	xe_exec_queue_kill(q);
  
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index b37642ebfc5e..8028aa591887 100644
+index b37642ebf..8028aa591 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
 @@ -92,7 +92,7 @@ struct xe_exec_queue {
@@ -1915,7 +1890,7 @@ index b37642ebfc5e..8028aa591887 100644
  	unsigned long eudebug_flags;
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.h b/drivers/gpu/drm/xe/xe_gt_debug.h
 deleted file mode 100644
-index 342082699ff6..000000000000
+index 342082699..000000000
 --- a/drivers/gpu/drm/xe/xe_gt_debug.h
 +++ /dev/null
 @@ -1,27 +0,0 @@
@@ -1947,7 +1922,7 @@ index 342082699ff6..000000000000
 -
 -#endif
 diff --git a/drivers/gpu/drm/xe/xe_hw_engine.c b/drivers/gpu/drm/xe/xe_hw_engine.c
-index 2bf038b87a29..98d883978f7a 100644
+index 2bf038b87..98d883978 100644
 --- a/drivers/gpu/drm/xe/xe_hw_engine.c
 +++ b/drivers/gpu/drm/xe/xe_hw_engine.c
 @@ -15,7 +15,7 @@
@@ -1960,7 +1935,7 @@ index 2bf038b87a29..98d883978f7a 100644
  #include "xe_force_wake.h"
  #include "xe_gsc.h"
 diff --git a/drivers/gpu/drm/xe/xe_sync.c b/drivers/gpu/drm/xe/xe_sync.c
-index fc7f4913d701..24922f714fea 100644
+index fc7f4913d..24922f714 100644
 --- a/drivers/gpu/drm/xe/xe_sync.c
 +++ b/drivers/gpu/drm/xe/xe_sync.c
 @@ -18,7 +18,7 @@
@@ -2000,7 +1975,7 @@ index fc7f4913d701..24922f714fea 100644
  		xe_sync_ufence_signal(ufence);
  
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 408c3afbac62..c9ec21319237 100644
+index 408c3afba..c9ec21319 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -24,7 +24,7 @@
@@ -2120,7 +2095,7 @@ index 408c3afbac62..c9ec21319237 100644
  	}
  
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 430635249908..3e0e39176927 100644
+index 430635249..3e0e39176 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -102,9 +102,7 @@ extern "C" {
@@ -2263,7 +2238,7 @@ index 430635249908..3e0e39176927 100644
  #if defined(__cplusplus)
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
 deleted file mode 100644
-index 2ebf21e15f5b..000000000000
+index 2ebf21e15..000000000
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ /dev/null
 @@ -1,225 +0,0 @@
@@ -2493,7 +2468,7 @@ index 2ebf21e15f5b..000000000000
 -
 -#endif
 diff --git a/include/uapi/drm/xe_drm_prelim.h b/include/uapi/drm/xe_drm_prelim.h
-index 9c86f5969500..18b2d144b1ce 100644
+index 9c86f5969..18b2d144b 100644
 --- a/include/uapi/drm/xe_drm_prelim.h
 +++ b/include/uapi/drm/xe_drm_prelim.h
 @@ -70,4 +70,306 @@

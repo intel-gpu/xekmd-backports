@@ -12,7 +12,7 @@ SHORT=c,d,h,b:
 LONG=create-tree,delete-tree,help,backport:
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 
-flavor="base"
+flavor="features"
 
 usage () {
           echo ""
@@ -20,7 +20,7 @@ usage () {
           echo ""
           echo "Options:"
           echo "  -c, --create-tree                   	Creates the kernel tree and apply the backport patches"
-          echo "  -b, --backport <base/features>      	backport options: default <base>"
+          echo "  -b, --backport <base/features>      	backport options: default <features>"
           echo "  -d, --delete-tree    	      		Delete the tree"
           exit 1
 }

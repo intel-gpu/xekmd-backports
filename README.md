@@ -27,7 +27,8 @@ backport.sh < options >
 |options:| | |
 |-- |--|--| 
 |1. |createtree| Create kernel tree|
-|2. |deletetree| Delete kernel tree|
+|2. |backport| Backport patches based on given option <base/features>|
+|3. |deletetree| Delete kernel tree|
 
 
 # License

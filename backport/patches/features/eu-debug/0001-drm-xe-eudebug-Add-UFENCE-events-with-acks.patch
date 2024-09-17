@@ -1,4 +1,4 @@
-From ed40ccc76a846bfa1993c3409476ad64f08dfddf Mon Sep 17 00:00:00 2001
+From 00235b304bb7b557cf213710eb753d64efbfad05 Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Fri, 8 Mar 2024 14:34:01 +0200
 Subject: drm/xe/eudebug: Add UFENCE events with acks
@@ -34,7 +34,7 @@ Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
  9 files changed, 347 insertions(+), 28 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 12b0d29d995a..3e607a1eea01 100644
+index 12b0d29d9..3e607a1ee 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -36,6 +36,7 @@
@@ -353,7 +353,7 @@ index 12b0d29d995a..3e607a1eea01 100644
  {
  	struct xe_exec_queue *q;
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
-index 0fd0864e74e7..58d28409c7f0 100644
+index 0fd0864e7..58d28409c 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
 @@ -15,6 +15,7 @@ struct xe_vm;
@@ -389,7 +389,7 @@ index 0fd0864e74e7..58d28409c7f0 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index 1ffe33f15409..6cddb8acfa7d 100644
+index 1ffe33f15..6cddb8acf 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
 @@ -86,6 +86,7 @@ struct xe_eudebug_eu_control_ops {
@@ -426,7 +426,7 @@ index 1ffe33f15409..6cddb8acfa7d 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_exec.c b/drivers/gpu/drm/xe/xe_exec.c
-index f36980aa26e6..400cb576f3b9 100644
+index f36980aa2..400cb576f 100644
 --- a/drivers/gpu/drm/xe/xe_exec.c
 +++ b/drivers/gpu/drm/xe/xe_exec.c
 @@ -157,7 +157,7 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
@@ -439,7 +439,7 @@ index f36980aa26e6..400cb576f3b9 100644
  					  (xe_vm_in_lr_mode(vm) ?
  					   SYNC_PARSE_FLAG_LR_MODE : 0));
 diff --git a/drivers/gpu/drm/xe/xe_sync.c b/drivers/gpu/drm/xe/xe_sync.c
-index 716b9d725688..fc7f4913d701 100644
+index af6c093c8..a23cc42c2 100644
 --- a/drivers/gpu/drm/xe/xe_sync.c
 +++ b/drivers/gpu/drm/xe/xe_sync.c
 @@ -18,17 +18,7 @@
@@ -487,7 +487,7 @@ index 716b9d725688..fc7f4913d701 100644
  	u64 __user *ptr = u64_to_user_ptr(addr);
 +	u64 bind_ref;
  
- 	if (!access_ok(ptr, sizeof(ptr)))
+ 	if (!access_ok(ptr, sizeof(*ptr)))
  		return ERR_PTR(-EFAULT);
  
 -	ufence = kmalloc(sizeof(*ufence), GFP_KERNEL);
@@ -561,7 +561,7 @@ index 716b9d725688..fc7f4913d701 100644
  			if (XE_IOCTL_DBG(xe, IS_ERR(sync->ufence)))
  				return PTR_ERR(sync->ufence);
 diff --git a/drivers/gpu/drm/xe/xe_sync.h b/drivers/gpu/drm/xe/xe_sync.h
-index 006dbf780793..30b508a8b5b8 100644
+index 006dbf780..30b508a8b 100644
 --- a/drivers/gpu/drm/xe/xe_sync.h
 +++ b/drivers/gpu/drm/xe/xe_sync.h
 @@ -9,8 +9,12 @@
@@ -594,7 +594,7 @@ index 006dbf780793..30b508a8b5b8 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_sync_types.h b/drivers/gpu/drm/xe/xe_sync_types.h
-index 30ac3f51993b..907c601a6d8c 100644
+index 30ac3f519..907c601a6 100644
 --- a/drivers/gpu/drm/xe/xe_sync_types.h
 +++ b/drivers/gpu/drm/xe/xe_sync_types.h
 @@ -7,12 +7,28 @@
@@ -632,7 +632,7 @@ index 30ac3f51993b..907c601a6d8c 100644
  struct xe_sync_entry {
  	struct drm_syncobj *syncobj;
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index fc1164a34e6a..634af1c36c60 100644
+index fc1164a34..634af1c36 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -3052,9 +3052,11 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
@@ -649,7 +649,7 @@ index fc1164a34e6a..634af1c36c60 100644
  					  (xe_vm_in_lr_mode(vm) ?
  					   SYNC_PARSE_FLAG_LR_MODE : 0) |
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
-index 44cf1b699589..b2f6038ccc59 100644
+index 44cf1b699..b2f6038cc 100644
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ b/include/uapi/drm/xe_drm_eudebug.h
 @@ -17,6 +17,7 @@ extern "C" {

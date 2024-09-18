@@ -1,6 +1,8 @@
 #!/bin/bash
 
-KERNEL_TAG="v6.11"
+SCRIPT_DIR=$(dirname $(realpath "${BASH_SOURCE[0]}"))
+. "$SCRIPT_DIR/config"
+KERNEL_TAG="$BASELINE"
 
 # Linux
 wget=/usr/bin/wget

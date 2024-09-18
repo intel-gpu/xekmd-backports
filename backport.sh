@@ -1,12 +1,14 @@
 #!/bin/bash
 
-KERNEL="linux-6.11"
+KERNEL_TAG="v6.11"
+
 # Linux
 wget=/usr/bin/wget
 tar=/bin/tar
 WORKING_DIR="$PWD"
 
 KERNEL_BASE="https://git.kernel.org/torvalds/t/"
+KERNEL="linux-${KERNEL_TAG/v}"
 
 SHORT=c,d,h,b:
 LONG=create-tree,delete-tree,help,backport:

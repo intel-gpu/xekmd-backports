@@ -1,4 +1,4 @@
-From e9c6b9d51526e1e2f5f9fe86351b7ce13104fa26 Mon Sep 17 00:00:00 2001
+From 3aacb5c4776a8802a1c545c5992f1e25d6be055a Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Fri, 8 Sep 2023 17:32:30 +0200
 Subject: drm/xe: Debug metadata create/destroy ioctls
@@ -14,6 +14,7 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 (cherry picked from commit 9f5b5d1ee49f7acddacd92797df390aa192c0c4d eudebug-dev-prelim)
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+v2: Rebase to 6.11.2
 ---
  drivers/gpu/drm/xe/Makefile                  |   1 +
  drivers/gpu/drm/xe/xe_debug_metadata.c       | 107 +++++++++++++++++++
@@ -28,7 +29,7 @@ Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_debug_metadata_types.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index b655c0e43834..e2aa65d4fa42 100644
+index b655c0e43..e2aa65d4f 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -29,6 +29,7 @@ xe-y += xe_bb.o \
@@ -41,7 +42,7 @@ index b655c0e43834..e2aa65d4fa42 100644
  	xe_device_sysfs.o \
 diff --git a/drivers/gpu/drm/xe/xe_debug_metadata.c b/drivers/gpu/drm/xe/xe_debug_metadata.c
 new file mode 100644
-index 000000000000..8d99170d3591
+index 000000000..8d99170d3
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_debug_metadata.c
 @@ -0,0 +1,107 @@
@@ -154,7 +155,7 @@ index 000000000000..8d99170d3591
 +}
 diff --git a/drivers/gpu/drm/xe/xe_debug_metadata.h b/drivers/gpu/drm/xe/xe_debug_metadata.h
 new file mode 100644
-index 000000000000..abaea076c12d
+index 000000000..abaea076c
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_debug_metadata.h
 @@ -0,0 +1,23 @@
@@ -183,7 +184,7 @@ index 000000000000..abaea076c12d
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_debug_metadata_types.h b/drivers/gpu/drm/xe/xe_debug_metadata_types.h
 new file mode 100644
-index 000000000000..508f2fdbbc42
+index 000000000..508f2fdbb
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_debug_metadata_types.h
 @@ -0,0 +1,28 @@
@@ -216,7 +217,7 @@ index 000000000000..508f2fdbbc42
 +
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 22c87999f92d..c9c0f8d1df56 100644
+index 90c5dcfcf..4658cebd1 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -24,6 +24,7 @@
@@ -255,9 +256,9 @@ index 22c87999f92d..c9c0f8d1df56 100644
  	unsigned long idx;
  
  	xe_pm_runtime_get(xe);
-@@ -182,6 +190,11 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -180,6 +188,11 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+ 	xa_for_each(&xef->vm.xa, idx, vm)
  		xe_vm_close_and_put(vm);
- 	mutex_unlock(&xef->vm.lock);
  
 +	mutex_lock(&xef->debug_metadata.lock);
 +	xa_for_each(&xef->debug_metadata.xa, idx, mdata)
@@ -267,7 +268,7 @@ index 22c87999f92d..c9c0f8d1df56 100644
  	xe_file_put(xef);
  
  	xe_pm_runtime_put(xe);
-@@ -206,6 +219,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
+@@ -204,6 +217,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
  			  DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_OBSERVATION, xe_observation_ioctl, DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_EUDEBUG_CONNECT, xe_eudebug_connect_ioctl, DRM_RENDER_ALLOW),
@@ -279,10 +280,10 @@ index 22c87999f92d..c9c0f8d1df56 100644
  
  static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index fdc9ee0ad1c8..c812a21ed1f5 100644
+index 1c8b08663..cbe731758 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -616,6 +616,14 @@ struct xe_file {
+@@ -627,6 +627,14 @@ struct xe_file {
  
  	/** @id: id into xe_device.files.xa */
  	u32 id;
@@ -298,7 +299,7 @@ index fdc9ee0ad1c8..c812a21ed1f5 100644
  
  #endif
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 985dcf852458..0d75a072b838 100644
+index 985dcf852..0d75a072b 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -103,7 +103,8 @@ extern "C" {

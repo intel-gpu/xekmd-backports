@@ -10,7 +10,7 @@ tar=/bin/tar
 WORKING_DIR="$PWD"
 TIME_STAMP=$(date +%Y%m%d_%H%M%S)
 
-KERNEL_BASE="https://git.kernel.org/torvalds/t/"
+KERNEL_BASE="https://cdn.kernel.org/pub/linux/kernel/v6.x/"
 KERNEL="linux-${KERNEL_TAG/v}"
 
 SHORT=:c,d,h,r

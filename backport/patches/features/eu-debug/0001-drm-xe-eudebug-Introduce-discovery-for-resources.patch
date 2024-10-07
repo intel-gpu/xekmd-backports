@@ -1,4 +1,4 @@
-From 4379edff907aa286f4dd2b196e926ea6950ee675 Mon Sep 17 00:00:00 2001
+From fcf70bf1b3ae50ee6408a23e1076545d98240b15 Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Tue, 31 Jan 2023 11:40:42 +0200
 Subject: drm/xe/eudebug: Introduce discovery for resources
@@ -18,6 +18,7 @@ Co-developed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 (cherry picked from commit acf0700d860a7b27fa2021f7f967bab44e06f623 eudebug-dev-prelim)
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+v2: Rebase to 6.11.2
 ---
  drivers/gpu/drm/xe/xe_device.c        |  6 +-
  drivers/gpu/drm/xe/xe_device_types.h  |  3 +
@@ -26,12 +27,12 @@ Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
  4 files changed, 107 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 8ceb0d4684b1..06e612899191 100644
+index eb75f6aef..2f9aabc87 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -306,6 +306,9 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
- 	if (xe->unordered_wq)
- 		destroy_workqueue(xe->unordered_wq);
+@@ -307,6 +307,9 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
+ 	if (xe->destroy_wq)
+ 		destroy_workqueue(xe->destroy_wq);
  
 +	if (xe->eudebug.ordered_wq)
 +		destroy_workqueue(xe->eudebug.ordered_wq);
@@ -39,22 +40,23 @@ index 8ceb0d4684b1..06e612899191 100644
  	ttm_device_fini(&xe->ttm);
  }
  
-@@ -376,8 +379,9 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
- 	xe->preempt_fence_wq = alloc_ordered_workqueue("xe-preempt-fence-wq", 0);
+@@ -376,9 +379,10 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
  
+ 	xe->preempt_fence_wq = alloc_ordered_workqueue("xe-preempt-fence-wq", 0);
  	xe->ordered_wq = alloc_ordered_workqueue("xe-ordered-wq", 0);
 +	xe->eudebug.ordered_wq = alloc_ordered_workqueue("xe-eudebug-ordered-wq", 0);
  	xe->unordered_wq = alloc_workqueue("xe-unordered-wq", 0, 0);
+ 	xe->destroy_wq = alloc_workqueue("xe-destroy-wq", 0, 0);
 -	if (!xe->ordered_wq || !xe->unordered_wq ||
 +	if (!xe->ordered_wq || !xe->unordered_wq || !xe->eudebug.ordered_wq ||
- 	    !xe->preempt_fence_wq) {
+ 	    !xe->preempt_fence_wq || !xe->destroy_wq) {
  		/*
  		 * Cleanup done in xe_device_destroy via
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 3ee74d006171..a677e141da7f 100644
+index ea8a37220..9a9ef9a7b 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -513,6 +513,9 @@ struct xe_device {
+@@ -516,6 +516,9 @@ struct xe_device {
  
  		/** @available: is the debugging functionality available */
  		bool available;
@@ -65,7 +67,7 @@ index 3ee74d006171..a677e141da7f 100644
  
  	/* private: */
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 38e01e9f0b4d..e2e67739c299 100644
+index 38e01e9f0..e2e67739c 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -428,6 +428,12 @@ xe_eudebug_get(struct xe_file *xef)
@@ -196,7 +198,7 @@ index 38e01e9f0b4d..e2e67739c299 100644
 +	xe_eudebug_put(d);
 +}
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index 093221a707df..202ddf41a325 100644
+index 093221a70..202ddf41a 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
 @@ -19,6 +19,7 @@

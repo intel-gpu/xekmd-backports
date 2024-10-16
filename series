@@ -2,19 +2,16 @@
 backport/patches/base/0001-drm-i915-Skip-programming-FIA-link-enable-bits-for-M.patch
 backport/patches/base/0001-drm-i915-disable-fbc-due-to-Wa_16023588340.patch
 backport/patches/base/0001-drm-i915-display-Cache-adpative-sync-caps-to-use-it-.patch
-backport/patches/base/0001-drm-xe-Generate-oob-before-compiling-anything.patch
 backport/patches/base/0001-drm-i915-display-WA-for-Re-initialize-dispcnlunitt1-.patch
 backport/patches/base/0001-drm-xe-gsc-add-Battlemage-support.patch
 backport/patches/base/0001-drm-xe-migrate-Handle-clear-ccs-logic-for-xe2-d.patch
 backport/patches/base/0001-drm-xe-migrate-Add-helper-function-to-program-identi.patch
 backport/patches/base/0001-drm-xe-xe2-Introduce-identity-map-for-compressed-pat.patch
 backport/patches/base/0001-drm-xe-xe_migrate-Handle-migration-logic-for-xe2-dgf.patch
-backport/patches/base/0001-drm-xe-fbdev-Limit-the-usage-of-stolen-for-LNL.patch
 backport/patches/base/0001-drm-xe-uapi-Expose-SIMD16-EU-mask-in-topology-query.patch
 backport/patches/base/0001-drm-xe-Fix-warning-on-unreachable-statement.patch
 backport/patches/base/0001-drm-i915-hdcp-Add-encoder-check-in-intel_hdcp_get_ca.patch
 backport/patches/base/0001-drm-i915-hdcp-Add-encoder-check-in-hdcp2_get_capabil.patch
-backport/patches/base/0001-drm-xe-hdcp-Check-GSC-structure-validity.patch
 backport/patches/base/0001-drm-i915-dp-Clear-VSC-SDP-during-post-ddi-disable-ro.patch
 backport/patches/base/0001-drm-xe-huc-Define-HuC-binary-for-LNL.patch
 backport/patches/base/0001-drm-xe-gsc-Define-GSC-binary-for-LNL.patch
@@ -61,7 +58,6 @@ backport/patches/base/0001-drm-xe-Make-xe_ggtt_node-struct-independent.patch
 backport/patches/base/0001-drm-xe-Fix-missing-runtime-outer-protection-for-ggtt.patch
 backport/patches/base/0001-drm-xe-Move-ggtt_fini-to-devm-managed.patch
 backport/patches/base/0001-drm-xe-Set-firmware-state-to-loadable-before-registe.patch
-backport/patches/base/0001-drm-xe-Drop-warn-on-xe_guc_pc_gucrc_disable-in-guc-p.patch
 backport/patches/base/0001-drm-xe-Move-hw_engine_fini-to-devm-managed.patch
 backport/patches/base/0001-drm-xe-Update-xe_sa-to-use-xe_managed_bo_create_pin_.patch
 backport/patches/base/0001-drm-xe-Handle-polling-only-for-system-s-r-in-xe_disp.patch
@@ -82,7 +78,6 @@ backport/patches/base/0001-drm-xe-hwmon-Treat-hwmon-as-a-per-device-concept.patc
 backport/patches/base/0001-drm-xe-s-xe_tile_migrate_engine-xe_tile_migrate_exec.patch
 backport/patches/base/0001-drm-xe-Add-xe_vm_pgtable_update_op-to-xe_vma_ops.patch
 backport/patches/base/0001-drm-xe-Add-xe_exec_queue_last_fence_test_dep.patch
-backport/patches/base/0001-drm-xe-Add-timeout-to-preempt-fences.patch
 backport/patches/base/0001-drm-xe-Convert-multiple-bind-ops-into-single-job.patch
 backport/patches/base/0001-drm-xe-Update-VM-trace-events.patch
 backport/patches/base/0001-drm-xe-Update-PT-layer-with-better-error-handling.patch
@@ -94,7 +89,6 @@ backport/patches/base/0001-drm-xe-Use-xe_pm_runtime_get-in-xe_bo_move-if-reclai.
 backport/patches/base/0001-drm-xe-Remove-extra-dma_fence_put-on-xe_sync_entry_a.patch
 backport/patches/base/0001-drm-xe-Don-t-keep-stale-pointer-to-bo-ggtt_node.patch
 backport/patches/base/0001-drm-xe-xe2hpg-Add-Wa_15016589081.patch
-backport/patches/base/0001-drm-i915-display-BMG-supports-UHBR13.5.patch
 backport/patches/base/0001-drm-i915-Do-not-explicilty-enable-FEC-in-DP_TP_CTL-f.patch
 backport/patches/base/0001-drm-xe-Fix-missing-conversion-to-xe_display_pm_runti.patch
 backport/patches/base/0001-drm-xe-display-Do-not-suspend-resume-dp-mst-during-r.patch
@@ -102,19 +96,11 @@ backport/patches/base/0001-drm-xe-display-Do-not-do-intel_fbdev_set_suspend-dur.
 backport/patches/base/0001-drm-xe-client-use-mem_type-from-the-current-resource.patch
 backport/patches/base/0001-drm-xe-Do-not-run-GPU-page-fault-handler-on-a-closed.patch
 backport/patches/base/0001-drm-xe-oa-Fix-overflow-in-oa-batch-buffer.patch
-backport/patches/base/0001-drm-i915-dp-Fix-AUX-IO-power-enabling-for-eDP-PSR.patch
 backport/patches/base/0001-drm-xe-guc-Fix-GUC_-SUBMIT-FIRMWARE-_VER-helper-macr.patch
-backport/patches/base/0001-drm-xe-vram-fix-ccs-offset-calculation.patch
-backport/patches/base/0001-drm-i915-dp-Fix-colorimetry-detection.patch
-backport/patches/base/0001-drm-xe-fix-UAF-around-queue-destruction.patch
 backport/patches/base/0001-drm-xe-mcr-Use-Xe2_LPM-steering-tables-for-Xe2_HPM.patch
 backport/patches/base/0001-drm-xe-xe2-Extend-performance-tuning-to-media-GT.patch
 backport/patches/base/0001-drm-xe-xe2-Add-performance-tuning-for-L3-cache-flush.patch
-backport/patches/base/0001-drm-xe-Clean-up-VM-exec-queue-file-lock-usage.patch
-backport/patches/base/0001-drm-xe-vm-move-xa_alloc-to-prevent-UAF.patch
 backport/patches/base/0001-drm-xe-queue-move-xa_alloc-to-prevent-UAF.patch
-backport/patches/base/0001-drm-xe-oa-Don-t-reset-OAC_CONTEXT_ENABLE-on-OA-strea.patch
-backport/patches/base/0001-drm-xe-Prevent-null-pointer-access-in-xe_migrate_cop.patch
 backport/patches/base/0001-drm-xe-Fix-memory-leak-when-aborting-binds.patch
 # features/eu-debug
 backport/patches/features/eu-debug/0001-drm-xe-Export-xe_hw_engine-s-mmio-accessors.patch

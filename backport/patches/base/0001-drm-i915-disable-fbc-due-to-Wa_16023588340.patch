@@ -1,4 +1,4 @@
-From 0617425ac72e03d6dd9cda32178cdceaf8eb2f85 Mon Sep 17 00:00:00 2001
+From 78e7179f2e15729542b9feff7aebb5cf5c849a15 Mon Sep 17 00:00:00 2001
 From: Matthew Auld <matthew.auld@intel.com>
 Date: Wed, 3 Jul 2024 13:43:39 +0100
 Subject: drm/i915: disable fbc due to Wa_16023588340
@@ -24,16 +24,17 @@ Link: https://patchwork.freedesktop.org/patch/msgid/20240703124338.208220-4-matt
 (cherry picked from commit c55f79f317ab428ae6d005965bc07e37496f209f linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
+Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
 ---
  drivers/gpu/drm/i915/display/intel_display_wa.h |  8 ++++++++
  drivers/gpu/drm/i915/display/intel_fbc.c        |  6 ++++++
- drivers/gpu/drm/xe/Makefile                     |  4 +++-
+ drivers/gpu/drm/xe/Makefile                     |  1 +
  drivers/gpu/drm/xe/display/xe_display_wa.c      | 16 ++++++++++++++++
- 4 files changed, 33 insertions(+), 1 deletion(-)
+ 4 files changed, 31 insertions(+)
  create mode 100644 drivers/gpu/drm/xe/display/xe_display_wa.c
 
 diff --git a/drivers/gpu/drm/i915/display/intel_display_wa.h b/drivers/gpu/drm/i915/display/intel_display_wa.h
-index 63201d09852c..be644ab6ae00 100644
+index 63201d098..be644ab6a 100644
 --- a/drivers/gpu/drm/i915/display/intel_display_wa.h
 +++ b/drivers/gpu/drm/i915/display/intel_display_wa.h
 @@ -6,8 +6,16 @@
@@ -54,7 +55,7 @@ index 63201d09852c..be644ab6ae00 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/i915/display/intel_fbc.c b/drivers/gpu/drm/i915/display/intel_fbc.c
-index 67116c9f1464..8488f82143a4 100644
+index 67116c9f1..8488f8214 100644
 --- a/drivers/gpu/drm/i915/display/intel_fbc.c
 +++ b/drivers/gpu/drm/i915/display/intel_fbc.c
 @@ -56,6 +56,7 @@
@@ -78,20 +79,10 @@ index 67116c9f1464..8488f82143a4 100644
  	if (i915_vtd_active(i915) && (IS_SKYLAKE(i915) || IS_BROXTON(i915))) {
  		plane_state->no_fbc_reason = "VT-d enabled";
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index e97c9da451b3..0eb0acc4f198 100644
+index 1979614a9..1ff9602a5 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -36,7 +36,8 @@ uses_generated_oob := \
- 	$(obj)/xe_ring_ops.o \
- 	$(obj)/xe_vm.o \
- 	$(obj)/xe_wa.o \
--	$(obj)/xe_ttm_stolen_mgr.o
-+	$(obj)/xe_ttm_stolen_mgr.o \
-+	$(obj)/display/xe_display_wa.o
- 
- $(uses_generated_oob): $(generated_oob)
- 
-@@ -194,6 +195,7 @@ xe-$(CONFIG_DRM_XE_DISPLAY) += \
+@@ -175,6 +175,7 @@ xe-$(CONFIG_DRM_XE_DISPLAY) += \
  	display/xe_display.o \
  	display/xe_display_misc.o \
  	display/xe_display_rps.o \
@@ -101,7 +92,7 @@ index e97c9da451b3..0eb0acc4f198 100644
  	display/xe_hdcp_gsc.o \
 diff --git a/drivers/gpu/drm/xe/display/xe_display_wa.c b/drivers/gpu/drm/xe/display/xe_display_wa.c
 new file mode 100644
-index 000000000000..68e3d1959ad6
+index 000000000..68e3d1959
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/display/xe_display_wa.c
 @@ -0,0 +1,16 @@
@@ -122,5 +113,5 @@ index 000000000000..68e3d1959ad6
 +	return XE_WA(xe_root_mmio_gt(i915), 16023588340);
 +}
 -- 
-2.46.0
+2.34.1
 

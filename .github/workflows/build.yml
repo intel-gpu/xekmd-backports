@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        kernel: ["base", "feature"]
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependancies
+        run: | 
+          sudo apt update
+          sudo apt install -y \
+          libasound2-dev \
+          libatomic1 \
+          libcairo-dev \
+          libcurl4-openssl-dev \
+          libdrm-dev \
+          libdrm-intel1 \
+          libdw-dev \
+          libelf-dev \
+          libgsl-dev \
+          libiberty-dev \
+          libjson-c-dev \
+          libkmod-dev \
+          liblzma-dev \
+          libncurses-dev \
+          liboping-dev \
+          libpci-dev \
+          libpciaccess-dev \
+          libpixman-1-dev \
+          libprocps-dev \
+          libssl-dev \
+          libtool \
+          libudev-dev \
+          libunwind-dev \
+          libxmlrpc-core-c3-dev \
+          libxrandr-dev \
+          libxv-dev \
+
+      - name: Apply patches
+        run: | 
+          git config --global user.email "you@example.com"
+          git config --global user.name "LGCI"
+          ./backport.sh -c ${{ matrix.kernel }}
+
+      - name: Checkout common kconfig
+        run: |
+          cd kernel
+          git clone https://gitlab.freedesktop.org/drm/xe/ci.git .ci
+          mkdir -p build64-default
+          cp .ci/kernel/kconfig build64-default/.config
+          make O=build64-default olddefconfig
+
+      - name: Build kernel
+        run: |
+          cd kernel
+          make O=build64-default -j$(nproc)

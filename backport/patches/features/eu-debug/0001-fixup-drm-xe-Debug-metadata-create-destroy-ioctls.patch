@@ -1,0 +1,52 @@
+From 708e02868c654a851ecc47207539c66ffc5def30 Mon Sep 17 00:00:00 2001
+From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Date: Wed, 23 Oct 2024 16:03:44 +0530
+Subject: fixup! drm/xe: Debug metadata create/destroy ioctls
+
+Don't leak args->id on error
+
+Cc: Matthew Auld <matthew.auld@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+(Backported from commit 26d26438fc5f135892fe77f54b84a17423b0110c eudebug-dev)
+Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+---
+ drivers/gpu/drm/xe/prelim/xe_debug_metadata.c       | 5 ++---
+ drivers/gpu/drm/xe/prelim/xe_debug_metadata_types.h | 3 ---
+ 2 files changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_debug_metadata.c b/drivers/gpu/drm/xe/prelim/xe_debug_metadata.c
+index a3b3b9c7b..639a3b6a3 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_debug_metadata.c
++++ b/drivers/gpu/drm/xe/prelim/xe_debug_metadata.c
+@@ -85,12 +85,11 @@ int prelim_xe_debug_metadata_create_ioctl(struct drm_device *dev,
+ 	err = xa_alloc(&xef->debug_metadata.xa, &id, mdata, xa_limit_32b, GFP_KERNEL);
+ 	mutex_unlock(&xef->debug_metadata.lock);
+ 
+-	args->metadata_id = id;
+-	mdata->id = id;
+-
+ 	if (err)
+ 		goto put_mdata;
+ 
++	args->metadata_id = id;
++
+ 	prelim_xe_eudebug_debug_metadata_create(xef, mdata);
+ 
+ 	return 0;
+diff --git a/drivers/gpu/drm/xe/prelim/xe_debug_metadata_types.h b/drivers/gpu/drm/xe/prelim/xe_debug_metadata_types.h
+index d8443aa5d..7d3db6a00 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_debug_metadata_types.h
++++ b/drivers/gpu/drm/xe/prelim/xe_debug_metadata_types.h
+@@ -18,9 +18,6 @@ struct prelim_xe_debug_metadata {
+ 	/** @len: length, in bytes of the metadata */
+ 	u64 len;
+ 
+-	/** @id */
+-	u64 id;
+-
+ 	/** @ref: reference count */
+ 	struct kref refcount;
+ };
+-- 
+2.34.1
+

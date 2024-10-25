@@ -1,4 +1,4 @@
-From 00235b304bb7b557cf213710eb753d64efbfad05 Mon Sep 17 00:00:00 2001
+From a20d609b9c10aefe6181230a7d58610828f0c837 Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Fri, 8 Mar 2024 14:34:01 +0200
 Subject: drm/xe/eudebug: Add UFENCE events with acks
@@ -20,18 +20,19 @@ v2: - use lock for bind ref
 
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 (cherry picked from commit 80209ee996fc143373815a8bb1988c052590dd6f eudebug-dev-prelim)
+(backported from commit 816b186ce2e87df7c7ead4ad44f70f3b10a04c91 linux-next)
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c       | 241 +++++++++++++++++++++++++-
  drivers/gpu/drm/xe/xe_eudebug.h       |  11 ++
  drivers/gpu/drm/xe/xe_eudebug_types.h |  14 ++
  drivers/gpu/drm/xe/xe_exec.c          |   2 +-
- drivers/gpu/drm/xe/xe_sync.c          |  56 ++++--
+ drivers/gpu/drm/xe/xe_sync.c          |  54 ++++--
  drivers/gpu/drm/xe/xe_sync.h          |   8 +-
  drivers/gpu/drm/xe/xe_sync_types.h    |  26 ++-
  drivers/gpu/drm/xe/xe_vm.c            |   4 +-
  include/uapi/drm/xe_drm_eudebug.h     |  13 ++
- 9 files changed, 347 insertions(+), 28 deletions(-)
+ 9 files changed, 346 insertions(+), 27 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
 index 12b0d29d9..3e607a1ee 100644
@@ -439,7 +440,7 @@ index f36980aa2..400cb576f 100644
  					  (xe_vm_in_lr_mode(vm) ?
  					   SYNC_PARSE_FLAG_LR_MODE : 0));
 diff --git a/drivers/gpu/drm/xe/xe_sync.c b/drivers/gpu/drm/xe/xe_sync.c
-index af6c093c8..a23cc42c2 100644
+index 0928a75e9..a23cc42c2 100644
 --- a/drivers/gpu/drm/xe/xe_sync.c
 +++ b/drivers/gpu/drm/xe/xe_sync.c
 @@ -18,17 +18,7 @@
@@ -472,7 +473,7 @@ index af6c093c8..a23cc42c2 100644
  	kfree(ufence);
  }
  
-@@ -49,16 +43,20 @@ static void user_fence_put(struct xe_user_fence *ufence)
+@@ -49,11 +43,15 @@ static void user_fence_put(struct xe_user_fence *ufence)
  	kref_put(&ufence->refcount, user_fence_destroy);
  }
  
@@ -489,12 +490,6 @@ index af6c093c8..a23cc42c2 100644
  
  	if (!access_ok(ptr, sizeof(*ptr)))
  		return ERR_PTR(-EFAULT);
- 
--	ufence = kmalloc(sizeof(*ufence), GFP_KERNEL);
-+	ufence = kzalloc(sizeof(*ufence), GFP_KERNEL);
- 	if (!ufence)
- 		return ERR_PTR(-ENOMEM);
- 
 @@ -69,12 +67,23 @@ static struct xe_user_fence *user_fence_create(struct xe_device *xe, u64 addr,
  	ufence->mm = current->mm;
  	mmgrab(ufence->mm);
@@ -632,10 +627,10 @@ index 30ac3f519..907c601a6 100644
  struct xe_sync_entry {
  	struct drm_syncobj *syncobj;
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index fc1164a34..634af1c36 100644
+index d80770c96..a130c9025 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -3052,9 +3052,11 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -3048,9 +3048,11 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		}
  	}
  

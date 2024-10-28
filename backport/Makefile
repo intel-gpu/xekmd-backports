@@ -20,7 +20,10 @@ KERNEL_CONFIG := $(KLIB_BUILD)/.config
 KERNEL_MAKEFILE := $(KLIB_BUILD)/Makefile
 CONFIG_MD5 := $(shell md5sum $(KERNEL_CONFIG) 2>/dev/null | sed 's/\s.*//')
 
-export KLIB KLIB_BUILD BACKPORT_DIR KMODDIR KMODPATH_ARG
+# TARGET_KERNEL_NAME with have info about the kernel we are building against i.e., uname -r
+TARGET_KERNEL_NAME=$(shell echo $(KLIB_BUILD) | cut -d "/" -f 4 2>/dev/null || echo 1)
+
+export KLIB KLIB_BUILD BACKPORT_DIR KMODDIR KMODPATH_ARG TARGET_KERNEL_NAME
 
 # disable built-in rules for this file
 .SUFFIXES:

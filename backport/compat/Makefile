@@ -1,9 +1,9 @@
 ccflags-y += -I$(src) -Wframe-larger-than=1280
 ifeq ($(CONFIG_BACKPORT_INTEGRATE),)
-obj-m += compat.o
+obj-m += xe-compat.o
 else
-obj-y += compat.o
+obj-y += xe-compat.o
 endif
-compat-y += main.o
+xe-compat-y += main.o
 
 # Kernel backport compatibility code

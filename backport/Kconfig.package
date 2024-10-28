@@ -1,17 +1,35 @@
-mainmenu "Backports from $BACKPORTED_KERNEL_NAME $BACKPORTED_KERNEL_VERSION (backports $BACKPORTS_VERSION)"
+mainmenu "Backports from $BASE_KERNEL_NAME $BASE_KERNEL_HEAD (backports $BACKPORTS_RELEASE_TAG)"
 
 config BACKPORT_DIR
 	string
 	option env="BACKPORT_DIR"
-config BACKPORTS_VERSION
+	help
+	   Path to current backport directory
+config BACKPORTS_RELEASE_TAG
 	string
-	option env="BACKPORTS_VERSION"
-config BACKPORTED_KERNEL_VERSION
+	option env="BACKPORTS_RELEASE_TAG"
+	help
+	   Backports Releases Tag info
+config BASE_KERNEL_HEAD
 	string
-	option env="BACKPORTED_KERNEL_VERSION"
-config BACKPORTED_KERNEL_NAME
+	option env="BASE_KERNEL_HEAD"
+	help
+	   contains HEAD commit of base kernel
+config BASE_KERNEL_NAME
 	string
-	option env="BACKPORTED_KERNEL_NAME"
+	option env="BASE_KERNEL_NAME"
+	help
+	   contains name of base kernel
+config BASE_KERNEL_TAG
+	string
+	option env="BASE_KERNEL_TAG"
+	help
+	   contains Tag info of base kernel
+config TARGET_KERNEL_NAME
+	string
+	option env="TARGET_KERNEL_NAME"
+	help
+	   Target kernel against which backport are created.
 
 # Packaging hacks
 source "$BACKPORT_DIR/Kconfig.package.hacks"

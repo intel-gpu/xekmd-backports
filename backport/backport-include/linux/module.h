@@ -25,8 +25,9 @@ extern void backport_dependency_symbol(void);
 #else
 #define BACKPORT_MOD_VERSIONS						\
 	MODULE_VERSION("backported from " CPTCFG_KERNEL_NAME	\
-		       " (" CPTCFG_KERNEL_VERSION ")"		\
-		       " using backports " CPTCFG_VERSION);
+		       " (" CPTCFG_BASE_KERNEL_HEAD ")"		\
+		       " using backports " CPTCFG_BACKPORTS_RELEASE_TAG \
+		       " for " CPTCFG_TARGET_KERNEL_NAME " Kernel ");
 #endif
 
 #ifdef MODULE

@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Date: Fri, 23 Feb 2024 10:42:26 +0530
+Subject: [PATCH] xe/xe_module: Add debug print
+
+Add debug prints in xe_module.c file to identify
+the backport driver.
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/xe/xe_module.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_module.c b/drivers/gpu/drm/xe/xe_module.c
+index 31e7689..b05f02c 100644
+--- a/drivers/gpu/drm/xe/xe_module.c
++++ b/drivers/gpu/drm/xe/xe_module.c
+@@ -149,7 +149,7 @@ static void xe_call_exit_func(unsigned int i)
+ static int __init xe_init(void)
+ {
+ 	int err, i;
+-
++	printk(KERN_INFO "XE Backport init, Module is backported from " CPTCFG_BASE_KERNEL_TAG "\n");
+ 	for (i = 0; i < ARRAY_SIZE(init_funcs); i++) {
+ 		err = xe_call_init_func(i);
+ 		if (err) {
+-- 
+2.34.1
+

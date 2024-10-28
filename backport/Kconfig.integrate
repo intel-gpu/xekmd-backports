@@ -6,24 +6,28 @@ config BACKPORT_DIR
 	string
 	default "%%BACKPORT_DIR%%"
 
-config BACKPORT_VERSION
+config BACKPORTS_RELEASE_TAG
 	string
-	default "%%BACKPORTS_VERSION%%"
+	default "%%BACKPORTS_RELEASE_TAG%%"
 
-config BACKPORT_KERNEL_VERSION
+config BASE_KERNEL_HEAD
 	string
-	default "%%BACKPORTED_KERNEL_VERSION%%"
+	default "%%BASE_KERNEL_HEAD%%"
 
-config BACKPORT_KERNEL_NAME
+config BASE_KERNEL_NAME
 	string
-	default "%%BACKPORTED_KERNEL_NAME%%"
+	default "%%BASE_KERNEL_NAME%%"
+
+config TARGET_KERNEL_VERSION
+	string
+	option env="TARGET_KERNEL_VERSION"
 
 menuconfig BACKPORT_LINUX
-	bool "Backport %%BACKPORTED_KERNEL_NAME%% %%BACKPORTED_KERNEL_VERSION%% (backports %%BACKPORTS_VERSION%%)"
+	bool "Backport %%BASE_KERNEL_NAME%% %%BASE_KERNEL_HEAD%% (backports %%BACKPORTS_RELEASE_TAG%%)"
 	default n
 	---help---
 	  Enabling this will let give you the opportunity to use features and
-	  drivers backported from %%BACKPORTED_KERNEL_NAME%% %%BACKPORTED_KERNEL_VERSION%%
+	  drivers backported from %%BASE_KERNEL_NAME%% %%BASE_KERNEL_HEAD%%
 	  on the kernel your are using. This is experimental and you should
 	  say no unless you'd like to help test things or want to help debug
 	  this should we run into any issues.

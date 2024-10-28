@@ -914,17 +914,22 @@ def process(kerneldir, copy_list_file, git_revision=None,
     if git_tracked_version:
         backports_version = "(see git)"
         kernel_version = "(see git)"
+        kernel_tag = "(see git)"
     else:
-        backports_version = git.describe(tree=source_dir, extra_args=['--long'])
+        backports_version = git.describe(tree=source_dir, extra_args=['--tags'])
         kernel_version = git.describe(rev=args.git_revision or 'HEAD',
                                       tree=args.kerneldir,
                                       extra_args=['--long'])
+        kernel_tag = git.describe(tree=args.kerneldir, extra_args=['--tags'])
+
+    if '/' in kernel_tag:
+         kernel_tag = kernel_tag.split('/')[-1]
 
     if not bpid.integrate:
         f = open(os.path.join(bpid.target_dir, 'versions'), 'w')
-        f.write('BACKPORTS_VERSION="%s"\n' % backports_version)
-        f.write('BACKPORTED_KERNEL_VERSION="%s"\n' % kernel_version)
-        f.write('BACKPORTED_KERNEL_NAME="%s"\n' % args.base_name)
+        f.write('BACKPORTS_RELEASE_TAG="%s"\n' % backports_version)
+        f.write('BASE_KERNEL_TAG="%s"\n' % kernel_tag)
+        f.write('BASE_KERNEL_HEAD="%s"\n' % kernel_version)
         if git_tracked_version:
             f.write('BACKPORTS_GIT_TRACKED="backport tracker ID: $(shell git rev-parse HEAD 2>/dev/null || echo \'not built in git tree\')"\n')
         f.close()
@@ -932,9 +937,9 @@ def process(kerneldir, copy_list_file, git_revision=None,
     else:
         kconf_regexes = [
                 (re.compile(r'.*(?P<key>%%BACKPORT_DIR%%)'), '%%BACKPORT_DIR%%', 'backports/'),
-                (re.compile(r'.*(?P<key>%%BACKPORTS_VERSION%%).*'), '%%BACKPORTS_VERSION%%', backports_version),
-                (re.compile(r'.*(?P<key>%%BACKPORTED_KERNEL_VERSION%%).*'), '%%BACKPORTED_KERNEL_VERSION%%', kernel_version),
-                (re.compile(r'.*(?P<key>%%BACKPORTED_KERNEL_NAME%%).*'), '%%BACKPORTED_KERNEL_NAME%%', args.base_name),
+                (re.compile(r'.*(?P<key>%%BACKPORTS_RELEASE_TAG%%).*'), '%%BACKPORTS_RELEASE_TAG%%', backports_version),
+                (re.compile(r'.*(?P<key>%%BASE_KERNEL_HEAD%%).*'), '%%BASE_KERNEL_HEAD%%', kernel_version),
+                (re.compile(r'.*(?P<key>%%BASE_KERNEL_TAG%%).*'), '%%BASE_KERNEL_TAG%%', kernel_tag),
         ]
         out = ''
         for l in open(os.path.join(bpid.target_dir, 'Kconfig'), 'r'):

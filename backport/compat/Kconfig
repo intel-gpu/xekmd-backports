@@ -62,11 +62,6 @@ config BP_MODULES
 	This symbol is necessary for the newer kconf tool, it looks
 	for the "option modules" to control the 'm' state.
 
-config BPAUTO_BUILD_NLATTR
-	def_bool y
-	depends on KERNEL_5_2
-	#c-file lib/nlattr.c
-
 config BPAUTO_USERSEL_BUILD_ALL
 	bool "Build all compat code"
 	help
@@ -76,15 +71,3 @@ config BPAUTO_USERSEL_BUILD_ALL
 	  It's only really useful for compat testing, so
 	  you probably shouldn't enable it.
 
-config BPAUTO_WANT_DEV_COREDUMP
-	bool
-
-config BPAUTO_CRYPTO_LIB_ARC4
-	bool
-
-config BPAUTO_BUILD_CRYPTO_LIB_ARC4
-	bool
-	default y if BPAUTO_CRYPTO_LIB_ARC4
-	depends on !(CRYPTO_LIB_ARC4=y || CRYPTO_LIB_ARC4=m)
-	#h-file crypto/arc4.h
-	#c-file lib/crypto/arc4.c

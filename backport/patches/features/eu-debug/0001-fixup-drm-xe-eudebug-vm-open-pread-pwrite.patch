@@ -1,0 +1,94 @@
+From c6091686cc67813a0d574c8ce56b9d8dffa54701 Mon Sep 17 00:00:00 2001
+From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Date: Thu, 31 Oct 2024 12:19:39 +0200
+Subject: fixup! drm/xe/eudebug: vm open/pread/pwrite
+
+We dont guard against setting timeout. Its nasty
+because we hold the eu_lock during it.
+
+Further work would be to separate the upper timeout
+handling from actual mmio timeouts so that the lock
+hold would be only during per individual op.
+
+Reported-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+(backported from commit 5525285aeedf65140a94a401f7f9932c86be4fc8
+eudebug-dev)
+Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+---
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c | 11 ++++++++---
+ include/uapi/drm/xe_drm_prelim.h       |  1 +
+ 2 files changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+index eefe86d29..449061c05 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+@@ -3438,7 +3438,7 @@ struct vm_file {
+ 	u64 flags;
+ 	u64 client_id;
+ 	u64 vm_handle;
+-	u64 timeout_ns;
++	unsigned int timeout_us;
+ };
+ 
+ static ssize_t __vm_read_write(struct xe_vm *vm,
+@@ -3613,6 +3613,7 @@ static int engine_rcu_flush(struct xe_eudebug *d,
+ 	if (!(psmi_ctrl & IDLE_MSG_DISABLE))
+ 		xe_mmio_write32(gt, psmi_addr, _MASKED_BIT_ENABLE(IDLE_MSG_DISABLE));
+ 
++	/* XXX: Timeout is per operation but in here we flush previous */
+ 	ret = xe_mmio_wait32(gt, RCU_ASYNC_FLUSH,
+ 			     RCU_ASYNC_FLUSH_IN_PROGRESS, 0,
+ 			     timeout_us, NULL, false);
+@@ -3655,7 +3656,7 @@ static int xe_eudebug_vm_fsync(struct file *file, loff_t start, loff_t end, int
+ 			    hwe->class != XE_ENGINE_CLASS_COMPUTE)
+ 				continue;
+ 
+-			ret = engine_rcu_flush(d, hwe, vmf->timeout_ns / 1000ull);
++			ret = engine_rcu_flush(d, hwe, vmf->timeout_us);
+ 			if (ret)
+ 				break;
+ 		}
+@@ -3693,6 +3694,7 @@ static const struct file_operations vm_fops = {
+ static long
+ xe_eudebug_vm_open_ioctl(struct xe_eudebug *d, unsigned long arg)
+ {
++	const u64 max_timeout_ns = DRM_XE_EUDEBUG_VM_SYNC_MAX_TIMEOUT_NSECS;
+ 	struct prelim_drm_xe_eudebug_vm_open param;
+ 	struct xe_device * const xe = d->xe;
+ 	struct xe_eudebug *d_ref = NULL;
+@@ -3715,6 +3717,9 @@ xe_eudebug_vm_open_ioctl(struct xe_eudebug *d, unsigned long arg)
+ 	if (XE_IOCTL_DBG(xe, param.flags))
+ 		return -EINVAL;
+ 
++	if (XE_IOCTL_DBG(xe, param.timeout_ns > max_timeout_ns))
++		return -EINVAL;
++
+ 	if (XE_IOCTL_DBG(xe, xe_eudebug_detached(d)))
+ 		return -ENOTCONN;
+ 
+@@ -3763,7 +3768,7 @@ xe_eudebug_vm_open_ioctl(struct xe_eudebug *d, unsigned long arg)
+ 	vmf->flags = param.flags;
+ 	vmf->client_id = param.client_handle;
+ 	vmf->vm_handle = param.vm_handle;
+-	vmf->timeout_ns = param.timeout_ns;
++	vmf->timeout_us = div64_u64(param.timeout_ns, 1000ull);
+ 
+ 	file = anon_inode_getfile("[xe_eudebug.vm]", &vm_fops, vmf, O_RDWR);
+ 	if (IS_ERR(file)) {
+diff --git a/include/uapi/drm/xe_drm_prelim.h b/include/uapi/drm/xe_drm_prelim.h
+index 18b2d144b..ac3b4598c 100644
+--- a/include/uapi/drm/xe_drm_prelim.h
++++ b/include/uapi/drm/xe_drm_prelim.h
+@@ -341,6 +341,7 @@ struct prelim_drm_xe_eudebug_vm_open {
+ 	/** @flags: flags */
+ 	__u64 flags;
+ 
++#define DRM_XE_EUDEBUG_VM_SYNC_MAX_TIMEOUT_NSECS (10ULL * NSEC_PER_SEC)
+ 	/** @timeout_ns: Timeout value in nanoseconds operations (fsync) */
+ 	__u64 timeout_ns;
+ };
+-- 
+2.34.1
+

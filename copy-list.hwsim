@@ -1,0 +1,66 @@
+#
+# This file specifies which sources are copied from the kernel
+# into the backports package.
+#
+# Directories must end with a slash (e.g. "net/wireless/") and
+# are then copied with all their contents.
+#
+# It is also possible to rename while copying, to do so list
+# old name -> new name
+# Note that in this case the spaces are needed: " -> "
+#
+
+COPYING
+LICENSES/
+Documentation/process/license-rules.rst
+MAINTAINERS
+include/linux/unaligned/
+include/linux/hashtable.h
+include/linux/fixp-arith.h
+include/linux/crc32poly.h
+
+# This just defines some macros, simply take it
+include/linux/bitfield.h
+include/linux/average.h
+include/linux/overflow.h
+
+# 802.11
+drivers/net/wireless/Kconfig
+drivers/net/wireless/Makefile
+
+include/linux/wireless.h
+include/uapi/linux/wireless.h
+include/linux/ieee80211.h
+include/linux/pci_ids.h
+include/uapi/linux/pci_regs.h
+include/linux/mmc/sdio_ids.h
+include/linux/rndis.h
+include/linux/usb/usbnet.h
+include/linux/usb/cdc.h
+include/uapi/linux/usb/cdc.h
+include/uapi/linux/usb/cdc-wdm.h
+include/linux/usb/cdc_ncm.h
+include/linux/usb/cdc-wdm.h
+include/linux/usb/rndis_host.h
+include/uapi/linux/nl80211.h
+include/net/rsi_91x.h
+
+include/net/cfg80211.h
+include/net/cfg80211-wext.h
+include/net/ieee80211_radiotap.h
+include/net/lib80211.h
+include/net/mac80211.h
+include/net/regulatory.h
+include/net/codel.h
+include/net/codel_impl.h
+include/net/codel_qdisc.h
+include/net/fq.h
+include/net/fq_impl.h
+
+net/Makefile
+net/Kconfig
+net/wireless/
+net/mac80211/
+
+drivers/net/wireless/mac80211_hwsim.c
+drivers/net/wireless/mac80211_hwsim.h

@@ -5,8 +5,7 @@ AC_DEFUN([AC_XE_CONFIG], [
 		[],
 		[enable_linux_builtin=no])
 	AC_CONFIG_KERNEL
-
-
+	AC_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
 
 	AC_KERNEL_WAIT
 ])

@@ -11,4 +11,9 @@
 #define LINUX_BACKPORT(__sym) backport_ ##__sym
 #endif
 
+/* FIXME: Auto tools conversion is required for assign_str */
+#if LINUX_VERSION_IS_LESS(6,10,0)
+#define BPM_ASSIGN_STR_SECOND_ARG_PRESENT
+#endif
+
 #endif /* __BACKPORT_H */

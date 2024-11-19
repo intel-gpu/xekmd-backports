@@ -1,4 +1,4 @@
-From a20d609b9c10aefe6181230a7d58610828f0c837 Mon Sep 17 00:00:00 2001
+From 93699c0d6fdb2937c45e19bd53cc0963ffac2b2e Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Fri, 8 Mar 2024 14:34:01 +0200
 Subject: drm/xe/eudebug: Add UFENCE events with acks
@@ -22,6 +22,7 @@ Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 (cherry picked from commit 80209ee996fc143373815a8bb1988c052590dd6f eudebug-dev-prelim)
 (backported from commit 816b186ce2e87df7c7ead4ad44f70f3b10a04c91 linux-next)
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c       | 241 +++++++++++++++++++++++++-
  drivers/gpu/drm/xe/xe_eudebug.h       |  11 ++
@@ -427,10 +428,10 @@ index 1ffe33f15..6cddb8acf 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_exec.c b/drivers/gpu/drm/xe/xe_exec.c
-index f36980aa2..400cb576f 100644
+index 6623287fd..8a72b9ad7 100644
 --- a/drivers/gpu/drm/xe/xe_exec.c
 +++ b/drivers/gpu/drm/xe/xe_exec.c
-@@ -157,7 +157,7 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -156,7 +156,7 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  	vm = q->vm;
  
  	for (num_syncs = 0; num_syncs < args->num_syncs; num_syncs++) {
@@ -440,7 +441,7 @@ index f36980aa2..400cb576f 100644
  					  (xe_vm_in_lr_mode(vm) ?
  					   SYNC_PARSE_FLAG_LR_MODE : 0));
 diff --git a/drivers/gpu/drm/xe/xe_sync.c b/drivers/gpu/drm/xe/xe_sync.c
-index 0928a75e9..a23cc42c2 100644
+index d79147f7b..1899f8243 100644
 --- a/drivers/gpu/drm/xe/xe_sync.c
 +++ b/drivers/gpu/drm/xe/xe_sync.c
 @@ -18,17 +18,7 @@
@@ -487,10 +488,10 @@ index 0928a75e9..a23cc42c2 100644
  	struct xe_user_fence *ufence;
  	u64 __user *ptr = u64_to_user_ptr(addr);
 +	u64 bind_ref;
+ 	u64 __maybe_unused prefetch_val;
  
- 	if (!access_ok(ptr, sizeof(*ptr)))
- 		return ERR_PTR(-EFAULT);
-@@ -69,12 +67,23 @@ static struct xe_user_fence *user_fence_create(struct xe_device *xe, u64 addr,
+ 	if (get_user(prefetch_val, ptr))
+@@ -70,12 +68,23 @@ static struct xe_user_fence *user_fence_create(struct xe_device *xe, u64 addr,
  	ufence->mm = current->mm;
  	mmgrab(ufence->mm);
  
@@ -516,7 +517,7 @@ index 0928a75e9..a23cc42c2 100644
  
  	if (mmget_not_zero(ufence->mm)) {
  		kthread_use_mm(ufence->mm);
-@@ -85,7 +94,20 @@ static void user_fence_worker(struct work_struct *w)
+@@ -86,7 +95,20 @@ static void user_fence_worker(struct work_struct *w)
  	}
  
  	wake_up_all(&ufence->xe->ufence_wq);
@@ -537,7 +538,7 @@ index 0928a75e9..a23cc42c2 100644
  	user_fence_put(ufence);
  }
  
-@@ -104,6 +126,7 @@ static void user_fence_cb(struct dma_fence *fence, struct dma_fence_cb *cb)
+@@ -105,6 +127,7 @@ static void user_fence_cb(struct dma_fence *fence, struct dma_fence_cb *cb)
  }
  
  int xe_sync_entry_parse(struct xe_device *xe, struct xe_file *xef,
@@ -545,7 +546,7 @@ index 0928a75e9..a23cc42c2 100644
  			struct xe_sync_entry *sync,
  			struct drm_xe_sync __user *sync_user,
  			unsigned int flags)
-@@ -185,7 +208,8 @@ int xe_sync_entry_parse(struct xe_device *xe, struct xe_file *xef,
+@@ -186,7 +209,8 @@ int xe_sync_entry_parse(struct xe_device *xe, struct xe_file *xef,
  		if (exec) {
  			sync->addr = sync_in.addr;
  		} else {
@@ -627,7 +628,7 @@ index 30ac3f519..907c601a6 100644
  struct xe_sync_entry {
  	struct drm_syncobj *syncobj;
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index d80770c96..a130c9025 100644
+index 84ef672e3..b09238d15 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -3048,9 +3048,11 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
@@ -682,5 +683,5 @@ index 44cf1b699..b2f6038cc 100644
  }
  #endif
 -- 
-2.34.1
+2.25.1
 

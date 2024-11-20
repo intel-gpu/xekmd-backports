@@ -1,7 +1,7 @@
-From 543cc97fccf9fa88e1b7e22babd384ab83b30796 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jani Nikula <jani.nikula@intel.com>
 Date: Wed, 21 Aug 2024 12:50:36 +0300
-Subject: drm/i915/display: identify display steppings in display probe
+Subject: [PATCH] drm/i915/display: identify display steppings in display probe
 
 Both i915 and xe have code to identify display steppings. Start
 deduplicating this by, uh, adding a third copy in display code. This is
@@ -31,7 +31,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  3 files changed, 217 insertions(+), 12 deletions(-)
 
 diff --git a/drivers/gpu/drm/i915/display/intel_display_device.c b/drivers/gpu/drm/i915/display/intel_display_device.c
-index ff3bac7dd9e3..5705f5bfc03c 100644
 --- a/drivers/gpu/drm/i915/display/intel_display_device.c
 +++ b/drivers/gpu/drm/i915/display/intel_display_device.c
 @@ -16,14 +16,25 @@
@@ -456,7 +455,6 @@ index ff3bac7dd9e3..5705f5bfc03c 100644
  	return;
  
 diff --git a/drivers/gpu/drm/i915/display/intel_display_device.h b/drivers/gpu/drm/i915/display/intel_display_device.h
-index ccf1710cb9df..4615c3ba60aa 100644
 --- a/drivers/gpu/drm/i915/display/intel_display_device.h
 +++ b/drivers/gpu/drm/i915/display/intel_display_device.h
 @@ -201,8 +201,9 @@ struct intel_display_runtime_info {
@@ -471,7 +469,6 @@ index ccf1710cb9df..4615c3ba60aa 100644
  	u32 rawclk_freq;
  
 diff --git a/drivers/gpu/drm/xe/compat-i915-headers/intel_step.h b/drivers/gpu/drm/xe/compat-i915-headers/intel_step.h
-index ee3f45b668b9..2cf13a572ab0 100644
 --- a/drivers/gpu/drm/xe/compat-i915-headers/intel_step.h
 +++ b/drivers/gpu/drm/xe/compat-i915-headers/intel_step.h
 @@ -8,6 +8,7 @@
@@ -482,6 +479,3 @@ index ee3f45b668b9..2cf13a572ab0 100644
  #define intel_step_name xe_step_name
  
  #endif /* __INTEL_STEP_H__ */
--- 
-2.46.0
-

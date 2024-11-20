@@ -1,7 +1,8 @@
-From 832ed040288d1cd344a59e2f459cb84c1f7f85e5 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Thomas=20Hellstr=C3=B6m?= <thomas.hellstrom@linux.intel.com>
 Date: Tue, 3 Sep 2024 11:42:32 +0200
-Subject: drm/xe: Use xe_pm_runtime_get in xe_bo_move() if reclaim-safe.
+Subject: [PATCH] drm/xe: Use xe_pm_runtime_get in xe_bo_move() if
+ reclaim-safe.
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -36,7 +37,6 @@ Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
  3 files changed, 19 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
-index 23c19323dcb1..49b6174effb9 100644
 --- a/drivers/gpu/drm/xe/xe_bo.c
 +++ b/drivers/gpu/drm/xe/xe_bo.c
 @@ -758,7 +758,16 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
@@ -58,7 +58,6 @@ index 23c19323dcb1..49b6174effb9 100644
  	if (xe_bo_is_pinned(bo) && !xe_bo_is_user(bo)) {
  		/*
 diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
-index 2dc95c609ca8..9c44f78c9890 100644
 --- a/drivers/gpu/drm/xe/xe_pm.c
 +++ b/drivers/gpu/drm/xe/xe_pm.c
 @@ -78,7 +78,14 @@ static struct lockdep_map xe_pm_runtime_nod3cold_map = {
@@ -78,7 +77,6 @@ index 2dc95c609ca8..9c44f78c9890 100644
  	return !xe->d3cold.capable && !xe->info.has_sriov;
  }
 diff --git a/drivers/gpu/drm/xe/xe_pm.h b/drivers/gpu/drm/xe/xe_pm.h
-index 9aef673b1c8a..998d1ed64556 100644
 --- a/drivers/gpu/drm/xe/xe_pm.h
 +++ b/drivers/gpu/drm/xe/xe_pm.h
 @@ -31,6 +31,7 @@ bool xe_pm_runtime_resume_and_get(struct xe_device *xe);
@@ -89,6 +87,3 @@ index 9aef673b1c8a..998d1ed64556 100644
  struct task_struct *xe_pm_read_callback_task(struct xe_device *xe);
  int xe_pm_module_init(void);
  
--- 
-2.34.1
-

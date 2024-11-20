@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Thu, 31 Oct 2024 11:22:57 -0700
+Subject: [PATCH] drm/xe: Restore system memory GGTT mappings
+
+commit dd886a63d6e2ce5c16e662c07547c067ad7d91f5 upstream.
+
+GGTT mappings reside on the device and this state is lost during suspend
+/ d3cold thus this state must be restored resume regardless if the BO is
+in system memory or VRAM.
+
+v2:
+ - Unnecessary parentheses around bo->placements[0] (Checkpatch)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/20241031182257.2949579-1-matthew.brost@intel.com
+(cherry picked from commit a19d1db9a3fa89fabd7c83544b84f393ee9b851f)
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+---
+ drivers/gpu/drm/xe/xe_bo.c       | 14 +++++++++++---
+ drivers/gpu/drm/xe/xe_bo_evict.c |  1 -
+ 2 files changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
+--- a/drivers/gpu/drm/xe/xe_bo.c
++++ b/drivers/gpu/drm/xe/xe_bo.c
+@@ -869,8 +869,8 @@ int xe_bo_evict_pinned(struct xe_bo *bo)
+ 	if (WARN_ON(!xe_bo_is_pinned(bo)))
+ 		return -EINVAL;
+ 
+-	if (WARN_ON(!xe_bo_is_vram(bo)))
+-		return -EINVAL;
++	if (!xe_bo_is_vram(bo))
++		return 0;
+ 
+ 	ret = ttm_bo_mem_space(&bo->ttm, &placement, &new_mem, &ctx);
+ 	if (ret)
+@@ -920,6 +920,7 @@ int xe_bo_restore_pinned(struct xe_bo *bo)
+ 		.interruptible = false,
+ 	};
+ 	struct ttm_resource *new_mem;
++	struct ttm_place *place = &bo->placements[0];
+ 	int ret;
+ 
+ 	xe_bo_assert_held(bo);
+@@ -933,6 +934,9 @@ int xe_bo_restore_pinned(struct xe_bo *bo)
+ 	if (WARN_ON(xe_bo_is_vram(bo) || !bo->ttm.ttm))
+ 		return -EINVAL;
+ 
++	if (!mem_type_is_vram(place->mem_type))
++		return 0;
++
+ 	ret = ttm_bo_mem_space(&bo->ttm, &bo->placement, &new_mem, &ctx);
+ 	if (ret)
+ 		return ret;
+@@ -1740,7 +1744,10 @@ int xe_bo_pin(struct xe_bo *bo)
+ 			place->fpfn = (xe_bo_addr(bo, 0, PAGE_SIZE) -
+ 				       vram_region_gpu_offset(bo->ttm.resource)) >> PAGE_SHIFT;
+ 			place->lpfn = place->fpfn + (bo->size >> PAGE_SHIFT);
++		}
+ 
++		if (mem_type_is_vram(place->mem_type) ||
++		    bo->flags & XE_BO_FLAG_GGTT) {
+ 			spin_lock(&xe->pinned.lock);
+ 			list_add_tail(&bo->pinned_link, &xe->pinned.kernel_bo_present);
+ 			spin_unlock(&xe->pinned.lock);
+@@ -1801,7 +1808,8 @@ void xe_bo_unpin(struct xe_bo *bo)
+ 	    bo->flags & XE_BO_FLAG_INTERNAL_TEST)) {
+ 		struct ttm_place *place = &(bo->placements[0]);
+ 
+-		if (mem_type_is_vram(place->mem_type)) {
++		if (mem_type_is_vram(place->mem_type) ||
++		    bo->flags & XE_BO_FLAG_GGTT) {
+ 			spin_lock(&xe->pinned.lock);
+ 			xe_assert(xe, !list_empty(&bo->pinned_link));
+ 			list_del_init(&bo->pinned_link);
+diff --git a/drivers/gpu/drm/xe/xe_bo_evict.c b/drivers/gpu/drm/xe/xe_bo_evict.c
+--- a/drivers/gpu/drm/xe/xe_bo_evict.c
++++ b/drivers/gpu/drm/xe/xe_bo_evict.c
+@@ -159,7 +159,6 @@ int xe_bo_restore_kernel(struct xe_device *xe)
+ 		 * should setup the iosys map.
+ 		 */
+ 		xe_assert(xe, !iosys_map_is_null(&bo->vmap));
+-		xe_assert(xe, xe_bo_is_vram(bo));
+ 
+ 		xe_bo_put(bo);
+ 

@@ -1,10 +1,13 @@
-From 16bc211b1ff4a8ece51c72788d65d80fe0336875 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Thomas=20Hellstr=C3=B6m?= <thomas.hellstrom@linux.intel.com>
 Date: Mon, 26 Aug 2024 16:34:50 +0200
-Subject: drm/xe: Use separate rpm lockdep map for non-d3cold-capable devices
+Subject: [PATCH] drm/xe: Use separate rpm lockdep map for non-d3cold-capable
+ devices
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
+
+commit 379cad69bdfe522e840ed5f5c01ac8769006d53e upstream.
 
 For non-d3cold-capable devices we'd like to be able to wake up the
 device from reclaim. In particular, for Lunar Lake we'd like to be
@@ -33,9 +36,7 @@ Cc: "Auld, Matthew" <matthew.auld@intel.com>
 Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
 Reviewed-by: Matthew Auld <matthew.auld@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240826143450.92511-1-thomas.hellstrom@linux.intel.com
-(cherry picked from commit 379cad69bdfe522e840ed5f5c01ac8769006d53e linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---
  drivers/gpu/drm/xe/xe_module.c |  9 ++++
  drivers/gpu/drm/xe/xe_pm.c     | 84 ++++++++++++++++++++++++++++------
@@ -43,7 +44,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  3 files changed, 80 insertions(+), 14 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_module.c b/drivers/gpu/drm/xe/xe_module.c
-index 464ec24e2dd2..5791670c22a3 100644
 --- a/drivers/gpu/drm/xe/xe_module.c
 +++ b/drivers/gpu/drm/xe/xe_module.c
 @@ -13,6 +13,7 @@
@@ -77,7 +77,6 @@ index 464ec24e2dd2..5791670c22a3 100644
  
  static int __init xe_call_init_func(unsigned int i)
 diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
-index 0f6f0526efbc..2dc95c609ca8 100644
 --- a/drivers/gpu/drm/xe/xe_pm.c
 +++ b/drivers/gpu/drm/xe/xe_pm.c
 @@ -69,11 +69,34 @@
@@ -239,7 +238,6 @@ index 0f6f0526efbc..2dc95c609ca8 100644
 +	return 0;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_pm.h b/drivers/gpu/drm/xe/xe_pm.h
-index 104a21ae6dfd..9aef673b1c8a 100644
 --- a/drivers/gpu/drm/xe/xe_pm.h
 +++ b/drivers/gpu/drm/xe/xe_pm.h
 @@ -32,5 +32,6 @@ void xe_pm_assert_unbounded_bridge(struct xe_device *xe);
@@ -249,6 +247,3 @@ index 104a21ae6dfd..9aef673b1c8a 100644
 +int xe_pm_module_init(void);
  
  #endif
--- 
-2.46.0
-

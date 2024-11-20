@@ -1,7 +1,7 @@
-From 250146a14b6e987b882e81c5e8e92bae6e9191c8 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Lucas De Marchi <lucas.demarchi@intel.com>
 Date: Fri, 30 Aug 2024 09:34:04 -0700
-Subject: drm/i915/display: rename IS_DISPLAY_IP_STEP() to
+Subject: [PATCH] drm/i915/display: rename IS_DISPLAY_IP_STEP() to
  IS_DISPLAY_VER_STEP()
 
 Unify macro naming on VER.
@@ -24,7 +24,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  5 files changed, 12 insertions(+), 12 deletions(-)
 
 diff --git a/drivers/gpu/drm/i915/display/intel_display_device.h b/drivers/gpu/drm/i915/display/intel_display_device.h
-index 73d6c865693b..ccf1710cb9df 100644
 --- a/drivers/gpu/drm/i915/display/intel_display_device.h
 +++ b/drivers/gpu/drm/i915/display/intel_display_device.h
 @@ -175,13 +175,13 @@ enum intel_display_subplatform {
@@ -45,7 +44,6 @@ index 73d6c865693b..ccf1710cb9df 100644
  	 IS_DISPLAY_STEP((__i915), (from), (until)))
  
 diff --git a/drivers/gpu/drm/i915/display/intel_fbc.c b/drivers/gpu/drm/i915/display/intel_fbc.c
-index 8488f82143a4..8102dd5c85ee 100644
 --- a/drivers/gpu/drm/i915/display/intel_fbc.c
 +++ b/drivers/gpu/drm/i915/display/intel_fbc.c
 @@ -1274,7 +1274,7 @@ static int intel_fbc_check_plane(struct intel_atomic_state *state,
@@ -58,7 +56,6 @@ index 8488f82143a4..8102dd5c85ee 100644
  		plane_state->no_fbc_reason = "PSR1 enabled (Wa_14016291713)";
  		return 0;
 diff --git a/drivers/gpu/drm/i915/display/intel_hdcp.c b/drivers/gpu/drm/i915/display/intel_hdcp.c
-index 05402ae6b569..94418f218448 100644
 --- a/drivers/gpu/drm/i915/display/intel_hdcp.c
 +++ b/drivers/gpu/drm/i915/display/intel_hdcp.c
 @@ -42,11 +42,11 @@ intel_hdcp_disable_hdcp_line_rekeying(struct intel_encoder *encoder,
@@ -77,7 +74,6 @@ index 05402ae6b569..94418f218448 100644
  				     TRANS_DDI_FUNC_CTL(dev_priv, hdcp->cpu_transcoder),
  				     0, TRANS_DDI_HDCP_LINE_REKEY_DISABLE);
 diff --git a/drivers/gpu/drm/i915/display/intel_pmdemand.c b/drivers/gpu/drm/i915/display/intel_pmdemand.c
-index 9ca981b7a12c..ceaf9e3147da 100644
 --- a/drivers/gpu/drm/i915/display/intel_pmdemand.c
 +++ b/drivers/gpu/drm/i915/display/intel_pmdemand.c
 @@ -92,7 +92,7 @@ int intel_pmdemand_init(struct drm_i915_private *i915)
@@ -90,10 +86,9 @@ index 9ca981b7a12c..ceaf9e3147da 100644
  		intel_de_rmw(i915, XELPD_CHICKEN_DCPR_3, 0, DMD_RSP_TIMEOUT_DISABLE);
  
 diff --git a/drivers/gpu/drm/i915/display/intel_psr.c b/drivers/gpu/drm/i915/display/intel_psr.c
-index 572dcdf77453..257526362b39 100644
 --- a/drivers/gpu/drm/i915/display/intel_psr.c
 +++ b/drivers/gpu/drm/i915/display/intel_psr.c
-@@ -1868,14 +1868,14 @@ static void intel_psr_enable_source(struct intel_dp *intel_dp,
+@@ -1887,14 +1887,14 @@ static void intel_psr_enable_source(struct intel_dp *intel_dp,
  		 * cause issues if non-supported panels are used.
  		 */
  		if (!intel_dp->psr.panel_replay_enabled &&
@@ -110,7 +105,7 @@ index 572dcdf77453..257526362b39 100644
  			intel_de_rmw(dev_priv,
  				     MTL_CLKGATE_DIS_TRANS(dev_priv, cpu_transcoder),
  				     0,
-@@ -2057,7 +2057,7 @@ static void intel_psr_disable_locked(struct intel_dp *intel_dp)
+@@ -2076,7 +2076,7 @@ static void intel_psr_disable_locked(struct intel_dp *intel_dp)
  	if (intel_dp->psr.sel_update_enabled) {
  		/* Wa_16012604467:adlp,mtl[a0,b0] */
  		if (!intel_dp->psr.panel_replay_enabled &&
@@ -119,7 +114,7 @@ index 572dcdf77453..257526362b39 100644
  			intel_de_rmw(dev_priv,
  				     MTL_CLKGATE_DIS_TRANS(dev_priv, cpu_transcoder),
  				     MTL_CLKGATE_DIS_TRANS_DMASC_GATING_DIS, 0);
-@@ -2542,7 +2542,7 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
+@@ -2561,7 +2561,7 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
  
  	/* Wa_14014971492 */
  	if (!crtc_state->has_panel_replay &&
@@ -128,6 +123,3 @@ index 572dcdf77453..257526362b39 100644
  	      IS_ALDERLAKE_P(dev_priv) || IS_TIGERLAKE(dev_priv))) &&
  	    crtc_state->splitter.enable)
  		crtc_state->psr2_su_area.y1 = 0;
--- 
-2.46.0
-

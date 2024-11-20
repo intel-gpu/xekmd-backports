@@ -1,7 +1,7 @@
-From 14ea3b41d650ba0e49077e131ece380fd1a69e43 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Date: Wed, 21 Aug 2024 15:38:39 -0400
-Subject: drm/xe: Introduce xe_ggtt_print_holes
+Subject: [PATCH] drm/xe: Introduce xe_ggtt_print_holes
 
 Introduce a new xe_ggtt_print_holes helper that attends the SRIOV
 demand and finishes the goal of limiting drm_mm access to xe_ggtt.
@@ -20,10 +20,9 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  3 files changed, 42 insertions(+), 24 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index 2d055f489879..960f5a28b7ed 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
-@@ -682,3 +682,43 @@ int xe_ggtt_dump(struct xe_ggtt *ggtt, struct drm_printer *p)
+@@ -692,3 +692,43 @@ int xe_ggtt_dump(struct xe_ggtt *ggtt, struct drm_printer *p)
  	mutex_unlock(&ggtt->lock);
  	return err;
  }
@@ -68,7 +67,6 @@ index 2d055f489879..960f5a28b7ed 100644
 +	return total;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.h b/drivers/gpu/drm/xe/xe_ggtt.h
-index 31060fe7644b..67ae5f1602a3 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.h
 +++ b/drivers/gpu/drm/xe/xe_ggtt.h
 @@ -32,6 +32,7 @@ void xe_ggtt_remove_bo(struct xe_ggtt *ggtt, struct xe_bo *bo);
@@ -80,7 +78,6 @@ index 31060fe7644b..67ae5f1602a3 100644
  #ifdef CONFIG_PCI_IOV
  void xe_ggtt_assign(struct xe_ggtt *ggtt, const struct xe_ggtt_node *node, u16 vfid);
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-index 6eeec2048505..a51f54782052 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 @@ -6,9 +6,6 @@
@@ -131,6 +128,3 @@ index 6eeec2048505..a51f54782052 100644
  	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
  
  	string_get_size(total, 1, STRING_UNITS_2, buf, sizeof(buf));
--- 
-2.46.0
-

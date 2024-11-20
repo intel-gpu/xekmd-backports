@@ -1,7 +1,7 @@
-From fe9ec4d3868c43b6f9983e771d7f94e6602dc261 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Lucas De Marchi <lucas.demarchi@intel.com>
 Date: Fri, 19 Jul 2024 12:15:34 -0700
-Subject: drm/xe: Fix warning on unreachable statement
+Subject: [PATCH] drm/xe: Fix warning on unreachable statement
 
 eu_type_to_str() relies on -Wswitch to warn (and -Werror) to make sure
 it handles all enum values. However it's perfectly legal to pass an int
@@ -39,7 +39,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_topology.c b/drivers/gpu/drm/xe/xe_gt_topology.c
-index 5a1559edf3e9..0662f71c6ede 100644
 --- a/drivers/gpu/drm/xe/xe_gt_topology.c
 +++ b/drivers/gpu/drm/xe/xe_gt_topology.c
 @@ -233,7 +233,7 @@ static const char *eu_type_to_str(enum xe_gt_eu_type eu_type)
@@ -51,6 +50,3 @@ index 5a1559edf3e9..0662f71c6ede 100644
  }
  
  void
--- 
-2.46.0
-

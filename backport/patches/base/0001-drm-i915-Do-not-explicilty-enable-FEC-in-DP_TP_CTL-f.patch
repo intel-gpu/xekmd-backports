@@ -1,7 +1,10 @@
-From 195517037f72d81f6c79dcae8a264369ce54ab14 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Chaitanya Kumar Borah <chaitanya.kumar.borah@intel.com>
 Date: Thu, 22 Aug 2024 11:44:48 +0530
-Subject: drm/i915: Do not explicilty enable FEC in DP_TP_CTL for UHBR rates
+Subject: [PATCH] drm/i915: Do not explicilty enable FEC in DP_TP_CTL for UHBR
+ rates
+
+commit 26c85e7f40f9aed4f5f04dcb0ea0bce5d44f6f54 upstream.
 
 In case of UHBR rates, we do not need to explicitly enable FEC by writing
 to DP_TP_CTL register.
@@ -18,17 +21,15 @@ Signed-off-by: Chaitanya Kumar Borah <chaitanya.kumar.borah@intel.com>
 Reviewed-by: Imre Deak <imre.deak@intel.com>
 Signed-off-by: Suraj Kandpal <suraj.kandpal@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240822061448.4085693-1-chaitanya.kumar.borah@intel.com
-(cherry picked from commit 26c85e7f40f9aed4f5f04dcb0ea0bce5d44f6f54)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 ---
  drivers/gpu/drm/i915/display/intel_dp.c | 8 +++++++-
  1 file changed, 7 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/i915/display/intel_dp.c b/drivers/gpu/drm/i915/display/intel_dp.c
-index e26fe5b1f01b..d923798dd26e 100644
 --- a/drivers/gpu/drm/i915/display/intel_dp.c
 +++ b/drivers/gpu/drm/i915/display/intel_dp.c
-@@ -2204,9 +2204,15 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
+@@ -2205,9 +2205,15 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
  		&pipe_config->hw.adjusted_mode;
  	int ret;
  
@@ -45,6 +46,3 @@ index e26fe5b1f01b..d923798dd26e 100644
  
  	if (!intel_dp_supports_dsc(connector, pipe_config))
  		return -EINVAL;
--- 
-2.34.1
-

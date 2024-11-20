@@ -1,7 +1,7 @@
-From 8d1fcf420e4aea6357a3d5345140617daedaf42e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Date: Wed, 24 Jul 2024 17:32:22 -0700
-Subject: drm/xe/gsc: Define GSC binary for LNL
+Subject: [PATCH] drm/xe/gsc: Define GSC binary for LNL
 
 As with previous binaries, we match the compatibility version instead of
 the build number.
@@ -17,7 +17,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  1 file changed, 1 insertion(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_uc_fw.c b/drivers/gpu/drm/xe/xe_uc_fw.c
-index 5fc34f5380df..883eb619de5a 100644
 --- a/drivers/gpu/drm/xe/xe_uc_fw.c
 +++ b/drivers/gpu/drm/xe/xe_uc_fw.c
 @@ -126,6 +126,7 @@ struct fw_blobs_by_type {
@@ -28,6 +27,3 @@ index 5fc34f5380df..883eb619de5a 100644
  	fw_def(METEORLAKE,	major_ver(i915,	gsc,	mtl,	1, 0, 0))
  
  #define MAKE_FW_PATH(dir__, uc__, shortname__, version__)			\
--- 
-2.46.0
-

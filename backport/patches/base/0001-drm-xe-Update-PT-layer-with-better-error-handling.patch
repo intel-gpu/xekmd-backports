@@ -1,7 +1,7 @@
-From b45778f88e64e605fb783a9be3c33cf55de2934f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Wed, 3 Jul 2024 21:16:51 -0700
-Subject: drm/xe: Update PT layer with better error handling
+Subject: [PATCH] drm/xe: Update PT layer with better error handling
 
 Update PT layer so if a memory allocation for a PTE fails the error can
 be propagated to the user without requiring the VM to be killed.
@@ -25,7 +25,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  1 file changed, 167 insertions(+), 65 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pt.c b/drivers/gpu/drm/xe/xe_pt.c
-index 319ba5df9a9a..9c0cdb97866e 100644
 --- a/drivers/gpu/drm/xe/xe_pt.c
 +++ b/drivers/gpu/drm/xe/xe_pt.c
 @@ -846,19 +846,27 @@ xe_vm_populate_pgtable(struct xe_migrate_pt_update *pt_update, struct xe_tile *t
@@ -430,6 +429,3 @@ index 319ba5df9a9a..9c0cdb97866e 100644
  	xe_bo_put_commit(&vops->pt_update_ops[tile->id].deferred);
 -	xe_vm_kill(vops->vm, false);
  }
--- 
-2.46.0
-

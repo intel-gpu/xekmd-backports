@@ -1,7 +1,7 @@
-From adb7a708b06c55941308a335681fda37a22d74ff Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Date: Wed, 28 Aug 2024 14:51:55 -0700
-Subject: drm/xe/gsc: Fix FW status if the firmware is already loaded
+Subject: [PATCH] drm/xe/gsc: Fix FW status if the firmware is already loaded
 
 We set the FW status to "TRANSFERRED" after the load completes and to
 "RUNNING"once we're done with proxy init, so do the same if we're trying
@@ -24,7 +24,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  1 file changed, 4 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gsc.c b/drivers/gpu/drm/xe/xe_gsc.c
-index 9614d9e6617e..6a94d51fb933 100644
 --- a/drivers/gpu/drm/xe/xe_gsc.c
 +++ b/drivers/gpu/drm/xe/xe_gsc.c
 @@ -531,7 +531,10 @@ void xe_gsc_load_start(struct xe_gsc *gsc)
@@ -39,6 +38,3 @@ index 9614d9e6617e..6a94d51fb933 100644
  		return;
  	}
  
--- 
-2.46.0
-

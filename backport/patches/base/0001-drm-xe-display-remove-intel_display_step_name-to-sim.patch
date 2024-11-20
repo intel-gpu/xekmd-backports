@@ -1,7 +1,7 @@
-From 6454baf587f8719eac19a9b82d6fbb0c670004fb Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jani Nikula <jani.nikula@intel.com>
 Date: Tue, 20 Aug 2024 22:00:35 +0300
-Subject: drm/xe/display: remove intel_display_step_name() to simplify
+Subject: [PATCH] drm/xe/display: remove intel_display_step_name() to simplify
 
 The intel_display_step_name() is an unnecessary extra
 indirection. Simplify by just adding a macro to map intel_step_name() to
@@ -25,7 +25,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  5 files changed, 4 insertions(+), 15 deletions(-)
 
 diff --git a/drivers/gpu/drm/i915/display/intel_dmc.c b/drivers/gpu/drm/i915/display/intel_dmc.c
-index 73977b173898..7c756d5ba2a2 100644
 --- a/drivers/gpu/drm/i915/display/intel_dmc.c
 +++ b/drivers/gpu/drm/i915/display/intel_dmc.c
 @@ -391,7 +391,7 @@ static const struct stepping_info *
@@ -38,7 +37,6 @@ index 73977b173898..7c756d5ba2a2 100644
  	si->stepping = step_name[0];
  	si->substepping = step_name[1];
 diff --git a/drivers/gpu/drm/i915/intel_step.c b/drivers/gpu/drm/i915/intel_step.c
-index a5adfb5d8fd2..80464e4edcce 100644
 --- a/drivers/gpu/drm/i915/intel_step.c
 +++ b/drivers/gpu/drm/i915/intel_step.c
 @@ -275,8 +275,3 @@ const char *intel_step_name(enum intel_step step)
@@ -51,7 +49,6 @@ index a5adfb5d8fd2..80464e4edcce 100644
 -	return intel_step_name(RUNTIME_INFO(i915)->step.display_step);
 -}
 diff --git a/drivers/gpu/drm/i915/intel_step.h b/drivers/gpu/drm/i915/intel_step.h
-index b6f43b624774..96dfca4cba73 100644
 --- a/drivers/gpu/drm/i915/intel_step.h
 +++ b/drivers/gpu/drm/i915/intel_step.h
 @@ -78,6 +78,5 @@ enum intel_step {
@@ -62,7 +59,6 @@ index b6f43b624774..96dfca4cba73 100644
  
  #endif /* __INTEL_STEP_H__ */
 diff --git a/drivers/gpu/drm/xe/compat-i915-headers/i915_drv.h b/drivers/gpu/drm/xe/compat-i915-headers/i915_drv.h
-index a7d206133922..3132a328e42c 100644
 --- a/drivers/gpu/drm/xe/compat-i915-headers/i915_drv.h
 +++ b/drivers/gpu/drm/xe/compat-i915-headers/i915_drv.h
 @@ -82,6 +82,8 @@ static inline struct drm_i915_private *kdev_to_i915(struct device *kdev)
@@ -75,7 +71,6 @@ index a7d206133922..3132a328e42c 100644
  #define IS_DISPLAY_STEP(xe, first, last) ({u8 __step = (xe)->info.step.display; first <= __step && __step < last; })
  
 diff --git a/drivers/gpu/drm/xe/compat-i915-headers/intel_step.h b/drivers/gpu/drm/xe/compat-i915-headers/intel_step.h
-index 0006ef812346..ee3f45b668b9 100644
 --- a/drivers/gpu/drm/xe/compat-i915-headers/intel_step.h
 +++ b/drivers/gpu/drm/xe/compat-i915-headers/intel_step.h
 @@ -6,15 +6,8 @@
@@ -95,6 +90,3 @@ index 0006ef812346..ee3f45b668b9 100644
 +#define intel_step_name xe_step_name
  
  #endif /* __INTEL_STEP_H__ */
--- 
-2.46.0
-

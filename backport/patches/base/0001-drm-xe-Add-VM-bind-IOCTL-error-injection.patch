@@ -1,7 +1,7 @@
-From 4318b7c44b9d6d2f00695620b7ba55dc62897678 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Wed, 3 Jul 2024 21:16:52 -0700
-Subject: drm/xe: Add VM bind IOCTL error injection
+Subject: [PATCH] drm/xe: Add VM bind IOCTL error injection
 
 Add VM bind IOCTL error injection which steals MSB of the bind flags
 field which if set injects errors at various points in the VM bind
@@ -24,7 +24,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  4 files changed, 61 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 1b370c171127..4219d82a60a2 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -23,6 +23,10 @@
@@ -38,7 +37,7 @@ index 1b370c171127..4219d82a60a2 100644
  #if IS_ENABLED(CONFIG_DRM_XE_DISPLAY)
  #include "soc/intel_pch.h"
  #include "intel_display_core.h"
-@@ -480,6 +484,14 @@ struct xe_device {
+@@ -483,6 +487,14 @@ struct xe_device {
  		int mode;
  	} wedged;
  
@@ -54,7 +53,6 @@ index 1b370c171127..4219d82a60a2 100644
  
  #if IS_ENABLED(CONFIG_DRM_XE_DISPLAY)
 diff --git a/drivers/gpu/drm/xe/xe_pt.c b/drivers/gpu/drm/xe/xe_pt.c
-index 9c0cdb97866e..c24e869b7eae 100644
 --- a/drivers/gpu/drm/xe/xe_pt.c
 +++ b/drivers/gpu/drm/xe/xe_pt.c
 @@ -1836,6 +1836,12 @@ int xe_pt_update_ops_prepare(struct xe_tile *tile, struct xe_vma_ops *vops)
@@ -84,10 +82,9 @@ index 9c0cdb97866e..c24e869b7eae 100644
  		ifence = kzalloc(sizeof(*ifence), GFP_KERNEL);
  		if (!ifence) {
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 86759b04453f..3e77eba14cfa 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -2476,6 +2476,12 @@ static int vm_bind_ioctl_ops_lock_and_prep(struct drm_exec *exec,
+@@ -2472,6 +2472,12 @@ static int vm_bind_ioctl_ops_lock_and_prep(struct drm_exec *exec,
  			return err;
  	}
  
@@ -100,7 +97,7 @@ index 86759b04453f..3e77eba14cfa 100644
  	return 0;
  }
  
-@@ -2712,11 +2718,18 @@ static int vm_bind_ioctl_ops_execute(struct xe_vm *vm,
+@@ -2708,11 +2714,18 @@ static int vm_bind_ioctl_ops_execute(struct xe_vm *vm,
  	return err;
  }
  
@@ -120,7 +117,7 @@ index 86759b04453f..3e77eba14cfa 100644
  #define XE_64K_PAGE_MASK 0xffffull
  #define ALL_DRM_XE_SYNCS_FLAGS (DRM_XE_SYNCS_FLAG_WAIT_FOR_OP)
  
-@@ -3073,6 +3086,15 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -3069,6 +3082,15 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		err = vm_bind_ioctl_ops_parse(vm, ops[i], &vops);
  		if (err)
  			goto unwind_ops;
@@ -137,7 +134,6 @@ index 86759b04453f..3e77eba14cfa 100644
  
  	/* Nothing to do */
 diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
-index 27d651093d30..7f9a303e51d8 100644
 --- a/drivers/gpu/drm/xe/xe_vm_types.h
 +++ b/drivers/gpu/drm/xe/xe_vm_types.h
 @@ -23,6 +23,16 @@ struct xe_user_fence;
@@ -168,6 +164,3 @@ index 27d651093d30..7f9a303e51d8 100644
  };
  
  #endif
--- 
-2.46.0
-

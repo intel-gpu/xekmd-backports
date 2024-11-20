@@ -1,7 +1,9 @@
-From ea22a27f713f729c3306e4250403aaeffb955702 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Akshata Jahagirdar <akshata.jahagirdar@intel.com>
 Date: Wed, 17 Jul 2024 21:10:06 +0000
-Subject: drm/xe/xe_migrate: Handle migration logic for xe2+ dgfx
+Subject: [PATCH] drm/xe/xe_migrate: Handle migration logic for xe2+ dgfx
+
+commit 523f191cc0c728a02a7e5fd0ec26526c41f399ef upstream.
 
 During eviction (vram->sysmem), we use compressed -> uncompressed mapping.
 During restore (sysmem->vram), we need to use mapping from
@@ -16,15 +18,12 @@ Reviewed-by: Matthew Auld <matthew.auld@intel.com>
 Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/79b3a016e686a662ae68c32b5fc7f0f2ac8043e9.1721250309.git.akshata.jahagirdar@intel.com
-(cherry picked from commit 523f191cc0c728a02a7e5fd0ec26526c41f399ef linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---
  drivers/gpu/drm/xe/xe_migrate.c | 19 +++++++++++--------
  1 file changed, 11 insertions(+), 8 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
-index 565727902284..1e550ba40647 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.c
 +++ b/drivers/gpu/drm/xe/xe_migrate.c
 @@ -706,7 +706,7 @@ static u32 xe_migrate_ccs_copy(struct xe_migrate *m,
@@ -88,6 +87,3 @@ index 565727902284..1e550ba40647 100644
  
  		job = xe_bb_create_migration_job(m->q, bb,
  						 xe_migrate_batch_base(m, usm),
--- 
-2.46.0
-

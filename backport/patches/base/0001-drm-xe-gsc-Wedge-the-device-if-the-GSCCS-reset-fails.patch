@@ -1,7 +1,7 @@
-From 993037bf4663eed7930f96b5c2cd60311b0133af Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Date: Wed, 28 Aug 2024 15:14:57 -0700
-Subject: drm/xe/gsc: Wedge the device if the GSCCS reset fails
+Subject: [PATCH] drm/xe/gsc: Wedge the device if the GSCCS reset fails
 
 Due to the special handling of the GSCCS in HW, we can't escalate to GT
 reset when we receive the reset failure interrupt; the specs indicate
@@ -21,7 +21,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  1 file changed, 3 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gsc.c b/drivers/gpu/drm/xe/xe_gsc.c
-index 50ff43f5426a..76d29408f115 100644
 --- a/drivers/gpu/drm/xe/xe_gsc.c
 +++ b/drivers/gpu/drm/xe/xe_gsc.c
 @@ -334,9 +334,11 @@ static int gsc_er_complete(struct xe_gt *gt)
@@ -37,6 +36,3 @@ index 50ff43f5426a..76d29408f115 100644
  		return -EIO;
  	}
  
--- 
-2.46.0
-

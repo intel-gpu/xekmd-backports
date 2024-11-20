@@ -1,7 +1,7 @@
-From 877f049c38b9c6cfdc19d1b12e221ff071f4f36d Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Mon, 26 Aug 2024 10:01:43 -0700
-Subject: dma-buf: Split out dma fence array create into alloc and arm
+Subject: [PATCH] dma-buf: Split out dma fence array create into alloc and arm
  functions
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -30,7 +30,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  2 files changed, 63 insertions(+), 21 deletions(-)
 
 diff --git a/drivers/dma-buf/dma-fence-array.c b/drivers/dma-buf/dma-fence-array.c
-index c74ac197d5fe..8a08ffde31e7 100644
 --- a/drivers/dma-buf/dma-fence-array.c
 +++ b/drivers/dma-buf/dma-fence-array.c
 @@ -144,37 +144,38 @@ const struct dma_fence_ops dma_fence_array_ops = {
@@ -136,7 +135,6 @@ index c74ac197d5fe..8a08ffde31e7 100644
  	return array;
  }
 diff --git a/include/linux/dma-fence-array.h b/include/linux/dma-fence-array.h
-index 29c5650c1038..079b3dec0a16 100644
 --- a/include/linux/dma-fence-array.h
 +++ b/include/linux/dma-fence-array.h
 @@ -79,6 +79,12 @@ to_dma_fence_array(struct dma_fence *fence)
@@ -152,6 +150,3 @@ index 29c5650c1038..079b3dec0a16 100644
  struct dma_fence_array *dma_fence_array_create(int num_fences,
  					       struct dma_fence **fences,
  					       u64 context, unsigned seqno,
--- 
-2.46.0
-

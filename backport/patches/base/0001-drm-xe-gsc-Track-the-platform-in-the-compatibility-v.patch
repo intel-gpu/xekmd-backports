@@ -1,7 +1,7 @@
-From fca6f648ef85ea5690f012d3a343394582cac771 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Date: Wed, 28 Aug 2024 14:51:56 -0700
-Subject: drm/xe/gsc: Track the platform in the compatibility version
+Subject: [PATCH] drm/xe/gsc: Track the platform in the compatibility version
 
 The GSC compatibility version number is reset for each new platform. To
 indicate this, the version includes a number that identifies the
@@ -27,7 +27,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  2 files changed, 13 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gsc.c b/drivers/gpu/drm/xe/xe_gsc.c
-index 6a94d51fb933..50ff43f5426a 100644
 --- a/drivers/gpu/drm/xe/xe_gsc.c
 +++ b/drivers/gpu/drm/xe/xe_gsc.c
 @@ -165,10 +165,11 @@ static int query_compatibility_version(struct xe_gsc *gsc)
@@ -46,7 +45,6 @@ index 6a94d51fb933..50ff43f5426a 100644
  out_bo:
  	xe_bo_unpin_map_no_vm(bo);
 diff --git a/drivers/gpu/drm/xe/xe_uc_fw.c b/drivers/gpu/drm/xe/xe_uc_fw.c
-index 4bb2a4a80ddc..d431d0031185 100644
 --- a/drivers/gpu/drm/xe/xe_uc_fw.c
 +++ b/drivers/gpu/drm/xe/xe_uc_fw.c
 @@ -129,8 +129,8 @@ struct fw_blobs_by_type {
@@ -97,6 +95,3 @@ index 4bb2a4a80ddc..d431d0031185 100644
  	};
  	static const struct fw_blobs_by_type blobs_all[XE_UC_FW_NUM_TYPES] = {
  		[XE_UC_FW_TYPE_GUC] = { entries_guc, ARRAY_SIZE(entries_guc) },
--- 
-2.46.0
-

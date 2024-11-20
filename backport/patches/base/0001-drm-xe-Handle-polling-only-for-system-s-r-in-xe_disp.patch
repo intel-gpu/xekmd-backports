@@ -1,8 +1,10 @@
-From 0fb4289007776fe0f51494fa346f2a8586d661b6 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Imre Deak <imre.deak@intel.com>
 Date: Fri, 23 Aug 2024 14:21:47 +0300
-Subject: drm/xe: Handle polling only for system s/r in
+Subject: [PATCH] drm/xe: Handle polling only for system s/r in
  xe_display_pm_suspend/resume()
+
+commit 122824165471ea492d8b07d15384345940aababb upstream.
 
 This is a preparation for the follow-up patch where polling
 will be handled properly for all cases during runtime suspend/resume.
@@ -13,15 +15,12 @@ Reviewed-by: Arun R Murthy <arun.r.murthy@intel.com>
 Signed-off-by: Imre Deak <imre.deak@intel.com>
 Signed-off-by: Vinod Govindapillai <vinod.govindapillai@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240823112148.327015-3-vinod.govindapillai@intel.com
-(cherry picked from commit 122824165471ea492d8b07d15384345940aababb linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---
  drivers/gpu/drm/xe/display/xe_display.c | 18 ++++++------------
  1 file changed, 6 insertions(+), 12 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/display/xe_display.c b/drivers/gpu/drm/xe/display/xe_display.c
-index d83046c34f97..1ab94fe7bfb3 100644
 --- a/drivers/gpu/drm/xe/display/xe_display.c
 +++ b/drivers/gpu/drm/xe/display/xe_display.c
 @@ -316,14 +316,11 @@ void xe_display_pm_suspend(struct xe_device *xe, bool runtime)
@@ -61,6 +60,3 @@ index d83046c34f97..1ab94fe7bfb3 100644
  
  	intel_opregion_resume(xe);
  
--- 
-2.46.0
-

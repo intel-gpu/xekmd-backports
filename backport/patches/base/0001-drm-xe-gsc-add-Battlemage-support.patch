@@ -1,7 +1,7 @@
-From 73171c1a0a6c0e5ac69c419eeee16e11b64e0238 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alexander Usyskin <alexander.usyskin@intel.com>
 Date: Mon, 8 Jul 2024 11:49:06 +0300
-Subject: drm/xe/gsc: add Battlemage support
+Subject: [PATCH] drm/xe/gsc: add Battlemage support
 
 Add heci_cscfi support bit for new CSC engine type.
 It has same mmio offsets as DG2 GSC but separate interrupt flow.
@@ -22,7 +22,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  5 files changed, 43 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index cbc582bcc90a..930e8b797ffa 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -40,6 +40,7 @@ struct xe_pat_ops;
@@ -33,7 +32,7 @@ index cbc582bcc90a..930e8b797ffa 100644
  
  #define XE_VRAM_FLAGS_NEED64K		BIT(0)
  
-@@ -285,6 +286,8 @@ struct xe_device {
+@@ -291,6 +292,8 @@ struct xe_device {
  		u8 skip_pcode:1;
  		/** @info.has_heci_gscfi: device has heci gscfi */
  		u8 has_heci_gscfi:1;
@@ -43,7 +42,6 @@ index cbc582bcc90a..930e8b797ffa 100644
  		u8 skip_guc_pc:1;
  		/** @info.has_atomic_enable_pte_bit: Device has atomic enable PTE bit */
 diff --git a/drivers/gpu/drm/xe/xe_heci_gsc.c b/drivers/gpu/drm/xe/xe_heci_gsc.c
-index 1c9d38b6f5f1..65b2e147c4b9 100644
 --- a/drivers/gpu/drm/xe/xe_heci_gsc.c
 +++ b/drivers/gpu/drm/xe/xe_heci_gsc.c
 @@ -92,7 +92,7 @@ void xe_heci_gsc_fini(struct xe_device *xe)
@@ -97,7 +95,6 @@ index 1c9d38b6f5f1..65b2e147c4b9 100644
 +		drm_err_ratelimited(&xe->drm, "error handling GSC irq: %d\n", ret);
 +}
 diff --git a/drivers/gpu/drm/xe/xe_heci_gsc.h b/drivers/gpu/drm/xe/xe_heci_gsc.h
-index 9db454478fae..48b3b1838045 100644
 --- a/drivers/gpu/drm/xe/xe_heci_gsc.h
 +++ b/drivers/gpu/drm/xe/xe_heci_gsc.h
 @@ -11,10 +11,15 @@ struct xe_device;
@@ -126,7 +123,6 @@ index 9db454478fae..48b3b1838045 100644
  
  #endif /* __XE_HECI_GSC_DEV_H__ */
 diff --git a/drivers/gpu/drm/xe/xe_irq.c b/drivers/gpu/drm/xe/xe_irq.c
-index 85733f993d09..5f2c368c35ad 100644
 --- a/drivers/gpu/drm/xe/xe_irq.c
 +++ b/drivers/gpu/drm/xe/xe_irq.c
 @@ -459,6 +459,8 @@ static irqreturn_t dg1_irq_handler(int irq, void *arg)
@@ -139,7 +135,6 @@ index 85733f993d09..5f2c368c35ad 100644
  			gu_misc_iir = gu_misc_irq_ack(xe, master_ctl);
  		}
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index 732ee0d02124..3c4a3c91377a 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
 @@ -59,6 +59,7 @@ struct xe_device_desc {
@@ -184,6 +179,3 @@ index 732ee0d02124..3c4a3c91377a 100644
  
  	drm_dbg(&xe->drm, "Stepping = (G:%s, M:%s, D:%s, B:%s)\n",
  		xe_step_name(xe->info.step.graphics),
--- 
-2.46.0
-

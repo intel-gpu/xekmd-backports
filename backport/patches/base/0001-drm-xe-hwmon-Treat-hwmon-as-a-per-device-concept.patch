@@ -1,7 +1,7 @@
-From 3f21d65cf2f49429b2e4c2f9897ce4e9a8b97bb6 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matt Roper <matthew.d.roper@intel.com>
 Date: Thu, 29 Aug 2024 15:06:22 -0700
-Subject: drm/xe/hwmon: Treat hwmon as a per-device concept
+Subject: [PATCH] drm/xe/hwmon: Treat hwmon as a per-device concept
 
 There's only one instance of hwmon per device, and MMIO access to it is
 always done through the root tile.  The code has been passing around a
@@ -23,7 +23,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  1 file changed, 53 insertions(+), 42 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
-index 98e3ec08279e..aa11728e7e79 100644
 --- a/drivers/gpu/drm/xe/xe_hwmon.c
 +++ b/drivers/gpu/drm/xe/xe_hwmon.c
 @@ -12,7 +12,6 @@
@@ -376,6 +375,3 @@ index 98e3ec08279e..aa11728e7e79 100644
  
  	xe_hwmon_get_preregistration_info(xe);
  
--- 
-2.46.0
-

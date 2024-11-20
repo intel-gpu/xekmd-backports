@@ -1,7 +1,10 @@
-From 4a87a56b0cc13bef5f767c7eee5a305edf1aecf4 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Date: Wed, 21 Aug 2024 15:38:34 -0400
-Subject: drm/{i915, xe}: Avoid direct inspection of dpt_vma from outside dpt
+Subject: [PATCH] drm/{i915, xe}: Avoid direct inspection of dpt_vma from
+ outside dpt
+
+commit 6dbd43dcedf3b58a18eb3518e5c19e38a97aa68a upstream.
 
 DPT code is so dependent on i915 vma implementation and it is not
 ported yet to Xe.
@@ -15,9 +18,7 @@ Cc: Juha-Pekka Heikkila <juhapekka.heikkila@gmail.com>
 Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240821193842.352557-4-rodrigo.vivi@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
-(cherry picked from commit 6dbd43dcedf3b58a18eb3518e5c19e38a97aa68a linux-next)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---
  drivers/gpu/drm/i915/display/intel_dpt.c           | 4 ++++
  drivers/gpu/drm/i915/display/intel_dpt.h           | 3 +++
@@ -26,7 +27,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  4 files changed, 16 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/i915/display/intel_dpt.c b/drivers/gpu/drm/i915/display/intel_dpt.c
-index 73a1918e2537..3a6d99044828 100644
 --- a/drivers/gpu/drm/i915/display/intel_dpt.c
 +++ b/drivers/gpu/drm/i915/display/intel_dpt.c
 @@ -317,3 +317,7 @@ void intel_dpt_destroy(struct i915_address_space *vm)
@@ -38,7 +38,6 @@ index 73a1918e2537..3a6d99044828 100644
 +	return dpt_vma->node.start;
 +}
 diff --git a/drivers/gpu/drm/i915/display/intel_dpt.h b/drivers/gpu/drm/i915/display/intel_dpt.h
-index ff18a525bfbe..1f88b0ee17e7 100644
 --- a/drivers/gpu/drm/i915/display/intel_dpt.h
 +++ b/drivers/gpu/drm/i915/display/intel_dpt.h
 @@ -6,6 +6,8 @@
@@ -58,7 +57,6 @@ index ff18a525bfbe..1f88b0ee17e7 100644
  
  #endif /* __INTEL_DPT_H__ */
 diff --git a/drivers/gpu/drm/i915/display/skl_universal_plane.c b/drivers/gpu/drm/i915/display/skl_universal_plane.c
-index 0e81d540ecc9..9452cad41d07 100644
 --- a/drivers/gpu/drm/i915/display/skl_universal_plane.c
 +++ b/drivers/gpu/drm/i915/display/skl_universal_plane.c
 @@ -14,6 +14,7 @@
@@ -69,7 +67,7 @@ index 0e81d540ecc9..9452cad41d07 100644
  #include "intel_fb.h"
  #include "intel_fbc.h"
  #include "intel_frontbuffer.h"
-@@ -1162,7 +1163,7 @@ static u32 skl_surf_address(const struct intel_plane_state *plane_state,
+@@ -1157,7 +1158,7 @@ static u32 skl_surf_address(const struct intel_plane_state *plane_state,
  		 * within the DPT is always 0.
  		 */
  		drm_WARN_ON(&i915->drm, plane_state->dpt_vma &&
@@ -79,7 +77,6 @@ index 0e81d540ecc9..9452cad41d07 100644
  		return offset >> 9;
  	} else {
 diff --git a/drivers/gpu/drm/xe/display/xe_fb_pin.c b/drivers/gpu/drm/xe/display/xe_fb_pin.c
-index d7db44e79eaf..42d431ff14e7 100644
 --- a/drivers/gpu/drm/xe/display/xe_fb_pin.c
 +++ b/drivers/gpu/drm/xe/display/xe_fb_pin.c
 @@ -377,8 +377,8 @@ void intel_plane_unpin_fb(struct intel_plane_state *old_plane_state)
@@ -102,6 +99,3 @@ index d7db44e79eaf..42d431ff14e7 100644
 +{
 +	return 0;
 +}
--- 
-2.46.0
-

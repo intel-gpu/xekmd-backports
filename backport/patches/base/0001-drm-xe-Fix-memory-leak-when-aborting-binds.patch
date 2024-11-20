@@ -1,7 +1,7 @@
-From fde33d7c0dac69a47af77f4e00c57af8dbeceac9 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Fri, 27 Sep 2024 16:22:28 -0700
-Subject: drm/xe: Fix memory leak when aborting binds
+Subject: [PATCH] drm/xe: Fix memory leak when aborting binds
 
 Make sure to call xe_pt_update_ops_fini in xe_pt_update_ops_abort to
 free any memory the bind allocated.
@@ -70,7 +70,6 @@ Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pt.c b/drivers/gpu/drm/xe/xe_pt.c
-index 34f9bcce4472..1f66f17619fe 100644
 --- a/drivers/gpu/drm/xe/xe_pt.c
 +++ b/drivers/gpu/drm/xe/xe_pt.c
 @@ -2186,5 +2186,5 @@ void xe_pt_update_ops_abort(struct xe_tile *tile, struct xe_vma_ops *vops)
@@ -80,6 +79,3 @@ index 34f9bcce4472..1f66f17619fe 100644
 -	xe_bo_put_commit(&vops->pt_update_ops[tile->id].deferred);
 +	xe_pt_update_ops_fini(tile, vops);
  }
--- 
-2.34.1
-

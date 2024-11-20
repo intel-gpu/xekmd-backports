@@ -1,7 +1,7 @@
-From 97b30eca39cf8bbd21d703340ec575cce63150b1 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jani Nikula <jani.nikula@intel.com>
 Date: Tue, 20 Aug 2024 22:00:43 +0300
-Subject: drm/xe: remove display stepping handling
+Subject: [PATCH] drm/xe: remove display stepping handling
 
 The code is now unused. Remove.
 
@@ -20,7 +20,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  4 files changed, 27 insertions(+), 37 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index 1011e5d281fa..a64bae36e0e3 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
 @@ -47,10 +47,9 @@ static int info(struct seq_file *m, void *data)
@@ -36,7 +35,6 @@ index 1011e5d281fa..a64bae36e0e3 100644
  	drm_printf(&p, "is_dgfx %s\n", str_yes_no(xe->info.is_dgfx));
  	drm_printf(&p, "platform %d\n", xe->info.platform);
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index 3c4a3c91377a..b42aa304c4e9 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
 @@ -833,10 +833,9 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -52,7 +50,6 @@ index 3c4a3c91377a..b42aa304c4e9 100644
  
  	drm_dbg(&xe->drm, "SR-IOV support: %s (mode: %s)\n",
 diff --git a/drivers/gpu/drm/xe/xe_step.c b/drivers/gpu/drm/xe/xe_step.c
-index eaf1b718f26c..c77b5c317fa0 100644
 --- a/drivers/gpu/drm/xe/xe_step.c
 +++ b/drivers/gpu/drm/xe/xe_step.c
 @@ -28,23 +28,17 @@
@@ -163,7 +160,6 @@ index eaf1b718f26c..c77b5c317fa0 100644
  	}
  
 diff --git a/drivers/gpu/drm/xe/xe_step_types.h b/drivers/gpu/drm/xe/xe_step_types.h
-index 95b38d2d6c50..d978cc2512f2 100644
 --- a/drivers/gpu/drm/xe/xe_step_types.h
 +++ b/drivers/gpu/drm/xe/xe_step_types.h
 @@ -11,7 +11,6 @@
@@ -174,6 +170,3 @@ index 95b38d2d6c50..d978cc2512f2 100644
  	u8 basedie;
  };
  
--- 
-2.46.0
-

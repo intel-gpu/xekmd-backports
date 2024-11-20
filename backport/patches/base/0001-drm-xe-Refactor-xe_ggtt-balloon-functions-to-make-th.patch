@@ -1,7 +1,8 @@
-From be0e1b2fc7bb0f4ed336e6244aab686642d99d68 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Date: Wed, 21 Aug 2024 15:38:40 -0400
-Subject: drm/xe: Refactor xe_ggtt balloon functions to make the node clear
+Subject: [PATCH] drm/xe: Refactor xe_ggtt balloon functions to make the node
+ clear
 
 These operations are related to node. Convert them to the
 new appropriate name space xe_ggtt_node.
@@ -24,10 +25,9 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  3 files changed, 18 insertions(+), 15 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index 960f5a28b7ed..d21474715bdb 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
-@@ -347,17 +347,17 @@ static void xe_ggtt_dump_node(struct xe_ggtt *ggtt,
+@@ -357,17 +357,17 @@ static void xe_ggtt_dump_node(struct xe_ggtt *ggtt,
  }
  
  /**
@@ -49,7 +49,7 @@ index 960f5a28b7ed..d21474715bdb 100644
  {
  	int err;
  
-@@ -384,18 +384,18 @@ int xe_ggtt_balloon(struct xe_ggtt *ggtt, u64 start, u64 end, struct xe_ggtt_nod
+@@ -394,18 +394,18 @@ int xe_ggtt_balloon(struct xe_ggtt *ggtt, u64 start, u64 end, struct xe_ggtt_nod
  }
  
  /**
@@ -73,7 +73,6 @@ index 960f5a28b7ed..d21474715bdb 100644
  	mutex_lock(&ggtt->lock);
  	drm_mm_remove_node(&node->base);
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.h b/drivers/gpu/drm/xe/xe_ggtt.h
-index 67ae5f1602a3..e258a4f381b4 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.h
 +++ b/drivers/gpu/drm/xe/xe_ggtt.h
 @@ -13,8 +13,9 @@ struct drm_printer;
@@ -89,7 +88,6 @@ index 67ae5f1602a3..e258a4f381b4 100644
  int xe_ggtt_node_insert(struct xe_ggtt *ggtt, struct xe_ggtt_node *node,
  			u32 size, u32 align);
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
-index 8892d6c2291e..f5bebc60ba4b 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
 @@ -528,7 +528,8 @@ static int vf_balloon_ggtt(struct xe_gt *gt)
@@ -132,6 +130,3 @@ index 8892d6c2291e..f5bebc60ba4b 100644
  }
  
  /**
--- 
-2.46.0
-

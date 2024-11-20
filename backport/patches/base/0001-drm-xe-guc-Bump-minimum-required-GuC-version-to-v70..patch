@@ -1,7 +1,7 @@
-From 19f9fd7944d32d34838cd886fd3c3888100d1f86 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Julia Filipchuk <julia.filipchuk@intel.com>
 Date: Fri, 2 Aug 2024 15:21:27 -0700
-Subject: drm/xe/guc: Bump minimum required GuC version to v70.29.2
+Subject: [PATCH] drm/xe/guc: Bump minimum required GuC version to v70.29.2
 
 The VF API version for this release is 1.13.4.
 
@@ -34,7 +34,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  2 files changed, 24 insertions(+), 13 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_guc.h b/drivers/gpu/drm/xe/xe_guc.h
-index e0bbf98f849d..c3e6b51f7a09 100644
 --- a/drivers/gpu/drm/xe/xe_guc.h
 +++ b/drivers/gpu/drm/xe/xe_guc.h
 @@ -11,6 +11,16 @@
@@ -55,7 +54,6 @@ index e0bbf98f849d..c3e6b51f7a09 100644
  
  void xe_guc_comm_init_early(struct xe_guc *guc);
 diff --git a/drivers/gpu/drm/xe/xe_uc_fw.c b/drivers/gpu/drm/xe/xe_uc_fw.c
-index 5b70d23724c4..6bd1962bce36 100644
 --- a/drivers/gpu/drm/xe/xe_uc_fw.c
 +++ b/drivers/gpu/drm/xe/xe_uc_fw.c
 @@ -15,6 +15,7 @@
@@ -106,6 +104,3 @@ index 5b70d23724c4..6bd1962bce36 100644
  		return -EINVAL;
  	}
  
--- 
-2.46.0
-

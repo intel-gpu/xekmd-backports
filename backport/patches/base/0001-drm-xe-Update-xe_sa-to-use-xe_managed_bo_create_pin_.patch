@@ -1,7 +1,7 @@
-From 9f2313c540765cae17f2ce9622ee80135faf38eb Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Tue, 20 Aug 2024 10:29:58 -0700
-Subject: drm/xe: Update xe_sa to use xe_managed_bo_create_pin_map
+Subject: [PATCH] drm/xe: Update xe_sa to use xe_managed_bo_create_pin_map
 
 Preferred way to create kernel BOs is xe_managed_bo_create_pin_map, use
 it.
@@ -18,7 +18,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  2 files changed, 7 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_sa.c b/drivers/gpu/drm/xe/xe_sa.c
-index 8941522b7705..b4fa6f16d4cf 100644
 --- a/drivers/gpu/drm/xe/xe_sa.c
 +++ b/drivers/gpu/drm/xe/xe_sa.c
 @@ -25,10 +25,9 @@ static void xe_sa_bo_manager_fini(struct drm_device *drm, void *arg)
@@ -64,7 +63,6 @@ index 8941522b7705..b4fa6f16d4cf 100644
  			return ERR_PTR(-ENOMEM);
  		}
 diff --git a/drivers/gpu/drm/xe/xe_sa_types.h b/drivers/gpu/drm/xe/xe_sa_types.h
-index 2ef896aeca1d..2b070ff1292e 100644
 --- a/drivers/gpu/drm/xe/xe_sa_types.h
 +++ b/drivers/gpu/drm/xe/xe_sa_types.h
 @@ -14,6 +14,7 @@ struct xe_sa_manager {
@@ -75,6 +73,3 @@ index 2ef896aeca1d..2b070ff1292e 100644
  };
  
  #endif
--- 
-2.46.0
-

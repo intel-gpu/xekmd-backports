@@ -1,7 +1,10 @@
-From cb379f65d9953f589ef3939cc3f7dcc499d41f23 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Vinod Govindapillai <vinod.govindapillai@intel.com>
 Date: Fri, 23 Aug 2024 14:21:48 +0300
-Subject: drm/xe/display: handle HPD polling in display runtime suspend/resume
+Subject: [PATCH] drm/xe/display: handle HPD polling in display runtime
+ suspend/resume
+
+commit 66a0f6b9f5fc205272035b6ffa4830be51e3f787 upstream.
 
 In XE, display runtime suspend / resume routines are called only
 if d3cold is allowed. This makes the driver unable to detect any
@@ -24,10 +27,8 @@ v4: rebased
 Reviewed-by: Arun R Murthy <arun.r.murthy@intel.com>
 Signed-off-by: Vinod Govindapillai <vinod.govindapillai@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240823112148.327015-4-vinod.govindapillai@intel.com
-(backported from commit 66a0f6b9f5fc205272035b6ffa4830be51e3f787 linux-next)
 [ Fix silent conflict due to s/enable_display/probe_display/ ]
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---
  drivers/gpu/drm/xe/display/xe_display.c | 23 +++++++++++++++++++++++
  drivers/gpu/drm/xe/display/xe_display.h |  4 ++++
@@ -35,7 +36,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  3 files changed, 32 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/display/xe_display.c b/drivers/gpu/drm/xe/display/xe_display.c
-index 1ab94fe7bfb3..2a9d247d31c5 100644
 --- a/drivers/gpu/drm/xe/display/xe_display.c
 +++ b/drivers/gpu/drm/xe/display/xe_display.c
 @@ -304,6 +304,18 @@ static void xe_display_flush_cleanup_work(struct xe_device *xe)
@@ -76,7 +76,6 @@ index 1ab94fe7bfb3..2a9d247d31c5 100644
  {
  	if (!xe->info.enable_display)
 diff --git a/drivers/gpu/drm/xe/display/xe_display.h b/drivers/gpu/drm/xe/display/xe_display.h
-index 000fb5799df5..53d727fd792b 100644
 --- a/drivers/gpu/drm/xe/display/xe_display.h
 +++ b/drivers/gpu/drm/xe/display/xe_display.h
 @@ -38,6 +38,8 @@ void xe_display_pm_suspend(struct xe_device *xe, bool runtime);
@@ -98,7 +97,6 @@ index 000fb5799df5..53d727fd792b 100644
  #endif /* CONFIG_DRM_XE_DISPLAY */
  #endif /* _XE_DISPLAY_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
-index 9a3f618d22dc..0f6f0526efbc 100644
 --- a/drivers/gpu/drm/xe/xe_pm.c
 +++ b/drivers/gpu/drm/xe/xe_pm.c
 @@ -362,9 +362,9 @@ int xe_pm_runtime_suspend(struct xe_device *xe)
@@ -129,6 +127,3 @@ index 9a3f618d22dc..0f6f0526efbc 100644
  out:
  	lock_map_release(&xe_pm_runtime_lockdep_map);
  	xe_pm_write_callback_task(xe, NULL);
--- 
-2.46.0
-

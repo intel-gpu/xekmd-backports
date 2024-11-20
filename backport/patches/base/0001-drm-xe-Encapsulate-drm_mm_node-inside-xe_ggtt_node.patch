@@ -1,7 +1,7 @@
-From a8f6267db02e52a79ce05250b613706a8c4016a5 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Date: Wed, 21 Aug 2024 15:38:35 -0400
-Subject: drm/xe: Encapsulate drm_mm_node inside xe_ggtt_node
+Subject: [PATCH] drm/xe: Encapsulate drm_mm_node inside xe_ggtt_node
 
 The xe_ggtt component uses drm_mm to manage the GGTT.
 The drm_mm_node is just a node inside drm_mm, but in Xe we use that
@@ -36,7 +36,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  11 files changed, 90 insertions(+), 78 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/compat-i915-headers/i915_vma.h b/drivers/gpu/drm/xe/compat-i915-headers/i915_vma.h
-index a20d2638ea7a..3028ac1ba72f 100644
 --- a/drivers/gpu/drm/xe/compat-i915-headers/i915_vma.h
 +++ b/drivers/gpu/drm/xe/compat-i915-headers/i915_vma.h
 @@ -7,7 +7,8 @@
@@ -68,7 +67,6 @@ index a20d2638ea7a..3028ac1ba72f 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/display/xe_fb_pin.c b/drivers/gpu/drm/xe/display/xe_fb_pin.c
-index 42d431ff14e7..a93923fb8721 100644
 --- a/drivers/gpu/drm/xe/display/xe_fb_pin.c
 +++ b/drivers/gpu/drm/xe/display/xe_fb_pin.c
 @@ -204,7 +204,7 @@ static int __xe_pin_fb_vma_ggtt(const struct intel_framebuffer *fb,
@@ -110,10 +108,9 @@ index 42d431ff14e7..a93923fb8721 100644
  
  	ttm_bo_reserve(&vma->bo->ttm, false, false, NULL);
 diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
-index 261d3d6c8a93..5d21990df51a 100644
 --- a/drivers/gpu/drm/xe/xe_bo.c
 +++ b/drivers/gpu/drm/xe/xe_bo.c
-@@ -1090,7 +1090,7 @@ static void xe_ttm_bo_destroy(struct ttm_buffer_object *ttm_bo)
+@@ -1097,7 +1097,7 @@ static void xe_ttm_bo_destroy(struct ttm_buffer_object *ttm_bo)
  
  	xe_assert(xe, list_empty(&ttm_bo->base.gpuva.list));
  
@@ -123,7 +120,6 @@ index 261d3d6c8a93..5d21990df51a 100644
  
  #ifdef CONFIG_PROC_FS
 diff --git a/drivers/gpu/drm/xe/xe_bo.h b/drivers/gpu/drm/xe/xe_bo.h
-index 6de894c728f5..7c95133cc32b 100644
 --- a/drivers/gpu/drm/xe/xe_bo.h
 +++ b/drivers/gpu/drm/xe/xe_bo.h
 @@ -194,9 +194,9 @@ xe_bo_main_addr(struct xe_bo *bo, size_t page_size)
@@ -140,7 +136,6 @@ index 6de894c728f5..7c95133cc32b 100644
  
  int xe_bo_vmap(struct xe_bo *bo);
 diff --git a/drivers/gpu/drm/xe/xe_bo_types.h b/drivers/gpu/drm/xe/xe_bo_types.h
-index 10450f1fbbde..b5ea6b958e21 100644
 --- a/drivers/gpu/drm/xe/xe_bo_types.h
 +++ b/drivers/gpu/drm/xe/xe_bo_types.h
 @@ -8,12 +8,13 @@
@@ -168,7 +163,6 @@ index 10450f1fbbde..b5ea6b958e21 100644
  	struct iosys_map vmap;
  	/** @ttm_kmap: TTM bo kmap object for internal use only. Keep off. */
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 45680b266a92..b180fcc00550 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -200,7 +200,7 @@ struct xe_tile {
@@ -181,10 +175,9 @@ index 45680b266a92..b180fcc00550 100644
  	} sriov;
  
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index dd5cd0df705c..1cf682d15253 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
-@@ -351,61 +351,61 @@ static void xe_ggtt_dump_node(struct xe_ggtt *ggtt,
+@@ -361,61 +361,61 @@ static void xe_ggtt_dump_node(struct xe_ggtt *ggtt,
   * @ggtt: the &xe_ggtt where we want to make reservation
   * @start: the starting GGTT address of the reserved region
   * @end: then end GGTT address of the reserved region
@@ -262,7 +255,7 @@ index dd5cd0df705c..1cf682d15253 100644
   * @size: size of the node
   * @align: alignment constrain of the node
   * @mm_flags: flags to control the node behavior
-@@ -414,23 +414,23 @@ void xe_ggtt_deballoon(struct xe_ggtt *ggtt, struct drm_mm_node *node)
+@@ -424,23 +424,23 @@ void xe_ggtt_deballoon(struct xe_ggtt *ggtt, struct drm_mm_node *node)
   *
   * Return: 0 on success or a negative error code on failure.
   */
@@ -291,7 +284,7 @@ index dd5cd0df705c..1cf682d15253 100644
  				u32 size, u32 align)
  {
  	int ret;
-@@ -452,7 +452,7 @@ void xe_ggtt_map_bo(struct xe_ggtt *ggtt, struct xe_bo *bo)
+@@ -462,7 +462,7 @@ void xe_ggtt_map_bo(struct xe_ggtt *ggtt, struct xe_bo *bo)
  {
  	u16 cache_mode = bo->flags & XE_BO_FLAG_NEEDS_UC ? XE_CACHE_NONE : XE_CACHE_WB;
  	u16 pat_index = tile_to_xe(ggtt->tile)->pat.idx[cache_mode];
@@ -300,7 +293,7 @@ index dd5cd0df705c..1cf682d15253 100644
  	u64 offset, pte;
  
  	for (offset = 0; offset < bo->size; offset += XE_PAGE_SIZE) {
-@@ -470,9 +470,9 @@ static int __xe_ggtt_insert_bo_at(struct xe_ggtt *ggtt, struct xe_bo *bo,
+@@ -480,9 +480,9 @@ static int __xe_ggtt_insert_bo_at(struct xe_ggtt *ggtt, struct xe_bo *bo,
  	if (xe_bo_is_vram(bo) && ggtt->flags & XE_GGTT_FLAGS_64K)
  		alignment = SZ_64K;
  
@@ -312,7 +305,7 @@ index dd5cd0df705c..1cf682d15253 100644
  		return 0;
  	}
  
-@@ -482,7 +482,7 @@ static int __xe_ggtt_insert_bo_at(struct xe_ggtt *ggtt, struct xe_bo *bo,
+@@ -492,7 +492,7 @@ static int __xe_ggtt_insert_bo_at(struct xe_ggtt *ggtt, struct xe_bo *bo,
  
  	xe_pm_runtime_get_noresume(tile_to_xe(ggtt->tile));
  	mutex_lock(&ggtt->lock);
@@ -321,7 +314,7 @@ index dd5cd0df705c..1cf682d15253 100644
  					  alignment, 0, start, end, 0);
  	if (!err)
  		xe_ggtt_map_bo(ggtt, bo);
-@@ -523,12 +523,12 @@ int xe_ggtt_insert_bo(struct xe_ggtt *ggtt, struct xe_bo *bo)
+@@ -533,12 +533,12 @@ int xe_ggtt_insert_bo(struct xe_ggtt *ggtt, struct xe_bo *bo)
  }
  
  /**
@@ -337,7 +330,7 @@ index dd5cd0df705c..1cf682d15253 100644
  			 bool invalidate)
  {
  	struct xe_device *xe = tile_to_xe(ggtt->tile);
-@@ -541,9 +541,9 @@ void xe_ggtt_remove_node(struct xe_ggtt *ggtt, struct drm_mm_node *node,
+@@ -551,9 +551,9 @@ void xe_ggtt_remove_node(struct xe_ggtt *ggtt, struct drm_mm_node *node,
  
  	mutex_lock(&ggtt->lock);
  	if (bound)
@@ -350,7 +343,7 @@ index dd5cd0df705c..1cf682d15253 100644
  	mutex_unlock(&ggtt->lock);
  
  	if (!bound)
-@@ -563,11 +563,11 @@ void xe_ggtt_remove_node(struct xe_ggtt *ggtt, struct drm_mm_node *node,
+@@ -573,11 +573,11 @@ void xe_ggtt_remove_node(struct xe_ggtt *ggtt, struct drm_mm_node *node,
   */
  void xe_ggtt_remove_bo(struct xe_ggtt *ggtt, struct xe_bo *bo)
  {
@@ -364,7 +357,7 @@ index dd5cd0df705c..1cf682d15253 100644
  
  	xe_ggtt_remove_node(ggtt, &bo->ggtt_node,
  			    bo->flags & XE_BO_FLAG_GGTT_INVALIDATE);
-@@ -602,17 +602,17 @@ static void xe_ggtt_assign_locked(struct xe_ggtt *ggtt, const struct drm_mm_node
+@@ -612,17 +612,17 @@ static void xe_ggtt_assign_locked(struct xe_ggtt *ggtt, const struct drm_mm_node
  /**
   * xe_ggtt_assign - assign a GGTT region to the VF
   * @ggtt: the &xe_ggtt where the node belongs
@@ -386,7 +379,6 @@ index dd5cd0df705c..1cf682d15253 100644
  }
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.h b/drivers/gpu/drm/xe/xe_ggtt.h
-index 2546bab97507..30a521f7b075 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.h
 +++ b/drivers/gpu/drm/xe/xe_ggtt.h
 @@ -13,15 +13,15 @@ struct drm_printer;
@@ -420,7 +412,6 @@ index 2546bab97507..30a521f7b075 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_ggtt_types.h b/drivers/gpu/drm/xe/xe_ggtt_types.h
-index 154de298a4e3..af312a7d1031 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt_types.h
 +++ b/drivers/gpu/drm/xe/xe_ggtt_types.h
 @@ -49,6 +49,14 @@ struct xe_ggtt {
@@ -439,7 +430,6 @@ index 154de298a4e3..af312a7d1031 100644
   * struct xe_ggtt_pt_ops - GGTT Page table operations
   * Which can vary from platform to platform.
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-index b6f0a7299c03..b6aeca9a2f26 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 @@ -6,6 +6,9 @@
@@ -556,7 +546,6 @@ index b6f0a7299c03..b6aeca9a2f26 100644
  
  	return 0;
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config_types.h
-index 7bc66656fcc7..a73d9a4b9e64 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config_types.h
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config_types.h
 @@ -6,8 +6,7 @@
@@ -578,6 +567,3 @@ index 7bc66656fcc7..a73d9a4b9e64 100644
  	/** @lmem_obj: LMEM allocation for use by the VF. */
  	struct xe_bo *lmem_obj;
  	/** @num_ctxs: number of GuC contexts IDs.  */
--- 
-2.46.0
-

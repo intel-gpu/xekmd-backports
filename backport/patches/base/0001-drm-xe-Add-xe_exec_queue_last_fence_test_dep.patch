@@ -1,7 +1,7 @@
-From 17c763c84d32d3eda1ef30f06ee92dca52131871 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Wed, 3 Jul 2024 21:16:48 -0700
-Subject: drm/xe: Add xe_exec_queue_last_fence_test_dep
+Subject: [PATCH] drm/xe: Add xe_exec_queue_last_fence_test_dep
 
 Helpful to determine if a bind can immediately use CPU or needs to be
 deferred a drm scheduler job.
@@ -21,10 +21,9 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  2 files changed, 25 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index c2953ddbd16e..3597dd788c7a 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -893,3 +893,26 @@ void xe_exec_queue_last_fence_set(struct xe_exec_queue *q, struct xe_vm *vm,
+@@ -895,3 +895,26 @@ void xe_exec_queue_last_fence_set(struct xe_exec_queue *q, struct xe_vm *vm,
  	xe_exec_queue_last_fence_put(q, vm);
  	q->last_fence = dma_fence_get(fence);
  }
@@ -52,7 +51,6 @@ index c2953ddbd16e..3597dd788c7a 100644
 +	return err;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
-index f4ba8897763f..99139368ba6e 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.h
 @@ -79,6 +79,8 @@ struct dma_fence *xe_exec_queue_last_fence_get(struct xe_exec_queue *e,
@@ -64,6 +62,3 @@ index f4ba8897763f..99139368ba6e 100644
  void xe_exec_queue_update_run_ticks(struct xe_exec_queue *q);
  
  #endif
--- 
-2.46.0
-

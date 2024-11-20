@@ -1,7 +1,7 @@
-From 19f39a1c301caf3401960f9198bd15931521d10f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Julia Filipchuk <julia.filipchuk@intel.com>
 Date: Mon, 5 Aug 2024 13:54:35 -0700
-Subject: drm/xe/guc: Enable w/a 14022293748 and 22019794406
+Subject: [PATCH] drm/xe/guc: Enable w/a 14022293748 and 22019794406
 
 Enable workarounds for HW bug where render engine reset fails. Given
 that we're bumping the minimum required GuC version to 70.29, we're
@@ -28,7 +28,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  3 files changed, 11 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
-index 8f9f60b28306..6b30743a2f6c 100644
 --- a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
 +++ b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
 @@ -351,6 +351,7 @@ enum xe_guc_klv_ids {
@@ -40,7 +39,6 @@ index 8f9f60b28306..6b30743a2f6c 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_guc_ads.c b/drivers/gpu/drm/xe/xe_guc_ads.c
-index 1c60b685dbc6..d1902a8581ca 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ads.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ads.c
 @@ -24,6 +24,7 @@
@@ -64,7 +62,6 @@ index 1c60b685dbc6..d1902a8581ca 100644
  	if (!size)
  		return;
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
-index 540d38603f32..5cf27ff27ce6 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
 @@ -27,6 +27,10 @@
@@ -78,6 +75,3 @@ index 540d38603f32..5cf27ff27ce6 100644
  22019338487	MEDIA_VERSION(2000)
  		GRAPHICS_VERSION(2001)
  22019338487_display	PLATFORM(LUNARLAKE)
--- 
-2.46.0
-

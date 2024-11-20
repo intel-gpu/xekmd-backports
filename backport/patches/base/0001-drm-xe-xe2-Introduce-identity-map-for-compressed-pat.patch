@@ -1,10 +1,13 @@
-From 0b79dbc8656bfd3d7c4416327e3f32521d5ea388 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Akshata Jahagirdar <akshata.jahagirdar@intel.com>
 Date: Wed, 17 Jul 2024 21:10:05 +0000
-Subject: drm/xe/xe2: Introduce identity map for compressed pat for vram
+Subject: [PATCH] drm/xe/xe2: Introduce identity map for compressed pat for
+ vram
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
+
+commit 2b808d6b2919cb2fe92901e5087da7b4ed4b9e07 upstream.
 
 Xe2+ has unified compression (exactly one compression mode/format),
 where compression is now controlled via PAT at PTE level.
@@ -58,17 +61,41 @@ Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/b00db5c7267e54260cb6183ba24b15c1e6ae52a3.1721250309.git.akshata.jahagirdar@intel.com
-(backported from commit 2b808d6b2919cb2fe92901e5087da7b4ed4b9e07 linux-next)
-[ Conflicts:
-	drivers/gpu/drm/xe/tests/xe_migrate.c ]
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---
- drivers/gpu/drm/xe/xe_migrate.c | 81 ++++++++++++++++++++++++---------
- 1 file changed, 59 insertions(+), 22 deletions(-)
+ drivers/gpu/drm/xe/tests/xe_migrate.c |  9 ++-
+ drivers/gpu/drm/xe/xe_migrate.c       | 81 +++++++++++++++++++--------
+ 2 files changed, 66 insertions(+), 24 deletions(-)
 
+diff --git a/drivers/gpu/drm/xe/tests/xe_migrate.c b/drivers/gpu/drm/xe/tests/xe_migrate.c
+--- a/drivers/gpu/drm/xe/tests/xe_migrate.c
++++ b/drivers/gpu/drm/xe/tests/xe_migrate.c
+@@ -393,17 +393,22 @@ static struct dma_fence *blt_copy(struct xe_tile *tile,
+ 		u32 flush_flags = 0;
+ 		u32 update_idx;
+ 		u32 avail_pts = max_mem_transfer_per_pass(xe) / LEVEL0_PAGE_TABLE_ENCODE_SIZE;
++		u32 pte_flags;
+ 
+ 		src_L0 = xe_migrate_res_sizes(m, &src_it);
+ 		dst_L0 = xe_migrate_res_sizes(m, &dst_it);
+ 
+ 		src_L0 = min(src_L0, dst_L0);
+ 
+-		batch_size += pte_update_size(m, src_is_vram, src_is_vram, src, &src_it, &src_L0,
++		pte_flags = src_is_vram ? (PTE_UPDATE_FLAG_IS_VRAM |
++					   PTE_UPDATE_FLAG_IS_COMP_PTE) : 0;
++		batch_size += pte_update_size(m, pte_flags, src, &src_it, &src_L0,
+ 					      &src_L0_ofs, &src_L0_pt, 0, 0,
+ 					      avail_pts);
+ 
+-		batch_size += pte_update_size(m, dst_is_vram, dst_is_vram, dst, &dst_it, &src_L0,
++		pte_flags = dst_is_vram ? (PTE_UPDATE_FLAG_IS_VRAM |
++					   PTE_UPDATE_FLAG_IS_COMP_PTE) : 0;
++		batch_size += pte_update_size(m, pte_flags, dst, &dst_it, &src_L0,
+ 					      &dst_L0_ofs, &dst_L0_pt, 0,
+ 					      avail_pts, avail_pts);
+ 
 diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
-index 8261c7d8c3dc..565727902284 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.c
 +++ b/drivers/gpu/drm/xe/xe_migrate.c
 @@ -73,6 +73,7 @@ struct xe_migrate {
@@ -276,6 +303,3 @@ index 8261c7d8c3dc..565727902284 100644
  
  	do {
  		u64 addr = ppgtt_ofs + ofs * 8;
--- 
-2.46.0
-

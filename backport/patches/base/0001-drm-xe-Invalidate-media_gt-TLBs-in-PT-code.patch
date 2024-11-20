@@ -1,7 +1,7 @@
-From 9a58cc2384ef26d99fdae9b995df3f6e72330437 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Mon, 26 Aug 2024 10:01:44 -0700
-Subject: drm/xe: Invalidate media_gt TLBs in PT code
+Subject: [PATCH] drm/xe: Invalidate media_gt TLBs in PT code
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -28,7 +28,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  1 file changed, 96 insertions(+), 21 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pt.c b/drivers/gpu/drm/xe/xe_pt.c
-index c24e869b7eae..34f9bcce4472 100644
 --- a/drivers/gpu/drm/xe/xe_pt.c
 +++ b/drivers/gpu/drm/xe/xe_pt.c
 @@ -3,6 +3,8 @@
@@ -264,6 +263,3 @@ index c24e869b7eae..34f9bcce4472 100644
  	kfree(ifence);
  kill_vm_tile1:
  	if (err != -EAGAIN && tile->id)
--- 
-2.46.0
-

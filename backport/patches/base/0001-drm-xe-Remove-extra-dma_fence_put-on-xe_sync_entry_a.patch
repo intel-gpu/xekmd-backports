@@ -1,7 +1,8 @@
-From 650112c30ab6ffe7648d5a916b641575dfab5472 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Date: Tue, 20 Aug 2024 14:32:28 +0530
-Subject: drm/xe: Remove extra dma_fence_put on xe_sync_entry_add_deps failure
+Subject: [PATCH] drm/xe: Remove extra dma_fence_put on xe_sync_entry_add_deps
+ failure
 
 drm_sched_job_add_dependency() drops references even in case of error,
 no need for caller to call dma_fence_put.
@@ -20,10 +21,9 @@ Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
  1 file changed, 3 insertions(+), 10 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_sync.c b/drivers/gpu/drm/xe/xe_sync.c
-index e8d31e010860..716b9d725688 100644
 --- a/drivers/gpu/drm/xe/xe_sync.c
 +++ b/drivers/gpu/drm/xe/xe_sync.c
-@@ -214,16 +214,9 @@ int xe_sync_entry_wait(struct xe_sync_entry *sync)
+@@ -215,16 +215,9 @@ int xe_sync_entry_wait(struct xe_sync_entry *sync)
  
  int xe_sync_entry_add_deps(struct xe_sync_entry *sync, struct xe_sched_job *job)
  {
@@ -43,6 +43,3 @@ index e8d31e010860..716b9d725688 100644
  
  	return 0;
  }
--- 
-2.34.1
-

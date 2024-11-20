@@ -1,7 +1,7 @@
-From 58f5bb1abdb32010bdbd46151634faafb06f9a3f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Date: Wed, 21 Aug 2024 15:38:32 -0400
-Subject: drm/xe: Introduce GGTT documentation
+Subject: [PATCH] drm/xe: Introduce GGTT documentation
 
 Document xe_ggtt and ensure it is part of the built kernel docs.
 
@@ -25,7 +25,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  3 files changed, 150 insertions(+), 35 deletions(-)
 
 diff --git a/Documentation/gpu/xe/xe_mm.rst b/Documentation/gpu/xe/xe_mm.rst
-index 6c8fd8b4a466..95864a4502dd 100644
 --- a/Documentation/gpu/xe/xe_mm.rst
 +++ b/Documentation/gpu/xe/xe_mm.rst
 @@ -7,6 +7,21 @@ Memory Management
@@ -51,7 +50,6 @@ index 6c8fd8b4a466..95864a4502dd 100644
  ==================
  
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index add14f3dea1f..dd5cd0df705c 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
 @@ -30,6 +30,39 @@
@@ -159,7 +157,7 @@ index add14f3dea1f..dd5cd0df705c 100644
  int xe_ggtt_init(struct xe_ggtt *ggtt)
  {
  	struct xe_device *xe = tile_to_xe(ggtt->tile);
-@@ -382,6 +402,18 @@ void xe_ggtt_deballoon(struct xe_ggtt *ggtt, struct drm_mm_node *node)
+@@ -392,6 +412,18 @@ void xe_ggtt_deballoon(struct xe_ggtt *ggtt, struct drm_mm_node *node)
  	mutex_unlock(&ggtt->lock);
  }
  
@@ -178,7 +176,7 @@ index add14f3dea1f..dd5cd0df705c 100644
  int xe_ggtt_insert_special_node_locked(struct xe_ggtt *ggtt, struct drm_mm_node *node,
  				       u32 size, u32 align, u32 mm_flags)
  {
-@@ -389,6 +421,15 @@ int xe_ggtt_insert_special_node_locked(struct xe_ggtt *ggtt, struct drm_mm_node
+@@ -399,6 +431,15 @@ int xe_ggtt_insert_special_node_locked(struct xe_ggtt *ggtt, struct drm_mm_node
  					  mm_flags);
  }
  
@@ -194,7 +192,7 @@ index add14f3dea1f..dd5cd0df705c 100644
  int xe_ggtt_insert_special_node(struct xe_ggtt *ggtt, struct drm_mm_node *node,
  				u32 size, u32 align)
  {
-@@ -402,6 +443,11 @@ int xe_ggtt_insert_special_node(struct xe_ggtt *ggtt, struct drm_mm_node *node,
+@@ -412,6 +453,11 @@ int xe_ggtt_insert_special_node(struct xe_ggtt *ggtt, struct drm_mm_node *node,
  	return ret;
  }
  
@@ -206,7 +204,7 @@ index add14f3dea1f..dd5cd0df705c 100644
  void xe_ggtt_map_bo(struct xe_ggtt *ggtt, struct xe_bo *bo)
  {
  	u16 cache_mode = bo->flags & XE_BO_FLAG_NEEDS_UC ? XE_CACHE_NONE : XE_CACHE_WB;
-@@ -449,17 +495,39 @@ static int __xe_ggtt_insert_bo_at(struct xe_ggtt *ggtt, struct xe_bo *bo,
+@@ -459,17 +505,39 @@ static int __xe_ggtt_insert_bo_at(struct xe_ggtt *ggtt, struct xe_bo *bo,
  	return err;
  }
  
@@ -246,7 +244,7 @@ index add14f3dea1f..dd5cd0df705c 100644
  void xe_ggtt_remove_node(struct xe_ggtt *ggtt, struct drm_mm_node *node,
  			 bool invalidate)
  {
-@@ -488,6 +556,11 @@ void xe_ggtt_remove_node(struct xe_ggtt *ggtt, struct drm_mm_node *node,
+@@ -498,6 +566,11 @@ void xe_ggtt_remove_node(struct xe_ggtt *ggtt, struct drm_mm_node *node,
  	drm_dev_exit(idx);
  }
  
@@ -258,7 +256,7 @@ index add14f3dea1f..dd5cd0df705c 100644
  void xe_ggtt_remove_bo(struct xe_ggtt *ggtt, struct xe_bo *bo)
  {
  	if (XE_WARN_ON(!bo->ggtt_node.size))
-@@ -544,6 +617,13 @@ void xe_ggtt_assign(struct xe_ggtt *ggtt, const struct drm_mm_node *node, u16 vf
+@@ -554,6 +627,13 @@ void xe_ggtt_assign(struct xe_ggtt *ggtt, const struct drm_mm_node *node, u16 vf
  }
  #endif
  
@@ -273,7 +271,6 @@ index add14f3dea1f..dd5cd0df705c 100644
  {
  	int err;
 diff --git a/drivers/gpu/drm/xe/xe_ggtt_types.h b/drivers/gpu/drm/xe/xe_ggtt_types.h
-index 2245d88d8f39..154de298a4e3 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt_types.h
 +++ b/drivers/gpu/drm/xe/xe_ggtt_types.h
 @@ -13,30 +13,50 @@
@@ -334,6 +331,3 @@ index 2245d88d8f39..154de298a4e3 100644
  	void (*ggtt_set_pte)(struct xe_ggtt *ggtt, u64 addr, u64 pte);
  };
  
--- 
-2.46.0
-

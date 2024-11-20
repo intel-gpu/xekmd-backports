@@ -1,7 +1,7 @@
-From be90c764cd9b1141358328046056cf387e5bd434 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Wed, 3 Jul 2024 21:16:49 -0700
-Subject: drm/xe: Convert multiple bind ops into single job
+Subject: [PATCH] drm/xe: Convert multiple bind ops into single job
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -61,7 +61,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  10 files changed, 1063 insertions(+), 1025 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_bo_types.h b/drivers/gpu/drm/xe/xe_bo_types.h
-index 68876cc37b07..2ed558ac2264 100644
 --- a/drivers/gpu/drm/xe/xe_bo_types.h
 +++ b/drivers/gpu/drm/xe/xe_bo_types.h
 @@ -59,6 +59,8 @@ struct xe_bo {
@@ -74,7 +73,6 @@ index 68876cc37b07..2ed558ac2264 100644
  	bool created;
  
 diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
-index 2897e702192a..3590b71c779e 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.c
 +++ b/drivers/gpu/drm/xe/xe_migrate.c
 @@ -1178,6 +1178,7 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
@@ -528,7 +526,6 @@ index 2897e702192a..3590b71c779e 100644
   * xe_migrate_wait() - Complete all operations using the xe_migrate context
   * @m: Migrate context to wait for.
 diff --git a/drivers/gpu/drm/xe/xe_migrate.h b/drivers/gpu/drm/xe/xe_migrate.h
-index ad123789effb..f2af9355c051 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.h
 +++ b/drivers/gpu/drm/xe/xe_migrate.h
 @@ -47,6 +47,24 @@ struct xe_migrate_pt_update_ops {
@@ -587,7 +584,6 @@ index ad123789effb..f2af9355c051 100644
  
  void xe_migrate_wait(struct xe_migrate *m);
 diff --git a/drivers/gpu/drm/xe/xe_pt.c b/drivers/gpu/drm/xe/xe_pt.c
-index 31a751a5de3f..319ba5df9a9a 100644
 --- a/drivers/gpu/drm/xe/xe_pt.c
 +++ b/drivers/gpu/drm/xe/xe_pt.c
 @@ -9,12 +9,15 @@
@@ -1852,7 +1848,6 @@ index 31a751a5de3f..319ba5df9a9a 100644
 +	xe_vm_kill(vops->vm, false);
  }
 diff --git a/drivers/gpu/drm/xe/xe_pt.h b/drivers/gpu/drm/xe/xe_pt.h
-index 71a4fbfcff43..9ab386431cad 100644
 --- a/drivers/gpu/drm/xe/xe_pt.h
 +++ b/drivers/gpu/drm/xe/xe_pt.h
 @@ -17,6 +17,7 @@ struct xe_sync_entry;
@@ -1884,7 +1879,6 @@ index 71a4fbfcff43..9ab386431cad 100644
  bool xe_pt_zap_ptes(struct xe_tile *tile, struct xe_vma *vma);
  
 diff --git a/drivers/gpu/drm/xe/xe_pt_types.h b/drivers/gpu/drm/xe/xe_pt_types.h
-index 2093150f461e..384cc04de719 100644
 --- a/drivers/gpu/drm/xe/xe_pt_types.h
 +++ b/drivers/gpu/drm/xe/xe_pt_types.h
 @@ -78,6 +78,8 @@ struct xe_vm_pgtable_update {
@@ -1936,7 +1930,6 @@ index 2093150f461e..384cc04de719 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_sa.c b/drivers/gpu/drm/xe/xe_sa.c
-index b4fa6f16d4cf..fe2cb2a96f78 100644
 --- a/drivers/gpu/drm/xe/xe_sa.c
 +++ b/drivers/gpu/drm/xe/xe_sa.c
 @@ -83,6 +83,13 @@ struct xe_sa_manager *xe_sa_bo_manager_init(struct xe_tile *tile, u32 size, u32
@@ -1954,7 +1947,6 @@ index b4fa6f16d4cf..fe2cb2a96f78 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 2de3daa103bf..405fb0cb9ade 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -313,7 +313,7 @@ int __xe_vm_userptr_needs_repin(struct xe_vm *vm)
@@ -2211,7 +2203,7 @@ index 2de3daa103bf..405fb0cb9ade 100644
  #define ALL_DRM_XE_VM_CREATE_FLAGS (DRM_XE_VM_CREATE_FLAG_SCRATCH_PAGE | \
  				    DRM_XE_VM_CREATE_FLAG_LR_MODE | \
  				    DRM_XE_VM_CREATE_FLAG_FAULT_MODE)
-@@ -2033,21 +1859,6 @@ static const u32 region_to_mem_type[] = {
+@@ -2029,21 +1855,6 @@ static const u32 region_to_mem_type[] = {
  	XE_PL_VRAM1,
  };
  
@@ -2233,7 +2225,7 @@ index 2de3daa103bf..405fb0cb9ade 100644
  static void prep_vma_destroy(struct xe_vm *vm, struct xe_vma *vma,
  			     bool post_commit)
  {
-@@ -2335,13 +2146,10 @@ static int xe_vma_op_commit(struct xe_vm *vm, struct xe_vma_op *op)
+@@ -2331,13 +2142,10 @@ static int xe_vma_op_commit(struct xe_vm *vm, struct xe_vma_op *op)
  	return err;
  }
  
@@ -2249,7 +2241,7 @@ index 2de3daa103bf..405fb0cb9ade 100644
  	struct drm_gpuva_op *__op;
  	struct xe_tile *tile;
  	u8 id, tile_mask = 0;
-@@ -2355,19 +2163,10 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct xe_exec_queue *q,
+@@ -2351,19 +2159,10 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct xe_exec_queue *q,
  	drm_gpuva_for_each_op(__op, ops) {
  		struct xe_vma_op *op = gpuva_op_to_vma_op(__op);
  		struct xe_vma *vma;
@@ -2269,7 +2261,7 @@ index 2de3daa103bf..405fb0cb9ade 100644
  		op->tile_mask = tile_mask;
  
  		switch (op->base.op) {
-@@ -2480,197 +2279,21 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct xe_exec_queue *q,
+@@ -2476,197 +2275,21 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct xe_exec_queue *q,
  		}
  		case DRM_GPUVA_OP_UNMAP:
  		case DRM_GPUVA_OP_PREFETCH:
@@ -2468,7 +2460,7 @@ index 2de3daa103bf..405fb0cb9ade 100644
  static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
  			     bool post_commit, bool prev_post_commit,
  			     bool next_post_commit)
-@@ -2856,23 +2479,110 @@ static int vm_bind_ioctl_ops_lock_and_prep(struct drm_exec *exec,
+@@ -2852,23 +2475,110 @@ static int vm_bind_ioctl_ops_lock_and_prep(struct drm_exec *exec,
  	return 0;
  }
  
@@ -2588,7 +2580,7 @@ index 2de3daa103bf..405fb0cb9ade 100644
  	return fence;
  }
  
-@@ -2953,12 +2663,10 @@ static int vm_bind_ioctl_ops_execute(struct xe_vm *vm,
+@@ -2949,12 +2659,10 @@ static int vm_bind_ioctl_ops_execute(struct xe_vm *vm,
  		fence = ops_execute(vm, vops);
  		if (IS_ERR(fence)) {
  			err = PTR_ERR(fence);
@@ -2603,7 +2595,7 @@ index 2de3daa103bf..405fb0cb9ade 100644
  	}
  
  unlock:
-@@ -3324,8 +3032,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -3320,8 +3028,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  			goto unwind_ops;
  		}
  
@@ -2614,7 +2606,6 @@ index 2de3daa103bf..405fb0cb9ade 100644
  			goto unwind_ops;
  	}
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index b481608b12f1..c864dba35e1d 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
 @@ -259,6 +259,8 @@ static inline struct dma_resv *xe_vm_resv(struct xe_vm *vm)
@@ -2627,7 +2618,6 @@ index b481608b12f1..c864dba35e1d 100644
   * xe_vm_assert_held(vm) - Assert that the vm's reservation object is held.
   * @vm: The vm
 diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
-index 211c88801182..27d651093d30 100644
 --- a/drivers/gpu/drm/xe/xe_vm_types.h
 +++ b/drivers/gpu/drm/xe/xe_vm_types.h
 @@ -26,14 +26,12 @@ struct xe_vm_pgtable_update_op;
@@ -2718,6 +2708,3 @@ index 211c88801182..27d651093d30 100644
  };
  
  #endif
--- 
-2.46.0
-

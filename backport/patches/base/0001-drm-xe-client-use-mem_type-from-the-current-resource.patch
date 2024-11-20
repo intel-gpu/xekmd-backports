@@ -1,10 +1,12 @@
-From 78e752b4b6932b850405fb221be424223d8feeff Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Auld <matthew.auld@intel.com>
 Date: Wed, 11 Sep 2024 16:55:29 +0100
-Subject: drm/xe/client: use mem_type from the current resource
+Subject: [PATCH] drm/xe/client: use mem_type from the current resource
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
+
+commit fbd73b7d2ae29ef0f604f376bcc22b886a49329e upstream.
 
 Rather extract the mem_type from the current resource. Checking the
 first potential placement doesn't really tell us where the bo is
@@ -18,14 +20,12 @@ Cc: "Thomas Hellström" <thomas.hellstrom@linux.intel.com>
 Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240911155527.178910-7-matthew.auld@intel.com
-(cherry picked from commit fbd73b7d2ae29ef0f604f376bcc22b886a49329e)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 ---
  drivers/gpu/drm/xe/xe_drm_client.c | 7 +------
  1 file changed, 1 insertion(+), 6 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_drm_client.c b/drivers/gpu/drm/xe/xe_drm_client.c
-index 1af95b9b9171..cdfee457b728 100644
 --- a/drivers/gpu/drm/xe/xe_drm_client.c
 +++ b/drivers/gpu/drm/xe/xe_drm_client.c
 @@ -168,15 +168,10 @@ static void bo_meminfo(struct xe_bo *bo,
@@ -45,6 +45,3 @@ index 1af95b9b9171..cdfee457b728 100644
  	if (drm_gem_object_is_shared_for_memory_stats(&bo->ttm.base))
  		stats[mem_type].shared += sz;
  	else
--- 
-2.34.1
-

@@ -1,7 +1,7 @@
-From 2b2fbd69d46a9928812b923d324a6ff28dbce9e6 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jani Nikula <jani.nikula@intel.com>
 Date: Tue, 20 Aug 2024 22:00:41 +0300
-Subject: drm/i915/display: switch to display detected steppings
+Subject: [PATCH] drm/i915/display: switch to display detected steppings
 
 Move the stepping related macros over to display. We can proceed to
 remove the compat macros from xe.
@@ -27,7 +27,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  5 files changed, 8 insertions(+), 11 deletions(-)
 
 diff --git a/drivers/gpu/drm/i915/display/intel_display_device.c b/drivers/gpu/drm/i915/display/intel_display_device.c
-index 5705f5bfc03c..1c03aed4c812 100644
 --- a/drivers/gpu/drm/i915/display/intel_display_device.c
 +++ b/drivers/gpu/drm/i915/display/intel_display_device.c
 @@ -1715,6 +1715,8 @@ void intel_display_device_info_print(const struct intel_display_device_info *inf
@@ -40,7 +39,6 @@ index 5705f5bfc03c..1c03aed4c812 100644
  	DEV_INFO_DISPLAY_FOR_EACH_FLAG(PRINT_FLAG);
  #undef PRINT_FLAG
 diff --git a/drivers/gpu/drm/i915/display/intel_display_device.h b/drivers/gpu/drm/i915/display/intel_display_device.h
-index 4615c3ba60aa..dfb0c8bf5ca2 100644
 --- a/drivers/gpu/drm/i915/display/intel_display_device.h
 +++ b/drivers/gpu/drm/i915/display/intel_display_device.h
 @@ -194,6 +194,12 @@ enum intel_display_subplatform {
@@ -57,7 +55,6 @@ index 4615c3ba60aa..dfb0c8bf5ca2 100644
  	enum intel_display_platform platform;
  	enum intel_display_subplatform subplatform;
 diff --git a/drivers/gpu/drm/i915/i915_drv.h b/drivers/gpu/drm/i915/i915_drv.h
-index 110340e02a02..01234406b146 100644
 --- a/drivers/gpu/drm/i915/i915_drv.h
 +++ b/drivers/gpu/drm/i915/i915_drv.h
 @@ -408,15 +408,10 @@ static inline struct intel_gt *to_gt(const struct drm_i915_private *i915)
@@ -77,7 +74,6 @@ index 110340e02a02..01234406b146 100644
  	(drm_WARN_ON(&(__i915)->drm, INTEL_GRAPHICS_STEP(__i915) == STEP_NONE), \
  	 INTEL_GRAPHICS_STEP(__i915) >= (since) && INTEL_GRAPHICS_STEP(__i915) < (until))
 diff --git a/drivers/gpu/drm/i915/intel_device_info.c b/drivers/gpu/drm/i915/intel_device_info.c
-index 01a650253050..d92b51b38a0e 100644
 --- a/drivers/gpu/drm/i915/intel_device_info.c
 +++ b/drivers/gpu/drm/i915/intel_device_info.c
 @@ -108,7 +108,6 @@ void intel_device_info_print(const struct intel_device_info *info,
@@ -89,7 +85,6 @@ index 01a650253050..d92b51b38a0e 100644
  
  	drm_printf(p, "gt: %d\n", info->gt);
 diff --git a/drivers/gpu/drm/xe/compat-i915-headers/i915_drv.h b/drivers/gpu/drm/xe/compat-i915-headers/i915_drv.h
-index cd2cb9c74981..b7b12b20e390 100644
 --- a/drivers/gpu/drm/xe/compat-i915-headers/i915_drv.h
 +++ b/drivers/gpu/drm/xe/compat-i915-headers/i915_drv.h
 @@ -80,11 +80,6 @@ static inline struct drm_i915_private *kdev_to_i915(struct device *kdev)
@@ -104,6 +99,3 @@ index cd2cb9c74981..b7b12b20e390 100644
  #define IS_LP(xe) (0)
  #define IS_GEN9_LP(xe) (0)
  #define IS_GEN9_BC(xe) (0)
--- 
-2.46.0
-

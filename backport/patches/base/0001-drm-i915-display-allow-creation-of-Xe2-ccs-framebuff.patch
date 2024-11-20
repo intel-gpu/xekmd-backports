@@ -1,7 +1,7 @@
-From 6c4e0581af96428d86e76b59e3d5869437df3285 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Juha-Pekka Heikkila <juhapekka.heikkila@gmail.com>
 Date: Fri, 16 Aug 2024 14:52:29 +0300
-Subject: drm/i915/display: allow creation of Xe2 ccs framebuffers
+Subject: [PATCH] drm/i915/display: allow creation of Xe2 ccs framebuffers
 
 Add I915_FORMAT_MOD_4_TILED_BMG_CCS and I915_FORMAT_MOD_4_TILED_LNL_CCS to possible
 created modifier for new framebuffer on Xe driver.
@@ -20,7 +20,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  3 files changed, 25 insertions(+)
 
 diff --git a/drivers/gpu/drm/i915/display/intel_display.c b/drivers/gpu/drm/i915/display/intel_display.c
-index c2c388212e2e..98d9b1d4d637 100644
 --- a/drivers/gpu/drm/i915/display/intel_display.c
 +++ b/drivers/gpu/drm/i915/display/intel_display.c
 @@ -6249,6 +6249,8 @@ static int intel_async_flip_check_hw(struct intel_atomic_state *state, struct in
@@ -33,7 +32,6 @@ index c2c388212e2e..98d9b1d4d637 100644
  		default:
  			drm_dbg_kms(&i915->drm,
 diff --git a/drivers/gpu/drm/i915/display/intel_fb.c b/drivers/gpu/drm/i915/display/intel_fb.c
-index f23547a88b1f..d2716915d046 100644
 --- a/drivers/gpu/drm/i915/display/intel_fb.c
 +++ b/drivers/gpu/drm/i915/display/intel_fb.c
 @@ -163,6 +163,14 @@ struct intel_modifier_desc {
@@ -76,10 +74,9 @@ index f23547a88b1f..d2716915d046 100644
  	case I915_FORMAT_MOD_4_TILED_DG2_RC_CCS_CC:
  	case I915_FORMAT_MOD_4_TILED_DG2_MC_CCS:
 diff --git a/drivers/gpu/drm/i915/display/skl_universal_plane.c b/drivers/gpu/drm/i915/display/skl_universal_plane.c
-index a1ab64db0130..0e81d540ecc9 100644
 --- a/drivers/gpu/drm/i915/display/skl_universal_plane.c
 +++ b/drivers/gpu/drm/i915/display/skl_universal_plane.c
-@@ -537,6 +537,8 @@ static u32 tgl_plane_min_alignment(struct intel_plane *plane,
+@@ -538,6 +538,8 @@ static u32 tgl_plane_min_alignment(struct intel_plane *plane,
  	case I915_FORMAT_MOD_4_TILED_DG2_RC_CCS:
  	case I915_FORMAT_MOD_4_TILED_DG2_RC_CCS_CC:
  	case I915_FORMAT_MOD_4_TILED_DG2_MC_CCS:
@@ -88,7 +85,7 @@ index a1ab64db0130..0e81d540ecc9 100644
  		/*
  		 * Align to at least 4x1 main surface
  		 * tiles (16K) to match 64B of AUX.
-@@ -948,6 +950,9 @@ static u32 skl_plane_ctl_tiling(u64 fb_modifier)
+@@ -949,6 +951,9 @@ static u32 skl_plane_ctl_tiling(u64 fb_modifier)
  		return PLANE_CTL_TILED_4 | PLANE_CTL_RENDER_DECOMPRESSION_ENABLE;
  	case I915_FORMAT_MOD_4_TILED_MTL_MC_CCS:
  		return PLANE_CTL_TILED_4 | PLANE_CTL_MEDIA_DECOMPRESSION_ENABLE;
@@ -98,6 +95,3 @@ index a1ab64db0130..0e81d540ecc9 100644
  	case I915_FORMAT_MOD_Y_TILED_CCS:
  	case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC:
  		return PLANE_CTL_TILED_Y | PLANE_CTL_RENDER_DECOMPRESSION_ENABLE;
--- 
-2.46.0
-

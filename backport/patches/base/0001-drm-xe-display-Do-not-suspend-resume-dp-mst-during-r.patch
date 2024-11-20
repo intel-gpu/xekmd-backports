@@ -1,7 +1,9 @@
-From 0f5c0837c70771d0c894462f4ef98e203116d5ec Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Suraj Kandpal <suraj.kandpal@intel.com>
 Date: Thu, 12 Sep 2024 06:55:44 +0530
-Subject: drm/xe/display: Do not suspend resume dp mst during runtime
+Subject: [PATCH] drm/xe/display: Do not suspend resume dp mst during runtime
+
+commit 47382485baa781b68622d94faa3473c9a235f23e upstream.
 
 Remove intel_dp_mst_suspend/resume from runtime suspend resume
 sequences. It is incorrect as it depends on AUX transfers which
@@ -44,17 +46,15 @@ the existing dependency chain (in reverse order) is:
 Signed-off-by: Suraj Kandpal <suraj.kandpal@intel.com>
 Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240912012545.702032-2-suraj.kandpal@intel.com
-(cherry picked from commit 47382485baa781b68622d94faa3473c9a235f23e)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 ---
  drivers/gpu/drm/xe/display/xe_display.c | 7 +++++--
  1 file changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/display/xe_display.c b/drivers/gpu/drm/xe/display/xe_display.c
-index 574909e098c1..9eda8b09fb21 100644
 --- a/drivers/gpu/drm/xe/display/xe_display.c
 +++ b/drivers/gpu/drm/xe/display/xe_display.c
-@@ -336,7 +336,8 @@ void xe_display_pm_suspend(struct xe_device *xe, bool runtime)
+@@ -325,7 +325,8 @@ static void __xe_display_pm_suspend(struct xe_device *xe, bool runtime)
  
  	xe_display_flush_cleanup_work(xe);
  
@@ -64,7 +64,7 @@ index 574909e098c1..9eda8b09fb21 100644
  
  	intel_hpd_cancel_work(xe);
  
-@@ -399,7 +400,9 @@ void xe_display_pm_resume(struct xe_device *xe, bool runtime)
+@@ -398,7 +399,9 @@ static void __xe_display_pm_resume(struct xe_device *xe, bool runtime)
  		intel_display_driver_resume_access(xe);
  
  	/* MST sideband requires HPD interrupts enabled */
@@ -75,6 +75,3 @@ index 574909e098c1..9eda8b09fb21 100644
  	if (!runtime && has_display(xe)) {
  		intel_display_driver_resume(xe);
  		drm_kms_helper_poll_enable(&xe->drm);
--- 
-2.34.1
-

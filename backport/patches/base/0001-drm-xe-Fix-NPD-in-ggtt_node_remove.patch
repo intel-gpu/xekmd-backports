@@ -1,7 +1,7 @@
-From 1723f188fb1693cca8980527c9cf2dc6bc64171e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Date: Wed, 28 Aug 2024 14:52:29 +0530
-Subject: drm/xe: Fix NPD in ggtt_node_remove()
+Subject: [PATCH] drm/xe: Fix NPD in ggtt_node_remove()
 
 Make sure that ggtt_node_remove() is invoked only if both node and ggtt
 are not null. Move the null checks to the caller function
@@ -25,7 +25,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  1 file changed, 8 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index 86fc6afa43bd..f3fca5565d32 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
 @@ -286,9 +286,6 @@ static void ggtt_node_remove(struct xe_ggtt_node *node)
@@ -55,6 +54,3 @@ index 86fc6afa43bd..f3fca5565d32 100644
  
  	node->invalidate_on_remove = invalidate;
  
--- 
-2.46.0
-

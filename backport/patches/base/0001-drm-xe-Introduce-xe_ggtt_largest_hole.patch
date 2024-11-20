@@ -1,7 +1,7 @@
-From 11bc315f99181836171730f053b0582cf0adbf99 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Date: Wed, 21 Aug 2024 15:38:38 -0400
-Subject: drm/xe: Introduce xe_ggtt_largest_hole
+Subject: [PATCH] drm/xe: Introduce xe_ggtt_largest_hole
 
 Introduce a new xe_ggtt_largest_hole helper that attends the SRIOV
 demand and continue with the goal of limiting drm_mm access to xe_ggtt.
@@ -22,10 +22,9 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  3 files changed, 38 insertions(+), 21 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index 7c8bbaa30fca..2d055f489879 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
-@@ -584,6 +584,41 @@ void xe_ggtt_remove_bo(struct xe_ggtt *ggtt, struct xe_bo *bo)
+@@ -594,6 +594,41 @@ void xe_ggtt_remove_bo(struct xe_ggtt *ggtt, struct xe_bo *bo)
  			    bo->flags & XE_BO_FLAG_GGTT_INVALIDATE);
  }
  
@@ -68,7 +67,6 @@ index 7c8bbaa30fca..2d055f489879 100644
  static u64 xe_encode_vfid_pte(u16 vfid)
  {
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.h b/drivers/gpu/drm/xe/xe_ggtt.h
-index f816b3c0732b..31060fe7644b 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.h
 +++ b/drivers/gpu/drm/xe/xe_ggtt.h
 @@ -29,6 +29,7 @@ int xe_ggtt_insert_bo(struct xe_ggtt *ggtt, struct xe_bo *bo);
@@ -80,7 +78,6 @@ index f816b3c0732b..31060fe7644b 100644
  int xe_ggtt_dump(struct xe_ggtt *ggtt, struct drm_printer *p);
  
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-index 1509fb6cae3b..6eeec2048505 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 @@ -590,30 +590,11 @@ int xe_gt_sriov_pf_config_bulk_set_ggtt(struct xe_gt *gt, unsigned int vfid,
@@ -116,6 +113,3 @@ index 1509fb6cae3b..6eeec2048505 100644
  
  	xe_gt_sriov_dbg_verbose(gt, "HOLE max %lluK reserved %lluK\n",
  				max_hole / SZ_1K, spare / SZ_1K);
--- 
-2.46.0
-

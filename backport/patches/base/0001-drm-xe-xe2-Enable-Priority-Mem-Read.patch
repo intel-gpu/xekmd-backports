@@ -1,7 +1,7 @@
-From 1eb83b87afc7e13c699ca2ef3f3dd2d28786867d Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Pallavi Mishra <pallavi.mishra@intel.com>
 Date: Thu, 1 Aug 2024 01:26:22 +0530
-Subject: drm/xe/xe2: Enable Priority Mem Read
+Subject: [PATCH] drm/xe/xe2: Enable Priority Mem Read
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -46,7 +46,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  2 files changed, 7 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_engine_regs.h b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
-index c38db2a74614..81b71903675e 100644
 --- a/drivers/gpu/drm/xe/regs/xe_engine_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
 @@ -104,6 +104,7 @@
@@ -58,7 +57,6 @@ index c38db2a74614..81b71903675e 100644
  #define FF_SLICE_CS_CHICKEN1(base)		XE_REG((base) + 0xe0, XE_REG_OPTION_MASKED)
  #define   FFSC_PERCTX_PREEMPT_CTRL		REG_BIT(14)
 diff --git a/drivers/gpu/drm/xe/xe_hw_engine.c b/drivers/gpu/drm/xe/xe_hw_engine.c
-index 00ace5fcc284..403eb1d2d20a 100644
 --- a/drivers/gpu/drm/xe/xe_hw_engine.c
 +++ b/drivers/gpu/drm/xe/xe_hw_engine.c
 @@ -428,6 +428,12 @@ hw_engine_setup_default_state(struct xe_hw_engine *hwe)
@@ -74,6 +72,3 @@ index 00ace5fcc284..403eb1d2d20a 100644
  		{}
  	};
  
--- 
-2.46.0
-

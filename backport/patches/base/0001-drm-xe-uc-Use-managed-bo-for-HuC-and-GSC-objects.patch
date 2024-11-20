@@ -1,7 +1,9 @@
-From cb2d0a4186eacccdec823c39be2b8d15ca0790bf Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Date: Thu, 15 Aug 2024 16:05:39 -0700
-Subject: drm/xe/uc: Use managed bo for HuC and GSC objects
+Subject: [PATCH] drm/xe/uc: Use managed bo for HuC and GSC objects
+
+commit 2e5d47fe7839298fa096970e184aac9bf82c3bd3 upstream.
 
 Drmm actions are not the right ones to clean up BOs and we should use
 devm instead. However, we can also instead just allocate the objects
@@ -19,9 +21,6 @@ Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Matthew Auld <matthew.auld@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240815230541.3828206-1-lucas.demarchi@intel.com
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-(cherry picked from commit 2e5d47fe7839298fa096970e184aac9bf82c3bd3 linux-next)
-Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
 ---
  drivers/gpu/drm/xe/xe_gsc.c       | 12 +++--------
  drivers/gpu/drm/xe/xe_gsc_proxy.c | 36 ++++++-------------------------
@@ -29,7 +28,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  3 files changed, 14 insertions(+), 53 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gsc.c b/drivers/gpu/drm/xe/xe_gsc.c
-index 2a612652bb13..8a137cb83318 100644
 --- a/drivers/gpu/drm/xe/xe_gsc.c
 +++ b/drivers/gpu/drm/xe/xe_gsc.c
 @@ -450,11 +450,6 @@ static void free_resources(void *arg)
@@ -59,7 +57,6 @@ index 2a612652bb13..8a137cb83318 100644
  		return PTR_ERR(bo);
  
 diff --git a/drivers/gpu/drm/xe/xe_gsc_proxy.c b/drivers/gpu/drm/xe/xe_gsc_proxy.c
-index aa812a2bc3ed..8f880c44211d 100644
 --- a/drivers/gpu/drm/xe/xe_gsc_proxy.c
 +++ b/drivers/gpu/drm/xe/xe_gsc_proxy.c
 @@ -376,27 +376,6 @@ static const struct component_ops xe_gsc_proxy_component_ops = {
@@ -124,7 +121,6 @@ index aa812a2bc3ed..8f880c44211d 100644
  
  /**
 diff --git a/drivers/gpu/drm/xe/xe_huc.c b/drivers/gpu/drm/xe/xe_huc.c
-index bec4366e5513..f5459f97af23 100644
 --- a/drivers/gpu/drm/xe/xe_huc.c
 +++ b/drivers/gpu/drm/xe/xe_huc.c
 @@ -43,14 +43,6 @@ huc_to_guc(struct xe_huc *huc)
@@ -165,6 +161,3 @@ index bec4366e5513..f5459f97af23 100644
  }
  
  int xe_huc_init(struct xe_huc *huc)
--- 
-2.46.0
-

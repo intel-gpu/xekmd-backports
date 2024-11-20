@@ -1,7 +1,7 @@
-From 895d85aad58ab0663f7191d79f2698704522e836 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Nathan Chancellor <nathan@kernel.org>
 Date: Fri, 23 Aug 2024 20:47:13 -0700
-Subject: drm/xe: Fix total initialization in xe_ggtt_print_holes()
+Subject: [PATCH] drm/xe: Fix total initialization in xe_ggtt_print_holes()
 
 Clang warns (or errors with CONFIG_DRM_WERROR or CONFIG_WERROR):
 
@@ -32,10 +32,9 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index a3ce91decdce..86fc6afa43bd 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
-@@ -795,7 +795,7 @@ u64 xe_ggtt_print_holes(struct xe_ggtt *ggtt, u64 alignment, struct drm_printer
+@@ -805,7 +805,7 @@ u64 xe_ggtt_print_holes(struct xe_ggtt *ggtt, u64 alignment, struct drm_printer
  	const struct drm_mm_node *entry;
  	u64 hole_min_start = xe_wopcm_size(tile_to_xe(ggtt->tile));
  	u64 hole_start, hole_end, hole_size;
@@ -45,7 +44,6 @@ index a3ce91decdce..86fc6afa43bd 100644
  
  	mutex_lock(&ggtt->lock);
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-index a86960592e25..dd0e5b5d897f 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 @@ -2109,7 +2109,7 @@ int xe_gt_sriov_pf_config_print_available_ggtt(struct xe_gt *gt, struct drm_prin
@@ -57,6 +55,3 @@ index a86960592e25..dd0e5b5d897f 100644
  	char buf[10];
  
  	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
--- 
-2.46.0
-

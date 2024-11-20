@@ -1,7 +1,7 @@
-From e861d482a6fda1fc4a086d833c7e6501272bf7b9 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Lucas De Marchi <lucas.demarchi@intel.com>
 Date: Thu, 22 Aug 2024 15:46:15 -0700
-Subject: drm/xe/lnl: Drop force_probe requirement
+Subject: [PATCH] drm/xe/lnl: Drop force_probe requirement
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -30,7 +30,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  1 file changed, 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index b42aa304c4e9..071a50f667bb 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
 @@ -338,7 +338,6 @@ static const struct xe_device_desc mtl_desc = {
@@ -41,6 +40,3 @@ index b42aa304c4e9..071a50f667bb 100644
  };
  
  static const struct xe_device_desc bmg_desc = {
--- 
-2.46.0
-

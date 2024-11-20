@@ -1,7 +1,9 @@
-From 4620f0c1b910c8e441429bdb110af974de740fca Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Gustavo Sousa <gustavo.sousa@intel.com>
 Date: Fri, 20 Sep 2024 18:13:16 -0300
-Subject: drm/xe/xe2: Extend performance tuning to media GT
+Subject: [PATCH] drm/xe/xe2: Extend performance tuning to media GT
+
+commit 3bf90935aafc750c838c8831e96c3ac36cfd48d5 upstream.
 
 With exception of "Tuning: L3 cache - media", we are currently applying
 recommended performance tuning settings only for the primary GT. Let's
@@ -36,18 +38,15 @@ Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240920211459.255181-3-gustavo.sousa@intel.com
 (cherry picked from commit e1f813947ccf2326cfda4558b7d31430d7860c4b)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-(cherry picked from commit 3bf90935aafc750c838c8831e96c3ac36cfd48d5)
-Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h |  6 ++++++
  drivers/gpu/drm/xe/xe_tuning.c       | 20 ++++++++++++++++++++
  2 files changed, 26 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index e6719dcff111..d07e5c2c45f1 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -167,6 +167,8 @@
+@@ -169,6 +169,8 @@
  #define XEHP_SLICE_COMMON_ECO_CHICKEN1		XE_REG_MCR(0x731c, XE_REG_OPTION_MASKED)
  #define   MSC_MSAA_REODER_BUF_BYPASS_DISABLE	REG_BIT(14)
  
@@ -56,7 +55,7 @@ index e6719dcff111..d07e5c2c45f1 100644
  #define VF_PREEMPTION				XE_REG(0x83a4, XE_REG_OPTION_MASKED)
  #define   PREEMPTION_VERTEX_COUNT		REG_GENMASK(15, 0)
  
-@@ -389,6 +391,10 @@
+@@ -391,6 +393,10 @@
  #define SCRATCH1LPFC				XE_REG(0xb474)
  #define   EN_L3_RW_CCS_CACHE_FLUSH		REG_BIT(0)
  
@@ -68,7 +67,6 @@ index e6719dcff111..d07e5c2c45f1 100644
  
  #define XE2_TDF_CTRL				XE_REG(0xb418)
 diff --git a/drivers/gpu/drm/xe/xe_tuning.c b/drivers/gpu/drm/xe/xe_tuning.c
-index faa1bf42e50e..c798ae1b3f75 100644
 --- a/drivers/gpu/drm/xe/xe_tuning.c
 +++ b/drivers/gpu/drm/xe/xe_tuning.c
 @@ -42,20 +42,40 @@ static const struct xe_rtp_entry_sr gt_tunings[] = {
@@ -112,6 +110,3 @@ index faa1bf42e50e..c798ae1b3f75 100644
  	{}
  };
  
--- 
-2.34.1
-

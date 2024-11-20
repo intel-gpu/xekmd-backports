@@ -1,7 +1,7 @@
-From c6107f1cbba00b8acd342160bbbf576bc47ff772 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Juha-Pekka Heikkila <juhapekka.heikkila@gmail.com>
 Date: Fri, 16 Aug 2024 14:52:28 +0300
-Subject: drm/fourcc: define Intel Xe2 related tile4 ccs modifiers
+Subject: [PATCH] drm/fourcc: define Intel Xe2 related tile4 ccs modifiers
 
 Add Tile4 type ccs modifiers to indicate presence of compression on Xe2.
 Here is defined I915_FORMAT_MOD_4_TILED_LNL_CCS which is meant for
@@ -22,7 +22,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  1 file changed, 25 insertions(+)
 
 diff --git a/include/uapi/drm/drm_fourcc.h b/include/uapi/drm/drm_fourcc.h
-index 2d84a8052b15..78abd819fd62 100644
 --- a/include/uapi/drm/drm_fourcc.h
 +++ b/include/uapi/drm/drm_fourcc.h
 @@ -702,6 +702,31 @@ extern "C" {
@@ -57,6 +56,3 @@ index 2d84a8052b15..78abd819fd62 100644
  /*
   * Tiled, NV12MT, grouped in 64 (pixels) x 32 (lines) -sized macroblocks
   *
--- 
-2.46.0
-

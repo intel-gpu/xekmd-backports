@@ -1,7 +1,7 @@
-From 5c98dc429cf227243e90e0f4fb95affbcfa4baf7 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Wed, 3 Jul 2024 21:16:47 -0700
-Subject: drm/xe: Add xe_vm_pgtable_update_op to xe_vma_ops
+Subject: [PATCH] drm/xe: Add xe_vm_pgtable_update_op to xe_vma_ops
 
 Each xe_vma_op resolves to 0-3 pt_ops. Add storage for the pt_ops to
 xe_vma_ops which is dynamically allocated based the number and types of
@@ -24,7 +24,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  3 files changed, 84 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pt_types.h b/drivers/gpu/drm/xe/xe_pt_types.h
-index cee70cb0f014..2093150f461e 100644
 --- a/drivers/gpu/drm/xe/xe_pt_types.h
 +++ b/drivers/gpu/drm/xe/xe_pt_types.h
 @@ -74,4 +74,16 @@ struct xe_vm_pgtable_update {
@@ -45,10 +44,9 @@ index cee70cb0f014..2093150f461e 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 4da32e3424ff..3924c257154b 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -708,6 +708,42 @@ int xe_vm_userptr_check_repin(struct xe_vm *vm)
+@@ -718,6 +718,42 @@ int xe_vm_userptr_check_repin(struct xe_vm *vm)
  		list_empty_careful(&vm->userptr.invalidated)) ? 0 : -EAGAIN;
  }
  
@@ -91,7 +89,7 @@ index 4da32e3424ff..3924c257154b 100644
  static void xe_vm_populate_rebind(struct xe_vma_op *op, struct xe_vma *vma,
  				  u8 tile_mask)
  {
-@@ -735,6 +771,7 @@ static int xe_vm_ops_add_rebind(struct xe_vma_ops *vops, struct xe_vma *vma,
+@@ -745,6 +781,7 @@ static int xe_vm_ops_add_rebind(struct xe_vma_ops *vops, struct xe_vma *vma,
  
  	xe_vm_populate_rebind(op, vma, tile_mask);
  	list_add_tail(&op->link, &vops->list);
@@ -99,7 +97,7 @@ index 4da32e3424ff..3924c257154b 100644
  
  	return 0;
  }
-@@ -775,6 +812,10 @@ int xe_vm_rebind(struct xe_vm *vm, bool rebind_worker)
+@@ -785,6 +822,10 @@ int xe_vm_rebind(struct xe_vm *vm, bool rebind_worker)
  			goto free_ops;
  	}
  
@@ -110,7 +108,7 @@ index 4da32e3424ff..3924c257154b 100644
  	fence = ops_execute(vm, &vops);
  	if (IS_ERR(fence)) {
  		err = PTR_ERR(fence);
-@@ -789,6 +830,7 @@ int xe_vm_rebind(struct xe_vm *vm, bool rebind_worker)
+@@ -799,6 +840,7 @@ int xe_vm_rebind(struct xe_vm *vm, bool rebind_worker)
  		list_del(&op->link);
  		kfree(op);
  	}
@@ -118,7 +116,7 @@ index 4da32e3424ff..3924c257154b 100644
  
  	return err;
  }
-@@ -810,12 +852,20 @@ struct dma_fence *xe_vma_rebind(struct xe_vm *vm, struct xe_vma *vma, u8 tile_ma
+@@ -820,12 +862,20 @@ struct dma_fence *xe_vma_rebind(struct xe_vm *vm, struct xe_vma *vma, u8 tile_ma
  	if (err)
  		return ERR_PTR(err);
  
@@ -139,7 +137,7 @@ index 4da32e3424ff..3924c257154b 100644
  
  	return fence;
  }
-@@ -2275,7 +2325,6 @@ static int xe_vma_op_commit(struct xe_vm *vm, struct xe_vma_op *op)
+@@ -2281,7 +2331,6 @@ static int xe_vma_op_commit(struct xe_vm *vm, struct xe_vma_op *op)
  	return err;
  }
  
@@ -147,7 +145,7 @@ index 4da32e3424ff..3924c257154b 100644
  static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct xe_exec_queue *q,
  				   struct drm_gpuva_ops *ops,
  				   struct xe_sync_entry *syncs, u32 num_syncs,
-@@ -2327,6 +2376,9 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct xe_exec_queue *q,
+@@ -2333,6 +2382,9 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct xe_exec_queue *q,
  				return PTR_ERR(vma);
  
  			op->map.vma = vma;
@@ -157,7 +155,7 @@ index 4da32e3424ff..3924c257154b 100644
  			break;
  		}
  		case DRM_GPUVA_OP_REMAP:
-@@ -2371,6 +2423,8 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct xe_exec_queue *q,
+@@ -2377,6 +2429,8 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct xe_exec_queue *q,
  					vm_dbg(&xe->drm, "REMAP:SKIP_PREV: addr=0x%016llx, range=0x%016llx",
  					       (ULL)op->remap.start,
  					       (ULL)op->remap.range);
@@ -166,7 +164,7 @@ index 4da32e3424ff..3924c257154b 100644
  				}
  			}
  
-@@ -2407,13 +2461,16 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct xe_exec_queue *q,
+@@ -2413,13 +2467,16 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct xe_exec_queue *q,
  					vm_dbg(&xe->drm, "REMAP:SKIP_NEXT: addr=0x%016llx, range=0x%016llx",
  					       (ULL)op->remap.start,
  					       (ULL)op->remap.range);
@@ -184,7 +182,7 @@ index 4da32e3424ff..3924c257154b 100644
  			break;
  		default:
  			drm_warn(&vm->xe->drm, "NOT POSSIBLE");
-@@ -3269,11 +3326,16 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -3275,11 +3332,16 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		goto unwind_ops;
  	}
  
@@ -202,7 +200,6 @@ index 4da32e3424ff..3924c257154b 100644
  		if (ops[i])
  			drm_gpuva_ops_free(&vm->gpuvm, ops[i]);
 diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
-index ce1a63a5e3e7..211c88801182 100644
 --- a/drivers/gpu/drm/xe/xe_vm_types.h
 +++ b/drivers/gpu/drm/xe/xe_vm_types.h
 @@ -21,6 +21,7 @@ struct xe_bo;
@@ -227,6 +224,3 @@ index ce1a63a5e3e7..211c88801182 100644
  };
  
  #endif
--- 
-2.46.0
-

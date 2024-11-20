@@ -1,7 +1,7 @@
-From ea5d0fd81d9901874f8b752311dcf856306d0629 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Date: Wed, 21 Aug 2024 15:38:36 -0400
-Subject: drm/xe: Rename xe_ggtt_node related functions
+Subject: [PATCH] drm/xe: Rename xe_ggtt_node related functions
 
 Bring some consistency and prepare for more xe_ggtt_node related
 functions to be introduced.
@@ -20,7 +20,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  4 files changed, 54 insertions(+), 56 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/display/xe_fb_pin.c b/drivers/gpu/drm/xe/display/xe_fb_pin.c
-index a93923fb8721..db74c3395ef8 100644
 --- a/drivers/gpu/drm/xe/display/xe_fb_pin.c
 +++ b/drivers/gpu/drm/xe/display/xe_fb_pin.c
 @@ -209,8 +209,7 @@ static int __xe_pin_fb_vma_ggtt(const struct intel_framebuffer *fb,
@@ -53,10 +52,9 @@ index a93923fb8721..db74c3395ef8 100644
  	ttm_bo_reserve(&vma->bo->ttm, false, false, NULL);
  	ttm_bo_unpin(&vma->bo->ttm);
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index 1cf682d15253..e0da24bb5774 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
-@@ -403,7 +403,7 @@ void xe_ggtt_deballoon(struct xe_ggtt *ggtt, struct xe_ggtt_node *node)
+@@ -413,7 +413,7 @@ void xe_ggtt_deballoon(struct xe_ggtt *ggtt, struct xe_ggtt_node *node)
  }
  
  /**
@@ -65,7 +63,7 @@ index 1cf682d15253..e0da24bb5774 100644
   * @ggtt: the &xe_ggtt where node will be inserted
   * @node: the &xe_ggtt_node to be inserted
   * @size: size of the node
-@@ -414,15 +414,15 @@ void xe_ggtt_deballoon(struct xe_ggtt *ggtt, struct xe_ggtt_node *node)
+@@ -424,15 +424,15 @@ void xe_ggtt_deballoon(struct xe_ggtt *ggtt, struct xe_ggtt_node *node)
   *
   * Return: 0 on success or a negative error code on failure.
   */
@@ -84,7 +82,7 @@ index 1cf682d15253..e0da24bb5774 100644
   * @ggtt: the &xe_ggtt where node will be inserted
   * @node: the &xe_ggtt_node to be inserted
   * @size: size of the node
-@@ -430,19 +430,53 @@ int xe_ggtt_insert_special_node_locked(struct xe_ggtt *ggtt, struct xe_ggtt_node
+@@ -440,19 +440,53 @@ int xe_ggtt_insert_special_node_locked(struct xe_ggtt *ggtt, struct xe_ggtt_node
   *
   * Return: 0 on success or a negative error code on failure.
   */
@@ -142,7 +140,7 @@ index 1cf682d15253..e0da24bb5774 100644
  /**
   * xe_ggtt_map_bo - Map the BO into GGTT
   * @ggtt: the &xe_ggtt where node will be mapped
-@@ -522,40 +556,6 @@ int xe_ggtt_insert_bo(struct xe_ggtt *ggtt, struct xe_bo *bo)
+@@ -532,40 +566,6 @@ int xe_ggtt_insert_bo(struct xe_ggtt *ggtt, struct xe_bo *bo)
  	return __xe_ggtt_insert_bo_at(ggtt, bo, 0, U64_MAX);
  }
  
@@ -183,7 +181,7 @@ index 1cf682d15253..e0da24bb5774 100644
  /**
   * xe_ggtt_remove_bo - Remove a BO from the GGTT
   * @ggtt: the &xe_ggtt where node will be removed
-@@ -569,7 +569,7 @@ void xe_ggtt_remove_bo(struct xe_ggtt *ggtt, struct xe_bo *bo)
+@@ -579,7 +579,7 @@ void xe_ggtt_remove_bo(struct xe_ggtt *ggtt, struct xe_bo *bo)
  	/* This BO is not currently in the GGTT */
  	xe_tile_assert(ggtt->tile, bo->ggtt_node.base.size == bo->size);
  
@@ -193,7 +191,6 @@ index 1cf682d15253..e0da24bb5774 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.h b/drivers/gpu/drm/xe/xe_ggtt.h
-index 30a521f7b075..5147930357de 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.h
 +++ b/drivers/gpu/drm/xe/xe_ggtt.h
 @@ -16,12 +16,12 @@ int xe_ggtt_init(struct xe_ggtt *ggtt);
@@ -216,7 +213,6 @@ index 30a521f7b075..5147930357de 100644
  void xe_ggtt_map_bo(struct xe_ggtt *ggtt, struct xe_bo *bo);
  int xe_ggtt_insert_bo(struct xe_ggtt *ggtt, struct xe_bo *bo);
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-index b6aeca9a2f26..d6e7c61eb2df 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 @@ -382,7 +382,7 @@ static void pf_release_ggtt(struct xe_tile *tile, struct xe_ggtt_node *node)
@@ -237,6 +233,3 @@ index b6aeca9a2f26..d6e7c61eb2df 100644
  	if (unlikely(err))
  		return err;
  
--- 
-2.46.0
-

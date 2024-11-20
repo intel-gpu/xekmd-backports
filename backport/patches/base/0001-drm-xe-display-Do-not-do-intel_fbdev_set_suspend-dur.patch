@@ -1,7 +1,10 @@
-From cd04d68714c88871fa93462d66538cce26eac4b6 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Suraj Kandpal <suraj.kandpal@intel.com>
 Date: Thu, 12 Sep 2024 06:55:45 +0530
-Subject: drm/xe/display: Do not do intel_fbdev_set_suspend during runtime
+Subject: [PATCH] drm/xe/display: Do not do intel_fbdev_set_suspend during
+ runtime
+
+commit 5422d30957570b0f0283f8ad4d0dd45637c11db7 upstream.
 
 Do not do intel_fbdev_set_suspend during runtime_suspend/resume
 functions. This cause a big circular lock_dep splat.
@@ -43,17 +46,15 @@ __drm_fb_helper_initial_config_and_unlock+0x31c/0x5e0 [drm_kms_helper]
 Signed-off-by: Suraj Kandpal <suraj.kandpal@intel.com>
 Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20240912012545.702032-3-suraj.kandpal@intel.com
-(cherry picked from commit 5422d30957570b0f0283f8ad4d0dd45637c11db7)
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
 ---
  drivers/gpu/drm/xe/display/xe_display.c | 7 +++++--
  1 file changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/display/xe_display.c b/drivers/gpu/drm/xe/display/xe_display.c
-index 9eda8b09fb21..d39be2ef08ca 100644
 --- a/drivers/gpu/drm/xe/display/xe_display.c
 +++ b/drivers/gpu/drm/xe/display/xe_display.c
-@@ -327,7 +327,9 @@ void xe_display_pm_suspend(struct xe_device *xe, bool runtime)
+@@ -316,7 +316,9 @@ static void __xe_display_pm_suspend(struct xe_device *xe, bool runtime)
  	 * properly.
  	 */
  	intel_power_domains_disable(xe);
@@ -64,7 +65,7 @@ index 9eda8b09fb21..d39be2ef08ca 100644
  	if (!runtime && has_display(xe)) {
  		drm_kms_helper_poll_disable(&xe->drm);
  		intel_display_driver_disable_user_access(xe);
-@@ -412,7 +414,8 @@ void xe_display_pm_resume(struct xe_device *xe, bool runtime)
+@@ -413,7 +415,8 @@ static void __xe_display_pm_resume(struct xe_device *xe, bool runtime)
  
  	intel_opregion_resume(xe);
  
@@ -74,6 +75,3 @@ index 9eda8b09fb21..d39be2ef08ca 100644
  
  	intel_power_domains_enable(xe);
  }
--- 
-2.34.1
-

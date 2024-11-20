@@ -1,7 +1,7 @@
-From fe0e3129227c762ecf282e0c6e3a32e83dd876e4 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jani Nikula <jani.nikula@intel.com>
 Date: Tue, 20 Aug 2024 22:00:42 +0300
-Subject: drm/i915: remove display stepping handling
+Subject: [PATCH] drm/i915: remove display stepping handling
 
 The code is now unused. Remove.
 
@@ -18,7 +18,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  2 files changed, 36 insertions(+), 44 deletions(-)
 
 diff --git a/drivers/gpu/drm/i915/intel_step.c b/drivers/gpu/drm/i915/intel_step.c
-index 80464e4edcce..285b96fadfd5 100644
 --- a/drivers/gpu/drm/i915/intel_step.c
 +++ b/drivers/gpu/drm/i915/intel_step.c
 @@ -23,8 +23,7 @@
@@ -168,7 +167,6 @@ index 80464e4edcce..285b96fadfd5 100644
  	}
  
 diff --git a/drivers/gpu/drm/i915/intel_step.h b/drivers/gpu/drm/i915/intel_step.h
-index 96dfca4cba73..83bd1190edf5 100644
 --- a/drivers/gpu/drm/i915/intel_step.h
 +++ b/drivers/gpu/drm/i915/intel_step.h
 @@ -16,7 +16,6 @@ struct intel_step_info {
@@ -179,6 +177,3 @@ index 96dfca4cba73..83bd1190edf5 100644
  	u8 media_step;
  	u8 basedie_step;
  };
--- 
-2.46.0
-

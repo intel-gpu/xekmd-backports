@@ -1,7 +1,7 @@
-From d43f2bfbec07fcb40ad172d26e6fc124dd76705f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Date: Wed, 21 Aug 2024 15:38:37 -0400
-Subject: drm/xe: Limit drm_mm_node_allocated access to xe_ggtt_node
+Subject: [PATCH] drm/xe: Limit drm_mm_node_allocated access to xe_ggtt_node
 
 Continue with the encapsulation of drm_mm_node inside xe_ggtt.
 
@@ -20,7 +20,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  4 files changed, 19 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/display/xe_fb_pin.c b/drivers/gpu/drm/xe/display/xe_fb_pin.c
-index db74c3395ef8..de4930b67a29 100644
 --- a/drivers/gpu/drm/xe/display/xe_fb_pin.c
 +++ b/drivers/gpu/drm/xe/display/xe_fb_pin.c
 @@ -323,7 +323,7 @@ static void __xe_unpin_fb_vma(struct i915_vma *vma)
@@ -33,10 +32,9 @@ index db74c3395ef8..de4930b67a29 100644
  		xe_ggtt_node_remove(ggtt, &vma->node, false);
  
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index e0da24bb5774..7c8bbaa30fca 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
-@@ -477,6 +477,17 @@ void xe_ggtt_node_remove(struct xe_ggtt *ggtt, struct xe_ggtt_node *node,
+@@ -487,6 +487,17 @@ void xe_ggtt_node_remove(struct xe_ggtt *ggtt, struct xe_ggtt_node *node,
  	drm_dev_exit(idx);
  }
  
@@ -55,7 +53,6 @@ index e0da24bb5774..7c8bbaa30fca 100644
   * xe_ggtt_map_bo - Map the BO into GGTT
   * @ggtt: the &xe_ggtt where node will be mapped
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.h b/drivers/gpu/drm/xe/xe_ggtt.h
-index 5147930357de..f816b3c0732b 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.h
 +++ b/drivers/gpu/drm/xe/xe_ggtt.h
 @@ -23,6 +23,7 @@ int xe_ggtt_node_insert_locked(struct xe_ggtt *ggtt,
@@ -67,7 +64,6 @@ index 5147930357de..f816b3c0732b 100644
  int xe_ggtt_insert_bo(struct xe_ggtt *ggtt, struct xe_bo *bo);
  int xe_ggtt_insert_bo_at(struct xe_ggtt *ggtt, struct xe_bo *bo,
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-index d6e7c61eb2df..1509fb6cae3b 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 @@ -235,7 +235,7 @@ static u32 encode_config_ggtt(u32 *cfg, const struct xe_gt_sriov_config *config)
@@ -123,6 +119,3 @@ index d6e7c61eb2df..1509fb6cae3b 100644
  			continue;
  
  		string_get_size(config->ggtt_region.base.size, 1, STRING_UNITS_2, buf, sizeof(buf));
--- 
-2.46.0
-

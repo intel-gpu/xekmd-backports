@@ -1,7 +1,8 @@
-From 38df86429b142af7043c138329ddfe6ca78ec629 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Date: Wed, 21 Aug 2024 15:38:42 -0400
-Subject: drm/xe: Fix missing runtime outer protection for ggtt_remove_node
+Subject: [PATCH] drm/xe: Fix missing runtime outer protection for
+ ggtt_remove_node
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -49,7 +50,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  2 files changed, 73 insertions(+), 39 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index 58d7cad2425b..b4a0cd2b62ed 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
 @@ -161,6 +161,7 @@ static void ggtt_fini_early(struct drm_device *drm, void *arg)
@@ -138,7 +138,7 @@ index 58d7cad2425b..b4a0cd2b62ed 100644
  /**
   * xe_ggtt_init - Regular non-early GGTT initialization
   * @ggtt: the &xe_ggtt to be initialized
-@@ -471,7 +536,9 @@ struct xe_ggtt_node *xe_ggtt_node_init(struct xe_ggtt *ggtt)
+@@ -481,7 +546,9 @@ struct xe_ggtt_node *xe_ggtt_node_init(struct xe_ggtt *ggtt)
  	if (!node)
  		return ERR_PTR(-ENOMEM);
  
@@ -148,7 +148,7 @@ index 58d7cad2425b..b4a0cd2b62ed 100644
  	return node;
  }
  
-@@ -488,45 +555,6 @@ void xe_ggtt_node_fini(struct xe_ggtt_node *node)
+@@ -498,45 +565,6 @@ void xe_ggtt_node_fini(struct xe_ggtt_node *node)
  	kfree(node);
  }
  
@@ -195,7 +195,6 @@ index 58d7cad2425b..b4a0cd2b62ed 100644
   * xe_ggtt_node_allocated - Check if node is allocated in GGTT
   * @node: the &xe_ggtt_node to be inspected
 diff --git a/drivers/gpu/drm/xe/xe_ggtt_types.h b/drivers/gpu/drm/xe/xe_ggtt_types.h
-index 0e8822ae13fc..cb02b7994a9a 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt_types.h
 +++ b/drivers/gpu/drm/xe/xe_ggtt_types.h
 @@ -47,6 +47,8 @@ struct xe_ggtt {
@@ -218,6 +217,3 @@ index 0e8822ae13fc..cb02b7994a9a 100644
  };
  
  /**
--- 
-2.46.0
-

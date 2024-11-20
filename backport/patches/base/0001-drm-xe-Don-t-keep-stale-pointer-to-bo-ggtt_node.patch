@@ -1,7 +1,7 @@
-From 83cd645501d69b292301403fd46be68163bf2b5a Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Sat, 7 Sep 2024 00:03:48 +0200
-Subject: drm/xe: Don't keep stale pointer to bo->ggtt_node
+Subject: [PATCH] drm/xe: Don't keep stale pointer to bo->ggtt_node
 
 When we fail to map a BO in the GGTT, we release our GGTT node
 placeholder, but leave stale bo->ggtt_node pointer to it, which
@@ -43,10 +43,9 @@ Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
  1 file changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index f3fca5565d32..2895f154654c 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
-@@ -619,16 +619,19 @@ static int __xe_ggtt_insert_bo_at(struct xe_ggtt *ggtt, struct xe_bo *bo,
+@@ -629,16 +629,19 @@ static int __xe_ggtt_insert_bo_at(struct xe_ggtt *ggtt, struct xe_bo *bo,
  	bo->ggtt_node = xe_ggtt_node_init(ggtt);
  	if (IS_ERR(bo->ggtt_node)) {
  		err = PTR_ERR(bo->ggtt_node);
@@ -68,6 +67,3 @@ index f3fca5565d32..2895f154654c 100644
  	mutex_unlock(&ggtt->lock);
  
  	if (!err && bo->flags & XE_BO_FLAG_GGTT_INVALIDATE)
--- 
-2.34.1
-

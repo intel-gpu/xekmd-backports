@@ -1,7 +1,7 @@
-From 3327f97c65c6be5f540d5c942ee2c56466f5ceeb Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Balasubramani Vivekanandan <balasubramani.vivekanandan@intel.com>
 Date: Wed, 28 Aug 2024 13:51:52 +0530
-Subject: drm/xe/bmg: Drop force_probe requirement
+Subject: [PATCH] drm/xe/bmg: Drop force_probe requirement
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -26,7 +26,6 @@ Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
  1 file changed, 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index 071a50f667bb..78741c02202a 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
 @@ -344,7 +344,6 @@ static const struct xe_device_desc bmg_desc = {
@@ -37,6 +36,3 @@ index 071a50f667bb..78741c02202a 100644
  	.has_heci_cscfi = 1,
  };
  
--- 
-2.46.0
-

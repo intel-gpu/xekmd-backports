@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Tue, 26 Nov 2024 09:46:14 -0800
+Subject: [PATCH 08/35] drm/xe: Set XE_BO_FLAG_PINNED in migrate selftest BOs
+
+We only allow continguous BOs to be vmapped, set XE_BO_FLAG_PINNED on
+BOs in migrate selftest as this forces continguous BOs and selftest uses
+vmaps.
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/20241126174615.2665852-8-matthew.brost@intel.com
+(cherry picked from commit e03b0aa67ac0106d8961581a426649fabab50827)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+---
+ drivers/gpu/drm/xe/tests/xe_migrate.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/tests/xe_migrate.c b/drivers/gpu/drm/xe/tests/xe_migrate.c
+index 962f6438e219..bfdab83658a0 100644
+--- a/drivers/gpu/drm/xe/tests/xe_migrate.c
++++ b/drivers/gpu/drm/xe/tests/xe_migrate.c
+@@ -83,7 +83,8 @@ static void test_copy(struct xe_migrate *m, struct xe_bo *bo,
+ 						   bo->size,
+ 						   ttm_bo_type_kernel,
+ 						   region |
+-						   XE_BO_FLAG_NEEDS_CPU_ACCESS);
++						   XE_BO_FLAG_NEEDS_CPU_ACCESS |
++						   XE_BO_FLAG_PINNED);
+ 	if (IS_ERR(remote)) {
+ 		KUNIT_FAIL(test, "Failed to allocate remote bo for %s: %pe\n",
+ 			   str, remote);
+-- 
+2.25.1
+

@@ -1,26 +1,28 @@
-From be5dfd714298760be1312178ba1846c54b76fb18 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Mon, 5 Feb 2024 13:28:46 +0200
-Subject: drm/xe/eudebug: Implement vm_bind_op discovery
+Subject: [PATCH 27/35] drm/xe/eudebug: Implement vm_bind_op discovery
 
 Follow the vm bind, vm_bind op sequence for
 discovery process of a vm with the vmas it has.
 Send events for ops and attach metadata if available.
 
-v2: Fix bad op ref seqno (Christoph)
+v2: - Fix bad op ref seqno (Christoph)
+    - with discovery semaphore, we dont need vm lock (Matthew)
 
+Cc: Matthew Brost <matthew.brost@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
-(cherry picked from commit 35c1730a9bccc9bafe755052ba964d95435b6202 eudebug-dev-prelim)
-Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+(cherry picked from commit 37abe2520b5a4ca9c6b36093f3a0c6024cd16de9)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 ---
- drivers/gpu/drm/xe/xe_eudebug.c | 40 +++++++++++++++++++++++++++++++++
- 1 file changed, 40 insertions(+)
+ drivers/gpu/drm/xe/xe_eudebug.c | 45 +++++++++++++++++++++++++++++++++
+ 1 file changed, 45 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 6dce38f3f86c..4f7e1583e02a 100644
+index 1a5f2b044e30..f14b39ced511 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -3121,6 +3121,42 @@ void xe_eudebug_debug_metadata_destroy(struct xe_file *xef, struct xe_debug_meta
+@@ -3243,6 +3243,47 @@ void xe_eudebug_debug_metadata_destroy(struct xe_file *xef, struct xe_debug_meta
  	xe_eudebug_event_put(d, debug_metadata_destroy_event(d, xef, m));
  }
  
@@ -31,7 +33,12 @@ index 6dce38f3f86c..4f7e1583e02a 100644
 +	u64 ref_seqno = 0;
 +	int err;
 +
-+	/* Currently only vm_bind_ioctl inserts vma's */
++	/*
++	 * Currently only vm_bind_ioctl inserts vma's
++	 * and with discovery lock, we have exclusivity.
++	 */
++	lockdep_assert_held_write(&d->xe->eudebug.discovery_lock);
++
 +	drm_gpuvm_for_each_va(va, &vm->gpuvm)
 +		num_ops++;
 +
@@ -50,7 +57,7 @@ index 6dce38f3f86c..4f7e1583e02a 100644
 +
 +		err = vm_bind_op(d, vm, DRM_XE_EUDEBUG_EVENT_CREATE, ref_seqno,
 +				 xe_vma_start(vma), xe_vma_size(vma),
-+				 &vma->debug_metadata);
++				 &vma->eudebug.metadata.list);
 +		if (err)
 +			return err;
 +
@@ -63,7 +70,7 @@ index 6dce38f3f86c..4f7e1583e02a 100644
  static int discover_client(struct xe_eudebug *d, struct xe_file *xef)
  {
  	struct xe_debug_metadata *m;
-@@ -3146,6 +3182,10 @@ static int discover_client(struct xe_eudebug *d, struct xe_file *xef)
+@@ -3265,6 +3306,10 @@ static int discover_client(struct xe_eudebug *d, struct xe_file *xef)
  		err = vm_create_event(d, xef, vm);
  		if (err)
  			break;
@@ -72,8 +79,8 @@ index 6dce38f3f86c..4f7e1583e02a 100644
 +		if (err)
 +			break;
  	}
- 	mutex_unlock(&xef->vm.lock);
  
+ 	xa_for_each(&xef->exec_queue.xa, i, q) {
 -- 
-2.34.1
+2.25.1
 

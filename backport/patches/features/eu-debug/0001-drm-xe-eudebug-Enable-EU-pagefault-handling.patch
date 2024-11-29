@@ -1,0 +1,191 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Date: Mon, 11 Nov 2024 14:07:18 +0200
+Subject: [PATCH 33/35] drm/xe/eudebug: Enable EU pagefault handling
+
+The XE2 (and PVC) HW has a limitation that the pagefault due to invalid
+access will halt the corresponding EUs. To solve this problem, enable
+EU pagefault handling functionality, which allows to unhalt pagefaulted
+eu threads and to EU debugger to get inform about the eu attentions state
+of EU threads during execution.
+
+If a pagefault occurs, send the DRM_XE_EUDEBUG_EVENT_PAGEFAULT event to
+the client connected to the xe_eudebug after handling the pagefault.
+
+The pagefault handling is a mechanism that allows a stalled EU thread to
+enter SIP mode by installing a temporal null page to the page table entry
+where the pagefault happened.
+
+A brief description of the page fault handling mechanism flow between KMD
+and the eu thread is as follows
+
+(1) eu thread accesses unallocated address
+(2) pagefault happens and eu thread stalls
+(3) XE kmd set an force eu thread exception to allow the running eu thread
+    to enter SIP mode (kmd set ForceException / ForceExternalHalt bit of
+    TD_CTL register)
+    Not stalled (none-pagefaulted) eu threads enter SIP mode
+(4) XE kmd installs temporal null page to the pagetable entry of the
+    address where pagefault happened.
+(5) XE kmd replies pagefault successful message to GUC
+(6) stalled eu thread resumes as per pagefault condition has resolved
+(7) resumed eu thread enters SIP mode due to force exception set by (3)
+
+As designed this feature to only work when eudbug is enabled, it should
+have no impact to regular recoverable pagefault code path.
+
+Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+(cherry picked from commit e311b5605d3cb4278fdca3557c2193fc1c299038)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_pagefault.c | 84 +++++++++++++++++++++++++---
+ 1 file changed, 76 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_pagefault.c b/drivers/gpu/drm/xe/xe_gt_pagefault.c
+index 53c50d61d6a0..910c5278edaa 100644
+--- a/drivers/gpu/drm/xe/xe_gt_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_gt_pagefault.c
+@@ -14,6 +14,7 @@
+ 
+ #include "abi/guc_actions_abi.h"
+ #include "xe_bo.h"
++#include "xe_eudebug.h"
+ #include "xe_gt.h"
+ #include "xe_gt_tlb_invalidation.h"
+ #include "xe_guc.h"
+@@ -185,12 +186,16 @@ unlock_dma_resv:
+ 	return err;
+ }
+ 
+-static int handle_pagefault(struct xe_gt *gt, struct pagefault *pf)
++static int handle_pagefault_start(struct xe_gt *gt, struct pagefault *pf,
++				  struct xe_vm **pf_vm,
++				  struct xe_eudebug_pagefault **eudebug_pf_out)
+ {
+-	struct xe_device *xe = gt_to_xe(gt);
++	struct xe_eudebug_pagefault *eudebug_pf;
+ 	struct xe_tile *tile = gt_to_tile(gt);
+-	struct xe_vm *vm;
++	struct xe_device *xe = gt_to_xe(gt);
++	bool  destroy_eudebug_pf = false;
+ 	struct xe_vma *vma = NULL;
++	struct xe_vm *vm;
+ 	int err;
+ 
+ 	/* SW isn't expected to handle TRTT faults */
+@@ -208,6 +213,10 @@ static int handle_pagefault(struct xe_gt *gt, struct pagefault *pf)
+ 	if (!vm)
+ 		return -EINVAL;
+ 
++	eudebug_pf = xe_eudebug_pagefault_create(gt, vm, pf->page_addr,
++						 pf->fault_type, pf->fault_level,
++						 pf->access_type);
++
+ 	/*
+ 	 * TODO: Change to read lock? Using write lock for simplicity.
+ 	 */
+@@ -220,8 +229,26 @@ static int handle_pagefault(struct xe_gt *gt, struct pagefault *pf)
+ 
+ 	vma = xe_gt_pagefault_lookup_vma(vm, pf->page_addr);
+ 	if (!vma) {
+-		err = -EINVAL;
+-		goto unlock_vm;
++		if (eudebug_pf)
++			vma = xe_vm_create_null_vma(vm, pf->page_addr);
++
++		if (IS_ERR_OR_NULL(vma)) {
++			err = -EINVAL;
++			if (eudebug_pf)
++				destroy_eudebug_pf = true;
++
++			goto unlock_vm;
++		}
++	} else {
++		/*
++		 * When creating an instance of eudebug_pagefault, there was
++		 * no vma containing the ppgtt address where the pagefault occurred,
++		 * but when reacquiring vm->lock, there is.
++		 * During not aquiring the vm->lock from this context,
++		 * but vma corresponding to the address where the pagefault occurred
++		 * in another context has allocated.*/
++		if (eudebug_pf)
++			destroy_eudebug_pf = true;
+ 	}
+ 
+ 	err = handle_vma_pagefault(tile, pf, vma);
+@@ -230,11 +257,44 @@ unlock_vm:
+ 	if (!err)
+ 		vm->usm.last_fault_vma = vma;
+ 	up_write(&vm->lock);
+-	xe_vm_put(vm);
++
++	if (destroy_eudebug_pf) {
++		xe_eudebug_pagefault_destroy(gt, vm, eudebug_pf, false);
++		*eudebug_pf_out = NULL;
++	} else {
++		*eudebug_pf_out = eudebug_pf;
++	}
++
++	/* while the lifetime of the eudebug pagefault instance, keep the VM instance.*/
++	if (!*eudebug_pf_out) {
++		xe_vm_put(vm);
++		*pf_vm = NULL;
++	}
++	else {
++		*pf_vm = vm;
++	}
+ 
+ 	return err;
+ }
+ 
++static void handle_pagefault_end(struct xe_gt *gt, struct xe_vm *vm,
++				 struct xe_eudebug_pagefault *eudebug_pf)
++{
++	/* if there no eudebug_pagefault then return */
++	if (!eudebug_pf)
++		return;
++
++	xe_eudebug_pagefault_process(gt, eudebug_pf);
++
++	/*
++	 * TODO: Remove VMA added to handle eudebug pagefault
++	 */
++
++	xe_eudebug_pagefault_destroy(gt, vm, eudebug_pf, true);
++
++	xe_vm_put(vm);
++}
++
+ static int send_pagefault_reply(struct xe_guc *guc,
+ 				struct xe_guc_pagefault_reply *reply)
+ {
+@@ -360,7 +420,10 @@ static void pf_queue_work_func(struct work_struct *w)
+ 	threshold = jiffies + msecs_to_jiffies(USM_QUEUE_MAX_RUNTIME_MS);
+ 
+ 	while (get_pagefault(pf_queue, &pf)) {
+-		ret = handle_pagefault(gt, &pf);
++		struct xe_eudebug_pagefault *eudebug_pf = NULL;
++		struct xe_vm *vm = NULL;
++
++		ret = handle_pagefault_start(gt, &pf, &vm, &eudebug_pf);
+ 		if (unlikely(ret)) {
+ 			print_pagefault(xe, &pf);
+ 			pf.fault_unsuccessful = 1;
+@@ -378,7 +441,12 @@ static void pf_queue_work_func(struct work_struct *w)
+ 			FIELD_PREP(PFR_ENG_CLASS, pf.engine_class) |
+ 			FIELD_PREP(PFR_PDATA, pf.pdata);
+ 
+-		send_pagefault_reply(&gt->uc.guc, &reply);
++		ret = send_pagefault_reply(&gt->uc.guc, &reply);
++		if (unlikely(ret)) {
++			drm_dbg(&xe->drm, "GuC Pagefault reply failed: %d\n", ret);
++		}
++
++		handle_pagefault_end(gt, vm, eudebug_pf);
+ 
+ 		if (time_after(jiffies, threshold) &&
+ 		    pf_queue->tail != pf_queue->head) {
+-- 
+2.25.1
+

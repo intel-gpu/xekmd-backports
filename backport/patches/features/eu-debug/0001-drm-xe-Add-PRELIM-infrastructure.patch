@@ -1,7 +1,7 @@
-From c1b2bdedb5131f7dc12ed858960b6478fff1763e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Ashutosh Dixit <ashutosh.dixit@intel.com>
 Date: Mon, 11 Dec 2023 21:54:10 -0800
-Subject: drm/xe: Add PRELIM infrastructure
+Subject: [PATCH 34/35] drm/xe: Add PRELIM infrastructure
 
 * Add xe_drm_prelim.h for maintaining internal/downstream declarations
   separate from upstream declarations in xe_drm.h. Because xe_drm_prelim.h
@@ -35,10 +35,10 @@ index 971cdb4816fc..02192621b76e 100644
 +
 +.. kernel-doc:: include/uapi/drm/xe_drm_prelim.h
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 4ed7dd584a6d..ed56ec080b90 100644
+index d16b9cb5ccb4..3dccdd9ea9e5 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -200,6 +200,14 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -164,6 +164,14 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  	xe_pm_runtime_put(xe);
  }
  
@@ -145,5 +145,5 @@ index 000000000000..9c86f5969500
 + */
 +#endif /* _UAPI_XE_DRM_PRELIM_H_ */
 -- 
-2.34.1
+2.25.1
 

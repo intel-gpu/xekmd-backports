@@ -1,7 +1,7 @@
-From bf52a72ebe664dd97af97a18c754295235c0fb4e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Fri, 2 Jun 2023 01:33:14 +0200
-Subject: drm/xe: Add EUDEBUG_ENABLE exec queue property
+Subject: [PATCH 16/35] drm/xe: Add EUDEBUG_ENABLE exec queue property
 
 Introduce exec queue immutable property of eudebug
 with a flags as value to enable eudebug specific feature(s).
@@ -16,12 +16,13 @@ make much difference, but leave control to the user.
 
 v2: - check CONFIG_DRM_XE_EUDEBUG and LR mode (Matthew)
     - disable preempt (Dominik)
+    - lrc_create remove from engine init
 
 Cc: Matthew Brost <matthew.brost@intel.com>
 Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
-(cherry picked from commit f4aa832e49574a6b667630e6bff9675cd6e7e538 eudebug-dev-prelim)
-Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+(cherry picked from commit 7a0201070ba80014df8340ae2030027774b3a94e)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c          |  4 +--
  drivers/gpu/drm/xe/xe_exec_queue.c       | 46 ++++++++++++++++++++++--
@@ -34,19 +35,19 @@ Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
  8 files changed, 74 insertions(+), 10 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 8c0599a10a3c..2c380622f586 100644
+index fecb7c8a9779..4644d6846aae 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -1245,7 +1245,7 @@ static int exec_queue_create_event(struct xe_eudebug *d,
- 	u64 h_lrc[XE_HW_ENGINE_MAX_INSTANCE], seqno;
+@@ -1338,7 +1338,7 @@ static int exec_queue_create_events(struct xe_eudebug *d,
  	int i;
+ 	int ret = 0;
  
 -	if (!xe_exec_queue_is_lr(q))
 +	if (!xe_exec_queue_is_debuggable(q))
  		return 0;
  
  	h_c = find_handle(d->res, XE_EUDEBUG_RES_TYPE_CLIENT, xef);
-@@ -1297,7 +1297,7 @@ static int exec_queue_destroy_event(struct xe_eudebug *d,
+@@ -1395,7 +1395,7 @@ static int exec_queue_destroy_event(struct xe_eudebug *d,
  	u64 h_lrc[XE_HW_ENGINE_MAX_INSTANCE], seqno;
  	int i;
  
@@ -56,7 +57,7 @@ index 8c0599a10a3c..2c380622f586 100644
  
  	h_c = find_handle(d->res, XE_EUDEBUG_RES_TYPE_CLIENT, xef);
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index e9e32af1a8b4..e59017c2e158 100644
+index 2338cceb8c63..15e91ade5a0a 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -107,6 +107,7 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
@@ -80,7 +81,7 @@ index e9e32af1a8b4..e59017c2e158 100644
  		if (IS_ERR(q->lrc[i])) {
  			err = PTR_ERR(q->lrc[i]);
  			goto err_unlock;
-@@ -389,6 +393,42 @@ static int exec_queue_set_timeslice(struct xe_device *xe, struct xe_exec_queue *
+@@ -391,6 +395,42 @@ static int exec_queue_set_timeslice(struct xe_device *xe, struct xe_exec_queue *
  	return 0;
  }
  
@@ -123,7 +124,7 @@ index e9e32af1a8b4..e59017c2e158 100644
  typedef int (*xe_exec_queue_set_property_fn)(struct xe_device *xe,
  					     struct xe_exec_queue *q,
  					     u64 value);
-@@ -396,6 +436,7 @@ typedef int (*xe_exec_queue_set_property_fn)(struct xe_device *xe,
+@@ -398,6 +438,7 @@ typedef int (*xe_exec_queue_set_property_fn)(struct xe_device *xe,
  static const xe_exec_queue_set_property_fn exec_queue_set_property_funcs[] = {
  	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY] = exec_queue_set_priority,
  	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_TIMESLICE] = exec_queue_set_timeslice,
@@ -131,7 +132,7 @@ index e9e32af1a8b4..e59017c2e158 100644
  };
  
  static int exec_queue_user_ext_set_property(struct xe_device *xe,
-@@ -415,7 +456,8 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
+@@ -417,7 +458,8 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
  			 ARRAY_SIZE(exec_queue_set_property_funcs)) ||
  	    XE_IOCTL_DBG(xe, ext.pad) ||
  	    XE_IOCTL_DBG(xe, ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY &&
@@ -184,10 +185,10 @@ index 9ed992adb136..aa75d762a658 100644
  		err = PTR_ERR(hwe->kernel_lrc);
  		goto err_hwsp;
 diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
-index 58121821f081..605a7fbc8d3b 100644
+index 974a9cd8c379..c3abffcff20d 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.c
 +++ b/drivers/gpu/drm/xe/xe_lrc.c
-@@ -890,7 +890,7 @@ static void xe_lrc_finish(struct xe_lrc *lrc)
+@@ -893,7 +893,7 @@ static void xe_lrc_finish(struct xe_lrc *lrc)
  #define PVC_CTX_ACC_CTR_THOLD	(0x2a + 1)
  
  static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
@@ -196,7 +197,7 @@ index 58121821f081..605a7fbc8d3b 100644
  {
  	struct xe_gt *gt = hwe->gt;
  	struct xe_tile *tile = gt_to_tile(gt);
-@@ -1007,6 +1007,16 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+@@ -1010,6 +1010,16 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
  	map = __xe_lrc_start_seqno_map(lrc);
  	xe_map_write32(lrc_to_xe(lrc), &map, lrc->fence_ctx.next_seqno - 1);
  
@@ -213,7 +214,7 @@ index 58121821f081..605a7fbc8d3b 100644
  	return 0;
  
  err_lrc_finish:
-@@ -1026,7 +1036,7 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+@@ -1029,7 +1039,7 @@ err_lrc_finish:
   * upon failure.
   */
  struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
@@ -222,7 +223,7 @@ index 58121821f081..605a7fbc8d3b 100644
  {
  	struct xe_lrc *lrc;
  	int err;
-@@ -1035,7 +1045,7 @@ struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
+@@ -1038,7 +1048,7 @@ struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
  	if (!lrc)
  		return ERR_PTR(-ENOMEM);
  
@@ -262,5 +263,5 @@ index 7e66e9117f49..985dcf852458 100644
  	__u64 extensions;
  
 -- 
-2.34.1
+2.25.1
 

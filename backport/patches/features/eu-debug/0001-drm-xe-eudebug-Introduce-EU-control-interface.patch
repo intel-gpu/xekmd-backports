@@ -1,4 +1,4 @@
-From da565f52052f9d69d28fc32ec00641b3b201f83b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Wed, 2 Aug 2023 12:27:19 +0200
 Subject: drm/xe/eudebug: Introduce EU control interface
@@ -11,29 +11,34 @@ so in the future guc will only need to provide appropriate callbacks.
 Based on implementation created by authors and other folks within
 i915 driver.
 
-v2: checkpatch (Maciej)
-v3: - lrc index off by one fix (Mika)
+v2: - checkpatch (Maciej)
+    - lrc index off by one fix (Mika)
     - checkpatch (Tilak)
+    - 32bit fixes (Andrzej, Mika)
+    - find_resource_get for client (Mika)
+
+v3: - fw ref (Mika)
 
 Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
-(cherry picked from commit 27fa7b27e8ebde99cacad8e51b1cf8dfcce63f48 eudebug-dev-prelim)
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+(cherry picked from commit 4a070114106fe54dc0b836be54d4904adc5a100a eudebug-dev)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h  |   2 +
- drivers/gpu/drm/xe/xe_eudebug.c       | 515 +++++++++++++++++++++++++-
- drivers/gpu/drm/xe/xe_eudebug_types.h |  23 ++
+ drivers/gpu/drm/xe/xe_eudebug.c       | 517 +++++++++++++++++++++++++-
+ drivers/gpu/drm/xe/xe_eudebug_types.h |  24 ++
  drivers/gpu/drm/xe/xe_gt_debug.c      |  12 +-
  drivers/gpu/drm/xe/xe_gt_debug.h      |   6 +
  include/uapi/drm/xe_drm_eudebug.h     |  21 +-
- 6 files changed, 559 insertions(+), 20 deletions(-)
+ 6 files changed, 561 insertions(+), 21 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 313ca00f3a0d..41ff01abea1b 100644
+index fe1974a20e89..9d8d342d2050 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -450,6 +450,8 @@
+@@ -468,6 +468,8 @@
  #define   THREAD_EX_ARB_MODE			REG_GENMASK(3, 2)
  #define   THREAD_EX_ARB_MODE_RR_AFTER_DEP	REG_FIELD_PREP(THREAD_EX_ARB_MODE, 0x2)
  
@@ -43,68 +48,69 @@ index 313ca00f3a0d..41ff01abea1b 100644
  #define   XE2_EUPEND_CHK_FLUSH_DIS		REG_BIT(14)
  #define   DIS_FIX_EOT1_FLUSH			REG_BIT(9)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 3cc476bb7279..959dba812c57 100644
+index 39e927100222..5915f4318e65 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -35,6 +35,7 @@
- #include "xe_reg_sr.h"
- #include "xe_pm.h"
- #include "xe_rtp.h"
+@@ -23,6 +23,7 @@
+ #include "xe_force_wake.h"
+ #include "xe_gt.h"
+ #include "xe_gt_debug.h"
 +#include "xe_gt_mcr.h"
- 
- #include "xe_eudebug_types.h"
- #include "xe_eudebug.h"
-@@ -579,6 +580,70 @@ static int find_handle(struct xe_eudebug_resources *res,
+ #include "xe_hw_engine.h"
+ #include "xe_lrc.h"
+ #include "xe_macros.h"
+@@ -587,6 +588,64 @@ static int find_handle(struct xe_eudebug_resources *res,
  	return id;
  }
  
-+static struct xe_eudebug_handle *__find_resource(struct xe_eudebug_resources *res,
-+						 const int type,
-+						 const u32 id)
++static void *find_resource__unlocked(struct xe_eudebug_resources *res,
++				     const int type,
++				     const u32 id)
 +{
 +	struct xe_eudebug_resource *r;
++	struct xe_eudebug_handle *h;
 +
 +	r = resource_from_type(res, type);
++	h = xa_load(&r->xa, id);
 +
-+	return xa_load(&r->xa, id);
++	return h ? (void *)(uintptr_t)h->key : NULL;
 +}
 +
-+static struct xe_eudebug_handle *find_resource(struct xe_eudebug_resources *res,
-+					       const int type,
-+					       const u32 id)
++static void *find_resource(struct xe_eudebug_resources *res,
++			   const int type,
++			   const u32 id)
 +{
-+	struct xe_eudebug_handle *h;
++	void *p;
 +
 +	mutex_lock(&res->lock);
-+	h = __find_resource(res, type, id);
++	p =  find_resource__unlocked(res, type, id);
 +	mutex_unlock(&res->lock);
 +
-+	return h;
++	return p;
 +}
 +
-+static struct xe_file *find_client(struct xe_eudebug *d, const u32 id)
++static struct xe_file *find_client_get(struct xe_eudebug *d, const u32 id)
 +{
-+	struct xe_eudebug_handle *h;
++	struct xe_file *xef;
 +
-+	h = find_resource(d->res, XE_EUDEBUG_RES_TYPE_CLIENT, id);
-+	if (h)
-+		return (void *)h->key;
++	mutex_lock(&d->res->lock);
++	xef = find_resource__unlocked(d->res, XE_EUDEBUG_RES_TYPE_CLIENT, id);
++	if (xef)
++		xe_file_get(xef);
++	mutex_unlock(&d->res->lock);
 +
-+	return NULL;
++	return xef;
 +}
 +
 +static struct xe_exec_queue *find_exec_queue_get(struct xe_eudebug *d,
 +						 u32 id)
 +{
-+	struct xe_exec_queue *q = NULL;
-+	struct xe_eudebug_handle *h;
++	struct xe_exec_queue *q;
 +
 +	mutex_lock(&d->res->lock);
-+	h = __find_resource(d->res, XE_EUDEBUG_RES_TYPE_EXEC_QUEUE, id);
-+	if (h) {
-+		q = (struct xe_exec_queue *)h->key;
++	q = find_resource__unlocked(d->res, XE_EUDEBUG_RES_TYPE_EXEC_QUEUE, id);
++	if (q)
 +		xe_exec_queue_get(q);
-+	}
 +	mutex_unlock(&d->res->lock);
 +
 +	return q;
@@ -112,20 +118,13 @@ index 3cc476bb7279..959dba812c57 100644
 +
 +static struct xe_lrc *find_lrc(struct xe_eudebug *d, const u32 id)
 +{
-+	struct xe_lrc *l = NULL;
-+	struct xe_eudebug_handle *h;
-+
-+	h = find_resource(d->res, XE_EUDEBUG_RES_TYPE_LRC, id);
-+	if (h)
-+		return (void *)h->key;
-+
-+	return l;
++	return find_resource(d->res, XE_EUDEBUG_RES_TYPE_LRC, id);
 +}
 +
  static int _xe_eudebug_add_handle(struct xe_eudebug *d,
  				  int type,
  				  void *p,
-@@ -832,6 +897,170 @@ static long xe_eudebug_read_event(struct xe_eudebug *d,
+@@ -843,6 +902,177 @@ static long xe_eudebug_read_event(struct xe_eudebug *d,
  	return ret;
  }
  
@@ -150,13 +149,15 @@ index 3cc476bb7279..959dba812c57 100644
 +	if (XE_IOCTL_DBG(xe, !IS_ALIGNED(arg->bitmask_size, sizeof(u32))))
 +		return -EINVAL;
 +
-+	xef = find_client(d, arg->client_handle);
++	xef = find_client_get(d, arg->client_handle);
 +	if (XE_IOCTL_DBG(xe, !xef))
 +		return -EINVAL;
 +
 +	q = find_exec_queue_get(d, arg->exec_queue_handle);
-+	if (XE_IOCTL_DBG(xe, !q))
++	if (XE_IOCTL_DBG(xe, !q)) {
++		xe_file_put(xef);
 +		return -EINVAL;
++	}
 +
 +	if (XE_IOCTL_DBG(xe, !xe_exec_queue_is_debuggable(q))) {
 +		ret = -EINVAL;
@@ -243,6 +244,7 @@ index 3cc476bb7279..959dba812c57 100644
 +	kfree(bits);
 +queue_put:
 +	xe_exec_queue_put(q);
++	xe_file_put(xef);
 +
 +	return ret;
 +}
@@ -253,6 +255,7 @@ index 3cc476bb7279..959dba812c57 100644
 +		u64_to_user_ptr(arg);
 +	struct drm_xe_eudebug_eu_control user_arg;
 +	struct xe_device *xe = d->xe;
++	struct xe_file *xef;
 +	int ret;
 +
 +	if (XE_IOCTL_DBG(xe, !(_IOC_DIR(DRM_XE_EUDEBUG_IOCTL_EU_CONTROL) & _IOC_WRITE)))
@@ -280,10 +283,13 @@ index 3cc476bb7279..959dba812c57 100644
 +	       user_arg.client_handle, user_arg.cmd, user_arg.flags, user_arg.exec_queue_handle,
 +	       user_arg.bitmask_size);
 +
-+	if (XE_IOCTL_DBG(xe, IS_ERR(find_client(d, user_arg.client_handle))))
++	xef = find_client_get(d, user_arg.client_handle);
++	if (XE_IOCTL_DBG(xe, !xef))
 +		return -EINVAL; /* As this is user input */
 +
 +	ret = do_eu_control(d, &user_arg, user_ptr);
++
++	xe_file_put(xef);
 +
 +	eu_dbg(d,
 +	       "eu_control: client_handle=%llu, cmd=%u, flags=0x%x, exec_queue_handle=%llu, bitmask_size=%u ret=%d\n",
@@ -296,7 +302,7 @@ index 3cc476bb7279..959dba812c57 100644
  static long xe_eudebug_ioctl(struct file *file,
  			     unsigned int cmd,
  			     unsigned long arg)
-@@ -844,6 +1073,10 @@ static long xe_eudebug_ioctl(struct file *file,
+@@ -859,6 +1089,10 @@ static long xe_eudebug_ioctl(struct file *file,
  		ret = xe_eudebug_read_event(d, arg,
  					    !(file->f_flags & O_NONBLOCK));
  		break;
@@ -307,7 +313,16 @@ index 3cc476bb7279..959dba812c57 100644
  
  	default:
  		ret = -EINVAL;
-@@ -1002,23 +1235,17 @@ static struct xe_hw_engine *get_runalone_active_hw_engine(struct xe_gt *gt)
+@@ -1000,7 +1234,7 @@ static struct xe_hw_engine *get_runalone_active_hw_engine(struct xe_gt *gt)
+ 		return NULL;
+ 	}
+ 
+-	val = xe_mmio_read32(&gt->mmio, RCU_DEBUG_1);
++	val = xe_mmio_read32(gt, RCU_DEBUG_1);
+ 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
+ 
+ 	drm_dbg(&gt_to_xe(gt)->drm, "eudbg: runalone RCU_DEBUG_1 = 0x%08x\n", val);
+@@ -1043,23 +1277,17 @@ static struct xe_hw_engine *get_runalone_active_hw_engine(struct xe_gt *gt)
  	return first;
  }
  
@@ -320,7 +335,7 @@ index 3cc476bb7279..959dba812c57 100644
  	struct xe_exec_queue *q, *found = NULL;
 -	struct xe_hw_engine *active;
  	struct xe_file *xef;
- 	unsigned long i, j;
+ 	unsigned long i;
  	int idx, err;
  	u32 lrc_hw;
  
@@ -335,25 +350,25 @@ index 3cc476bb7279..959dba812c57 100644
  	if (err)
  		return ERR_PTR(err);
  
-@@ -1035,7 +1262,7 @@ static struct xe_exec_queue *runalone_active_queue_get(struct xe_gt *gt, int *lr
+@@ -1070,7 +1298,7 @@ static struct xe_exec_queue *runalone_active_queue_get(struct xe_gt *gt, int *lr
  			if (q->gt != gt)
- 				goto cont_search;
+ 				continue;
  
 -			if (q->class != active->class)
 +			if (q->class != hwe->class)
- 				goto cont_search;
+ 				continue;
  
  			if (xe_exec_queue_is_idle(q))
-@@ -1068,7 +1295,7 @@ static struct xe_exec_queue *runalone_active_queue_get(struct xe_gt *gt, int *lr
+@@ -1096,7 +1324,7 @@ static struct xe_exec_queue *runalone_active_queue_get(struct xe_gt *gt, int *lr
+ 	if (!found)
  		return ERR_PTR(-ENOENT);
- 	}
  
 -	if (XE_WARN_ON(current_lrca(active, &lrc_hw)) &&
 +	if (XE_WARN_ON(current_lrca(hwe, &lrc_hw)) &&
  	    XE_WARN_ON(match_exec_queue_lrca(found, lrc_hw) < 0)) {
  		xe_exec_queue_put(found);
  		return ERR_PTR(-ENOENT);
-@@ -1077,6 +1304,19 @@ static struct xe_exec_queue *runalone_active_queue_get(struct xe_gt *gt, int *lr
+@@ -1105,6 +1333,19 @@ static struct xe_exec_queue *runalone_active_queue_get(struct xe_gt *gt, int *lr
  	return found;
  }
  
@@ -373,7 +388,7 @@ index 3cc476bb7279..959dba812c57 100644
  static int send_attention_event(struct xe_eudebug *d, struct xe_exec_queue *q, int lrc_idx)
  {
  	struct xe_eudebug_event_eu_attention *ea;
-@@ -1125,7 +1365,6 @@ static int send_attention_event(struct xe_eudebug *d, struct xe_exec_queue *q, i
+@@ -1153,7 +1394,6 @@ static int send_attention_event(struct xe_eudebug *d, struct xe_exec_queue *q, i
  	return xe_eudebug_queue_event(d, event);
  }
  
@@ -381,7 +396,7 @@ index 3cc476bb7279..959dba812c57 100644
  static int xe_send_gt_attention(struct xe_gt *gt)
  {
  	struct xe_eudebug *d;
-@@ -1233,6 +1472,255 @@ static void attention_scan_flush(struct xe_device *xe)
+@@ -1261,6 +1501,254 @@ static void attention_scan_flush(struct xe_device *xe)
  	mod_delayed_work(system_wq, &xe->eudebug.attention_scan, 0);
  }
  
@@ -393,6 +408,7 @@ index 3cc476bb7279..959dba812c57 100644
 +	struct xe_device *xe = d->xe;
 +	struct xe_exec_queue *active;
 +	struct xe_hw_engine *hwe;
++	unsigned int fw_ref;
 +	int lrc_idx, ret;
 +	u32 lrc_hw;
 +	u32 td_ctl;
@@ -413,14 +429,12 @@ index 3cc476bb7279..959dba812c57 100644
 +	}
 +	xe_exec_queue_put(active);
 +
-+	if (XE_IOCTL_DBG(xe, lrc_idx >= q->width || q->lrc[lrc_idx] != lrc)) {
-+		ret = -EINVAL;
-+		goto put_fw;
-+	}
++	if (XE_IOCTL_DBG(xe, lrc_idx >= q->width || q->lrc[lrc_idx] != lrc))
++		return -EINVAL;
 +
-+	ret = xe_force_wake_get(gt_to_fw(gt), hwe->domain);
-+	if (ret)
-+		goto put_fw;
++	fw_ref = xe_force_wake_get(gt_to_fw(gt), hwe->domain);
++	if (!fw_ref)
++		return -ETIMEDOUT;
 +
 +	/* Additional check just before issuing MMIO writes */
 +	ret = __current_lrca(hwe, &lrc_hw);
@@ -469,7 +483,7 @@ index 3cc476bb7279..959dba812c57 100644
 +		eu_warn(d, "xe_eudebug: interrupted wrong context.");
 +
 +put_fw:
-+	xe_force_wake_put(gt_to_fw(gt), q->hwe->domain);
++	xe_force_wake_put(gt_to_fw(gt), fw_ref);
 +
 +	return ret;
 +}
@@ -637,16 +651,16 @@ index 3cc476bb7279..959dba812c57 100644
  static void discovery_work_fn(struct work_struct *work);
  
  static int
-@@ -1295,6 +1783,7 @@ xe_eudebug_connect(struct xe_device *xe,
+@@ -1320,6 +1808,7 @@ xe_eudebug_connect(struct xe_device *xe,
+ 		goto err_detach;
+ 	}
+ 
++	d->ops = &eu_control;
  	kref_get(&d->ref);
  	queue_work(xe->eudebug.ordered_wq, &d->discovery_work);
  	attention_scan_flush(xe);
-+	d->ops = &eu_control;
- 
- 	eu_dbg(d, "connected session %lld", d->session);
- 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index 16667b4dfe45..a75986180d71 100644
+index 410b3ecccc12..e1d4e31b32ec 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
 @@ -18,8 +18,12 @@
@@ -662,7 +676,7 @@ index 16667b4dfe45..a75986180d71 100644
  
  #define CONFIG_DRM_XE_DEBUGGER_EVENT_QUEUE_SIZE 64
  
-@@ -65,6 +69,23 @@ struct xe_eudebug_resources {
+@@ -65,6 +69,24 @@ struct xe_eudebug_resources {
  	struct xe_eudebug_resource rt[XE_EUDEBUG_RES_TYPE_COUNT];
  };
  
@@ -683,10 +697,11 @@ index 16667b4dfe45..a75986180d71 100644
 +	int (*stopped)(struct xe_eudebug *e, struct xe_exec_queue *q,
 +		       struct xe_lrc *lrc, u8 *bitmap, unsigned int bitmap_size);
 +};
++
  /**
   * struct xe_eudebug - Top level struct for eudebug: the connection
   */
-@@ -128,6 +149,8 @@ struct xe_eudebug {
+@@ -128,6 +150,8 @@ struct xe_eudebug {
  		atomic_long_t seqno;
  	} events;
  
@@ -696,7 +711,7 @@ index 16667b4dfe45..a75986180d71 100644
  
  /**
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.c b/drivers/gpu/drm/xe/xe_gt_debug.c
-index d36684c7514d..fcf32c7c77d8 100644
+index c4f0d11a20a6..f35b9df5e41b 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug.c
 +++ b/drivers/gpu/drm/xe/xe_gt_debug.c
 @@ -13,12 +13,12 @@
@@ -716,8 +731,8 @@ index d36684c7514d..fcf32c7c77d8 100644
 +					       u16 instance),
 +				     void *data)
  {
- 	const enum xe_force_wake_domains fw_domains = XE_FW_GT | XE_FW_RENDER;
- 	unsigned int dss;
+ 	const enum xe_force_wake_domains fw_domains = XE_FW_GT;
+ 	unsigned int dss, fw_ref;
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.h b/drivers/gpu/drm/xe/xe_gt_debug.h
 index 3f13dbb17a5f..342082699ff6 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug.h
@@ -736,7 +751,7 @@ index 3f13dbb17a5f..342082699ff6 100644
  int xe_gt_eu_attention_bitmap_size(struct xe_gt *gt);
  int xe_gt_eu_attention_bitmap(struct xe_gt *gt, u8 *bits,
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
-index 1e63bdede5f2..3c43aefefedd 100644
+index 144c7cf888bb..ccfbe976c509 100644
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ b/include/uapi/drm/xe_drm_eudebug.h
 @@ -15,7 +15,8 @@ extern "C" {
@@ -749,7 +764,7 @@ index 1e63bdede5f2..3c43aefefedd 100644
  
  /* XXX: Document events to match their internal counterparts when moved to xe_drm.h */
  struct drm_xe_eudebug_event {
-@@ -74,6 +75,24 @@ struct drm_xe_eudebug_event_eu_attention {
+@@ -91,6 +92,24 @@ struct drm_xe_eudebug_event_eu_attention {
  	__u8 bitmask[];
  };
  
@@ -775,5 +790,5 @@ index 1e63bdede5f2..3c43aefefedd 100644
  }
  #endif
 -- 
-2.34.1
+2.25.1
 

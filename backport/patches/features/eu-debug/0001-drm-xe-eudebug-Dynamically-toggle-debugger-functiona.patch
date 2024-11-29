@@ -1,7 +1,8 @@
-From ea130d3be12d4b4181240c04d0f9c3090b19416a Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Christoph Manszewski <christoph.manszewski@intel.com>
 Date: Mon, 27 Nov 2023 15:26:52 +0100
-Subject: drm/xe/eudebug: Dynamically toggle debugger functionality
+Subject: drm/xe/eudebug: Dynamically toggle debugger
+ functionality
 
 Make it possible to dynamically enable/disable debugger funtionality,
 including the setting and unsetting of required hw register values via a
@@ -10,37 +11,33 @@ sysfs entry located at '/sys/class/drm/card<X>/device/enable_eudebug'.
 This entry uses 'kstrtobool' and as such it accepts inputs as documented
 by this function, in particular '0' and '1'.
 
-1) Adjust to xe_rtp graphics ranges changes.
-2) Fix pile placement. Wa 14019869343 (aka. 16021232320) was
-added later in the pile, move disablement to appropriate commit.
-3) flush reset (Christoph)
-4) dont allow exec queue enable if feature is disabled (Dominik)
-5) bind to drm sysfs functions (Maciej)
-6) Do not use xe_rtp (Dominik)
+v2: use new discovery_lock to gain exclusivity (Mika)
+v3: remove init_late and init_hw_engine (Dominik)
 
 Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com>
 Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
-Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(cherry picked from commit 35b41c3d0a624ff7cce718e3cd72a20e82423adf eudebug-dev-prelim)
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+(cherry picked from commit 8a07e23d639d941c46c02555109f3d1ef65c2317 eudebug-dev)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 ---
  drivers/gpu/drm/xe/xe_device.c       |   2 -
- drivers/gpu/drm/xe/xe_device_types.h |   5 ++
+ drivers/gpu/drm/xe/xe_device_types.h |   3 +
  drivers/gpu/drm/xe/xe_eudebug.c      | 128 +++++++++++++++++++++++----
- drivers/gpu/drm/xe/xe_eudebug.h      |   2 -
- drivers/gpu/drm/xe/xe_exec_queue.c   |   3 +
+ drivers/gpu/drm/xe/xe_eudebug.h      |   4 -
+ drivers/gpu/drm/xe/xe_exec_queue.c   |   5 ++
  drivers/gpu/drm/xe/xe_hw_engine.c    |   1 -
  drivers/gpu/drm/xe/xe_reg_sr.c       |  21 +++--
  drivers/gpu/drm/xe/xe_reg_sr.h       |   4 +-
  drivers/gpu/drm/xe/xe_rtp.c          |   2 +-
- 9 files changed, 136 insertions(+), 32 deletions(-)
+ 9 files changed, 137 insertions(+), 33 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index c9c0f8d1df56..4ed7dd584a6d 100644
+index 681d10a646de..d16b9cb5ccb4 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -779,8 +779,6 @@ int xe_device_probe(struct xe_device *xe)
+@@ -744,8 +744,6 @@ int xe_device_probe(struct xe_device *xe)
  
  	xe_debugfs_register(xe);
  
@@ -50,15 +47,13 @@ index c9c0f8d1df56..4ed7dd584a6d 100644
  
  	for_each_gt(gt, xe, id)
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index c812a21ed1f5..3ab9c2b8f97d 100644
+index d82f711ca77f..1dde69a199af 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -517,6 +517,11 @@ struct xe_device {
- 		/** @ordered_wq: used to discovery */
- 		struct workqueue_struct *ordered_wq;
+@@ -518,6 +518,9 @@ struct xe_device {
+ 		/** discovery_lock: used for discovery to block xe ioctls */
+ 		struct rw_semaphore discovery_lock;
  
-+		/** @enable_lock: protects the enable toggle */
-+		struct mutex enable_lock;
 +		/** @enable: is the debugging functionality enabled */
 +		bool enable;
 +
@@ -66,10 +61,10 @@ index c812a21ed1f5..3ab9c2b8f97d 100644
  		struct delayed_work attention_scan;
  	} eudebug;
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 4f7e1583e02a..22e920cd2115 100644
+index f14b39ced511..73ee2894aea5 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -2007,9 +2007,6 @@ xe_eudebug_connect(struct xe_device *xe,
+@@ -2028,9 +2028,6 @@ xe_eudebug_connect(struct xe_device *xe,
  
  	param->version = DRM_XE_EUDEBUG_VERSION;
  
@@ -79,86 +74,72 @@ index 4f7e1583e02a..22e920cd2115 100644
  	d = kzalloc(sizeof(*d), GFP_KERNEL);
  	if (!d)
  		return -ENOMEM;
-@@ -2071,15 +2068,24 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
+@@ -2090,28 +2087,30 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
+ {
+ 	struct xe_device *xe = to_xe_device(dev);
  	struct drm_xe_eudebug_connect * const param = data;
- 	int ret = 0;
+-	int ret = 0;
  
-+	mutex_lock(&xe->eudebug.enable_lock);
-+
-+	if (!xe->eudebug.enable) {
-+		mutex_unlock(&xe->eudebug.enable_lock);
+-	ret = xe_eudebug_connect(xe, param);
++	lockdep_assert_held(&xe->eudebug.discovery_lock);
+ 
+-	return ret;
++	if (!xe->eudebug.enable)
 +		return -ENODEV;
-+	}
 +
- 	ret = xe_eudebug_connect(xe, param);
- 
-+	mutex_unlock(&xe->eudebug.enable_lock);
-+
- 	return ret;
++	return xe_eudebug_connect(xe, param);
  }
  
- #undef XE_REG_MCR
- #define XE_REG_MCR(...)     XE_REG(__VA_ARGS__, .mcr = 1)
+ static void add_sr_entry(struct xe_hw_engine *hwe,
+ 			 struct xe_reg_mcr mcr_reg,
+-			 u32 mask)
++			 u32 mask, bool enable)
+ {
+ 	const struct xe_reg_sr_entry sr_entry = {
+ 		.reg = mcr_reg.__reg,
+ 		.clr_bits = mask,
+-		.set_bits = mask,
++		.set_bits = enable ? mask : 0,
+ 		.read_mask = mask,
+ 	};
+ 
+-	xe_reg_sr_add(&hwe->reg_sr, &sr_entry, hwe->gt);
++	xe_reg_sr_add(&hwe->reg_sr, &sr_entry, hwe->gt, true);
+ }
  
 -void xe_eudebug_init_hw_engine(struct xe_hw_engine *hwe)
 +static void xe_eudebug_reinit_hw_engine(struct xe_hw_engine *hwe, bool enable)
  {
  	struct xe_gt *gt = hwe->gt;
  	struct xe_device *xe = gt_to_xe(gt);
-@@ -2094,22 +2100,22 @@ void xe_eudebug_init_hw_engine(struct xe_hw_engine *hwe)
- 		struct xe_reg_sr_entry sr_entry = {
- 			.reg = ROW_CHICKEN,
- 			.clr_bits = STALL_DOP_GATING_DISABLE,
--			.set_bits = STALL_DOP_GATING_DISABLE,
-+			.set_bits = enable ? STALL_DOP_GATING_DISABLE : 0,
- 			.read_mask = STALL_DOP_GATING_DISABLE,
- 		};
+@@ -2123,23 +2122,113 @@ void xe_eudebug_init_hw_engine(struct xe_hw_engine *hwe)
+ 		return;
  
--		xe_reg_sr_add(&hwe->reg_sr, &sr_entry, gt);
-+		xe_reg_sr_add(&hwe->reg_sr, &sr_entry, gt, true);
- 	}
+ 	if (XE_WA(gt, 18022722726))
+-		add_sr_entry(hwe, ROW_CHICKEN, STALL_DOP_GATING_DISABLE);
++		add_sr_entry(hwe, ROW_CHICKEN,
++			     STALL_DOP_GATING_DISABLE, enable);
  
- 	if (XE_WA(gt, 14015474168)) {
- 		struct xe_reg_sr_entry sr_entry = {
- 			.reg = ROW_CHICKEN2,
- 			.clr_bits = XEHPC_DISABLE_BTB,
--			.set_bits = XEHPC_DISABLE_BTB,
-+			.set_bits = enable ? XEHPC_DISABLE_BTB : 0,
- 			.read_mask = XEHPC_DISABLE_BTB,
- 		};
+ 	if (XE_WA(gt, 14015474168))
+-		add_sr_entry(hwe, ROW_CHICKEN2, XEHPC_DISABLE_BTB);
++		add_sr_entry(hwe, ROW_CHICKEN2,
++			     XEHPC_DISABLE_BTB,
++			     enable);
  
--		xe_reg_sr_add(&hwe->reg_sr, &sr_entry, gt);
-+		xe_reg_sr_add(&hwe->reg_sr, &sr_entry, gt, true);
- 	}
+ 	if (xe->info.graphics_verx100 >= 1200)
+ 		add_sr_entry(hwe, TD_CTL,
+ 			     TD_CTL_BREAKPOINT_ENABLE |
+ 			     TD_CTL_FORCE_THREAD_BREAKPOINT_ENABLE |
+-			     TD_CTL_FEH_AND_FEE_ENABLE);
++			     TD_CTL_FEH_AND_FEE_ENABLE,
++			     enable);
  
- 	if (xe->info.graphics_verx100 >= 1200) {
-@@ -2119,40 +2125,124 @@ void xe_eudebug_init_hw_engine(struct xe_hw_engine *hwe)
- 		struct xe_reg_sr_entry sr_entry = {
- 			.reg = TD_CTL,
- 			.clr_bits = mask,
--			.set_bits = mask,
-+			.set_bits = enable ? mask : 0,
- 			.read_mask = mask,
- 		};
- 
--		xe_reg_sr_add(&hwe->reg_sr, &sr_entry, gt);
-+		xe_reg_sr_add(&hwe->reg_sr, &sr_entry, gt, true);
- 	}
- 
- 	if (xe->info.graphics_verx100 >= 1250) {
- 		struct xe_reg_sr_entry sr_entry = {
- 			.reg = TD_CTL,
- 			.clr_bits = TD_CTL_GLOBAL_DEBUG_ENABLE,
--			.set_bits = TD_CTL_GLOBAL_DEBUG_ENABLE,
-+			.set_bits = enable ? TD_CTL_GLOBAL_DEBUG_ENABLE : 0,
- 			.read_mask = TD_CTL_GLOBAL_DEBUG_ENABLE,
- 		};
- 
--		xe_reg_sr_add(&hwe->reg_sr, &sr_entry, gt);
-+		xe_reg_sr_add(&hwe->reg_sr, &sr_entry, gt, true);
- 	}
- }
- 
+ 	if (xe->info.graphics_verx100 >= 1250)
+-		add_sr_entry(hwe, TD_CTL, TD_CTL_GLOBAL_DEBUG_ENABLE);
++		add_sr_entry(hwe, TD_CTL,
++			     TD_CTL_GLOBAL_DEBUG_ENABLE, enable);
++}
++
 +static int xe_eudebug_enable(struct xe_device *xe, bool enable)
 +{
 +	struct xe_gt *gt;
@@ -168,16 +149,19 @@ index 4f7e1583e02a..22e920cd2115 100644
 +	if (!xe->eudebug.available)
 +		return -EOPNOTSUPP;
 +
-+	/* XXX: TODO hold list lock? */
-+	mutex_lock(&xe->eudebug.enable_lock);
++	/*
++	 * The connect ioctl has read lock so we can
++	 * serialize with taking write
++	 */
++	down_write(&xe->eudebug.discovery_lock);
 +
 +	if (!enable && !list_empty(&xe->eudebug.list)) {
-+		mutex_unlock(&xe->eudebug.enable_lock);
++		up_write(&xe->eudebug.discovery_lock);
 +		return -EBUSY;
 +	}
 +
 +	if (enable == xe->eudebug.enable) {
-+		mutex_unlock(&xe->eudebug.enable_lock);
++		up_write(&xe->eudebug.discovery_lock);
 +		return 0;
 +	}
 +
@@ -193,13 +177,13 @@ index 4f7e1583e02a..22e920cd2115 100644
 +		flush_work(&gt->reset.worker);
 +	}
 +
++	xe->eudebug.enable = enable;
++	up_write(&xe->eudebug.discovery_lock);
++
 +	if (enable)
 +		attention_scan_flush(xe);
 +	else
 +		attention_scan_cancel(xe);
-+
-+	xe->eudebug.enable = enable;
-+	mutex_unlock(&xe->eudebug.enable_lock);
 +
 +	return 0;
 +}
@@ -236,8 +220,8 @@ index 4f7e1583e02a..22e920cd2115 100644
 +	struct xe_device *xe = arg;
 +
 +	sysfs_remove_file(&xe->drm.dev->kobj, &dev_attr_enable_eudebug.attr);
-+}
-+
+ }
+ 
  void xe_eudebug_init(struct xe_device *xe)
  {
 +	struct device *dev = xe->drm.dev;
@@ -245,17 +229,17 @@ index 4f7e1583e02a..22e920cd2115 100644
 +
  	spin_lock_init(&xe->eudebug.lock);
  	INIT_LIST_HEAD(&xe->eudebug.list);
- 	INIT_DELAYED_WORK(&xe->eudebug.attention_scan, attention_scan_fn);
  
--	xe->eudebug.available = true;
+@@ -2150,14 +2239,17 @@ void xe_eudebug_init(struct xe_device *xe)
+ 
+ 	xe->eudebug.ordered_wq = alloc_ordered_workqueue("xe-eudebug-ordered-wq", 0);
+ 	xe->eudebug.available = !!xe->eudebug.ordered_wq;
 -}
-+	drmm_mutex_init(&xe->drm, &xe->eudebug.enable_lock);
-+	xe->eudebug.enable = false;
  
 -void xe_eudebug_init_late(struct xe_device *xe)
 -{
--	if (!xe->eudebug.available)
--		return;
+ 	if (!xe->eudebug.available)
+ 		return;
  
 -	attention_scan_flush(xe);
 +	ret = sysfs_create_file(&xe->drm.dev->kobj, &dev_attr_enable_eudebug.attr);
@@ -269,7 +253,7 @@ index 4f7e1583e02a..22e920cd2115 100644
  
  void xe_eudebug_fini(struct xe_device *xe)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
-index 40ac2a6adcd8..1ebc0e48c902 100644
+index 766d0a94d200..90525d8a02ad 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
 @@ -26,9 +26,7 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
@@ -282,16 +266,28 @@ index 40ac2a6adcd8..1ebc0e48c902 100644
  
  void xe_eudebug_file_open(struct xe_file *xef);
  void xe_eudebug_file_close(struct xe_file *xef);
+@@ -62,9 +60,7 @@ static inline int xe_eudebug_connect_ioctl(struct drm_device *dev,
+ 					   struct drm_file *file) { return 0; }
+ 
+ static inline void xe_eudebug_init(struct xe_device *xe) { }
+-static inline void xe_eudebug_init_late(struct xe_device *xe) { }
+ static inline void xe_eudebug_fini(struct xe_device *xe) { }
+-static inline void xe_eudebug_init_hw_engine(struct xe_hw_engine *hwe) { }
+ 
+ static inline void xe_eudebug_file_open(struct xe_file *xef) { }
+ static inline void xe_eudebug_file_close(struct xe_file *xef) { }
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index e59017c2e158..1c4287a764fa 100644
+index 15e91ade5a0a..ad9f9303171b 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -418,6 +418,9 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+@@ -420,6 +420,11 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
  			 !(value & DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)))
  		return -EINVAL;
  
++#if IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)
 +	if (XE_IOCTL_DBG(xe, !xe->eudebug.enable))
 +		return -EPERM;
++#endif
 +
  	q->eudebug_flags = EXEC_QUEUE_EUDEBUG_FLAG_ENABLE;
  	q->sched_props.preempt_timeout_us = 0;
@@ -386,5 +382,5 @@ index 5efe83cc82ab..383c7890dc11 100644
  
  static bool rtp_process_one_sr(const struct xe_rtp_entry_sr *entry,
 -- 
-2.34.1
+2.25.1
 

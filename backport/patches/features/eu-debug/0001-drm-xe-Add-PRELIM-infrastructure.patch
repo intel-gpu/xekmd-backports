@@ -1,4 +1,4 @@
-From c1b2bdedb5131f7dc12ed858960b6478fff1763e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Ashutosh Dixit <ashutosh.dixit@intel.com>
 Date: Mon, 11 Dec 2023 21:54:10 -0800
 Subject: drm/xe: Add PRELIM infrastructure
@@ -13,6 +13,7 @@ Signed-off-by: Ashutosh Dixit <ashutosh.dixit@intel.com>
 Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 (cherry picked from commit 79d1f6524d3d36c8c29340c7288e5666be7e5ed5 eudebug-dev-prelim)
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 ---
  Documentation/gpu/driver-uapi.rst |  5 +++
  drivers/gpu/drm/xe/xe_device.c    |  8 ++++
@@ -22,7 +23,7 @@ Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
  create mode 100644 include/uapi/drm/xe_drm_prelim.h
 
 diff --git a/Documentation/gpu/driver-uapi.rst b/Documentation/gpu/driver-uapi.rst
-index 971cdb4816fc..02192621b76e 100644
+index 971cdb481..02192621b 100644
 --- a/Documentation/gpu/driver-uapi.rst
 +++ b/Documentation/gpu/driver-uapi.rst
 @@ -27,3 +27,8 @@ drm/xe uAPI
@@ -35,10 +36,10 @@ index 971cdb4816fc..02192621b76e 100644
 +
 +.. kernel-doc:: include/uapi/drm/xe_drm_prelim.h
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 4ed7dd584a6d..ed56ec080b90 100644
+index d16b9cb5c..3dccdd9ea 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -200,6 +200,14 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -164,6 +164,14 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  	xe_pm_runtime_put(xe);
  }
  
@@ -54,7 +55,7 @@ index 4ed7dd584a6d..ed56ec080b90 100644
  	DRM_IOCTL_DEF_DRV(XE_DEVICE_QUERY, xe_query_ioctl, DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_GEM_CREATE, xe_gem_create_ioctl, DRM_RENDER_ALLOW),
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 2416971fbf2d..430635249908 100644
+index 2416971fb..430635249 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -1785,6 +1785,7 @@ struct drm_xe_debug_metadata_destroy {
@@ -67,7 +68,7 @@ index 2416971fbf2d..430635249908 100644
  }
 diff --git a/include/uapi/drm/xe_drm_prelim.h b/include/uapi/drm/xe_drm_prelim.h
 new file mode 100644
-index 000000000000..9c86f5969500
+index 000000000..9c86f5969
 --- /dev/null
 +++ b/include/uapi/drm/xe_drm_prelim.h
 @@ -0,0 +1,73 @@
@@ -145,5 +146,5 @@ index 000000000000..9c86f5969500
 + */
 +#endif /* _UAPI_XE_DRM_PRELIM_H_ */
 -- 
-2.34.1
+2.25.1
 

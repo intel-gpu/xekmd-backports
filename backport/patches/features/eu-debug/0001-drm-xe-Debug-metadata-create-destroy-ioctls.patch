@@ -1,4 +1,4 @@
-From 3aacb5c4776a8802a1c545c5992f1e25d6be055a Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Fri, 8 Sep 2023 17:32:30 +0200
 Subject: drm/xe: Debug metadata create/destroy ioctls
@@ -10,39 +10,48 @@ by attaching them to vm_bind operations.
 todo: WORK_IN_PROGRESS_* defines need to be reworded/refined when
       the real usage and need is established by l0+gdb.
 
+v2: - include uapi/drm/xe_drm.h
+    - metadata behind kconfig (Mika)
+    - dont leak args->id on error (Matt Auld)
+
+Cc: Matthew Auld <matthew.auld@intel.com>
 Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
-(cherry picked from commit 9f5b5d1ee49f7acddacd92797df390aa192c0c4d eudebug-dev-prelim)
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
-v2: Rebase to 6.11.2
+(cherry picked from commit 04f67b29959c170fb9e923aff52c0f1161ce7a49 eudebug-dev)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 ---
- drivers/gpu/drm/xe/Makefile                  |   1 +
+ drivers/gpu/drm/xe/Makefile                  |   3 +-
  drivers/gpu/drm/xe/xe_debug_metadata.c       | 107 +++++++++++++++++++
- drivers/gpu/drm/xe/xe_debug_metadata.h       |  23 ++++
- drivers/gpu/drm/xe/xe_debug_metadata_types.h |  28 +++++
- drivers/gpu/drm/xe/xe_device.c               |  17 +++
- drivers/gpu/drm/xe/xe_device_types.h         |   8 ++
+ drivers/gpu/drm/xe/xe_debug_metadata.h       |  50 +++++++++
+ drivers/gpu/drm/xe/xe_debug_metadata_types.h |  25 +++++
+ drivers/gpu/drm/xe/xe_device.c               |   5 +
+ drivers/gpu/drm/xe/xe_device.h               |   2 +
+ drivers/gpu/drm/xe/xe_device_types.h         |   7 ++
+ drivers/gpu/drm/xe/xe_eudebug.c              |  13 +++
  include/uapi/drm/xe_drm.h                    |  53 ++++++++-
- 7 files changed, 236 insertions(+), 1 deletion(-)
+ 9 files changed, 263 insertions(+), 2 deletions(-)
  create mode 100644 drivers/gpu/drm/xe/xe_debug_metadata.c
  create mode 100644 drivers/gpu/drm/xe/xe_debug_metadata.h
  create mode 100644 drivers/gpu/drm/xe/xe_debug_metadata_types.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index b655c0e43..e2aa65d4f 100644
+index 5514b705c8c4..317607e1e1fe 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -29,6 +29,7 @@ xe-y += xe_bb.o \
- 	xe_bo.o \
- 	xe_bo_evict.o \
- 	xe_debugfs.o \
-+	xe_debug_metadata.o \
- 	xe_devcoredump.o \
- 	xe_device.o \
- 	xe_device_sysfs.o \
+@@ -117,7 +117,8 @@ xe-y += xe_bb.o \
+ 	xe_wa.o \
+ 	xe_wopcm.o
+ 
+-xe-$(CONFIG_DRM_XE_EUDEBUG) += xe_eudebug.o
++xe-$(CONFIG_DRM_XE_EUDEBUG) += xe_eudebug.o \
++	xe_debug_metadata.o
+ 
+ xe-$(CONFIG_HMM_MIRROR) += xe_hmm.o
+ 
 diff --git a/drivers/gpu/drm/xe/xe_debug_metadata.c b/drivers/gpu/drm/xe/xe_debug_metadata.c
 new file mode 100644
-index 000000000..8d99170d3
+index 000000000000..1dfed9aed285
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_debug_metadata.c
 @@ -0,0 +1,107 @@
@@ -54,7 +63,7 @@ index 000000000..8d99170d3
 +
 +#include <drm/drm_device.h>
 +#include <drm/drm_file.h>
-+#include <drm/xe_drm.h>
++#include <uapi/drm/xe_drm.h>
 +
 +#include "xe_device.h"
 +#include "xe_macros.h"
@@ -115,15 +124,14 @@ index 000000000..8d99170d3
 +		goto put_mdata;
 +	}
 +
-+	mutex_lock(&xef->debug_metadata.lock);
-+	err = xa_alloc(&xef->debug_metadata.xa, &id, mdata, xa_limit_32b, GFP_KERNEL);
-+	mutex_unlock(&xef->debug_metadata.lock);
-+
-+	args->metadata_id = id;
-+	mdata->id = id;
++	mutex_lock(&xef->eudebug.metadata.lock);
++	err = xa_alloc(&xef->eudebug.metadata.xa, &id, mdata, xa_limit_32b, GFP_KERNEL);
++	mutex_unlock(&xef->eudebug.metadata.lock);
 +
 +	if (err)
 +		goto put_mdata;
++
++	args->metadata_id = id;
 +
 +	return 0;
 +
@@ -144,21 +152,22 @@ index 000000000..8d99170d3
 +	if (XE_IOCTL_DBG(xe, args->extensions))
 +		return -EINVAL;
 +
-+	mutex_lock(&xef->debug_metadata.lock);
-+	mdata = xa_erase(&xef->debug_metadata.xa, args->metadata_id);
-+	mutex_unlock(&xef->debug_metadata.lock);
++	mutex_lock(&xef->eudebug.metadata.lock);
++	mdata = xa_erase(&xef->eudebug.metadata.xa, args->metadata_id);
++	mutex_unlock(&xef->eudebug.metadata.lock);
 +	if (XE_IOCTL_DBG(xe, !mdata))
 +		return -ENOENT;
 +
 +	xe_debug_metadata_put(mdata);
++
 +	return 0;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_debug_metadata.h b/drivers/gpu/drm/xe/xe_debug_metadata.h
 new file mode 100644
-index 000000000..abaea076c
+index 000000000000..3266c25e657e
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_debug_metadata.h
-@@ -0,0 +1,23 @@
+@@ -0,0 +1,50 @@
 +/* SPDX-License-Identifier: MIT */
 +/*
 + * Copyright © 2023 Intel Corporation
@@ -167,10 +176,12 @@ index 000000000..abaea076c
 +#ifndef _XE_DEBUG_METADATA_H_
 +#define _XE_DEBUG_METADATA_H_
 +
-+#include "xe_debug_metadata_types.h"
-+
 +struct drm_device;
 +struct drm_file;
++
++#if IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)
++
++#include "xe_debug_metadata_types.h"
 +
 +void xe_debug_metadata_put(struct xe_debug_metadata *mdata);
 +
@@ -181,13 +192,38 @@ index 000000000..abaea076c
 +int xe_debug_metadata_destroy_ioctl(struct drm_device *dev,
 +				    void *data,
 +				    struct drm_file *file);
++#else /* CONFIG_DRM_XE_EUDEBUG */
++
++#include <linux/errno.h>
++
++struct xe_debug_metadata;
++
++static inline void xe_debug_metadata_put(struct xe_debug_metadata *mdata) { }
++
++static inline int xe_debug_metadata_create_ioctl(struct drm_device *dev,
++						 void *data,
++						 struct drm_file *file)
++{
++	return -EOPNOTSUPP;
++}
++
++static inline int xe_debug_metadata_destroy_ioctl(struct drm_device *dev,
++						  void *data,
++						  struct drm_file *file)
++{
++	return -EOPNOTSUPP;
++}
++
++#endif /* CONFIG_DRM_XE_EUDEBUG */
++
++
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_debug_metadata_types.h b/drivers/gpu/drm/xe/xe_debug_metadata_types.h
 new file mode 100644
-index 000000000..508f2fdbb
+index 000000000000..624852920f58
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_debug_metadata_types.h
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,25 @@
 +/* SPDX-License-Identifier: MIT */
 +/*
 + * Copyright © 2023 Intel Corporation
@@ -208,16 +244,13 @@ index 000000000..508f2fdbb
 +	/** @len: length, in bytes of the metadata */
 +	u64 len;
 +
-+	/** @id */
-+	u64 id;
-+
 +	/** @ref: reference count */
 +	struct kref refcount;
 +};
 +
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 90c5dcfcf..4658cebd1 100644
+index 5bb4386ca0c3..681d10a646de 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -24,6 +24,7 @@
@@ -228,47 +261,7 @@ index 90c5dcfcf..4658cebd1 100644
  #include "xe_dma_buf.h"
  #include "xe_drm_client.h"
  #include "xe_drv.h"
-@@ -99,6 +100,9 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
- 	xe->clients.count++;
- 	spin_unlock(&xe->clients.lock);
- 
-+	mutex_init(&xef->debug_metadata.lock);
-+	xa_init_flags(&xef->debug_metadata.xa, XA_FLAGS_ALLOC1);
-+
- 	file->driver_priv = xef;
- 	kref_init(&xef->refcount);
- 
-@@ -117,6 +121,9 @@ static void xe_file_destroy(struct kref *ref)
- 	xa_destroy(&xef->vm.xa);
- 	mutex_destroy(&xef->vm.lock);
- 
-+	xa_destroy(&xef->debug_metadata.xa);
-+	mutex_destroy(&xef->debug_metadata.lock);
-+
- 	spin_lock(&xe->clients.lock);
- 	xe->clients.count--;
- 	spin_unlock(&xe->clients.lock);
-@@ -157,6 +164,7 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
- 	struct xe_file *xef = file->driver_priv;
- 	struct xe_vm *vm;
- 	struct xe_exec_queue *q;
-+	struct xe_debug_metadata *mdata;
- 	unsigned long idx;
- 
- 	xe_pm_runtime_get(xe);
-@@ -180,6 +188,11 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
- 	xa_for_each(&xef->vm.xa, idx, vm)
- 		xe_vm_close_and_put(vm);
- 
-+	mutex_lock(&xef->debug_metadata.lock);
-+	xa_for_each(&xef->debug_metadata.xa, idx, mdata)
-+		xe_debug_metadata_put(mdata);
-+	mutex_unlock(&xef->debug_metadata.lock);
-+
- 	xe_file_put(xef);
- 
- 	xe_pm_runtime_put(xe);
-@@ -204,6 +217,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
+@@ -182,6 +183,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
  			  DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_OBSERVATION, xe_observation_ioctl, DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_EUDEBUG_CONNECT, xe_eudebug_connect_ioctl, DRM_RENDER_ALLOW),
@@ -279,27 +272,83 @@ index 90c5dcfcf..4658cebd1 100644
  };
  
  static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
+index 4c4cf4dc631c..b54ad38686ce 100644
+--- a/drivers/gpu/drm/xe/xe_device.h
++++ b/drivers/gpu/drm/xe/xe_device.h
+@@ -201,6 +201,8 @@ static inline int xe_eudebug_needs_lock(const unsigned int cmd)
+ 	case DRM_XE_EXEC_QUEUE_CREATE:
+ 	case DRM_XE_EXEC_QUEUE_DESTROY:
+ 	case DRM_XE_EUDEBUG_CONNECT:
++	case DRM_XE_DEBUG_METADATA_CREATE:
++	case DRM_XE_DEBUG_METADATA_DESTROY:
+ 		return 1;
+ 	}
+ 
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 1c8b08663..cbe731758 100644
+index 25336bac8b5f..d82f711ca77f 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -627,6 +627,14 @@ struct xe_file {
- 
- 	/** @id: id into xe_device.files.xa */
- 	u32 id;
+@@ -628,6 +628,13 @@ struct xe_file {
+ 	struct {
+ 		/** @client_link: list entry in xe_device.clients.list */
+ 		struct list_head client_link;
 +
-+	/** @debug_metadata: array of debug metadata for file */
-+	struct {
-+		/** @xa: xarray to store debug metadata */
-+		struct xarray xa;
-+		/** @lock: protects debug metadata xarray */
-+		struct mutex lock;
-+	} debug_metadata;
- };
- 
++		struct {
++			/** @xa: xarray to store debug metadata */
++			struct xarray xa;
++			/** @lock: protects debug metadata xarray */
++			struct mutex lock;
++		} metadata;
+ 	} eudebug;
  #endif
+ };
+diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
+index ca1e3a229f2f..25a9a7daf852 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/xe_eudebug.c
+@@ -21,6 +21,7 @@
+ #include "xe_assert.h"
+ #include "xe_bo.h"
+ #include "xe_device.h"
++#include "xe_debug_metadata.h"
+ #include "xe_eudebug.h"
+ #include "xe_eudebug_types.h"
+ #include "xe_exec_queue.h"
+@@ -2141,6 +2142,8 @@ void xe_eudebug_file_open(struct xe_file *xef)
+ 	struct xe_eudebug *d;
+ 
+ 	INIT_LIST_HEAD(&xef->eudebug.client_link);
++	mutex_init(&xef->eudebug.metadata.lock);
++	xa_init_flags(&xef->eudebug.metadata.xa, XA_FLAGS_ALLOC1);
+ 
+ 	down_read(&xef->xe->eudebug.discovery_lock);
+ 
+@@ -2158,12 +2161,22 @@ void xe_eudebug_file_open(struct xe_file *xef)
+ void xe_eudebug_file_close(struct xe_file *xef)
+ {
+ 	struct xe_eudebug *d;
++	unsigned long idx;
++	struct xe_debug_metadata *mdata;
+ 
+ 	down_read(&xef->xe->eudebug.discovery_lock);
+ 	d = xe_eudebug_get(xef);
+ 	if (d)
+ 		xe_eudebug_event_put(d, client_destroy_event(d, xef));
+ 
++	mutex_lock(&xef->eudebug.metadata.lock);
++	xa_for_each(&xef->eudebug.metadata.xa, idx, mdata)
++		xe_debug_metadata_put(mdata);
++	mutex_unlock(&xef->eudebug.metadata.lock);
++
++	xa_destroy(&xef->eudebug.metadata.xa);
++	mutex_destroy(&xef->eudebug.metadata.lock);
++
+ 	spin_lock(&xef->xe->clients.lock);
+ 	list_del_init(&xef->eudebug.client_link);
+ 	spin_unlock(&xef->xe->clients.lock);
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 985dcf852..0d75a072b 100644
+index 985dcf852458..0d75a072b838 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -103,7 +103,8 @@ extern "C" {
@@ -377,5 +426,5 @@ index 985dcf852..0d75a072b 100644
  
  #if defined(__cplusplus)
 -- 
-2.34.1
+2.25.1
 

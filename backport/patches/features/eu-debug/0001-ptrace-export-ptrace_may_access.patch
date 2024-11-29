@@ -1,11 +1,11 @@
-From 6c6b9d1e009aca6cd1f3b3039784d68331b613f2 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Wed, 20 Jan 2021 12:40:46 +0200
 Subject: ptrace: export ptrace_may_access
 
 xe driver would like to allow fine grained access control
-for GBU debugger. Without this export, the only option would
-be to check for CAP_SYS_ADMIN.
+for GDB debugger using ptrace. Without this export, the only
+option would be to check for CAP_SYS_ADMIN.
 
 The check intended for an ioctl to attach a GPU debugger
 is similar to the ptrace use case: allow a calling process
@@ -14,7 +14,8 @@ capabilities or the same permissions, as described in
 Documentation/process/adding-syscalls.rst.
 
 Export ptrace_may_access function to allow GPU debugger to
-have identical access control for debugger as a CPU debugger.
+have identical access control for debugger(s)
+as a CPU debugger.
 
 v2: proper commit message (Lucas)
 
@@ -30,8 +31,9 @@ Cc: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
 Reviewed-by: Andi Shyti <andi.shyti@linux.intel.com>
-(cherry picked from commit a3258ab6e9ea555c4d6693567276b6008051e574 eudebug-dev-prelim)
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+(cherry picked from commit c94a90ab4170a71cf8eb25ce0e8ae7814dbc6382 eudebug-dev)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 ---
  kernel/ptrace.c | 1 +
  1 file changed, 1 insertion(+)
@@ -49,5 +51,5 @@ index d5f89f9ef29f..86be1805ebd8 100644
  static int check_ptrace_options(unsigned long data)
  {
 -- 
-2.34.1
+2.25.1
 

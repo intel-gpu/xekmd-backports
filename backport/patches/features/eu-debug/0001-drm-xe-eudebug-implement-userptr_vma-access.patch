@@ -1,4 +1,4 @@
-From 99e603bbb4c4c2629fe552d1321d9f29b48d25fa Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Andrzej Hajda <andrzej.hajda@intel.com>
 Date: Mon, 5 Aug 2024 18:54:21 +0200
 Subject: drm/xe/eudebug: implement userptr_vma access
@@ -8,43 +8,47 @@ Since hmm_range_fault is used to pin userptr vmas, it is possible
 to map those vmas from debugger context.
 
 v2: pin pages vs notifier, move to vm.c (Matthew)
+v3: - iterate over system pages instead of DMA, fixes work with iommu enabled
+    - s/xe_uvma_access/xe_vm_uvma_access/ (Matt)
 
 Signed-off-by: Andrzej Hajda <andrzej.hajda@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
-Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
-(cherry picked from commit aaab8ff5bf34bcc05ec3664203651b49d0ada502 eudebug-dev-prelim)
+Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com> #v1
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+(cherry picked from commit 3e789bcc3b49595e7d1fd0632ca9a5584504cd83 eudebug-dev)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 ---
- drivers/gpu/drm/xe/xe_eudebug.c |  2 +-
+ drivers/gpu/drm/xe/xe_eudebug.c |  3 ++-
  drivers/gpu/drm/xe/xe_vm.c      | 47 +++++++++++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_vm.h      |  3 +++
- 3 files changed, 51 insertions(+), 1 deletion(-)
+ 3 files changed, 52 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 7f645d689fd3..523ffb627539 100644
+index fbfe86dc85af..ca1e3a229f2f 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -2945,7 +2945,7 @@ static int xe_eudebug_vma_access(struct xe_vma *vma, u64 offset,
- 	if (bo)
- 		return xe_eudebug_bovma_access(bo, offset, buf, bytes, write);
+@@ -3076,7 +3076,8 @@ static int xe_eudebug_vma_access(struct xe_vma *vma, u64 offset_in_vma,
+ 		return ret;
+ 	}
  
--	return -EOPNOTSUPP;
-+	return xe_uvma_access(to_userptr_vma(vma), offset, buf, bytes, write);
+-	return -EINVAL;
++	return xe_vm_userptr_access(to_userptr_vma(vma), offset_in_vma,
++				    buf, bytes, write);
  }
  
  static int xe_eudebug_vm_access(struct xe_vm *vm, u64 offset,
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 634af1c36c60..f420cc4380f5 100644
+index 8a9f7761bd85..6b9d1d69293d 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -3443,3 +3443,50 @@ void xe_vm_snapshot_free(struct xe_vm_snapshot *snap)
+@@ -3428,3 +3428,50 @@ void xe_vm_snapshot_free(struct xe_vm_snapshot *snap)
  	}
  	kvfree(snap);
  }
 +
-+int xe_uvma_access(struct xe_userptr_vma *uvma, u64 offset,
-+		   void *buf, u64 len, bool write)
++int xe_vm_userptr_access(struct xe_userptr_vma *uvma, u64 offset,
++			 void *buf, u64 len, bool write)
 +{
 +	struct xe_vm *vm = xe_vma_vm(&uvma->vma);
 +	struct xe_userptr *up = &uvma->userptr;
@@ -71,7 +75,7 @@ index 634af1c36c60..f420cc4380f5 100644
 +		goto out_unlock_notifier;
 +	}
 +
-+	for (xe_res_first_sg(up->sg, offset, len, &cur); cur.remaining;
++	for (xe_res_first_sg_system(up->sg, offset, len, &cur); cur.remaining;
 +	     xe_res_next(&cur, cur_len)) {
 +		void *ptr = kmap_local_page(sg_page(cur.sgl)) + cur.start;
 +
@@ -90,7 +94,7 @@ index 634af1c36c60..f420cc4380f5 100644
 +	return ret;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index c864dba35e1d..99b9a9b011de 100644
+index c864dba35e1d..165eab494d59 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
 @@ -281,3 +281,6 @@ struct xe_vm_snapshot *xe_vm_snapshot_capture(struct xe_vm *vm);
@@ -98,8 +102,8 @@ index c864dba35e1d..99b9a9b011de 100644
  void xe_vm_snapshot_print(struct xe_vm_snapshot *snap, struct drm_printer *p);
  void xe_vm_snapshot_free(struct xe_vm_snapshot *snap);
 +
-+int xe_uvma_access(struct xe_userptr_vma *uvma, u64 offset,
-+		   void *buf, u64 len, bool write);
++int xe_vm_userptr_access(struct xe_userptr_vma *uvma, u64 offset,
++			 void *buf, u64 len, bool write);
 -- 
-2.34.1
+2.25.1
 

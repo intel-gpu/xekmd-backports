@@ -1,0 +1,133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Date: Mon, 11 Nov 2024 12:34:59 +0200
+Subject: drm/xe/eudebug: Add read/count/compare helper for eu
+ attention
+
+Add xe_eu_attentions structure to capture and store eu attention bits.
+Add a function to count the number of eu threads that have turned on from
+eu attentions, and add a function to count the number of eu threads that
+have changed on a state between eu attentions.
+
+Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+(cherry picked from commit 9f5abd3965f54eb848eb2a477b307d6fe09336d1 eudebug-dev)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_debug.c | 64 ++++++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_gt_debug.h | 15 ++++++++
+ 2 files changed, 79 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_debug.c b/drivers/gpu/drm/xe/xe_gt_debug.c
+index f35b9df5e41b..5dcc12ea5a11 100644
+--- a/drivers/gpu/drm/xe/xe_gt_debug.c
++++ b/drivers/gpu/drm/xe/xe_gt_debug.c
+@@ -3,6 +3,7 @@
+  * Copyright © 2023 Intel Corporation
+  */
+ 
++#include <linux/delay.h>
+ #include "regs/xe_gt_regs.h"
+ #include "xe_device.h"
+ #include "xe_force_wake.h"
+@@ -146,3 +147,66 @@ int xe_gt_eu_threads_needing_attention(struct xe_gt *gt)
+ 
+ 	return err < 0 ? 0 : err;
+ }
++
++static inline unsigned int
++xe_eu_attentions_count(const struct xe_eu_attentions *a)
++{
++	return bitmap_weight((void *)a->att, a->size * BITS_PER_BYTE);
++}
++
++void xe_gt_eu_attentions_read(struct xe_gt *gt,
++			      struct xe_eu_attentions *a,
++			      const unsigned int settle_time_ms)
++{
++	unsigned int prev = 0;
++	ktime_t end, now;
++
++	now = ktime_get_raw();
++	end = ktime_add_ms(now, settle_time_ms);
++
++	a->ts = 0;
++	a->size = min_t(int,
++			xe_gt_eu_attention_bitmap_size(gt),
++			sizeof(a->att));
++
++	do {
++		unsigned int attn;
++
++		xe_gt_eu_attention_bitmap(gt, a->att, a->size);
++		attn = xe_eu_attentions_count(a);
++
++		now = ktime_get_raw();
++
++		if (a->ts == 0)
++			a->ts = now;
++		else if (attn && attn != prev)
++			a->ts = now;
++
++		prev = attn;
++
++		if (settle_time_ms)
++			udelay(5);
++
++		/*
++		 * XXX We are gathering data for production SIP to find
++		 * the upper limit of settle time. For now, we wait full
++		 * timeout value regardless.
++		 */
++	} while (ktime_before(now, end));
++}
++
++unsigned int xe_eu_attentions_xor_count(const struct xe_eu_attentions *a,
++					const struct xe_eu_attentions *b)
++{
++	unsigned int count = 0;
++	unsigned int i;
++
++	if (XE_WARN_ON(a->size != b->size))
++		return -EINVAL;
++
++	for (i = 0; i < a->size; i++)
++		if (a->att[i] ^ b->att[i])
++			count++;
++
++	return count;
++}
+diff --git a/drivers/gpu/drm/xe/xe_gt_debug.h b/drivers/gpu/drm/xe/xe_gt_debug.h
+index 342082699ff6..3e3fb501eedd 100644
+--- a/drivers/gpu/drm/xe/xe_gt_debug.h
++++ b/drivers/gpu/drm/xe/xe_gt_debug.h
+@@ -12,6 +12,15 @@
+ 
+ #define XE_GT_ATTENTION_TIMEOUT_MS 100
+ 
++struct xe_eu_attentions {
++#define XE_MAX_EUS 1024
++#define XE_MAX_THREADS 10
++
++	u8 att[DIV_ROUND_UP(XE_MAX_EUS * XE_MAX_THREADS, BITS_PER_BYTE)];
++	unsigned int size;
++	ktime_t ts;
++};
++
+ int xe_gt_eu_threads_needing_attention(struct xe_gt *gt);
+ int xe_gt_foreach_dss_group_instance(struct xe_gt *gt,
+ 				     int (*fn)(struct xe_gt *gt,
+@@ -24,4 +33,10 @@ int xe_gt_eu_attention_bitmap_size(struct xe_gt *gt);
+ int xe_gt_eu_attention_bitmap(struct xe_gt *gt, u8 *bits,
+ 			      unsigned int bitmap_size);
+ 
++void xe_gt_eu_attentions_read(struct xe_gt *gt,
++			      struct xe_eu_attentions *a,
++			      const unsigned int settle_time_ms);
++
++unsigned int xe_eu_attentions_xor_count(const struct xe_eu_attentions *a,
++					const struct xe_eu_attentions *b);
+ #endif
+-- 
+2.25.1
+

@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Date: Mon, 11 Nov 2024 12:03:47 +0200
+Subject: drm/xe/vm: Support for adding null page VMA to VM on request
+
+The XE2 (and PVC) HW has a limitation that the pagefault due to invalid
+access will halt the corresponding EUs. So, in order to activate the
+debugger, kmd needs to install the temporal page to unhalt the EUs.
+Plan to be used for pagefault handling when the EU debugger is running.
+The idea is to install a null page vma if the pagefault is from an invalid
+access. After installing null page pte, the user debugger can continue to
+run/inspect without causing a fatal failure or reset and stop.
+Based on Bruce's implementation [1].
+
+[1] https://lore.kernel.org/intel-xe/20230829231648.4438-1-yu.bruce.chang@intel.com/
+
+Cc: Oak Zeng <oak.zeng@intel.com>
+Cc: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Cc: Stuart Summers <stuart.summers@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Co-developed-by: Bruce Chang <yu.bruce.chang@intel.com>
+Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+(cherry picked from commit 845ebc0e92a0f40079cd102e4b57d9d74414b42c eudebug-dev)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vm.c | 23 +++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_vm.h |  2 ++
+ 2 files changed, 25 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index 31f5d1d3cc4b..12e626669893 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -3566,3 +3566,26 @@ out_unlock_notifier:
+ 	up_read(&vm->userptr.notifier_lock);
+ 	return ret;
+ }
++
++struct xe_vma *xe_vm_create_null_vma(struct xe_vm *vm, u64 addr)
++{
++	struct xe_vma *vma;
++	u32 page_size;
++	int err;
++
++	if (xe_vm_is_closed_or_banned(vm))
++		return ERR_PTR(-ENOENT);
++
++	page_size = vm->flags & XE_VM_FLAG_64K ? SZ_64K : SZ_4K;
++	vma = xe_vma_create(vm, NULL, 0, addr, addr + page_size - 1, 0, VMA_CREATE_FLAG_IS_NULL);
++	if (IS_ERR_OR_NULL(vma))
++		return vma;
++
++	err = xe_vm_insert_vma(vm, vma);
++	if (err) {
++		xe_vma_destroy_late(vma);
++		return ERR_PTR(err);
++	}
++
++	return vma;
++}
+diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
+index 165eab494d59..4a613ddbd139 100644
+--- a/drivers/gpu/drm/xe/xe_vm.h
++++ b/drivers/gpu/drm/xe/xe_vm.h
+@@ -284,3 +284,5 @@ void xe_vm_snapshot_free(struct xe_vm_snapshot *snap);
+ 
+ int xe_vm_userptr_access(struct xe_userptr_vma *uvma, u64 offset,
+ 			 void *buf, u64 len, bool write);
++
++struct xe_vma *xe_vm_create_null_vma(struct xe_vm *vm, u64 addr);
+-- 
+2.25.1
+

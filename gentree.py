@@ -856,8 +856,11 @@ def process(kerneldir, copy_list_file, git_revision=None,
         'INSTALL',
         'm4/',
         'Makefile.am',
+        'Makefile',
         'NEWS',
         'README',
+        'debian/',
+        'compile.sh',
     ]]
 
     if not bpid.integrate:

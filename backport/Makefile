@@ -25,6 +25,20 @@ TARGET_KERNEL_NAME=$(shell echo $(KLIB_BUILD) | cut -d "/" -f 4 2>/dev/null || e
 
 export KLIB KLIB_BUILD BACKPORT_DIR KMODDIR KMODPATH_ARG TARGET_KERNEL_NAME
 
+
+# Packaging targets Available
+#
+DEB_PKG_DISTRO_TARGETS := xe-dkms-deb-pkg
+RPM_PKG_DISTRO_TARGETS :=
+
+# PKG_DISTRO_TARGETS
+# DKMS Package Targets
+PKG_DISTRO_TARGETS := $(DEB_PKG_DISTRO_TARGETS) $(RPM_PKG_DISTRO_TARGETS)
+
+# BIN_PKG_TARGETS
+# Binary Package Targets
+BIN_PKG_TARGETS :=
+
 # disable built-in rules for this file
 .SUFFIXES:
 

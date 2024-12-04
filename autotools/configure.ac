@@ -4,6 +4,8 @@
 AC_PREREQ([2.69])
 AC_INIT([intel-xe-drm], [1.0], [linux-graphics@intel.com])
 
+AC_SUBST([DOLLAR_SIGN],[$])
+
 AC_CONFIG_AUX_DIR([src])
 AC_CONFIG_HEADERS([src/backport-include/backport/backport_auto.h])
 

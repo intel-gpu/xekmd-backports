@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Date: Wed, 18 Dec 2024 01:15:23 +0530
+Subject: drivers/gpu: disable display by default for xe oot module
+
+Disabling display related configs in xe/Kconfig file by default
+for xe only oot module.
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/xe/Kconfig | 21 +++++++++++----------
+ 1 file changed, 11 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/Kconfig b/drivers/gpu/drm/xe/Kconfig
+index b51a2bd..c6443c3 100644
+--- a/drivers/gpu/drm/xe/Kconfig
++++ b/drivers/gpu/drm/xe/Kconfig
+@@ -8,18 +8,18 @@ config DRM_XE
+ 	select SHMEM
+ 	select TMPFS
+ 	select DRM_BUDDY
+-	select DRM_CLIENT_SELECTION
++	#select DRM_CLIENT_SELECTION
+ 	select DRM_EXEC
+-	select DRM_KMS_HELPER
++	#select DRM_KMS_HELPER
+ 	select DRM_KUNIT_TEST_HELPERS if DRM_XE_KUNIT_TEST != n
+-	select DRM_PANEL
+-	select DRM_SUBALLOC_HELPER
+-	select DRM_DISPLAY_DP_HELPER
+-	select DRM_DISPLAY_DSC_HELPER
+-	select DRM_DISPLAY_HDCP_HELPER
+-	select DRM_DISPLAY_HDMI_HELPER
+-	select DRM_DISPLAY_HELPER
+-	select DRM_MIPI_DSI
++	#select DRM_PANEL
++	#select DRM_SUBALLOC_HELPER
++	#select DRM_DISPLAY_DP_HELPER
++	#select DRM_DISPLAY_DSC_HELPER
++	#select DRM_DISPLAY_HDCP_HELPER
++	#select DRM_DISPLAY_HDMI_HELPER
++	#select DRM_DISPLAY_HELPER
++	#select DRM_MIPI_DSI
+ 	select RELAY
+ 	select IRQ_WORK
+ 	# xe depends on ACPI_VIDEO when ACPI is enabled
+@@ -51,6 +51,7 @@ config DRM_XE
+ 
+ config DRM_XE_DISPLAY
+ 	bool "Enable display support"
++	depends on n
+ 	depends on DRM_XE && DRM_XE=m && HAS_IOPORT
+ 	select FB_IOMEM_HELPERS
+ 	select I2C
+-- 
+2.25.1
+

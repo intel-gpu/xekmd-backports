@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Date: Thu, 5 Dec 2024 00:39:08 +0530
-Subject: [PATCH] drm/xe/eudebug: Introduce EU pagefault handling  interface
+Subject: [PATCH] drm/xe/eudebug: Introduce EU pagefault handling interface
 
 The XE2 (and PVC) HW has a limitation that the pagefault due to invalid
 access will halt the corresponding EUs. To solve this problem, introduce
@@ -61,7 +61,7 @@ Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
  6 files changed, 613 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 73ee2894a..f2d55f9bc 100644
+index 73ee2894aea5..8b27f8232718 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -31,6 +31,7 @@
@@ -354,7 +354,7 @@ index 73ee2894a..f2d55f9bc 100644
  
  	return ret;
  }
-+ 
++
 +static int queue_pagefault(struct xe_gt *gt, struct xe_eudebug_pagefault *pf)
 +{
 +	struct xe_eudebug *d;
@@ -632,7 +632,7 @@ index 73ee2894a..f2d55f9bc 100644
 +	attention_scan_flush(gt_to_xe(gt));
 +}
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
-index 90525d8a0..5f6f58ed7 100644
+index 90525d8a02ad..5f6f58ed70d4 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
 @@ -11,6 +11,7 @@ struct drm_device;
@@ -679,7 +679,7 @@ index 90525d8a0..5f6f58ed7 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index a69051b04..00853dacd 100644
+index a69051b04698..00853dacd477 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
 @@ -16,6 +16,8 @@
@@ -796,7 +796,7 @@ index a69051b04..00853dacd 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_gt_pagefault.c b/drivers/gpu/drm/xe/xe_gt_pagefault.c
-index 00af059a8..53c50d61d 100644
+index 00af059a8971..53c50d61d6a0 100644
 --- a/drivers/gpu/drm/xe/xe_gt_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_gt_pagefault.c
 @@ -80,7 +80,7 @@ static bool vma_matches(struct xe_vma *vma, u64 page_addr)
@@ -818,7 +818,7 @@ index 00af059a8..53c50d61d 100644
  		err = -EINVAL;
  		goto unlock_vm;
 diff --git a/drivers/gpu/drm/xe/xe_gt_pagefault.h b/drivers/gpu/drm/xe/xe_gt_pagefault.h
-index 839c065a5..3c0628b79 100644
+index 839c065a5e4c..3c0628b79f33 100644
 --- a/drivers/gpu/drm/xe/xe_gt_pagefault.h
 +++ b/drivers/gpu/drm/xe/xe_gt_pagefault.h
 @@ -10,10 +10,12 @@
@@ -835,7 +835,7 @@ index 839c065a5..3c0628b79 100644
  
  #endif	/* _XE_GT_PAGEFAULT_ */
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
-index 3c4d1b511..e43576c7b 100644
+index 3c4d1b511acd..e43576c7bc5e 100644
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ b/include/uapi/drm/xe_drm_eudebug.h
 @@ -38,6 +38,7 @@ struct drm_xe_eudebug_event {
@@ -866,5 +866,5 @@ index 3c4d1b511..e43576c7b 100644
  }
  #endif
 -- 
-2.25.1
+2.34.1
 

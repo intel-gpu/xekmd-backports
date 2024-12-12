@@ -15,5 +15,10 @@ AC_DEFUN([AC_XE_CONFIG], [
 	AC_DRM_DBG_PRINTER_NOT_PRESENT
 	AC_DRM_BUDDY_BLOCK_TRIM_2ND_ARG_NOT_PRESENT
 
+dnl # Macros to check for header availability
+	AC_KERNEL_CHECK_HEADERS([drm/i915_gsc_proxy_mei_interface.h])
+	AC_KERNEL_CHECK_HEADERS([drm/i915_component.h])
+	AC_KERNEL_CHECK_HEADERS([drm/intel/i915_drm.h])
+
 	AC_KERNEL_WAIT
 ])

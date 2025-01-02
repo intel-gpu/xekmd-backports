@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Date: Sat, 4 Jan 2025 17:07:59 +0530
+Subject: drm/ttm: Add BACKPORT_MOD_VERSIONS for oot module
+
+Add BACKPORT_MOD_VERSIONS to display information about oot module version.
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/drm_gem_ttm_helper.c | 1 +
+ drivers/gpu/drm/ttm/ttm_module.c     | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/drivers/gpu/drm/drm_gem_ttm_helper.c b/drivers/gpu/drm/drm_gem_ttm_helper.c
+index 3734aa2..eb81ba2 100644
+--- a/drivers/gpu/drm/drm_gem_ttm_helper.c
++++ b/drivers/gpu/drm/drm_gem_ttm_helper.c
+@@ -149,5 +149,6 @@ int drm_gem_ttm_dumb_map_offset(struct drm_file *file, struct drm_device *dev,
+ }
+ EXPORT_SYMBOL(drm_gem_ttm_dumb_map_offset);
+ 
++BACKPORT_MOD_VERSIONS
+ MODULE_DESCRIPTION("DRM gem ttm helpers");
+ MODULE_LICENSE("GPL");
+diff --git a/drivers/gpu/drm/ttm/ttm_module.c b/drivers/gpu/drm/ttm/ttm_module.c
+index b3fffe7..0da7fb8 100644
+--- a/drivers/gpu/drm/ttm/ttm_module.c
++++ b/drivers/gpu/drm/ttm/ttm_module.c
+@@ -86,6 +86,7 @@ pgprot_t ttm_prot_from_caching(enum ttm_caching caching, pgprot_t tmp)
+ 	return tmp;
+ }
+ 
++BACKPORT_MOD_VERSIONS
+ MODULE_AUTHOR("Thomas Hellstrom, Jerome Glisse");
+ MODULE_DESCRIPTION("TTM memory manager subsystem (for DRM device)");
+ MODULE_LICENSE("GPL and additional rights");
+-- 
+2.34.1
+

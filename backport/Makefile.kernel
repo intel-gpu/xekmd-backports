@@ -41,3 +41,6 @@ obj-y += compat/
 
 # XE Drivers
 obj-$(CPTCFG_DRM_XE) += drivers/gpu/drm/xe/
+obj-$(CPTCFG_DRM_TTM)   += drivers/gpu/drm/ttm/
+drm_ttm_helper-y := drivers/gpu/drm/drm_gem_ttm_helper.o
+obj-$(CPTCFG_DRM_TTM_HELPER) += drm_ttm_helper.o

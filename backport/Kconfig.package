@@ -30,6 +30,11 @@ config TARGET_KERNEL_NAME
 	option env="TARGET_KERNEL_NAME"
 	help
 	   Target kernel against which backport are created.
+config OOT_BACKPORT
+	string
+	option env="OOT_BACKPORT"
+	help
+	   Macro to control backport specific features
 
 # Packaging hacks
 source "$BACKPORT_DIR/Kconfig.package.hacks"

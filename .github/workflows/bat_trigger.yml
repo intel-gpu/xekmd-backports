@@ -1,7 +1,7 @@
 name: BAT Testing
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [ "main" ]
 
 jobs:
@@ -15,5 +15,5 @@ jobs:
 
       - name: Queue testing
         run: |
-          COMMIT=$(git rev-parse HEAD^2)
+          COMMIT=${{ github.event.pull_request.head.sha }}
           curl -X POST ${{ secrets.SERVER_URL }} --user ${{ secrets.USER }}:${{ secrets.TOKEN }} --data-urlencode "TARGET_COMMIT=$COMMIT" --data-urlencode "DEBUG=false"

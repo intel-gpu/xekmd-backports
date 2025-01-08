@@ -103,7 +103,13 @@ xe-dkms-deb-pkg: clean
 all clean:
 	$(MAKE) -C src $@
 
-modules olddefconfig menuconfig savedefconfig:
+olddefconfig menuconfig savedefconfig:
+	$(MAKE) -C src KLIB=$(LINUX_OBJ) KLIB_BUILD=$(LINUX_OBJ) $@
+
+
+.PHONY: modules
+modules: clean
+	$(shell ./src/scripts/create_automacro_h.sh -h $(LINUX_OBJ) -b $(BACKPORT_DIR))
 	$(MAKE) -C src KLIB=$(LINUX_OBJ) KLIB_BUILD=$(LINUX_OBJ) $@
 
 #------------------------------------------------------------------------------

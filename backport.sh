@@ -19,6 +19,8 @@ OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 
 flavor="features"
 is_existing_tree=0
+xkb_tag=""
+
 usage () {
           echo ""
           echo "Usage: $0 [-c|--create-tree] [-d|--delete-tree] [-r|--reset-tree]"
@@ -53,6 +55,7 @@ apply_patches() {
 		fi
 	done <$WORKING_DIR/series
 
+	git -C "$WORKING_DIR/kernel" tag "xe-$xkb_tag"
 	echo "Tree created in the kernel folder, Now follow normal kernel build process"
 	exit;
 }
@@ -134,6 +137,7 @@ delete_kernel_tree () {
 	fi
 }
 
+xkb_tag=$(git -C $WORKING_DIR describe --always --tags)
 if [ ! $# -gt 0 ]; then
 	echo "No option provided, so proceeding with create-tree"
         create_kernel_tree

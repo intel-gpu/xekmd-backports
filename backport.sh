@@ -72,30 +72,7 @@ create_kernel_tree () {
 
 	#check if tree is already created
 	if [ -d "kernel" ]; then
-		echo "Tree already exist"
-		base=$(git -C $SCRIPT_DIR"/kernel" log -1 --oneline | grep ${KERNEL_TAG/v} 2>&1)
-		if [ -n "$base" ]; then
-			echo "INFO: Tree already exists with given config, hence proceeding with it"
-			cd "kernel"
-			echo "$flavor backport"
-			apply_patches
-		else
-			echo "WARNING: Existing tree is not based on given config"
-			read -p "Do you want to reset it? (y/n)" yn
-			case $yn in
-				[yY] ) echo "resetting the existing tree";
-					rm -rf "kernel"
-					;;
-				[nN] ) echo "Storing the current tree to bkp_tree_$TIME_STAMP";
-					git -C "$WORKING_DIR/kernel" branch "bkp_tree_$TIME_STAMP"
-					base_sha=$(git -C "$WORKING_DIR/kernel" log --pretty=format:"%h" --reverse | head -1 2>&1)
-					git -C "$WORKING_DIR/kernel" reset --hard $base_sha
-					is_existing_tree=1
-					;;
-				* ) echo "Invalid option";
-					exit;;
-			esac
-		fi
+		rm -rf "kernel"
 	fi
 
 	# wget to download tarball

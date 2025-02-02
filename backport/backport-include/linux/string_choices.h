@@ -32,4 +32,11 @@ static inline const char *str_plural(size_t num)
 }
 #endif
 
+#ifdef BPM_STR_UP_DOWN_NOT_PRESENT
+static inline const char *str_up_down(bool v)
+{
+        return v ? "up" : "down";
+}
 #endif
+
+#endif /* _BACKPORT_STRING_CHOICES_H */

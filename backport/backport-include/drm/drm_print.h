@@ -37,4 +37,9 @@ static inline struct drm_printer drm_dbg_printer(struct drm_device *drm,
         return drm_debug_printer(prefix);
 }
 #endif
+
+#ifdef BPM_DRM_LINE_PRINTER_NOT_PRESENT
+#define drm_line_printer(x,y,z) drm_debug_printer(z)
+#endif
+
 #endif /* _BACKPORT_DRM_PRINT_H_ */

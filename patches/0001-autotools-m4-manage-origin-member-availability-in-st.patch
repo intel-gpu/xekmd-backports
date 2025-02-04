@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Date: Tue, 4 Feb 2025 15:06:46 +0530
+Subject: autotools/m4: manage origin member availability in struct
+ drm_printer
+
+From KV 6.11 onwards, origin member is added in drm_printer
+structure to improve drm dev printk function output.
+
+manage origin member availability if origin member is not
+available in struct drm_printer.
+
+Reference:
+    c2ef66e9ad8 drm/print: Improve drm_dbg_printer
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_printk.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_printk.h b/drivers/gpu/drm/xe/xe_gt_printk.h
+index 2f9baf7..3bf68d4 100644
+--- a/drivers/gpu/drm/xe/xe_gt_printk.h
++++ b/drivers/gpu/drm/xe/xe_gt_printk.h
+@@ -77,7 +77,9 @@ static inline void __xe_gt_printfn_dbg(struct drm_printer *p, struct va_format *
+ 	 * redirect to the tweaked drm_dbg_printer() instead.
+ 	 */
+ 	dbg = drm_dbg_printer(&gt_to_xe(gt)->drm, DRM_UT_DRIVER, NULL);
++#ifndef BPM_STRUCT_DRM_PRINTER_ORIGIN_NOT_PRESENT
+ 	dbg.origin = p->origin;
++#endif
+ 
+ 	drm_printf(&dbg, "GT%u: %pV", gt->info.id, vaf);
+ }
+@@ -123,7 +125,9 @@ static inline struct drm_printer xe_gt_dbg_printer(struct xe_gt *gt)
+ 	struct drm_printer p = {
+ 		.printfn = __xe_gt_printfn_dbg,
+ 		.arg = gt,
++#ifndef BPM_STRUCT_DRM_PRINTER_ORIGIN_NOT_PRESENT
+ 		.origin = (const void *)_THIS_IP_,
++#endif
+ 	};
+ 	return p;
+ }
+-- 
+2.34.1

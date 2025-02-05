@@ -1,0 +1,116 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Date: Fri, 24 Jan 2025 15:27:11 +0200
+Subject: [PATCH] drm/xe: Reset engines before full reset Wa_22011100796
+
+On BMG eudebug has had problems when two separate contexts
+are run where first one is debuggable and other is not
+and then hardware is forced to enter exception handler.
+
+This will lead to confused hardware state where we
+will lose access to the GPU first and then to CPU
+leading to full machine hang.
+
+Joonas remembered that we had similarish problem in i915/dg2
+and Chris helped me to find the exact workaround to test on.
+
+With Wa_22011100796 brought into xe and BMG where individual
+engines are first reseted before full soft reset, the
+problem goes away.
+
+Cc: Chris Wilson <chris@chris-wilson.co.uk>
+Cc: Joonas Lahtinen <joonas.lahtinen@linux.intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+
+fixup
+
+(backported from commit f46e27b25f00f2ed786fd07c3091a391a458e6b8 eudebug-dev)
+signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_gt_regs.h |  1 +
+ drivers/gpu/drm/xe/xe_gt.c           | 32 ++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_wa_oob.rules   |  1 +
+ 3 files changed, 34 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+index a404e5956..012e3961e 100644
+--- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+@@ -238,6 +238,7 @@
+ 
+ #define GDRST					XE_REG(0x941c)
+ #define   GRDOM_GUC				REG_BIT(3)
++#define   GRDOM_RENDER				REG_BIT(1)
+ #define   GRDOM_FULL				REG_BIT(0)
+ 
+ #define MISCCPCTL				XE_REG(0x9424)
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index a4a5c012a..08ec8b77d 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -5,6 +5,7 @@
+ 
+ #include "xe_gt.h"
+ 
++#include <linux/delay.h>
+ #include <linux/minmax.h>
+ 
+ #include <drm/drm_managed.h>
+@@ -643,12 +644,43 @@ void xe_gt_record_user_engines(struct xe_gt *gt)
+ 		     == gt->info.engine_mask);
+ }
+ 
++
++static void do_engine_resets(struct xe_gt *gt)
++{
++	/* Render seems to be enough for BMG */
++	const u32 mask = GRDOM_RENDER;
++	int loops = 2;
++	int err;
++	u32 val;
++
++	if (gt->info.id != 0)
++		return;
++
++	do {
++		xe_mmio_write32(&gt->mmio, GDRST, mask);
++
++		err = xe_mmio_wait32(&gt->mmio, GDRST, mask, 0,
++				     10000, &val, true);
++	} while (err && --loops);
++
++	if (err)
++		xe_gt_err(gt, "engine reset failed 0x%08x:0x%08x (%d)\n", mask, val, err);
++	/*
++	 * As we have observed that the engine state is still volatile
++	 * after GDRST is acked, impose a small delay to let everything settle.
++	 */
++	udelay(50);
++}
++
+ static int do_gt_reset(struct xe_gt *gt)
+ {
+ 	int err;
+ 
+ 	xe_gsc_wa_14015076503(gt, true);
+ 
++	if (XE_WA(gt, 22011100796))
++		do_engine_resets(gt);
++
+ 	xe_mmio_write32(gt, GDRST, GRDOM_FULL);
+ 	err = xe_mmio_wait32(gt, GDRST, GRDOM_FULL, 0, 5000, NULL, false);
+ 	if (err)
+diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
+index da7d2c842..7476888fa 100644
+--- a/drivers/gpu/drm/xe/xe_wa_oob.rules
++++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
+@@ -37,5 +37,6 @@
+ 16023588340	GRAPHICS_VERSION(2001)
+ 14019789679	GRAPHICS_VERSION(1255)
+ 		GRAPHICS_VERSION_RANGE(1270, 2004)
++22011100796    GRAPHICS_VERSION(3000), GRAPHICS_STEP(A0, B0)
+ 18022722726	GRAPHICS_VERSION_RANGE(1250, 1274)
+ 14015474168	PLATFORM(PVC)
+-- 
+2.34.1
+

@@ -13,12 +13,13 @@ TIME_STAMP=$(date +%Y%m%d_%H%M%S)
 KERNEL_BASE="https://cdn.kernel.org/pub/linux/kernel/v6.x/"
 KERNEL="linux-${KERNEL_TAG/v}"
 
-SHORT=:c,d,h,r
-LONG=create-tree:delete-tree,help,reset-tree
+SHORT=:c,d,h,r,o
+LONG=create-tree:delete-tree,help,reset-tree,override
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 
 flavor="features"
 is_existing_tree=0
+is_override=0
 xkb_tag=""
 
 usage () {
@@ -29,6 +30,7 @@ usage () {
           echo "  -c, --create-tree                   	Create kernel tree based on given option <base/features>"
           echo "  -d, --delete-tree    	      		Delete the tree"
           echo "  -r, --reset-tree    	      		Delete the existing tree and re-create it"
+          echo "  -o, --override    	      		Overrides the existing tree"
           exit 1
 }
 
@@ -73,28 +75,19 @@ create_kernel_tree () {
 	#check if tree is already created
 	if [ -d "kernel" ]; then
 		echo "Tree already exist"
-		base=$(git -C $SCRIPT_DIR"/kernel" log -1 --oneline | grep ${KERNEL_TAG/v} 2>&1)
-		if [ -n "$base" ]; then
-			echo "INFO: Tree already exists with given config, hence proceeding with it"
-			cd "kernel"
-			echo "$flavor backport"
-			apply_patches
+		# if tree already exists, check whether the override option is provided or not
+		# if yes, remove the kernel folder and create it freshly.
+		# Otherwise store the current branch before creating the new one.
+		if [ $is_override -gt 0 ]; then
+			echo "Override option has provided hence deleting the tree"
+			rm -rf kernel
 		else
-			echo "WARNING: Existing tree is not based on given config"
-			read -p "Do you want to reset it? (y/n)" yn
-			case $yn in
-				[yY] ) echo "resetting the existing tree";
-					rm -rf "kernel"
-					;;
-				[nN] ) echo "Storing the current tree to bkp_tree_$TIME_STAMP";
-					git -C "$WORKING_DIR/kernel" branch "bkp_tree_$TIME_STAMP"
-					base_sha=$(git -C "$WORKING_DIR/kernel" log --pretty=format:"%h" --reverse | head -1 2>&1)
-					git -C "$WORKING_DIR/kernel" reset --hard $base_sha
-					is_existing_tree=1
-					;;
-				* ) echo "Invalid option";
-					exit;;
-			esac
+			echo "No override option provided hence creating the tree in same folder"
+			echo "Storing the current tree to bkp_tree_$TIME_STAMP";
+			git -C "$WORKING_DIR/kernel" branch "bkp_tree_$TIME_STAMP"
+			base_sha=$(git -C "$WORKING_DIR/kernel" log --pretty=format:"%h" --reverse | head -1 2>&1)
+			git -C "$WORKING_DIR/kernel" reset --hard $base_sha
+			is_existing_tree=1
 		fi
 	fi
 
@@ -144,8 +137,15 @@ if [ ! $# -gt 0 ]; then
 fi
 
 while [ $# -gt 0 ]; do
+	for arg in "$@"
+	do
+		if [ "$arg" == "--override" ] || [ "$arg" == "-o" ]; then
+			is_override=1
+		fi
+	done
+
         case $1 in
-                -c|--create-tree)
+                -c|--create-tree|-o|--override)
 			if [ ! $# -gt 1 ]; then
 				echo "No option provided for creating the tree"
 			else

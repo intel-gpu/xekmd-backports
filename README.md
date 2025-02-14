@@ -29,6 +29,7 @@ backport.sh < options >
 |1. |create-tree| Create kernel tree based on given option <base/features>|
 |2. |delete-tree| Delete the tree|
 |3. |reset-tree| Delete the existing tree and re-create it|
+|4. |override| Overrides existing tree|
 
 
 # License

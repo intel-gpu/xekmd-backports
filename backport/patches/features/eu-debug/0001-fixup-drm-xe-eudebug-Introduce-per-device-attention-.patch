@@ -1,0 +1,177 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
+Date: Mon, 24 Feb 2025 12:52:43 +0530
+Subject: [PATCH] fixup! drm/xe/eudebug: Introduce per device attention scan worker
+
+Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
+(backported from de4d62e148057efc412e96a43629260dffba72c2 eudebug-dev)
+Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+---
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c  | 23 +++++++++------
+ drivers/gpu/drm/xe/prelim/xe_gt_debug.c | 37 +++++++++++++++++++------
+ drivers/gpu/drm/xe/prelim/xe_gt_debug.h |  3 +-
+ 3 files changed, 45 insertions(+), 18 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+index c13a3e58757b..4ce0dfdcf59a 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+@@ -2055,7 +2055,7 @@ struct ss_iter {
+ };
+ 
+ static int check_attn_mcr(struct xe_gt *gt, void *data,
+-			  u16 group, u16 instance)
++			  u16 group, u16 instance, bool present)
+ {
+ 	struct ss_iter *iter = data;
+ 	struct xe_eudebug *d = iter->debugger;
+@@ -2074,7 +2074,8 @@ static int check_attn_mcr(struct xe_gt *gt, void *data,
+ 		memcpy(&val, &iter->bits[iter->i], sizeof(val));
+ 		iter->i += sizeof(val);
+ 
+-		cur = xe_gt_mcr_unicast_read(gt, TD_ATT(row), group, instance);
++		if (present)
++			cur = xe_gt_mcr_unicast_read(gt, TD_ATT(row), group, instance);
+ 
+ 		if ((val | cur) != cur) {
+ 			eu_dbg(d,
+@@ -2088,7 +2089,7 @@ static int check_attn_mcr(struct xe_gt *gt, void *data,
+ }
+ 
+ static int clear_attn_mcr(struct xe_gt *gt, void *data,
+-			  u16 group, u16 instance)
++			  u16 group, u16 instance, bool present)
+ {
+ 	struct ss_iter *iter = data;
+ 	struct xe_eudebug *d = iter->debugger;
+@@ -2110,12 +2111,18 @@ static int clear_attn_mcr(struct xe_gt *gt, void *data,
+ 		if (!val)
+ 			continue;
+ 
+-		xe_gt_mcr_unicast_write(gt, TD_CLR(row), val,
+-					group, instance);
++		if (present) {
++			xe_gt_mcr_unicast_write(gt, TD_CLR(row), val,
++						group, instance);
+ 
+-		eu_dbg(d,
+-		       "TD_CLR: (%u:%u:%u): 0x%08x\n",
+-		       group, instance, row, val);
++			eu_dbg(d,
++			       "TD_CLR: (%u:%u:%u): 0x%08x\n",
++			       group, instance, row, val);
++		} else {
++			eu_warn(d,
++				"EU_ATT_CLR: (%u:%u:%u): 0x%08x to fused off dss\n",
++				group, instance, row, val);
++		}
+ 	}
+ 
+ 	return 0;
+diff --git a/drivers/gpu/drm/xe/prelim/xe_gt_debug.c b/drivers/gpu/drm/xe/prelim/xe_gt_debug.c
+index 9fda277f035a..abf0f6a36c08 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_gt_debug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_gt_debug.c
+@@ -18,10 +18,12 @@ int prelim_xe_gt_foreach_dss_group_instance(struct xe_gt *gt,
+ 				     int (*fn)(struct xe_gt *gt,
+ 					       void *data,
+ 					       u16 group,
+-					       u16 instance),
++					       u16 instance,
++					       bool present),
+ 				     void *data)
+ {
+ 	const enum xe_force_wake_domains fw_domains = XE_FW_GT;
++	xe_dss_mask_t dss_mask;
+ 	unsigned int dss;
+ 	u16 group, instance;
+ 	int ret = 0;
+@@ -30,8 +32,19 @@ int prelim_xe_gt_foreach_dss_group_instance(struct xe_gt *gt,
+ 	if (ret)
+ 		return ret;
+ 
+-	for_each_dss_steering(dss, gt, group, instance) {
+-		ret = fn(gt, data, group, instance);
++	bitmap_or(dss_mask, gt->fuse_topo.g_dss_mask, gt->fuse_topo.c_dss_mask,
++		  XE_MAX_DSS_FUSE_BITS);
++
++	/*
++	 * Note: This removes terminating zeros when last dss is fused out!
++	 * In order bitmask to be exactly the same as on with i915 we would
++	 * need to figure out max dss for given platform, most probably by
++	 * querying hwconfig
++	 */
++	for (dss = 0; dss <= find_last_bit(dss_mask, XE_MAX_DSS_FUSE_BITS); dss++) {
++		xe_gt_mcr_get_dss_steering(gt, dss, &group, &instance);
++
++		ret = fn(gt, data, group, instance, test_bit(dss, dss_mask));
+ 		if (ret)
+ 			break;
+ 	}
+@@ -42,12 +55,15 @@ int prelim_xe_gt_foreach_dss_group_instance(struct xe_gt *gt,
+ }
+ 
+ static int read_first_attention_mcr(struct xe_gt *gt, void *data,
+-				    u16 group, u16 instance)
++				    u16 group, u16 instance, bool present)
+ {
+ 	unsigned int row;
+ 
++	if (!present)
++		return 0;
++
+ 	for (row = 0; row < 2; row++) {
+-		u32 val;
++		u32 val = 0;
+ 
+ 		val = xe_gt_mcr_unicast_read(gt, TD_ATT(row), group, instance);
+ 
+@@ -75,8 +91,8 @@ int prelim_xe_gt_eu_attention_bitmap_size(struct xe_gt *gt)
+ 	bitmap_or(dss_mask, gt->fuse_topo.c_dss_mask,
+ 		  gt->fuse_topo.g_dss_mask, XE_MAX_DSS_FUSE_BITS);
+ 
+-	return  bitmap_weight(dss_mask, XE_MAX_DSS_FUSE_BITS) *
+-		PRELIM_TD_EU_ATTENTION_MAX_ROWS * MAX_THREADS *
++	return  (find_last_bit(dss_mask, XE_MAX_DSS_FUSE_BITS) + 1) *
++                PRELIM_TD_EU_ATTENTION_MAX_ROWS * MAX_THREADS *
+ 		MAX_EUS_PER_ROW / 8;
+ }
+ 
+@@ -88,7 +104,7 @@ struct attn_read_iter {
+ };
+ 
+ static int read_eu_attentions_mcr(struct xe_gt *gt, void *data,
+-				  u16 group, u16 instance)
++				  u16 group, u16 instance, bool present)
+ {
+ 	struct attn_read_iter * const iter = data;
+ 	unsigned int row;
+@@ -101,7 +117,10 @@ static int read_eu_attentions_mcr(struct xe_gt *gt, void *data,
+ 
+ 		XE_WARN_ON(iter->i + sizeof(val) > prelim_xe_gt_eu_attention_bitmap_size(gt));
+ 
+-		val = xe_gt_mcr_unicast_read(gt, TD_ATT(row), group, instance);
++		if (present)
++			val = xe_gt_mcr_unicast_read(gt, TD_ATT(row), group, instance);
++		else
++			val = 0;
+ 
+ 		memcpy(&iter->bits[iter->i], &val, sizeof(val));
+ 		iter->i += sizeof(val);
+diff --git a/drivers/gpu/drm/xe/prelim/xe_gt_debug.h b/drivers/gpu/drm/xe/prelim/xe_gt_debug.h
+index 619a94feed29..b8a92482ef68 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_gt_debug.h
++++ b/drivers/gpu/drm/xe/prelim/xe_gt_debug.h
+@@ -26,7 +26,8 @@ int prelim_xe_gt_foreach_dss_group_instance(struct xe_gt *gt,
+ 				     int (*fn)(struct xe_gt *gt,
+ 					       void *data,
+ 					       u16 group,
+-					       u16 instance),
++					       u16 instance,
++					       bool present),
+ 				     void *data);
+ 
+ int prelim_xe_gt_eu_attention_bitmap_size(struct xe_gt *gt);
+-- 
+2.34.1
+

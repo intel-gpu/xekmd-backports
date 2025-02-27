@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Sat, 17 Jun 2023 14:40:31 +0200
-Subject: drm/xe/eudebug: Introduce per device attention scan
- worker
+Subject: [PATCH] drm/xe/eudebug: Introduce per device attention scan worker
 
 Scan for EU debugging attention bits periodically to detect if some EU
 thread has entered the system routine (SIP) due to EU thread exception.
@@ -29,6 +28,7 @@ Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
 (cherry picked from commit e6cd96d976905e1917b98344e6616efd52cd58d7 eudebug-dev)
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/Makefile              |   1 +
  drivers/gpu/drm/xe/regs/xe_engine_regs.h |   3 +
@@ -46,11 +46,11 @@ Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_gt_debug.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 2d15cf268936..5514b705c8c4 100644
+index 1bdd4c54c..e3a1691a2 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -49,6 +49,7 @@ xe-y += xe_bb.o \
- 	xe_gt_debugfs.o \
+@@ -48,6 +48,7 @@ xe-y += xe_bb.o \
+ 	xe_gt_clock.o \
  	xe_gt_freq.o \
  	xe_gt_idle.o \
 +	xe_gt_debug.o \
@@ -58,10 +58,10 @@ index 2d15cf268936..5514b705c8c4 100644
  	xe_gt_pagefault.o \
  	xe_gt_sysfs.o \
 diff --git a/drivers/gpu/drm/xe/regs/xe_engine_regs.h b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
-index e004423a66bf..f2f136b1b0fa 100644
+index 7742e2c90..6202d5903 100644
 --- a/drivers/gpu/drm/xe/regs/xe_engine_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
-@@ -133,6 +133,9 @@
+@@ -135,6 +135,9 @@
  #define RING_EXECLIST_STATUS_LO(base)		XE_REG((base) + 0x234)
  #define RING_EXECLIST_STATUS_HI(base)		XE_REG((base) + 0x234 + 4)
  
@@ -72,10 +72,10 @@ index e004423a66bf..f2f136b1b0fa 100644
  #define	  CTX_CTRL_OAC_CONTEXT_ENABLE		REG_BIT(8)
  #define	  CTX_CTRL_RUN_ALONE			REG_BIT(7)
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 250a8ee77eb3..fe1974a20e89 100644
+index cd8c49a90..a20331b6c 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -457,6 +457,8 @@
+@@ -467,6 +467,8 @@
  #define   DISABLE_ECC				REG_BIT(5)
  #define   ENABLE_PREFETCH_INTO_IC		REG_BIT(3)
  
@@ -84,7 +84,7 @@ index 250a8ee77eb3..fe1974a20e89 100644
  #define ROW_CHICKEN4				XE_REG_MCR(0xe48c, XE_REG_OPTION_MASKED)
  #define   DISABLE_GRF_CLEAR			REG_BIT(13)
  #define   XEHP_DIS_BBL_SYSPIPE			REG_BIT(11)
-@@ -537,6 +539,11 @@
+@@ -547,6 +549,11 @@
  #define   CCS_MODE_CSLICE(cslice, ccs) \
  	((ccs) << ((cslice) * CCS_MODE_CSLICE_WIDTH))
  
@@ -97,10 +97,10 @@ index 250a8ee77eb3..fe1974a20e89 100644
  
  /* Applicable for all FORCEWAKE_DOMAIN and FORCEWAKE_ACK_DOMAIN regs */
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 986e80b9bbc7..5bb4386ca0c3 100644
+index 873e133a7..dd249180f 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -739,6 +739,8 @@ int xe_device_probe(struct xe_device *xe)
+@@ -778,6 +778,8 @@ int xe_device_probe(struct xe_device *xe)
  
  	xe_debugfs_register(xe);
  
@@ -110,10 +110,10 @@ index 986e80b9bbc7..5bb4386ca0c3 100644
  
  	for_each_gt(gt, xe, id)
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index f0ffd6b012ad..25336bac8b5f 100644
+index b62dc2567..eac8f4863 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -517,6 +517,9 @@ struct xe_device {
+@@ -564,6 +564,9 @@ struct xe_device {
  
  		/** discovery_lock: used for discovery to block xe ioctls */
  		struct rw_semaphore discovery_lock;
@@ -124,7 +124,7 @@ index f0ffd6b012ad..25336bac8b5f 100644
  #endif
  
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 4644d6846aae..39e927100222 100644
+index 4644d6846..39e927100 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -20,9 +20,17 @@
@@ -597,7 +597,7 @@ index 4644d6846aae..39e927100222 100644
  
  	if (xe->eudebug.ordered_wq)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
-index 3cd6bc7bb682..1fe86bec99e1 100644
+index 3cd6bc7bb..1fe86bec9 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
 @@ -20,6 +20,7 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
@@ -617,7 +617,7 @@ index 3cd6bc7bb682..1fe86bec99e1 100644
  static inline void xe_eudebug_init_hw_engine(struct xe_hw_engine *hwe) { }
  
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index bdffdfb1abff..410b3ecccc12 100644
+index bdffdfb1a..410b3eccc 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
 @@ -105,6 +105,9 @@ struct xe_eudebug {
@@ -666,7 +666,7 @@ index bdffdfb1abff..410b3ecccc12 100644
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.c b/drivers/gpu/drm/xe/xe_gt_debug.c
 new file mode 100644
-index 000000000000..c4f0d11a20a6
+index 000000000..c4f0d11a2
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_gt_debug.c
 @@ -0,0 +1,148 @@
@@ -820,7 +820,7 @@ index 000000000000..c4f0d11a20a6
 +}
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.h b/drivers/gpu/drm/xe/xe_gt_debug.h
 new file mode 100644
-index 000000000000..3f13dbb17a5f
+index 000000000..3f13dbb17
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_gt_debug.h
 @@ -0,0 +1,21 @@
@@ -846,7 +846,7 @@ index 000000000000..3f13dbb17a5f
 +
 +#endif
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
-index 21690008a869..144c7cf888bb 100644
+index 21690008a..144c7cf88 100644
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ b/include/uapi/drm/xe_drm_eudebug.h
 @@ -28,12 +28,14 @@ struct drm_xe_eudebug_event {
@@ -883,5 +883,5 @@ index 21690008a869..144c7cf888bb 100644
  }
  #endif
 -- 
-2.25.1
+2.34.1
 

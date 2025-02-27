@@ -23,8 +23,9 @@ Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Acked-by: Matthew Brost <matthew.brost@intel.com> #locking
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
-(cherry picked from commit 9dde4e4ba3dd91c82aa297112001659956089c30 eudebug-dev)
+(backported from commit 9dde4e4ba3dd91c82aa297112001659956089c30 eudebug-dev)
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_device.c        |  10 +-
  drivers/gpu/drm/xe/xe_device.h        |  34 +++++++
@@ -34,10 +35,10 @@ Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
  5 files changed, 185 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 12381e5c9a19..986e80b9bbc7 100644
+index eee54d6a5..873e133a7 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -194,8 +194,11 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+@@ -209,8 +209,11 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
  		return -ECANCELED;
  
  	ret = xe_pm_runtime_get_ioctl(xe);
@@ -50,7 +51,7 @@ index 12381e5c9a19..986e80b9bbc7 100644
  	xe_pm_runtime_put(xe);
  
  	return ret;
-@@ -212,8 +215,11 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
+@@ -227,8 +230,11 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
  		return -ECANCELED;
  
  	ret = xe_pm_runtime_get_ioctl(xe);
@@ -64,7 +65,7 @@ index 12381e5c9a19..986e80b9bbc7 100644
  
  	return ret;
 diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
-index 41d6ca3cce96..4c4cf4dc631c 100644
+index fc3c2af3f..c882c3527 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
 @@ -7,6 +7,7 @@
@@ -74,8 +75,8 @@ index 41d6ca3cce96..4c4cf4dc631c 100644
 +#include <drm/drm_ioctl.h>
  
  #include "xe_device_types.h"
- 
-@@ -188,4 +189,37 @@ void xe_file_put(struct xe_file *xef);
+ #include "xe_gt_types.h"
+@@ -204,4 +205,37 @@ void xe_file_put(struct xe_file *xef);
  #define LNL_FLUSH_WORK(wrk__) \
  	flush_work(wrk__)
  
@@ -114,10 +115,10 @@ index 41d6ca3cce96..4c4cf4dc631c 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 5aeac9466863..f0ffd6b012ad 100644
+index 9e8591d67..b62dc2567 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -511,6 +511,12 @@ struct xe_device {
+@@ -558,6 +558,12 @@ struct xe_device {
  
  		/** @available: is the debugging functionality available */
  		bool available;
@@ -131,7 +132,7 @@ index 5aeac9466863..f0ffd6b012ad 100644
  #endif
  
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index bbb5f1e81bb8..228bc36342ba 100644
+index bbb5f1e81..228bc3634 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -299,6 +299,8 @@ static bool xe_eudebug_detach(struct xe_device *xe,
@@ -365,7 +366,7 @@ index bbb5f1e81bb8..228bc36342ba 100644
 +	xe_eudebug_put(d);
 +}
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index a5185f18f640..080a821db3e4 100644
+index a5185f18f..080a821db 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
 @@ -19,6 +19,7 @@
@@ -390,5 +391,5 @@ index a5185f18f640..080a821db3e4 100644
  	struct {
  		/** @lock: guards access to fifo */
 -- 
-2.25.1
+2.34.1
 

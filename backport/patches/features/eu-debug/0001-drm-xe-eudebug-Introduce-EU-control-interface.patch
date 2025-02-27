@@ -23,22 +23,23 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
-(cherry picked from commit 4a070114106fe54dc0b836be54d4904adc5a100a eudebug-dev)
+(backported from commit 4a070114106fe54dc0b836be54d4904adc5a100a eudebug-dev)
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h  |   2 +
- drivers/gpu/drm/xe/xe_eudebug.c       | 517 +++++++++++++++++++++++++-
+ drivers/gpu/drm/xe/xe_eudebug.c       | 515 +++++++++++++++++++++++++-
  drivers/gpu/drm/xe/xe_eudebug_types.h |  24 ++
  drivers/gpu/drm/xe/xe_gt_debug.c      |  12 +-
  drivers/gpu/drm/xe/xe_gt_debug.h      |   6 +
  include/uapi/drm/xe_drm_eudebug.h     |  21 +-
- 6 files changed, 561 insertions(+), 21 deletions(-)
+ 6 files changed, 560 insertions(+), 20 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index fe1974a20e89..9d8d342d2050 100644
+index a20331b6c..5fcf06835 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -468,6 +468,8 @@
+@@ -478,6 +478,8 @@
  #define   THREAD_EX_ARB_MODE			REG_GENMASK(3, 2)
  #define   THREAD_EX_ARB_MODE_RR_AFTER_DEP	REG_FIELD_PREP(THREAD_EX_ARB_MODE, 0x2)
  
@@ -48,7 +49,7 @@ index fe1974a20e89..9d8d342d2050 100644
  #define   XE2_EUPEND_CHK_FLUSH_DIS		REG_BIT(14)
  #define   DIS_FIX_EOT1_FLUSH			REG_BIT(9)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 39e927100222..5915f4318e65 100644
+index 39e927100..81d03a860 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -23,6 +23,7 @@
@@ -313,15 +314,6 @@ index 39e927100222..5915f4318e65 100644
  
  	default:
  		ret = -EINVAL;
-@@ -1000,7 +1234,7 @@ static struct xe_hw_engine *get_runalone_active_hw_engine(struct xe_gt *gt)
- 		return NULL;
- 	}
- 
--	val = xe_mmio_read32(&gt->mmio, RCU_DEBUG_1);
-+	val = xe_mmio_read32(gt, RCU_DEBUG_1);
- 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
- 
- 	drm_dbg(&gt_to_xe(gt)->drm, "eudbg: runalone RCU_DEBUG_1 = 0x%08x\n", val);
 @@ -1043,23 +1277,17 @@ static struct xe_hw_engine *get_runalone_active_hw_engine(struct xe_gt *gt)
  	return first;
  }
@@ -660,7 +652,7 @@ index 39e927100222..5915f4318e65 100644
  	queue_work(xe->eudebug.ordered_wq, &d->discovery_work);
  	attention_scan_flush(xe);
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index 410b3ecccc12..e1d4e31b32ec 100644
+index 410b3eccc..e1d4e31b3 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
 @@ -18,8 +18,12 @@
@@ -711,7 +703,7 @@ index 410b3ecccc12..e1d4e31b32ec 100644
  
  /**
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.c b/drivers/gpu/drm/xe/xe_gt_debug.c
-index c4f0d11a20a6..f35b9df5e41b 100644
+index c4f0d11a2..f35b9df5e 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug.c
 +++ b/drivers/gpu/drm/xe/xe_gt_debug.c
 @@ -13,12 +13,12 @@
@@ -734,7 +726,7 @@ index c4f0d11a20a6..f35b9df5e41b 100644
  	const enum xe_force_wake_domains fw_domains = XE_FW_GT;
  	unsigned int dss, fw_ref;
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.h b/drivers/gpu/drm/xe/xe_gt_debug.h
-index 3f13dbb17a5f..342082699ff6 100644
+index 3f13dbb17..342082699 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug.h
 +++ b/drivers/gpu/drm/xe/xe_gt_debug.h
 @@ -13,6 +13,12 @@
@@ -751,7 +743,7 @@ index 3f13dbb17a5f..342082699ff6 100644
  int xe_gt_eu_attention_bitmap_size(struct xe_gt *gt);
  int xe_gt_eu_attention_bitmap(struct xe_gt *gt, u8 *bits,
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
-index 144c7cf888bb..ccfbe976c509 100644
+index 144c7cf88..ccfbe976c 100644
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ b/include/uapi/drm/xe_drm_eudebug.h
 @@ -15,7 +15,8 @@ extern "C" {
@@ -790,5 +782,5 @@ index 144c7cf888bb..ccfbe976c509 100644
  }
  #endif
 -- 
-2.25.1
+2.34.1
 

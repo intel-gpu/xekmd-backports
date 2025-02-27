@@ -11,17 +11,17 @@ Signed-off-by: Shekhar Chauhan <shekhar.chauhan@intel.com>
 Reviewed-by: Clint Taylor <Clinton.A.Taylor@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20250128162015.3288675-1-shekhar.chauhan@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
-(backported from commit fa8ffaae1b15236b8afb0fbbc04117ff7c900a83 linux-next)
-Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
+(cherry picked from commit fa8ffaae1b15236b8afb0fbbc04117ff7c900a83 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
- include/drm/intel/xe_pciids.h | 5 ++++-
+ include/drm/intel/pciids.h | 5 ++++-
  1 file changed, 4 insertions(+), 1 deletion(-)
 
-diff --git a/include/drm/intel/xe_pciids.h b/include/drm/intel/xe_pciids.h
-index 644872a35..3f7cff6c3 100644
---- a/include/drm/intel/xe_pciids.h
-+++ b/include/drm/intel/xe_pciids.h
-@@ -197,6 +197,9 @@
+diff --git a/include/drm/intel/pciids.h b/include/drm/intel/pciids.h
+index 7883384acd5e..e53d7d9bb64d 100644
+--- a/include/drm/intel/pciids.h
++++ b/include/drm/intel/pciids.h
+@@ -817,7 +817,10 @@
  	MACRO__(0xE20B, ## __VA_ARGS__), \
  	MACRO__(0xE20C, ## __VA_ARGS__), \
  	MACRO__(0xE20D, ## __VA_ARGS__), \
@@ -31,7 +31,8 @@ index 644872a35..3f7cff6c3 100644
 +	MACRO__(0xE215, ## __VA_ARGS__), \
 +	MACRO__(0xE216, ## __VA_ARGS__)
  
- #endif
+ /* PTL */
+ #define INTEL_PTL_IDS(MACRO__, ...) \
 -- 
 2.34.1
 

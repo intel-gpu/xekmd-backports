@@ -38,15 +38,16 @@ Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 (cherry picked from commit e311b5605d3cb4278fdca3557c2193fc1c299038 eudebug-dev)
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_gt_pagefault.c | 84 +++++++++++++++++++++++++---
  1 file changed, 76 insertions(+), 8 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_pagefault.c b/drivers/gpu/drm/xe/xe_gt_pagefault.c
-index 53c50d61d6a0..910c5278edaa 100644
+index 5558342b8..b666b6a3e 100644
 --- a/drivers/gpu/drm/xe/xe_gt_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_gt_pagefault.c
-@@ -14,6 +14,7 @@
+@@ -13,6 +13,7 @@
  
  #include "abi/guc_actions_abi.h"
  #include "xe_bo.h"
@@ -54,14 +55,14 @@ index 53c50d61d6a0..910c5278edaa 100644
  #include "xe_gt.h"
  #include "xe_gt_tlb_invalidation.h"
  #include "xe_guc.h"
-@@ -185,12 +186,16 @@ unlock_dma_resv:
- 	return err;
+@@ -199,12 +200,16 @@ static struct xe_vm *asid_to_vm(struct xe_device *xe, u32 asid)
+ 	return vm;
  }
  
 -static int handle_pagefault(struct xe_gt *gt, struct pagefault *pf)
 +static int handle_pagefault_start(struct xe_gt *gt, struct pagefault *pf,
-+				  struct xe_vm **pf_vm,
-+				  struct xe_eudebug_pagefault **eudebug_pf_out)
++		struct xe_vm **pf_vm,
++		struct xe_eudebug_pagefault **eudebug_pf_out)
  {
 -	struct xe_device *xe = gt_to_xe(gt);
 +	struct xe_eudebug_pagefault *eudebug_pf;
@@ -74,18 +75,18 @@ index 53c50d61d6a0..910c5278edaa 100644
  	int err;
  
  	/* SW isn't expected to handle TRTT faults */
-@@ -208,6 +213,10 @@ static int handle_pagefault(struct xe_gt *gt, struct pagefault *pf)
- 	if (!vm)
- 		return -EINVAL;
+@@ -215,6 +220,10 @@ static int handle_pagefault(struct xe_gt *gt, struct pagefault *pf)
+ 	if (IS_ERR(vm))
+ 		return PTR_ERR(vm);
  
 +	eudebug_pf = xe_eudebug_pagefault_create(gt, vm, pf->page_addr,
-+						 pf->fault_type, pf->fault_level,
-+						 pf->access_type);
++			pf->fault_type, pf->fault_level,
++			pf->access_type);
 +
  	/*
  	 * TODO: Change to read lock? Using write lock for simplicity.
  	 */
-@@ -220,8 +229,26 @@ static int handle_pagefault(struct xe_gt *gt, struct pagefault *pf)
+@@ -227,8 +236,26 @@ static int handle_pagefault(struct xe_gt *gt, struct pagefault *pf)
  
  	vma = xe_gt_pagefault_lookup_vma(vm, pf->page_addr);
  	if (!vma) {
@@ -114,7 +115,7 @@ index 53c50d61d6a0..910c5278edaa 100644
  	}
  
  	err = handle_vma_pagefault(tile, pf, vma);
-@@ -230,11 +257,44 @@ unlock_vm:
+@@ -237,11 +264,44 @@ static int handle_pagefault(struct xe_gt *gt, struct pagefault *pf)
  	if (!err)
  		vm->usm.last_fault_vma = vma;
  	up_write(&vm->lock);
@@ -160,7 +161,7 @@ index 53c50d61d6a0..910c5278edaa 100644
  static int send_pagefault_reply(struct xe_guc *guc,
  				struct xe_guc_pagefault_reply *reply)
  {
-@@ -360,7 +420,10 @@ static void pf_queue_work_func(struct work_struct *w)
+@@ -367,7 +427,10 @@ static void pf_queue_work_func(struct work_struct *w)
  	threshold = jiffies + msecs_to_jiffies(USM_QUEUE_MAX_RUNTIME_MS);
  
  	while (get_pagefault(pf_queue, &pf)) {
@@ -172,7 +173,7 @@ index 53c50d61d6a0..910c5278edaa 100644
  		if (unlikely(ret)) {
  			print_pagefault(xe, &pf);
  			pf.fault_unsuccessful = 1;
-@@ -378,7 +441,12 @@ static void pf_queue_work_func(struct work_struct *w)
+@@ -385,7 +448,12 @@ static void pf_queue_work_func(struct work_struct *w)
  			FIELD_PREP(PFR_ENG_CLASS, pf.engine_class) |
  			FIELD_PREP(PFR_PDATA, pf.pdata);
  
@@ -187,5 +188,5 @@ index 53c50d61d6a0..910c5278edaa 100644
  		if (time_after(jiffies, threshold) &&
  		    pf_queue->tail != pf_queue->head) {
 -- 
-2.25.1
+2.34.1
 

@@ -16,4 +16,5 @@ jobs:
       - name: Queue testing
         run: |
           COMMIT=${{ github.event.pull_request.head.sha }}
-          curl -X POST ${{ secrets.SERVER_URL }} --user ${{ secrets.USER }}:${{ secrets.TOKEN }} --data-urlencode "TARGET_COMMIT=$COMMIT" --data-urlencode "DEBUG=false"
+          PR_NUM=${{ github.event.pull_request.number }}
+          curl -X POST ${{ secrets.SERVER_URL }} --user ${{ secrets.USER }}:${{ secrets.TOKEN }} --data-urlencode "TARGET_COMMIT=$COMMIT" --data-urlencode "PR_NUMBER=$PR_NUM" --data-urlencode "DEBUG=false"

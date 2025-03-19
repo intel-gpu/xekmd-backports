@@ -57,8 +57,9 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
 Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com>
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
-(cherry picked from commit a807a89f021ecc320e4fe8e1381992ae8e870fee eudebug-dev)
+(backported from commit a807a89f021ecc320e4fe8e1381992ae8e870fee eudebug-dev)
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/Kconfig            |   10 +
  drivers/gpu/drm/xe/Makefile           |    2 +
@@ -77,10 +78,10 @@ Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
  create mode 100644 include/uapi/drm/xe_drm_eudebug.h
 
 diff --git a/drivers/gpu/drm/xe/Kconfig b/drivers/gpu/drm/xe/Kconfig
-index 7bbe46a98ff1..23f34e8e3151 100644
+index b51a2bde7..ed97730b1 100644
 --- a/drivers/gpu/drm/xe/Kconfig
 +++ b/drivers/gpu/drm/xe/Kconfig
-@@ -85,6 +85,16 @@ config DRM_XE_FORCE_PROBE
+@@ -87,6 +87,16 @@ config DRM_XE_FORCE_PROBE
  
  	  Use "!*" to block the probe of the driver for all known devices.
  
@@ -98,7 +99,7 @@ index 7bbe46a98ff1..23f34e8e3151 100644
  depends on DRM_XE
  depends on EXPERT
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 1ff9602a52f6..2d15cf268936 100644
+index 5c97ad6ed..1bdd4c54c 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -116,6 +116,8 @@ xe-y += xe_bb.o \
@@ -111,10 +112,10 @@ index 1ff9602a52f6..2d15cf268936 100644
  
  # graphics hardware monitoring (HWMON) support
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 9e6b68179d43..12381e5c9a19 100644
+index 4e1839b48..eee54d6a5 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -27,6 +27,7 @@
+@@ -28,6 +28,7 @@
  #include "xe_dma_buf.h"
  #include "xe_drm_client.h"
  #include "xe_drv.h"
@@ -122,16 +123,16 @@ index 9e6b68179d43..12381e5c9a19 100644
  #include "xe_exec.h"
  #include "xe_exec_queue.h"
  #include "xe_force_wake.h"
-@@ -88,6 +89,8 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
- 	file->driver_priv = xef;
- 	kref_init(&xef->refcount);
+@@ -100,6 +101,8 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
+ 		put_task_struct(task);
+ 	}
  
 +	xe_eudebug_file_open(xef);
 +
  	return 0;
  }
  
-@@ -140,6 +143,8 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -153,6 +156,8 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  
  	xe_pm_runtime_get(xe);
  
@@ -140,7 +141,7 @@ index 9e6b68179d43..12381e5c9a19 100644
  	/*
  	 * No need for exec_queue.lock here as there is no contention for it
  	 * when FD is closing as IOCTLs presumably can't be modifying the
-@@ -176,6 +181,7 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
+@@ -191,6 +196,7 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
  	DRM_IOCTL_DEF_DRV(XE_WAIT_USER_FENCE, xe_wait_user_fence_ioctl,
  			  DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_OBSERVATION, xe_observation_ioctl, DRM_RENDER_ALLOW),
@@ -148,7 +149,7 @@ index 9e6b68179d43..12381e5c9a19 100644
  };
  
  static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-@@ -265,6 +271,8 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
+@@ -280,6 +286,8 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
  {
  	struct xe_device *xe = to_xe_device(dev);
  
@@ -157,20 +158,20 @@ index 9e6b68179d43..12381e5c9a19 100644
  	if (xe->preempt_fence_wq)
  		destroy_workqueue(xe->preempt_fence_wq);
  
-@@ -338,6 +346,8 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
+@@ -353,6 +361,8 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
  	INIT_LIST_HEAD(&xe->pinned.external_vram);
  	INIT_LIST_HEAD(&xe->pinned.evicted);
  
 +	xe_eudebug_init(xe);
 +
- 	xe->preempt_fence_wq = alloc_ordered_workqueue("xe-preempt-fence-wq", 0);
+ 	xe->preempt_fence_wq = alloc_ordered_workqueue("xe-preempt-fence-wq",
+ 						       WQ_MEM_RECLAIM);
  	xe->ordered_wq = alloc_ordered_workqueue("xe-ordered-wq", 0);
- 	xe->unordered_wq = alloc_workqueue("xe-unordered-wq", 0, 0);
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index b173f19feb5f..5aeac9466863 100644
+index 8a7b15972..9e8591d67 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -346,6 +346,17 @@ struct xe_device {
+@@ -391,6 +391,17 @@ struct xe_device {
  		struct workqueue_struct *wq;
  	} sriov;
  
@@ -188,7 +189,7 @@ index b173f19feb5f..5aeac9466863 100644
  	/** @usm: unified memory state */
  	struct {
  		/** @usm.asid: convert a ASID to VM */
-@@ -486,6 +497,23 @@ struct xe_device {
+@@ -533,6 +544,23 @@ struct xe_device {
  	u8 vm_inject_error_position;
  #endif
  
@@ -212,7 +213,7 @@ index b173f19feb5f..5aeac9466863 100644
  	/* private: */
  
  #if IS_ENABLED(CONFIG_DRM_XE_DISPLAY)
-@@ -586,6 +614,13 @@ struct xe_file {
+@@ -650,6 +678,13 @@ struct xe_file {
  
  	/** @refcount: ref count of this xe file */
  	struct kref refcount;
@@ -228,7 +229,7 @@ index b173f19feb5f..5aeac9466863 100644
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
 new file mode 100644
-index 000000000000..bbb5f1e81bb8
+index 000000000..bbb5f1e81
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -0,0 +1,1118 @@
@@ -1352,7 +1353,7 @@ index 000000000000..bbb5f1e81bb8
 +}
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
 new file mode 100644
-index 000000000000..e3247365f72f
+index 000000000..e3247365f
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
 @@ -0,0 +1,46 @@
@@ -1404,7 +1405,7 @@ index 000000000000..e3247365f72f
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
 new file mode 100644
-index 000000000000..a5185f18f640
+index 000000000..a5185f18f
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
 @@ -0,0 +1,169 @@
@@ -1578,10 +1579,10 @@ index 000000000000..a5185f18f640
 +
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 21d383fcba14..c545a9d43750 100644
+index 690330352..8b0c5eceb 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -26,6 +26,7 @@
+@@ -25,6 +25,7 @@
  #include "xe_bo.h"
  #include "xe_device.h"
  #include "xe_drm_client.h"
@@ -1589,7 +1590,7 @@ index 21d383fcba14..c545a9d43750 100644
  #include "xe_exec_queue.h"
  #include "xe_gt_pagefault.h"
  #include "xe_gt_tlb_invalidation.h"
-@@ -1812,6 +1813,8 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
+@@ -1797,6 +1798,8 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
  
  	args->vm_id = id;
  
@@ -1598,7 +1599,7 @@ index 21d383fcba14..c545a9d43750 100644
  	return 0;
  
  err_close_and_put:
-@@ -1843,8 +1846,10 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
+@@ -1828,8 +1831,10 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
  		xa_erase(&xef->vm.xa, args->vm_id);
  	mutex_unlock(&xef->vm.lock);
  
@@ -1611,7 +1612,7 @@ index 21d383fcba14..c545a9d43750 100644
  	return err;
  }
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index b6fbe4988f2e..7e66e9117f49 100644
+index f62689ca8..edada6cfd 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -102,6 +102,7 @@ extern "C" {
@@ -1630,7 +1631,7 @@ index b6fbe4988f2e..7e66e9117f49 100644
  
  /**
   * DOC: Xe IOCTL Extensions
-@@ -1694,6 +1696,25 @@ struct drm_xe_oa_stream_info {
+@@ -1729,6 +1731,25 @@ struct drm_xe_oa_stream_info {
  	__u64 reserved[3];
  };
  
@@ -1658,7 +1659,7 @@ index b6fbe4988f2e..7e66e9117f49 100644
  #endif
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
 new file mode 100644
-index 000000000000..acf6071c82bf
+index 000000000..acf6071c8
 --- /dev/null
 +++ b/include/uapi/drm/xe_drm_eudebug.h
 @@ -0,0 +1,56 @@
@@ -1719,5 +1720,5 @@ index 000000000000..acf6071c82bf
 +
 +#endif
 -- 
-2.25.1
+2.34.1
 

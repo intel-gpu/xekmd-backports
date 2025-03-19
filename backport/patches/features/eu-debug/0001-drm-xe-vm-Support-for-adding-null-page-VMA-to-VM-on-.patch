@@ -21,18 +21,19 @@ Cc: Matthew Brost <matthew.brost@intel.com>
 Co-developed-by: Bruce Chang <yu.bruce.chang@intel.com>
 Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
-(cherry picked from commit 845ebc0e92a0f40079cd102e4b57d9d74414b42c eudebug-dev)
+(backported from commit 845ebc0e92a0f40079cd102e4b57d9d74414b42c eudebug-dev)
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_vm.c | 23 +++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_vm.h |  2 ++
  2 files changed, 25 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 31f5d1d3cc4b..12e626669893 100644
+index 37eed15bb..1525f4902 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -3566,3 +3566,26 @@ out_unlock_notifier:
+@@ -3620,3 +3620,26 @@ int xe_vm_userptr_access(struct xe_userptr_vma *uvma, u64 offset,
  	up_read(&vm->userptr.notifier_lock);
  	return ret;
  }
@@ -60,15 +61,18 @@ index 31f5d1d3cc4b..12e626669893 100644
 +	return vma;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index 165eab494d59..4a613ddbd139 100644
+index 55996114b..86a13fee3 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
-@@ -284,3 +284,5 @@ void xe_vm_snapshot_free(struct xe_vm_snapshot *snap);
- 
+@@ -283,6 +283,8 @@ void xe_vm_snapshot_free(struct xe_vm_snapshot *snap);
  int xe_vm_userptr_access(struct xe_userptr_vma *uvma, u64 offset,
  			 void *buf, u64 len, bool write);
-+
+ 
 +struct xe_vma *xe_vm_create_null_vma(struct xe_vm *vm, u64 addr);
++
+ #if IS_ENABLED(CONFIG_DRM_XE_USERPTR_INVAL_INJECT)
+ void xe_vma_userptr_force_invalidate(struct xe_userptr_vma *uvma);
+ #else
 -- 
-2.25.1
+2.34.1
 

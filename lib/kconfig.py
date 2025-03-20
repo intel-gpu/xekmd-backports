@@ -213,6 +213,14 @@ class ConfigTree(object):
                     syms.append(m.group('sym'))
         return syms
 
+    def modify_symbols(self):
+        modified_syms = []
+        syms = self.symbols()
+        for sym in syms:
+            modified_syms.append(sym + ' 1')
+            modified_syms.append(sym + '_MODULE 1')
+        return modified_syms
+
     def all_selects(self):
         result = []
         for nf in self._walk(self.rootfile):

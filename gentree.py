@@ -1020,6 +1020,16 @@ def process(kerneldir, copy_list_file, git_revision=None,
             f.write('%s=\n' % sym)
         f.close()
         git_debug_snapshot(args, "add symbols files")
+
+    autoconf_symbols = configtree.modify_symbols()
+
+    # write autoconf local symbol list -- needed during creation of Kconfig.kernel
+    if not bpid.integrate:
+        f = open(os.path.join(bpid.target_dir, 'local-symbols-autoconf'), 'w')
+        for sym in autoconf_symbols:
+            f.write('%s\n' % sym)
+        f.close()
+
     # also write Kconfig.local, representing all local symbols
     # with a BACKPORTED_ prefix
     f = open(os.path.join(bpid.target_dir, 'Kconfig.local'), 'w')

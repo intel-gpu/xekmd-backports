@@ -51,3 +51,21 @@ AC_DEFUN([AC_STRUCT_DRM_PRINTER_ORIGIN_NOT_PRESENT], [
                ])
        ])
 ])
+
+dnl #
+dnl # v6.9-20f5583dd7a5
+dnl # drm/print: Add drm_dbg_ratelimited
+dnl #
+AC_DEFUN([AC_DRM_DBG_RATELIMITED_NOT_PRESENT], [
+        AC_KERNEL_DO_BACKGROUND([
+                AC_KERNEL_TRY_COMPILE([
+                        #include <drm/drm_print.h>
+                ],[
+                        drm_dbg_ratelimited(NULL,NULL);
+                ],[
+                ],[
+                        AC_DEFINE(BPM_DRM_DBG_RATELIMITED_NOT_PRESENT, 1,
+                                [drm_dbg_ratelimited() not available])
+                ])
+        ])
+])

@@ -42,4 +42,9 @@ static inline struct drm_printer drm_dbg_printer(struct drm_device *drm,
 #define drm_line_printer(x,y,z) drm_debug_printer(z)
 #endif
 
+#ifdef BPM_DRM_DBG_RATELIMITED_NOT_PRESENT
+#define drm_dbg_ratelimited(drm, fmt, ...) \
+        __DRM_DEFINE_DBG_RATELIMITED(DRIVER, drm, fmt, ## __VA_ARGS__)
+#endif
+
 #endif /* _BACKPORT_DRM_PRINT_H_ */

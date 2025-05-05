@@ -10,7 +10,16 @@ tar=/bin/tar
 WORKING_DIR="$PWD"
 TIME_STAMP=$(date +%Y%m%d_%H%M%S)
 
-KERNEL_BASE="https://git.kernel.org/torvalds/t/"
+# Link to download stable kernel releases
+KERNEL_STABLE_BASE="https://cdn.kernel.org/pub/linux/kernel/v6.x/"
+# Link to download Release candidates
+KERNEL_TORVALDS_BASE="https://git.kernel.org/torvalds/t/"
+if [[ $BASELINE == *"-rc"* ]]; then
+KERNEL_BASE=${KERNEL_TORVALDS_BASE}
+else
+KERNEL_BASE=${KERNEL_STABLE_BASE}
+fi
+
 KERNEL="linux-${KERNEL_TAG/v}"
 
 SHORT=:c,d,h,r,o

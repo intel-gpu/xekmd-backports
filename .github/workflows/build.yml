@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         kernel: ["base", "feature"]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +38,7 @@ jobs:
           libpci-dev \
           libpciaccess-dev \
           libpixman-1-dev \
-          libprocps-dev \
+          libproc2-dev \
           libssl-dev \
           libtool \
           libudev-dev \

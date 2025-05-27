@@ -2,7 +2,7 @@ name: BAT Testing
 
 on:
   pull_request_target:
-    branches: [ "main" ]
+    branches: [ "main", "main_6.11" ]
 
 jobs:
   Queued:
@@ -17,4 +17,9 @@ jobs:
         run: |
           COMMIT=${{ github.event.pull_request.head.sha }}
           PR_NUM=${{ github.event.pull_request.number }}
-          curl -X POST ${{ secrets.SERVER_URL }} --user ${{ secrets.USER }}:${{ secrets.TOKEN }} --data-urlencode "TARGET_COMMIT=$COMMIT" --data-urlencode "PR_NUMBER=$PR_NUM" --data-urlencode "DEBUG=false"
+          TARGET_BRANCH=${{ github.event.pull_request.base.ref }}
+          curl -X POST ${{ secrets.SERVER_URL }} --user ${{ secrets.USER }}:${{ secrets.TOKEN }} \
+            --data-urlencode "TARGET_COMMIT=$COMMIT" \
+            --data-urlencode "PR_NUMBER=$PR_NUM" \
+            --data-urlencode "TARGET_BRANCH=$TARGET_BRANCH" \
+            --data-urlencode "DEBUG=false"

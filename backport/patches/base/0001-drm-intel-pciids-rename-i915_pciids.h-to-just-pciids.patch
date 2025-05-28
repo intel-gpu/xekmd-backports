@@ -1,0 +1,107 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jani Nikula <jani.nikula@intel.com>
+Date: Tue, 22 Oct 2024 12:41:50 +0300
+Subject: drm/intel/pciids: rename i915_pciids.h to just pciids.h
+
+In preparation of sharing the PCI ID macros between i915 and xe, rename
+i915_pciids.h to pciids.h.
+
+Cc: Joonas Lahtinen <joonas.lahtinen@linux.intel.com>
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Cc: Tvrtko Ursulin <tursulin@ursulin.net>
+Reviewed-by: Andi Shyti <andi.shyti@linux.intel.com>
+Acked-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/835143845faa5310e4bb58405a8a0848392bbf06.1729590029.git.jani.nikula@intel.com
+Signed-off-by: Jani Nikula <jani.nikula@intel.com>
+(backported from commit f719c2a2d1e7fb891d45998f241ff4273d7ae7e6 drm-tip)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+---
+ arch/x86/kernel/early-quirks.c                      | 2 +-
+ drivers/gpu/drm/i915/display/intel_display_device.c | 2 +-
+ drivers/gpu/drm/i915/i915_pci.c                     | 2 +-
+ drivers/gpu/drm/i915/intel_device_info.c            | 2 +-
+ include/drm/intel/{i915_pciids.h => pciids.h}       | 6 +++---
+ 5 files changed, 7 insertions(+), 7 deletions(-)
+ rename include/drm/intel/{i915_pciids.h => pciids.h} (99%)
+
+diff --git a/arch/x86/kernel/early-quirks.c b/arch/x86/kernel/early-quirks.c
+index 29d1f9104..6b6f32f40 100644
+--- a/arch/x86/kernel/early-quirks.c
++++ b/arch/x86/kernel/early-quirks.c
+@@ -18,7 +18,7 @@
+ #include <linux/bcma/bcma_regs.h>
+ #include <linux/platform_data/x86/apple.h>
+ #include <drm/intel/i915_drm.h>
+-#include <drm/intel/i915_pciids.h>
++#include <drm/intel/pciids.h>
+ #include <asm/pci-direct.h>
+ #include <asm/dma.h>
+ #include <asm/io_apic.h>
+diff --git a/drivers/gpu/drm/i915/display/intel_display_device.c b/drivers/gpu/drm/i915/display/intel_display_device.c
+index 1c03aed4c..2c3ac8af6 100644
+--- a/drivers/gpu/drm/i915/display/intel_display_device.c
++++ b/drivers/gpu/drm/i915/display/intel_display_device.c
+@@ -3,7 +3,7 @@
+  * Copyright © 2023 Intel Corporation
+  */
+ 
+-#include <drm/intel/i915_pciids.h>
++#include <drm/intel/pciids.h>
+ #include <drm/drm_color_mgmt.h>
+ #include <linux/pci.h>
+ 
+diff --git a/drivers/gpu/drm/i915/i915_pci.c b/drivers/gpu/drm/i915/i915_pci.c
+index ce4dfd65f..c95839ece 100644
+--- a/drivers/gpu/drm/i915/i915_pci.c
++++ b/drivers/gpu/drm/i915/i915_pci.c
+@@ -24,7 +24,7 @@
+ 
+ #include <drm/drm_color_mgmt.h>
+ #include <drm/drm_drv.h>
+-#include <drm/intel/i915_pciids.h>
++#include <drm/intel/pciids.h>
+ 
+ #include "display/intel_display.h"
+ #include "display/intel_display_driver.h"
+diff --git a/drivers/gpu/drm/i915/intel_device_info.c b/drivers/gpu/drm/i915/intel_device_info.c
+index 1e88af96c..78556d96f 100644
+--- a/drivers/gpu/drm/i915/intel_device_info.c
++++ b/drivers/gpu/drm/i915/intel_device_info.c
+@@ -25,7 +25,7 @@
+ #include <linux/string_helpers.h>
+ 
+ #include <drm/drm_print.h>
+-#include <drm/intel/i915_pciids.h>
++#include <drm/intel/pciids.h>
+ 
+ #include "gt/intel_gt_regs.h"
+ #include "i915_drv.h"
+diff --git a/include/drm/intel/i915_pciids.h b/include/drm/intel/pciids.h
+similarity index 99%
+rename from include/drm/intel/i915_pciids.h
+rename to include/drm/intel/pciids.h
+index f35534522..38ba94ae5 100644
+--- a/include/drm/intel/i915_pciids.h
++++ b/include/drm/intel/pciids.h
+@@ -22,8 +22,8 @@
+  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+  * DEALINGS IN THE SOFTWARE.
+  */
+-#ifndef _I915_PCIIDS_H
+-#define _I915_PCIIDS_H
++#ifndef __PCIIDS_H__
++#define __PCIIDS_H__
+ 
+ /*
+  * A pci_device_id struct {
+@@ -811,4 +811,4 @@
+ 	MACRO__(0xE20D, ## __VA_ARGS__), \
+ 	MACRO__(0xE212, ## __VA_ARGS__)
+ 
+-#endif /* _I915_PCIIDS_H */
++#endif /* __PCIIDS_H__ */
+-- 
+2.34.1
+

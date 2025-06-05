@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Fri, 27 Jan 2023 00:15:09 +0100
-Subject: [PATCH] drm/xe/eudebug: Introduce exec_queue events
+Subject: drm/xe/eudebug: Introduce exec_queue events
 
 Inform debugger about creation and destruction of exec_queues.
 
@@ -341,18 +341,18 @@ index 080a821db..4824c4159 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 7e1abbbfb..7e880a08c 100644
+index cd9b1c32f..d2f7fc75e 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -25,6 +25,7 @@
- #include "xe_ring_ops_types.h"
- #include "xe_trace.h"
- #include "xe_vm.h"
-+#include "xe_eudebug.h"
+@@ -13,6 +13,7 @@
+ #include <uapi/drm/xe_drm.h>
  
- enum xe_exec_queue_sched_prop {
- 	XE_EXEC_QUEUE_JOB_TIMEOUT = 0,
-@@ -657,6 +658,8 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
+ #include "xe_device.h"
++#include "xe_eudebug.h"
+ #include "xe_gt.h"
+ #include "xe_hw_engine_class_sysfs.h"
+ #include "xe_hw_engine_group.h"
+@@ -716,6 +717,8 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
  
  	args->exec_queue_id = id;
  
@@ -361,7 +361,7 @@ index 7e1abbbfb..7e880a08c 100644
  	return 0;
  
  kill_exec_queue:
-@@ -846,6 +849,8 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
+@@ -905,6 +908,8 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
  	if (q->vm && q->hwe->hw_engine_group)
  		xe_hw_engine_group_del_exec_queue(q->hwe->hw_engine_group, q);
  

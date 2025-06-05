@@ -21,13 +21,13 @@ Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
  drivers/gpu/drm/xe/xe_eudebug.c       | 318 +++++++++++++++++++++++++-
  drivers/gpu/drm/xe/xe_eudebug.h       |  13 ++
  drivers/gpu/drm/xe/xe_eudebug_types.h |  29 +++
- drivers/gpu/drm/xe/xe_vm.c            |  16 +-
+ drivers/gpu/drm/xe/xe_vm.c            |  15 +-
  drivers/gpu/drm/xe/xe_vm_types.h      |  13 ++
  include/uapi/drm/xe_drm_eudebug.h     |  64 ++++++
- 6 files changed, 449 insertions(+), 4 deletions(-)
+ 6 files changed, 448 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 5915f4318e65..c61530d50699 100644
+index 81d03a860..f544f60d7 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -792,7 +792,7 @@ static struct xe_eudebug_event *
@@ -370,7 +370,7 @@ index 5915f4318e65..c61530d50699 100644
  {
  	struct xe_exec_queue *q;
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
-index 1fe86bec99e1..ccc7202b3308 100644
+index 1fe86bec9..ccc7202b3 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
 @@ -5,11 +5,14 @@
@@ -413,7 +413,7 @@ index 1fe86bec99e1..ccc7202b3308 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index e1d4e31b32ec..cbc316ec3593 100644
+index e1d4e31b3..cbc316ec3 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
 @@ -177,6 +177,11 @@ struct xe_eudebug_event {
@@ -458,10 +458,10 @@ index e1d4e31b32ec..cbc316ec3593 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index c545a9d43750..3bfc105726e5 100644
+index 181b39ed9..acc5f52c2 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -1411,6 +1411,8 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags)
+@@ -1671,6 +1671,8 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags)
  	for_each_tile(tile, xe, id)
  		xe_range_fence_tree_init(&vm->rftree[id]);
  
@@ -470,7 +470,7 @@ index c545a9d43750..3bfc105726e5 100644
  	vm->pt_ops = &xelp_pt_ops;
  
  	/*
-@@ -1650,6 +1652,8 @@ static void vm_destroy_work_func(struct work_struct *w)
+@@ -1945,6 +1947,8 @@ static void vm_destroy_work_func(struct work_struct *w)
  	struct xe_tile *tile;
  	u8 id;
  
@@ -479,7 +479,7 @@ index c545a9d43750..3bfc105726e5 100644
  	/* xe_vm_close_and_put was not called? */
  	xe_assert(xe, !vm->size);
  
-@@ -2665,7 +2669,7 @@ static void vm_bind_ioctl_ops_fini(struct xe_vm *vm, struct xe_vma_ops *vops,
+@@ -2986,7 +2990,7 @@ static void vm_bind_ioctl_ops_fini(struct xe_vm *vm, struct xe_vma_ops *vops,
  				   struct dma_fence *fence)
  {
  	struct xe_exec_queue *wait_exec_queue = to_wait_exec_queue(vm, vops->q);
@@ -488,17 +488,17 @@ index c545a9d43750..3bfc105726e5 100644
  	struct xe_vma_op *op;
  	int i;
  
-@@ -2680,6 +2684,9 @@ static void vm_bind_ioctl_ops_fini(struct xe_vm *vm, struct xe_vma_ops *vops,
+@@ -3001,6 +3005,9 @@ static void vm_bind_ioctl_ops_fini(struct xe_vm *vm, struct xe_vma_ops *vops,
  			xe_vma_destroy(gpuva_to_vma(op->base.remap.unmap->va),
  				       fence);
  	}
 +
 +	xe_eudebug_vm_bind_end(vm, ufence, 0);
-+
++	
  	if (ufence)
  		xe_sync_ufence_put(ufence);
- 	for (i = 0; i < vops->num_syncs; i++)
-@@ -3088,6 +3095,8 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+ 	if (fence) {
+@@ -3440,6 +3447,8 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		if (err)
  			goto unwind_ops;
  
@@ -507,8 +507,8 @@ index c545a9d43750..3bfc105726e5 100644
  #ifdef TEST_VM_OPS_ERROR
  		if (flags & FORCE_OP_ERROR) {
  			vops.inject_error = true;
-@@ -3111,8 +3120,11 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
- 	err = vm_bind_ioctl_ops_execute(vm, &vops);
+@@ -3467,8 +3476,10 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+ 		dma_fence_put(fence);
  
  unwind_ops:
 -	if (err && err != -ENODATA)
@@ -516,15 +516,14 @@ index c545a9d43750..3bfc105726e5 100644
 +		xe_eudebug_vm_bind_end(vm, num_ufence > 0, err);
  		vm_bind_ioctl_ops_unwind(vm, ops, args->num_binds);
 +	}
-+
  	xe_vma_ops_fini(&vops);
  	for (i = args->num_binds - 1; i >= 0; --i)
  		if (ops[i])
 diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
-index 7f9a303e51d8..557b047ebdd7 100644
+index 84fa41b9f..f3245f952 100644
 --- a/drivers/gpu/drm/xe/xe_vm_types.h
 +++ b/drivers/gpu/drm/xe/xe_vm_types.h
-@@ -282,6 +282,19 @@ struct xe_vm {
+@@ -314,6 +314,19 @@ struct xe_vm {
  	bool batch_invalidate_tlb;
  	/** @xef: XE file handle for tracking this VM's drm client */
  	struct xe_file *xef;
@@ -545,7 +544,7 @@ index 7f9a303e51d8..557b047ebdd7 100644
  
  /** struct xe_vma_op_map - VMA map operation */
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
-index ccfbe976c509..cc34c522fa4d 100644
+index ccfbe976c..cc34c522f 100644
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ b/include/uapi/drm/xe_drm_eudebug.h
 @@ -30,6 +30,8 @@ struct drm_xe_eudebug_event {
@@ -627,5 +626,5 @@ index ccfbe976c509..cc34c522fa4d 100644
  }
  #endif
 -- 
-2.25.1
+2.34.1
 

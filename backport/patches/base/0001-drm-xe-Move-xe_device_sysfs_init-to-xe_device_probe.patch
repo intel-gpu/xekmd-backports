@@ -19,7 +19,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  3 files changed, 13 insertions(+), 10 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 4e1839b48..c6bcb1c66 100644
+index 00191227b..8da5fe120 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -25,6 +25,7 @@
@@ -30,22 +30,22 @@ index 4e1839b48..c6bcb1c66 100644
  #include "xe_dma_buf.h"
  #include "xe_drm_client.h"
  #include "xe_drv.h"
-@@ -760,6 +761,10 @@ int xe_device_probe(struct xe_device *xe)
- 
- 	xe_oa_register(xe);
+@@ -908,6 +909,10 @@ int xe_device_probe(struct xe_device *xe)
+ 	if (err)
+ 		goto err_unregister_display;
  
 +	err = xe_device_sysfs_init(xe);
 +	if (err)
-+		goto err_fini_display;
++		goto err_unregister_display;
 +
  	xe_debugfs_register(xe);
  
- 	xe_hwmon_register(xe);
+ 	err = xe_hwmon_register(xe);
 diff --git a/drivers/gpu/drm/xe/xe_device_sysfs.c b/drivers/gpu/drm/xe/xe_device_sysfs.c
-index 737593793..27b05ddf2 100644
+index 7efbd4c52..d4c73acea 100644
 --- a/drivers/gpu/drm/xe/xe_device_sysfs.c
 +++ b/drivers/gpu/drm/xe/xe_device_sysfs.c
-@@ -73,7 +73,8 @@ static void xe_device_sysfs_fini(void *arg)
+@@ -67,7 +67,8 @@ static void xe_device_sysfs_fini(void *arg)
  {
  	struct xe_device *xe = arg;
  
@@ -55,7 +55,7 @@ index 737593793..27b05ddf2 100644
  }
  
  int xe_device_sysfs_init(struct xe_device *xe)
-@@ -81,9 +82,11 @@ int xe_device_sysfs_init(struct xe_device *xe)
+@@ -75,9 +76,11 @@ int xe_device_sysfs_init(struct xe_device *xe)
  	struct device *dev = xe->drm.dev;
  	int ret;
  
@@ -71,7 +71,7 @@ index 737593793..27b05ddf2 100644
  	return devm_add_action_or_reset(dev, xe_device_sysfs_fini, xe);
  }
 diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
-index 89fd2c043..f63f356e0 100644
+index 7b6b754ad..857f076af 100644
 --- a/drivers/gpu/drm/xe/xe_pm.c
 +++ b/drivers/gpu/drm/xe/xe_pm.c
 @@ -16,7 +16,6 @@
@@ -82,7 +82,7 @@ index 89fd2c043..f63f356e0 100644
  #include "xe_ggtt.h"
  #include "xe_gt.h"
  #include "xe_guc.h"
-@@ -263,6 +262,7 @@ int xe_pm_init_early(struct xe_device *xe)
+@@ -273,6 +272,7 @@ int xe_pm_init_early(struct xe_device *xe)
  	if (err)
  		return err;
  
@@ -90,7 +90,7 @@ index 89fd2c043..f63f356e0 100644
  	return 0;
  }
  ALLOW_ERROR_INJECTION(xe_pm_init_early, ERRNO); /* See xe_pci_probe() */
-@@ -293,12 +293,7 @@ int xe_pm_init(struct xe_device *xe)
+@@ -303,12 +303,7 @@ int xe_pm_init(struct xe_device *xe)
  	if (!xe_device_uc_enabled(xe))
  		return 0;
  

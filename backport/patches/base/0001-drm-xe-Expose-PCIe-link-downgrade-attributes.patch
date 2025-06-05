@@ -25,7 +25,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  2 files changed, 96 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device_sysfs.c b/drivers/gpu/drm/xe/xe_device_sysfs.c
-index 27b05ddf2..8673fcc0b 100644
+index d4c73acea..9628e9a0a 100644
 --- a/drivers/gpu/drm/xe/xe_device_sysfs.c
 +++ b/drivers/gpu/drm/xe/xe_device_sysfs.c
 @@ -3,14 +3,16 @@
@@ -47,7 +47,7 @@ index 27b05ddf2..8673fcc0b 100644
  #include "xe_pm.h"
  
  /**
-@@ -69,12 +71,93 @@ vram_d3cold_threshold_store(struct device *dev, struct device_attribute *attr,
+@@ -63,12 +65,93 @@ vram_d3cold_threshold_store(struct device *dev, struct device_attribute *attr,
  
  static DEVICE_ATTR_RW(vram_d3cold_threshold);
  
@@ -141,7 +141,7 @@ index 27b05ddf2..8673fcc0b 100644
  }
  
  int xe_device_sysfs_init(struct xe_device *xe)
-@@ -88,5 +171,11 @@ int xe_device_sysfs_init(struct xe_device *xe)
+@@ -82,5 +165,11 @@ int xe_device_sysfs_init(struct xe_device *xe)
  			return ret;
  	}
  
@@ -154,7 +154,7 @@ index 27b05ddf2..8673fcc0b 100644
  	return devm_add_action_or_reset(dev, xe_device_sysfs_fini, xe);
  }
 diff --git a/drivers/gpu/drm/xe/xe_pcode_api.h b/drivers/gpu/drm/xe/xe_pcode_api.h
-index f153ce96f..e52f24063 100644
+index 2bae9afdb..6bb4bd962 100644
 --- a/drivers/gpu/drm/xe/xe_pcode_api.h
 +++ b/drivers/gpu/drm/xe/xe_pcode_api.h
 @@ -34,6 +34,7 @@
@@ -165,9 +165,9 @@ index f153ce96f..e52f24063 100644
  
  #define   PCODE_POWER_SETUP			0x7C
  #define     POWER_SETUP_SUBCOMMAND_READ_I1	0x4
-@@ -49,6 +50,10 @@
- /* Domain IDs (param2) */
- #define     PCODE_MBOX_DOMAIN_HBM		0x2
+@@ -63,6 +64,10 @@
+ /* Auxiliary info bits */
+ #define   AUXINFO_HISTORY_OFFSET	REG_GENMASK(31, 29)
  
 +#define BMG_PCIE_CAP                   XE_REG(0x138340)
 +#define   LINK_DOWNGRADE               REG_GENMASK(1, 0)

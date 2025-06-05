@@ -15,10 +15,10 @@ Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
  1 file changed, 39 insertions(+), 12 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_res_cursor.h b/drivers/gpu/drm/xe/xe_res_cursor.h
-index dca374b6521c..c1f39a680ae0 100644
+index d1a403cfb..4c29f17c1 100644
 --- a/drivers/gpu/drm/xe/xe_res_cursor.h
 +++ b/drivers/gpu/drm/xe/xe_res_cursor.h
-@@ -129,18 +129,35 @@ static inline void __xe_res_sg_next(struct xe_res_cursor *cur)
+@@ -152,15 +152,19 @@ static inline void __xe_res_sg_next(struct xe_res_cursor *cur)
  {
  	struct scatterlist *sgl = cur->sgl;
  	u64 start = cur->start;
@@ -34,16 +34,20 @@ index dca374b6521c..c1f39a680ae0 100644
  		sgl = sg_next(sgl);
  		XE_WARN_ON(!sgl);
  	}
--
+ 
  	cur->start = start;
 -	cur->size = sg_dma_len(sgl) - start;
 +	cur->size = len - start;
  	cur->sgl = sgl;
  }
  
+@@ -194,6 +198,20 @@ static inline void __xe_res_dma_next(struct xe_res_cursor *cur)
+ 	cur->size = cur->dma_seg_size - start;
+ }
+ 
 +static inline void __xe_res_first_sg(const struct sg_table *sg,
-+				   u64 start, u64 size,
-+				   struct xe_res_cursor *cur, u32 mem_type)
++		u64 start, u64 size,
++		struct xe_res_cursor *cur, u32 mem_type)
 +{
 +	XE_WARN_ON(!sg);
 +	cur->node = NULL;
@@ -58,7 +62,7 @@ index dca374b6521c..c1f39a680ae0 100644
  /**
   * xe_res_first_sg - initialize a xe_res_cursor with a scatter gather table
   *
-@@ -155,14 +172,24 @@ static inline void xe_res_first_sg(const struct sg_table *sg,
+@@ -208,15 +226,24 @@ static inline void xe_res_first_sg(const struct sg_table *sg,
  				   u64 start, u64 size,
  				   struct xe_res_cursor *cur)
  {
@@ -67,6 +71,7 @@ index dca374b6521c..c1f39a680ae0 100644
 -	cur->start = start;
 -	cur->remaining = size;
 -	cur->size = 0;
+-	cur->dma_addr = NULL;
 -	cur->sgl = sg->sgl;
 -	cur->mem_type = XE_PL_TT;
 -	__xe_res_sg_next(cur);
@@ -84,13 +89,13 @@ index dca374b6521c..c1f39a680ae0 100644
 + * Start walking over the range of allocations between @start and @size
 + */
 +static inline void xe_res_first_sg_system(const struct sg_table *sg,
-+				   u64 start, u64 size,
-+				   struct xe_res_cursor *cur)
++		u64 start, u64 size,
++		struct xe_res_cursor *cur)
 +{
 +	__xe_res_first_sg(sg, start, size, cur, XE_PL_SYSTEM);
  }
  
  /**
 -- 
-2.25.1
+2.34.1
 

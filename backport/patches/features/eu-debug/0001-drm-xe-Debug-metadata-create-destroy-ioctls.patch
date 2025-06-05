@@ -36,11 +36,11 @@ Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_debug_metadata_types.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index e3a1691a2..6b05c43b7 100644
+index cb990c1bd..6897772f9 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -117,7 +117,8 @@ xe-y += xe_bb.o \
- 	xe_wa.o \
+@@ -125,7 +125,8 @@ xe-y += xe_bb.o \
+ 	xe_wait_user_fence.o \
  	xe_wopcm.o
  
 -xe-$(CONFIG_DRM_XE_EUDEBUG) += xe_eudebug.o
@@ -48,7 +48,7 @@ index e3a1691a2..6b05c43b7 100644
 +	xe_debug_metadata.o
  
  xe-$(CONFIG_HMM_MIRROR) += xe_hmm.o
- 
+ xe-$(CONFIG_DRM_GPUSVM) += xe_svm.o
 diff --git a/drivers/gpu/drm/xe/xe_debug_metadata.c b/drivers/gpu/drm/xe/xe_debug_metadata.c
 new file mode 100644
 index 000000000..1dfed9aed
@@ -250,7 +250,7 @@ index 000000000..624852920
 +
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index cfc52fe57..22413dd40 100644
+index 7582fb7b3..97578bbb5 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -26,6 +26,7 @@
@@ -261,7 +261,7 @@ index cfc52fe57..22413dd40 100644
  #include "xe_dma_buf.h"
  #include "xe_drm_client.h"
  #include "xe_drv.h"
-@@ -198,6 +199,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
+@@ -202,6 +203,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
  			  DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_OBSERVATION, xe_observation_ioctl, DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_EUDEBUG_CONNECT, xe_eudebug_connect_ioctl, DRM_RENDER_ALLOW),
@@ -273,10 +273,10 @@ index cfc52fe57..22413dd40 100644
  
  static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
-index c882c3527..c390b51f3 100644
+index c2a4ee254..7e0611c63 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
-@@ -217,6 +217,8 @@ static inline int xe_eudebug_needs_lock(const unsigned int cmd)
+@@ -222,6 +222,8 @@ static inline int xe_eudebug_needs_lock(const unsigned int cmd)
  	case DRM_XE_EXEC_QUEUE_CREATE:
  	case DRM_XE_EXEC_QUEUE_DESTROY:
  	case DRM_XE_EUDEBUG_CONNECT:
@@ -286,10 +286,10 @@ index c882c3527..c390b51f3 100644
  	}
  
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index f2ab316bf..99910e83d 100644
+index 0b60d98cc..1d8ea7172 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -693,6 +693,13 @@ struct xe_file {
+@@ -719,6 +719,13 @@ struct xe_file {
  	struct {
  		/** @client_link: list entry in xe_device.clients.list */
  		struct list_head client_link;
@@ -348,7 +348,7 @@ index b450d38fa..9ef9e8cff 100644
  	list_del_init(&xef->eudebug.client_link);
  	spin_unlock(&xef->xe->clients.lock);
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index abbdce4bf..1a9fdb03f 100644
+index 0c24fd0d8..316b91457 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -103,7 +103,8 @@ extern "C" {
@@ -370,7 +370,7 @@ index abbdce4bf..1a9fdb03f 100644
  
  /**
   * DOC: Xe IOCTL Extensions
-@@ -1749,6 +1752,54 @@ struct drm_xe_eudebug_connect {
+@@ -1983,6 +1986,54 @@ struct drm_xe_eudebug_connect {
  	__u32 version; /* output: current ABI (ioctl / events) version */
  };
  

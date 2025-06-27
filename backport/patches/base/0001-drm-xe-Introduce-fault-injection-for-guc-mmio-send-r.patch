@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Date: Thu, 3 Apr 2025 17:36:40 +0530
+Subject: drm/xe: Introduce fault injection for guc mmio send/recv.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fault can be injected with below steps.
+
+FAILTYPE=fail_function
+FAILFUNC=xe_guc_mmio_send_recv
+
+echo > /sys/kernel/debug/$FAILTYPE/inject
+echo $FAILFUNC > /sys/kernel/debug/$FAILTYPE/inject
+printf %#x -5 > /sys/kernel/debug/$FAILTYPE/$FAILFUNC/retval
+
+echo N > /sys/kernel/debug/$FAILTYPE/task-filter
+echo 10 > /sys/kernel/debug/$FAILTYPE/probability
+echo 0 > /sys/kernel/debug/$FAILTYPE/interval
+echo -1 > /sys/kernel/debug/$FAILTYPE/times
+echo 0 > /sys/kernel/debug/$FAILTYPE/space
+echo 1 > /sys/kernel/debug/$FAILTYPE/verbose
+
+Signed-off-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Michał Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20250403120641.7258-2-satyanarayana.k.v.p@intel.com
+(cherry picked from commit e9dea328e8392d01b21544587cbcf313e4fdbe26 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
+index f229745b78b9..352a53e0d7d0 100644
+--- a/drivers/gpu/drm/xe/xe_guc.c
++++ b/drivers/gpu/drm/xe/xe_guc.c
+@@ -1388,6 +1388,7 @@ int xe_guc_mmio_send_recv(struct xe_guc *guc, const u32 *request,
+ 	/* Use data from the GuC response as our return value */
+ 	return FIELD_GET(GUC_HXG_RESPONSE_MSG_0_DATA0, header);
+ }
++ALLOW_ERROR_INJECTION(xe_guc_mmio_send_recv, ERRNO);
+ 
+ int xe_guc_mmio_send(struct xe_guc *guc, const u32 *request, u32 len)
+ {
+-- 
+2.43.0
+

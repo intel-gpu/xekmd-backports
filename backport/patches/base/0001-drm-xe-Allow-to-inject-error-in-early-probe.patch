@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Lucas De Marchi <lucas.demarchi@intel.com>
+Date: Fri, 14 Mar 2025 06:54:27 -0700
+Subject: drm/xe: Allow to inject error in early probe
+
+Allow to test if driver behaves correctly when xe_pcode_probe_early()
+fails. Note that this is not sufficient for testing survivability mode
+as it's still required to read the hw to check for errors, which doesn't
+happen on an injected failure.
+
+To complete the early probe coverage, allow injection in the other
+functions as well: xe_mmio_probe_early() and xe_device_probe_early().
+
+Reviewed-by: Francois Dugast <francois.dugast@intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/20250314-fix-survivability-v5-3-fdb3559ea965@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(cherry picked from commit 676da6ba5bdc1997910ac1cc901cbf16bc6f6d97 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c | 1 +
+ drivers/gpu/drm/xe/xe_mmio.c   | 2 +-
+ drivers/gpu/drm/xe/xe_pcode.c  | 2 ++
+ 3 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index a98f477d377f..0d4ebe575a3d 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -600,6 +600,7 @@ int xe_device_probe_early(struct xe_device *xe)
+ 
+ 	return 0;
+ }
++ALLOW_ERROR_INJECTION(xe_device_probe_early, ERRNO); /* See xe_pci_probe() */
+ 
+ static int probe_has_flat_ccs(struct xe_device *xe)
+ {
+diff --git a/drivers/gpu/drm/xe/xe_mmio.c b/drivers/gpu/drm/xe/xe_mmio.c
+index dd167c84bf32..ad39c54f2eec 100644
+--- a/drivers/gpu/drm/xe/xe_mmio.c
++++ b/drivers/gpu/drm/xe/xe_mmio.c
+@@ -177,7 +177,7 @@ int xe_mmio_probe_early(struct xe_device *xe)
+ 
+ 	return devm_add_action_or_reset(xe->drm.dev, mmio_fini, xe);
+ }
+-
++ALLOW_ERROR_INJECTION(xe_mmio_probe_early, ERRNO); /* See xe_pci_probe() */
+ /**
+  * xe_mmio_init() - Initialize an MMIO instance
+  * @mmio: Pointer to the MMIO instance to initialize
+diff --git a/drivers/gpu/drm/xe/xe_pcode.c b/drivers/gpu/drm/xe/xe_pcode.c
+index 5ff2d0e45ab7..9189117fe825 100644
+--- a/drivers/gpu/drm/xe/xe_pcode.c
++++ b/drivers/gpu/drm/xe/xe_pcode.c
+@@ -7,6 +7,7 @@
+ 
+ #include <linux/delay.h>
+ #include <linux/errno.h>
++#include <linux/error-injection.h>
+ 
+ #include <drm/drm_managed.h>
+ 
+@@ -334,3 +335,4 @@ int xe_pcode_probe_early(struct xe_device *xe)
+ {
+ 	return xe_pcode_ready(xe, false);
+ }
++ALLOW_ERROR_INJECTION(xe_pcode_probe_early, ERRNO); /* See xe_pci_probe */
+-- 
+2.43.0
+

@@ -1,0 +1,140 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Date: Mon, 9 Jun 2025 12:46:28 +0200
+Subject: drm/xe/eudebug: add eudebug drm managed finalize
+
+xe_eudebug_fini() can be called too early, that is before
+xe_eudebug_init() on some probe failures and this leads to
+errors/assert.
+
+xe_eudebug_fini() was called from xe_device_destroy() which is
+drm release managed function.
+Instead of being called from xe_device_destroy() it's better to add
+xe_eudebug_fini() as drm release managed function which is added only
+if xe_eudebug_init() was actually called.
+The advantage is that xe_eudebug_fini() will be called before
+xe_device_destroy().
+
+Reworked also sysfs init in the same way.
+
+Jira: VLK-73787
+
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Reviewed-by: Christoph Manszewski <christoph.manszewski@intel.com>
+(backported from commit 5ac85708cfba5a908bf24c0cb30a5d74faa29474 eudebug-dev)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c | 40 +++++++++++++++++---------
+ drivers/gpu/drm/xe/prelim/xe_eudebug.h |  2 --
+ drivers/gpu/drm/xe/xe_device.c         |  2 --
+ 3 files changed, 27 insertions(+), 17 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+index f0cb16527..e143bf2f6 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+@@ -2504,16 +2504,27 @@ static ssize_t prelim_enable_eudebug_store(struct device *dev, struct device_att
+ 
+ static DEVICE_ATTR_RW(prelim_enable_eudebug);
+ 
+-static void xe_eudebug_sysfs_fini(void *arg)
++static void prelim_xe_eudebug_sysfs_fini(struct drm_device *dev, void *__unused)
+ {
+-	struct xe_device *xe = arg;
++	struct xe_device *xe = to_xe_device(dev);
+ 
+ 	sysfs_remove_file(&xe->drm.dev->kobj, &dev_attr_prelim_enable_eudebug.attr);
+ }
+ 
++static void prelim_xe_eudebug_fini(struct drm_device *dev, void *__unused)
++{
++	struct xe_device *xe = to_xe_device(dev);
++
++	attention_scan_cancel(xe);
++	xe_assert(xe, list_empty_careful(&xe->eudebug.list));
++
++	if (xe->eudebug.ordered_wq)
++		destroy_workqueue(xe->eudebug.ordered_wq);
++}
++
++
+ void prelim_xe_eudebug_init(struct xe_device *xe)
+ {
+-	struct device *dev = xe->drm.dev;
+ 	int ret;
+ 
+ 	spin_lock_init(&xe->eudebug.lock);
+@@ -2536,23 +2547,26 @@ void prelim_xe_eudebug_init(struct xe_device *xe)
+ 		return;
+ 	}
+ 
++	ret = drmm_add_action_or_reset(&xe->drm, prelim_xe_eudebug_fini, NULL);
++	if (ret) {
++		drm_warn(&xe->drm, "eudebug initialization failed: %d, debugger unavailable\n", ret);
++		return;
++	}
++
++
+ 	ret = sysfs_create_file(&xe->drm.dev->kobj, &dev_attr_prelim_enable_eudebug.attr);
+ 	if (ret) {
+ 		drm_warn(&xe->drm, "eudebug sysfs init failed: %d, debugger unavailable\n", ret);
+ 		return;
+ 	}
+ 
+-	devm_add_action_or_reset(dev, xe_eudebug_sysfs_fini, xe);
+-	xe->eudebug.state = XE_EUDEBUG_SUPPORTED;
+-}
+-
+-void prelim_xe_eudebug_fini(struct xe_device *xe)
+-{
+-	attention_scan_cancel(xe);
+-	xe_assert(xe, list_empty_careful(&xe->eudebug.list));
++	ret = drmm_add_action_or_reset(&xe->drm, prelim_xe_eudebug_sysfs_fini, NULL);
++	if (ret) {
++		drm_warn(&xe->drm, "eudebug sysfs post-init failed: %d, debugger unavailable\n", ret);
++		return;
++	}
+ 
+-	if (xe->eudebug.ordered_wq)
+-		destroy_workqueue(xe->eudebug.ordered_wq);
++	xe->eudebug.state = XE_EUDEBUG_SUPPORTED;
+ }
+ 
+ static int send_open_event(struct xe_eudebug *d, u32 flags, const u64 handle,
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.h b/drivers/gpu/drm/xe/prelim/xe_eudebug.h
+index 425a89a88..c1ec283ea 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.h
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.h
+@@ -34,7 +34,6 @@ int prelim_xe_eudebug_support_disable(struct xe_device *xe);
+ bool prelim_xe_eudebug_is_enabled(struct xe_device *xe);
+ 
+ void prelim_xe_eudebug_init(struct xe_device *xe);
+-void prelim_xe_eudebug_fini(struct xe_device *xe);
+ 
+ void prelim_xe_eudebug_file_open(struct xe_file *xef);
+ void prelim_xe_eudebug_file_close(struct xe_file *xef);
+@@ -79,7 +78,6 @@ static inline int prelim_xe_eudebug_support_disable(struct xe_device *xe) { retu
+ static inline bool prelim_xe_eudebug_is_enabled(struct xe_device *xe) { return false; }
+ 
+ static inline void prelim_xe_eudebug_init(struct xe_device *xe) { }
+-static inline void prelim_xe_eudebug_fini(struct xe_device *xe) { }
+ 
+ static inline void prelim_xe_eudebug_file_open(struct xe_file *xef) { }
+ static inline void prelim_xe_eudebug_file_close(struct xe_file *xef) { }
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index c4cc89084..b8cfb4d97 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -421,8 +421,6 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
+ {
+ 	struct xe_device *xe = to_xe_device(dev);
+ 
+-	prelim_xe_eudebug_fini(xe);
+-
+ 	xe_bo_dev_fini(&xe->bo_device);
+ 
+ 	if (xe->preempt_fence_wq)
+-- 
+2.34.1
+

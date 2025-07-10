@@ -59,7 +59,7 @@ index fecb7c8a9..4644d6846 100644
  
  	h_c = find_handle(d->res, XE_EUDEBUG_RES_TYPE_CLIENT, xef);
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 7e880a08c..58c6906ba 100644
+index a9741fa29..40a77c0cd 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -112,6 +112,7 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
@@ -187,10 +187,10 @@ index 5ef96deaa..779a52daf 100644
  		err = PTR_ERR(port->lrc);
  		goto err;
 diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
-index bbb9ffbf6..ecb05b9fe 100644
+index 64f0f4f91..14faa6082 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.c
 +++ b/drivers/gpu/drm/xe/xe_lrc.c
-@@ -883,7 +883,7 @@ static void xe_lrc_finish(struct xe_lrc *lrc)
+@@ -989,7 +989,7 @@ static int xe_lrc_setup_utilization(struct xe_lrc *lrc)
  #define PVC_CTX_ACC_CTR_THOLD	(0x2a + 1)
  
  static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
@@ -199,7 +199,7 @@ index bbb9ffbf6..ecb05b9fe 100644
  {
  	struct xe_gt *gt = hwe->gt;
  	struct xe_tile *tile = gt_to_tile(gt);
-@@ -1008,6 +1008,16 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+@@ -1124,6 +1124,16 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
  	map = __xe_lrc_start_seqno_map(lrc);
  	xe_map_write32(lrc_to_xe(lrc), &map, lrc->fence_ctx.next_seqno - 1);
  
@@ -213,10 +213,10 @@ index bbb9ffbf6..ecb05b9fe 100644
 +		xe_lrc_write_ctx_reg(lrc, CTX_CONTEXT_CONTROL, ctx_control);
 +	}
 +
- 	return 0;
- 
- err_lrc_finish:
-@@ -1028,7 +1038,7 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+ 	err = xe_lrc_setup_utilization(lrc);
+ 	if (err)
+ 		goto err_lrc_finish;
+@@ -1148,7 +1158,7 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
   * upon failure.
   */
  struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
@@ -225,7 +225,7 @@ index bbb9ffbf6..ecb05b9fe 100644
  {
  	struct xe_lrc *lrc;
  	int err;
-@@ -1037,7 +1047,7 @@ struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
+@@ -1157,7 +1167,7 @@ struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
  	if (!lrc)
  		return ERR_PTR(-ENOMEM);
  
@@ -235,7 +235,7 @@ index bbb9ffbf6..ecb05b9fe 100644
  		kfree(lrc);
  		return ERR_PTR(err);
 diff --git a/drivers/gpu/drm/xe/xe_lrc.h b/drivers/gpu/drm/xe/xe_lrc.h
-index 4206e6a8b..7a40b54d2 100644
+index 13c083559..3e9e1394f 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.h
 +++ b/drivers/gpu/drm/xe/xe_lrc.h
 @@ -41,8 +41,10 @@ struct xe_lrc_snapshot {

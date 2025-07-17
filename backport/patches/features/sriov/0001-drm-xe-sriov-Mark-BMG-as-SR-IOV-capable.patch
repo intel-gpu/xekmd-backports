@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 10 Jul 2025 10:30:40 +0000
+Subject: drm/xe/sriov: Mark BMG as SR-IOV capable
+
+Enable SR-IOV support for BMG platforms. Note that as other flags from
+the platform descriptor, it only means it may have that capability: it
+still depends on runtime checks for the proper support in HW and
+firmware.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Tested-by: Jakub Kolakowski <jakub1.kolakowski@intel.com>
+Signed-off-by: Jakub Kolakowski <jakub1.kolakowski@intel.com>
+Reviewed-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Link: https://lore.kernel.org/r/20250710103040.375610-3-jakub1.kolakowski@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(cherry picked from commit 908d9d56c8264536b9e10d682c08781a54527d7b linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index efe4ea46d614..dc9e143d6293 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -339,6 +339,7 @@ static const struct xe_device_desc bmg_desc = {
+ 	.has_fan_control = true,
+ 	.has_mbx_power_limits = true,
+ 	.has_heci_cscfi = 1,
++	.has_sriov = true,
+ };
+ 
+ static const struct xe_device_desc ptl_desc = {
+-- 
+2.43.0
+

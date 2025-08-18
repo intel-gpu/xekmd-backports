@@ -1,0 +1,81 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Lucas De Marchi <lucas.demarchi@intel.com>
+Date: Fri, 21 Feb 2025 16:10:44 -0800
+Subject: drm/xe: Stop setting drvdata to NULL
+
+PCI subsystem is not supposed to call the remove() function when probe
+fails and doesn't need a protection for that. The only places checking
+for NULL drvdata, is on 2 sysfs files and they shouldn't be needed since
+the files are removed and reads on open fds just return an error.
+
+For this protection the core driver implementation in
+drivers/base/dd.c:device_unbind_cleanup() already sets it to NULL, after
+the release of dev resources.
+
+Remove the setting to NULL so it's possible to obtain the xe pointer
+from callbacks like the component unbind from device_unbind_cleanup(),
+i.e. after xe_pci_remove() already finished.
+
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/20250222001051.3012936-5-lucas.demarchi@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit 83e3d0876754f820cb2adef55275d09d31676020 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device_sysfs.c | 6 ------
+ drivers/gpu/drm/xe/xe_pci.c          | 7 +------
+ 2 files changed, 1 insertion(+), 12 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device_sysfs.c b/drivers/gpu/drm/xe/xe_device_sysfs.c
+index 4e32750de3a7..2e657692e5b5 100644
+--- a/drivers/gpu/drm/xe/xe_device_sysfs.c
++++ b/drivers/gpu/drm/xe/xe_device_sysfs.c
+@@ -34,9 +34,6 @@ vram_d3cold_threshold_show(struct device *dev,
+ 	struct xe_device *xe = pdev_to_xe_device(pdev);
+ 	int ret;
+ 
+-	if (!xe)
+-		return -EINVAL;
+-
+ 	xe_pm_runtime_get(xe);
+ 	ret = sysfs_emit(buf, "%d\n", xe->d3cold.vram_threshold);
+ 	xe_pm_runtime_put(xe);
+@@ -53,9 +50,6 @@ vram_d3cold_threshold_store(struct device *dev, struct device_attribute *attr,
+ 	u32 vram_d3cold_threshold;
+ 	int ret;
+ 
+-	if (!xe)
+-		return -EINVAL;
+-
+ 	ret = kstrtou32(buff, 0, &vram_d3cold_threshold);
+ 	if (ret)
+ 		return ret;
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index a37bc4386991..9addca0f2e26 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -758,11 +758,7 @@ static int xe_info_init(struct xe_device *xe,
+ 
+ static void xe_pci_remove(struct pci_dev *pdev)
+ {
+-	struct xe_device *xe;
+-
+-	xe = pdev_to_xe_device(pdev);
+-	if (!xe) /* driver load aborted, nothing to cleanup */
+-		return;
++	struct xe_device *xe = pdev_to_xe_device(pdev);
+ 
+ 	if (IS_SRIOV_PF(xe))
+ 		xe_pci_sriov_configure(pdev, 0);
+@@ -772,7 +768,6 @@ static void xe_pci_remove(struct pci_dev *pdev)
+ 
+ 	xe_device_remove(xe);
+ 	xe_pm_runtime_fini(xe);
+-	pci_set_drvdata(pdev, NULL);
+ }
+ 
+ /*
+-- 
+2.43.0
+

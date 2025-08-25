@@ -14,19 +14,19 @@ Signed-off-by: Jakub Kolakowski <jakub1.kolakowski@intel.com>
 Reviewed-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
 Link: https://lore.kernel.org/r/20250710103040.375610-3-jakub1.kolakowski@intel.com
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-(cherry picked from commit 908d9d56c8264536b9e10d682c08781a54527d7b linux-next)
+(backported from commit 908d9d56c8264536b9e10d682c08781a54527d7b linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_pci.c | 1 +
  1 file changed, 1 insertion(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index efe4ea46d614..dc9e143d6293 100644
+index 9f22fd2cd346..7520d3d362db 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -339,6 +339,7 @@ static const struct xe_device_desc bmg_desc = {
- 	.has_fan_control = true,
+@@ -346,6 +346,7 @@ static const struct xe_device_desc bmg_desc = {
  	.has_mbx_power_limits = true,
+ 	.has_gsc_nvm = 1,
  	.has_heci_cscfi = 1,
 +	.has_sriov = true,
  };

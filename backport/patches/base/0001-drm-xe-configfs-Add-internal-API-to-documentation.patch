@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Lucas De Marchi <lucas.demarchi@intel.com>
+Date: Wed, 28 May 2025 14:54:08 -0700
+Subject: drm/xe/configfs: Add internal API to documentation
+
+Add the internal configfs API like is done with other parts of the
+driver. Also ensure the correct number of '=' chars are used for the
+header.
+
+Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
+Link: https://lore.kernel.org/r/20250528-engine-mask-v4-5-f4636d2a890a@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(cherry-picked from commit 399c5f54090c1c7d8f9eae7897940e8a11604884 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ Documentation/gpu/xe/xe_configfs.rst | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/Documentation/gpu/xe/xe_configfs.rst b/Documentation/gpu/xe/xe_configfs.rst
+index 9b9d941eb20e..7f8ec39dc6dd 100644
+--- a/Documentation/gpu/xe/xe_configfs.rst
++++ b/Documentation/gpu/xe/xe_configfs.rst
+@@ -2,9 +2,15 @@
+ 
+ .. _xe_configfs:
+ 
+-============
++===========
+ Xe Configfs
+-============
++===========
+ 
+ .. kernel-doc:: drivers/gpu/drm/xe/xe_configfs.c
+    :doc: Xe Configfs
++
++Internal API
++============
++
++.. kernel-doc:: drivers/gpu/drm/xe/xe_configfs.c
++   :internal:
+-- 
+2.43.0
+

@@ -1,3 +1,4 @@
+[Note|Check how the tests are going to be triggered if I send this from a non-maintainer account.]
 
 # Introduction
 

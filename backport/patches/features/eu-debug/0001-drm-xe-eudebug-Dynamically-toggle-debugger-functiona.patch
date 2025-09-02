@@ -18,7 +18,7 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
-(rebase from commit 8a07e23d639d941c46c02555109f3d1ef65c2317 eudebug-dev)
+(backported from commit 8a07e23d639d941c46c02555109f3d1ef65c2317 eudebug-dev)
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -35,23 +35,23 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  10 files changed, 138 insertions(+), 34 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 1a6336a5d..959328d7b 100644
+index e3122a6798dc..3d83b954cb2c 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -783,8 +783,6 @@ int xe_device_probe(struct xe_device *xe)
+@@ -929,8 +929,6 @@ int xe_device_probe(struct xe_device *xe)
  
  	xe_debugfs_register(xe);
  
 -	xe_eudebug_init_late(xe);
 -
- 	xe_hwmon_register(xe);
- 
- 	for_each_gt(gt, xe, id)
+ 	err = xe_hwmon_register(xe);
+ 	if (err)
+ 		goto err_unregister_display;
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index a02e42e55..cc007ebc8 100644
+index 1270a0a1283d..890603ef0f19 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -565,6 +565,9 @@ struct xe_device {
+@@ -649,6 +649,9 @@ struct xe_device {
  		/** discovery_lock: used for discovery to block xe ioctls */
  		struct rw_semaphore discovery_lock;
  
@@ -62,7 +62,7 @@ index a02e42e55..cc007ebc8 100644
  		struct delayed_work attention_scan;
  	} eudebug;
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index f14b39ced..73ee2894a 100644
+index 610e1a2ae6ea..bd225e3d6c44 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -2028,9 +2028,6 @@ xe_eudebug_connect(struct xe_device *xe,
@@ -254,7 +254,7 @@ index f14b39ced..73ee2894a 100644
  
  void xe_eudebug_fini(struct xe_device *xe)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
-index 766d0a94d..90525d8a0 100644
+index 766d0a94d200..90525d8a02ad 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
 @@ -26,9 +26,7 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
@@ -278,10 +278,10 @@ index 766d0a94d..90525d8a0 100644
  static inline void xe_eudebug_file_open(struct xe_file *xef) { }
  static inline void xe_eudebug_file_close(struct xe_file *xef) { }
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 58c6906ba..09ddd6d7f 100644
+index fdec884d5b06..f9e257517893 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -435,6 +435,11 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+@@ -476,6 +476,11 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
  			 !(value & DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)))
  		return -EINVAL;
  
@@ -294,10 +294,10 @@ index 58c6906ba..09ddd6d7f 100644
  	q->sched_props.preempt_timeout_us = 0;
  
 diff --git a/drivers/gpu/drm/xe/xe_hw_engine.c b/drivers/gpu/drm/xe/xe_hw_engine.c
-index 2867a3012..d702d1784 100644
+index d19e529e5c90..cb400c051db6 100644
 --- a/drivers/gpu/drm/xe/xe_hw_engine.c
 +++ b/drivers/gpu/drm/xe/xe_hw_engine.c
-@@ -562,7 +562,6 @@ static void hw_engine_init_early(struct xe_gt *gt, struct xe_hw_engine *hwe,
+@@ -564,7 +564,6 @@ static void hw_engine_init_early(struct xe_gt *gt, struct xe_hw_engine *hwe,
  	xe_tuning_process_engine(hwe);
  	xe_wa_process_engine(hwe);
  	hw_engine_setup_default_state(hwe);
@@ -306,7 +306,7 @@ index 2867a3012..d702d1784 100644
  	xe_reg_sr_init(&hwe->reg_whitelist, hwe->name, gt_to_xe(gt));
  	xe_reg_whitelist_process_engine(hwe);
 diff --git a/drivers/gpu/drm/xe/xe_reg_sr.c b/drivers/gpu/drm/xe/xe_reg_sr.c
-index 9475e3f74..977a5240b 100644
+index fc8447a838c4..8f525d6c6765 100644
 --- a/drivers/gpu/drm/xe/xe_reg_sr.c
 +++ b/drivers/gpu/drm/xe/xe_reg_sr.c
 @@ -73,22 +73,31 @@ static void reg_sr_inc_error(struct xe_reg_sr *sr)
@@ -348,7 +348,7 @@ index 9475e3f74..977a5240b 100644
  	}
  
 diff --git a/drivers/gpu/drm/xe/xe_reg_sr.h b/drivers/gpu/drm/xe/xe_reg_sr.h
-index 51fbba423..d67fafdcd 100644
+index 51fbba423e27..d67fafdcd847 100644
 --- a/drivers/gpu/drm/xe/xe_reg_sr.h
 +++ b/drivers/gpu/drm/xe/xe_reg_sr.h
 @@ -6,6 +6,8 @@
@@ -370,10 +370,10 @@ index 51fbba423..d67fafdcd 100644
  void xe_reg_sr_apply_whitelist(struct xe_hw_engine *hwe);
  
 diff --git a/drivers/gpu/drm/xe/xe_reg_whitelist.c b/drivers/gpu/drm/xe/xe_reg_whitelist.c
-index edab5d4e3..14e5955a9 100644
+index 23f6c81d9994..166ca3d183db 100644
 --- a/drivers/gpu/drm/xe/xe_reg_whitelist.c
 +++ b/drivers/gpu/drm/xe/xe_reg_whitelist.c
-@@ -119,7 +119,7 @@ static void whitelist_apply_to_hwe(struct xe_hw_engine *hwe)
+@@ -118,7 +118,7 @@ static void whitelist_apply_to_hwe(struct xe_hw_engine *hwe)
  		}
  
  		xe_reg_whitelist_print_entry(&p, 0, reg, entry);
@@ -383,10 +383,10 @@ index edab5d4e3..14e5955a9 100644
  		slot++;
  	}
 diff --git a/drivers/gpu/drm/xe/xe_rtp.c b/drivers/gpu/drm/xe/xe_rtp.c
-index 7a1c78fdf..c2831f657 100644
+index 95571b87aa73..a78ce4d206bb 100644
 --- a/drivers/gpu/drm/xe/xe_rtp.c
 +++ b/drivers/gpu/drm/xe/xe_rtp.c
-@@ -153,7 +153,7 @@ static void rtp_add_sr_entry(const struct xe_rtp_action *action,
+@@ -180,7 +180,7 @@ static void rtp_add_sr_entry(const struct xe_rtp_action *action,
  	};
  
  	sr_entry.reg.addr += mmio_base;
@@ -396,5 +396,5 @@ index 7a1c78fdf..c2831f657 100644
  
  static bool rtp_process_one_sr(const struct xe_rtp_entry_sr *entry,
 -- 
-2.34.1
+2.43.0
 

@@ -28,7 +28,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  6 files changed, 70 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_engine_regs.h b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
-index db2d7bd7e..e190d16fc 100644
+index 38984c67f543..fba725bee914 100644
 --- a/drivers/gpu/drm/xe/regs/xe_engine_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
 @@ -120,6 +120,10 @@
@@ -43,7 +43,7 @@ index db2d7bd7e..e190d16fc 100644
  #define RING_BBADDR_UDW(base)			XE_REG((base) + 0x168)
  
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 1f149ba7e..dbc01463c 100644
+index 1f149ba7e5e9..dbc01463c09e 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 @@ -473,6 +473,14 @@
@@ -76,7 +76,7 @@ index 1f149ba7e..dbc01463c 100644
  #define   DISABLE_TDL_SVHS_GATING		REG_BIT(1)
  #define   DISABLE_DOP_GATING			REG_BIT(0)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index cbcf7a72f..fecb7c8a9 100644
+index cbcf7a72fdba..fecb7c8a9779 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -10,13 +10,21 @@
@@ -150,7 +150,7 @@ index cbcf7a72f..fecb7c8a9 100644
  {
  	spin_lock_init(&xe->eudebug.lock);
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
-index 326ddbd50..3cd6bc7bb 100644
+index 326ddbd50651..3cd6bc7bb682 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
 @@ -11,6 +11,7 @@ struct xe_device;
@@ -178,18 +178,18 @@ index 326ddbd50..3cd6bc7bb 100644
  static inline void xe_eudebug_file_open(struct xe_file *xef) { }
  static inline void xe_eudebug_file_close(struct xe_file *xef) { }
 diff --git a/drivers/gpu/drm/xe/xe_hw_engine.c b/drivers/gpu/drm/xe/xe_hw_engine.c
-index b26b6fb5c..a2bc42a94 100644
+index 7020c8e536e6..a9bcff5666c0 100644
 --- a/drivers/gpu/drm/xe/xe_hw_engine.c
 +++ b/drivers/gpu/drm/xe/xe_hw_engine.c
-@@ -16,6 +16,7 @@
- #include "xe_assert.h"
+@@ -17,6 +17,7 @@
  #include "xe_bo.h"
+ #include "xe_configfs.h"
  #include "xe_device.h"
 +#include "xe_eudebug.h"
  #include "xe_execlist.h"
  #include "xe_force_wake.h"
  #include "xe_gsc.h"
-@@ -559,6 +560,7 @@ static void hw_engine_init_early(struct xe_gt *gt, struct xe_hw_engine *hwe,
+@@ -560,6 +561,7 @@ static void hw_engine_init_early(struct xe_gt *gt, struct xe_hw_engine *hwe,
  	xe_tuning_process_engine(hwe);
  	xe_wa_process_engine(hwe);
  	hw_engine_setup_default_state(hwe);
@@ -198,7 +198,7 @@ index b26b6fb5c..a2bc42a94 100644
  	xe_reg_sr_init(&hwe->reg_whitelist, hwe->name, gt_to_xe(gt));
  	xe_reg_whitelist_process_engine(hwe);
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
-index ab5a4be2b..2c986715a 100644
+index a697bcbebee5..a115a32bd26c 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
 @@ -41,6 +41,8 @@

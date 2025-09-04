@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Thu, 19 Oct 2023 11:16:12 +0200
-Subject: drm/xe/eudebug: Add debug metadata support for
- xe_eudebug
+Subject: drm/xe/eudebug: Add debug metadata support for xe_eudebug
 
 Reflect debug metadata resource creation/destroy as events passed to the
 debugger. Introduce ioctl allowing to read metadata content on demand.
@@ -21,8 +20,9 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
-(cherry picked from commit 80b45ec2be680ed836ac9f4c08af32e05c3bf702 eudebug-dev)
+(cherry picked from commit 5e7894a7aa75841e8a97996db16758f20f84fa52 eudebug-dev)
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_debug_metadata.c |   8 +-
  drivers/gpu/drm/xe/xe_eudebug.c        | 330 ++++++++++++++++++++++++-
@@ -75,7 +75,7 @@ index b045bdd77235..172fe2b33557 100644
  
  	return 0;
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 25a9a7daf852..1a5f2b044e30 100644
+index 9ef9e8cffe79..d43e06e054e0 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -20,15 +20,18 @@
@@ -606,10 +606,10 @@ index ffb0dc71430a..a69051b04698 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index dad6cdf4d862..31f5d1d3cc4b 100644
+index 3a2befd644e5..b3cdc2b8951a 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -3188,7 +3188,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -3783,7 +3783,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		if (err)
  			goto unwind_ops;
  
@@ -674,5 +674,5 @@ index a5f13563b3b9..3c4d1b511acd 100644
  }
  #endif
 -- 
-2.25.1
+2.43.0
 

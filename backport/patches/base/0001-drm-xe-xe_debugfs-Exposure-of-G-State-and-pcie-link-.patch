@@ -42,11 +42,11 @@ Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_pmt.h | 10 ++++
- drivers/gpu/drm/xe/xe_debugfs.c  | 85 ++++++++++++++++++++++++++++++++
- 2 files changed, 95 insertions(+)
+ drivers/gpu/drm/xe/xe_debugfs.c  | 80 ++++++++++++++++++++++++++++++++
+ 2 files changed, 90 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_pmt.h b/drivers/gpu/drm/xe/regs/xe_pmt.h
-index b0efd9b48d1e..3b3cd72f5f42 100644
+index 2995d72c3..264e9baf9 100644
 --- a/drivers/gpu/drm/xe/regs/xe_pmt.h
 +++ b/drivers/gpu/drm/xe/regs/xe_pmt.h
 @@ -21,4 +21,14 @@
@@ -65,10 +65,10 @@ index b0efd9b48d1e..3b3cd72f5f42 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index 92e6fa8fe3a1..b59c1e727d1e 100644
+index 26e9d146c..8edbd99e1 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
-@@ -11,15 +11,18 @@
+@@ -11,17 +11,20 @@
  
  #include <drm/drm_debugfs.h>
  
@@ -81,13 +81,15 @@ index 92e6fa8fe3a1..b59c1e727d1e 100644
  #include "xe_guc_ads.h"
 +#include "xe_mmio.h"
  #include "xe_pm.h"
+ #include "xe_pxp_debugfs.h"
  #include "xe_sriov.h"
+ #include "xe_sriov_pf.h"
  #include "xe_step.h"
 +#include "xe_vsec.h"
+ #include "xe_wa.h"
  
  #ifdef CONFIG_DRM_XE_DEBUG
- #include "xe_bo_evict.h"
-@@ -29,6 +32,23 @@
+@@ -32,6 +35,23 @@
  
  DECLARE_FAULT_ATTR(gt_reset_failure);
  
@@ -111,7 +113,7 @@ index 92e6fa8fe3a1..b59c1e727d1e 100644
  static struct xe_device *node_to_xe(struct drm_info_node *node)
  {
  	return to_xe_device(node->minor->dev);
-@@ -81,11 +101,71 @@ static int sriov_info(struct seq_file *m, void *data)
+@@ -102,6 +122,61 @@ static int workaround_info(struct seq_file *m, void *data)
  	return 0;
  }
  
@@ -173,17 +175,7 @@ index 92e6fa8fe3a1..b59c1e727d1e 100644
  static const struct drm_info_list debugfs_list[] = {
  	{"info", info, 0},
  	{ .name = "sriov_info", .show = sriov_info, },
- };
- 
-+static const struct drm_info_list debugfs_residencies[] = {
-+	{ .name = "dgfx_pkg_residencies", .show = dgfx_pkg_residencies_show, },
-+	{ .name = "dgfx_pcie_link_residencies", .show = dgfx_pcie_link_residencies_show, },
-+};
-+
- static int forcewake_open(struct inode *inode, struct file *file)
- {
- 	struct xe_device *xe = inode->i_private;
-@@ -204,6 +284,11 @@ void xe_debugfs_register(struct xe_device *xe)
+@@ -261,6 +336,11 @@ void xe_debugfs_register(struct xe_device *xe)
  				 ARRAY_SIZE(debugfs_list),
  				 root, minor);
  

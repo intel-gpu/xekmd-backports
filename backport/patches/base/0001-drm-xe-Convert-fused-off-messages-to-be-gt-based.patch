@@ -1,0 +1,104 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Lucas De Marchi <lucas.demarchi@intel.com>
+Date: Wed, 28 May 2025 14:54:05 -0700
+Subject: drm/xe: Convert "fused off" messages to be gt-based
+
+It's useful to see in the log message what GT was being checked for
+disabled/fused-off engines. Especially on multi-tile platforms the
+different tiles may be fused differently making it harder to parse
+the information.
+
+Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
+Link: https://lore.kernel.org/r/20250528-engine-mask-v4-2-f4636d2a890a@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(cherry-picked from commit 2b0ef1f7a2980bf0c5589ff42806eee2d55ea8e6 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hw_engine.c | 17 ++++++-----------
+ 1 file changed, 6 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hw_engine.c b/drivers/gpu/drm/xe/xe_hw_engine.c
+index 042aba206509..82904e351e7b 100644
+--- a/drivers/gpu/drm/xe/xe_hw_engine.c
++++ b/drivers/gpu/drm/xe/xe_hw_engine.c
+@@ -661,7 +661,7 @@ static void read_media_fuses(struct xe_gt *gt)
+ 
+ 		if (!(BIT(j) & vdbox_mask)) {
+ 			gt->info.engine_mask &= ~BIT(i);
+-			drm_info(&xe->drm, "vcs%u fused off\n", j);
++			xe_gt_info(gt, "vcs%u fused off\n", j);
+ 		}
+ 	}
+ 
+@@ -671,7 +671,7 @@ static void read_media_fuses(struct xe_gt *gt)
+ 
+ 		if (!(BIT(j) & vebox_mask)) {
+ 			gt->info.engine_mask &= ~BIT(i);
+-			drm_info(&xe->drm, "vecs%u fused off\n", j);
++			xe_gt_info(gt, "vecs%u fused off\n", j);
+ 		}
+ 	}
+ }
+@@ -696,15 +696,13 @@ static void read_copy_fuses(struct xe_gt *gt)
+ 
+ 		if (!(BIT(j / 2) & bcs_mask)) {
+ 			gt->info.engine_mask &= ~BIT(i);
+-			drm_info(&xe->drm, "bcs%u fused off\n", j);
++			xe_gt_info(gt, "bcs%u fused off\n", j);
+ 		}
+ 	}
+ }
+ 
+ static void read_compute_fuses_from_dss(struct xe_gt *gt)
+ {
+-	struct xe_device *xe = gt_to_xe(gt);
+-
+ 	/*
+ 	 * CCS fusing based on DSS masks only applies to platforms that can
+ 	 * have more than one CCS.
+@@ -723,14 +721,13 @@ static void read_compute_fuses_from_dss(struct xe_gt *gt)
+ 
+ 		if (!xe_gt_topology_has_dss_in_quadrant(gt, j)) {
+ 			gt->info.engine_mask &= ~BIT(i);
+-			drm_info(&xe->drm, "ccs%u fused off\n", j);
++			xe_gt_info(gt, "ccs%u fused off\n", j);
+ 		}
+ 	}
+ }
+ 
+ static void read_compute_fuses_from_reg(struct xe_gt *gt)
+ {
+-	struct xe_device *xe = gt_to_xe(gt);
+ 	u32 ccs_mask;
+ 
+ 	ccs_mask = xe_mmio_read32(&gt->mmio, XEHP_FUSE4);
+@@ -742,7 +739,7 @@ static void read_compute_fuses_from_reg(struct xe_gt *gt)
+ 
+ 		if ((ccs_mask & BIT(j)) == 0) {
+ 			gt->info.engine_mask &= ~BIT(i);
+-			drm_info(&xe->drm, "ccs%u fused off\n", j);
++			xe_gt_info(gt, "ccs%u fused off\n", j);
+ 		}
+ 	}
+ }
+@@ -757,8 +754,6 @@ static void read_compute_fuses(struct xe_gt *gt)
+ 
+ static void check_gsc_availability(struct xe_gt *gt)
+ {
+-	struct xe_device *xe = gt_to_xe(gt);
+-
+ 	if (!(gt->info.engine_mask & BIT(XE_HW_ENGINE_GSCCS0)))
+ 		return;
+ 
+@@ -774,7 +769,7 @@ static void check_gsc_availability(struct xe_gt *gt)
+ 		xe_mmio_write32(&gt->mmio, GUNIT_GSC_INTR_ENABLE, 0);
+ 		xe_mmio_write32(&gt->mmio, GUNIT_GSC_INTR_MASK, ~0);
+ 
+-		drm_dbg(&xe->drm, "GSC FW not used, disabling gsccs\n");
++		xe_gt_dbg(gt, "GSC FW not used, disabling gsccs\n");
+ 	}
+ }
+ 
+-- 
+2.43.0
+

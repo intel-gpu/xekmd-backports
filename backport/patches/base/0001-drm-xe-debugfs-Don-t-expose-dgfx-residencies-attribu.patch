@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 5 Sep 2025 19:36:25 +0200
+Subject: drm/xe/debugfs: Don't expose dgfx residencies attributes on
+ VF
+
+In addition of checking if we are running on the BATTLEMAGE,
+we should also check for not being a VF driver, as VFs can't
+access necessary registers, and doing so leads to:
+
+ | .. [drm] GT0: VF is trying to read an inaccessible register 0x35b004+0x0
+ | RIP: 0010:xe_gt_sriov_vf_read32+0x5e2/0x8a0 [xe]
+ | Call Trace:
+ |  xe_mmio_read32+0x110/0x280 [xe]
+ |  read_residency_counter+0x42/0xd0 [xe]
+ |  dgfx_pkg_residencies_show+0x115/0x190 [xe]
+ | .. [drm] Package G2 counter failed to read, ret -19
+
+or
+
+ | .. [drm] GT0: VF is trying to read an inaccessible register 0x35b004+0x0
+ | RIP: 0010:xe_gt_sriov_vf_read32+0x5e2/0x8a0 [xe]
+ | Call Trace:
+ |  xe_mmio_read32+0x110/0x280 [xe]
+ |  read_residency_counter+0x42/0xd0 [xe]
+ |  dgfx_pcie_link_residencies_show+0xe7/0x160 [xe]
+ | .. [drm] PCIE LINK L0 RESIDENCY counter failed to read, ret -19
+
+Similarly, there is no point to expose inject_csc_hw_error on VFs,
+as HW errors support is already disabled for VFs.
+
+Bspec: 53221
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Soham Purkait <soham.purkait@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Riana Tauro <riana.tauro@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Acked-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250905173625.8398-1-michal.wajdeczko@intel.com
+(backported from commit f261f5dddec1acdf60198371048b052febf67cf5 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_debugfs.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
+index b59c1e727d1e..e9e5c1f79303 100644
+--- a/drivers/gpu/drm/xe/xe_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_debugfs.c
+@@ -284,7 +284,7 @@ void xe_debugfs_register(struct xe_device *xe)
+ 				 ARRAY_SIZE(debugfs_list),
+ 				 root, minor);
+ 
+-	if (xe->info.platform == XE_BATTLEMAGE)
++	if (xe->info.platform == XE_BATTLEMAGE && !IS_SRIOV_VF(xe))
+ 		drm_debugfs_create_files(debugfs_residencies,
+ 					 ARRAY_SIZE(debugfs_residencies),
+ 					 root, minor);
+-- 
+2.43.0
+

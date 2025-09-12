@@ -23,23 +23,26 @@ Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
  create mode 100644 include/uapi/drm/xe_drm_prelim.h
 
 diff --git a/Documentation/gpu/driver-uapi.rst b/Documentation/gpu/driver-uapi.rst
-index 971cdb481..02192621b 100644
+index 1f15a8ca1265..ccc6c5cd588a 100644
 --- a/Documentation/gpu/driver-uapi.rst
 +++ b/Documentation/gpu/driver-uapi.rst
-@@ -27,3 +27,8 @@ drm/xe uAPI
- ===========
+@@ -28,6 +28,11 @@ drm/xe uAPI
  
  .. kernel-doc:: include/uapi/drm/xe_drm.h
-+
+ 
 +drm/xe PRELIM uAPI
 +==================
 +
 +.. kernel-doc:: include/uapi/drm/xe_drm_prelim.h
++
+ drm/asahi uAPI
+ ================
+ 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index d16b9cb5c..3dccdd9ea 100644
+index 338a4da0d074..754c7a3bc1fc 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -164,6 +164,14 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -188,6 +188,14 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  	xe_pm_runtime_put(xe);
  }
  
@@ -55,10 +58,10 @@ index d16b9cb5c..3dccdd9ea 100644
  	DRM_IOCTL_DEF_DRV(XE_DEVICE_QUERY, xe_query_ioctl, DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_GEM_CREATE, xe_gem_create_ioctl, DRM_RENDER_ALLOW),
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 2416971fb..430635249 100644
+index 5abba79e8056..a7b3a6d88837 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
-@@ -1785,6 +1785,7 @@ struct drm_xe_debug_metadata_destroy {
+@@ -2065,6 +2065,7 @@ struct drm_xe_debug_metadata_destroy {
  };
  
  #include "xe_drm_eudebug.h"
@@ -68,7 +71,7 @@ index 2416971fb..430635249 100644
  }
 diff --git a/include/uapi/drm/xe_drm_prelim.h b/include/uapi/drm/xe_drm_prelim.h
 new file mode 100644
-index 000000000..9c86f5969
+index 000000000000..9c86f5969500
 --- /dev/null
 +++ b/include/uapi/drm/xe_drm_prelim.h
 @@ -0,0 +1,73 @@
@@ -146,5 +149,5 @@ index 000000000..9c86f5969
 + */
 +#endif /* _UAPI_XE_DRM_PRELIM_H_ */
 -- 
-2.25.1
+2.43.0
 

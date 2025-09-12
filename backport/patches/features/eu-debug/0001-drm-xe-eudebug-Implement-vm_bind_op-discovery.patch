@@ -12,18 +12,18 @@ v2: - Fix bad op ref seqno (Christoph)
 
 Cc: Matthew Brost <matthew.brost@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
-Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
-(cherry picked from commit 37abe2520b5a4ca9c6b36093f3a0c6024cd16de9 eudebug-dev)
-Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry-picked from commit 052062a6ef30e07ca9e6695cde7dfc1f6bdf0315 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c | 45 +++++++++++++++++++++++++++++++++
  1 file changed, 45 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 1a5f2b044e30..f14b39ced511 100644
+index 17c075ccb36b..c9bffb95e81c 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -3243,6 +3243,47 @@ void xe_eudebug_debug_metadata_destroy(struct xe_file *xef, struct xe_debug_meta
+@@ -3188,6 +3188,47 @@ void xe_eudebug_debug_metadata_destroy(struct xe_file *xef, struct xe_debug_meta
  	xe_eudebug_event_put(d, debug_metadata_destroy_event(d, xef, m));
  }
  
@@ -71,7 +71,7 @@ index 1a5f2b044e30..f14b39ced511 100644
  static int discover_client(struct xe_eudebug *d, struct xe_file *xef)
  {
  	struct xe_debug_metadata *m;
-@@ -3265,6 +3306,10 @@ static int discover_client(struct xe_eudebug *d, struct xe_file *xef)
+@@ -3210,6 +3251,10 @@ static int discover_client(struct xe_eudebug *d, struct xe_file *xef)
  		err = vm_create_event(d, xef, vm);
  		if (err)
  			break;
@@ -83,5 +83,5 @@ index 1a5f2b044e30..f14b39ced511 100644
  
  	xa_for_each(&xef->exec_queue.xa, i, q) {
 -- 
-2.25.1
+2.43.0
 

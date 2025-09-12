@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
+Date: Wed, 28 Aug 2024 14:12:38 +0200
+Subject: drm/xe/eudebug/ptl: Add RCU_DEBUG_1 register support for xe3
+
+Format of Register_RenderControlUnitDebug1 is different from
+previous gens. Adjust it so it matches PTL/xe3 format.
+
+Acked-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry-picked from commit 765bcabd48b582ef8f66a79c15769caf413f8f51 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_eudebug.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
+index d27838d0e8ca..4771c3a256aa 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/xe_eudebug.c
+@@ -1463,6 +1463,17 @@ static u32 engine_status_xe2(const struct xe_hw_engine * const hwe,
+ 	return (rcu_debug1 >> shift) & RCU_DEBUG_1_ENGINE_STATUS;
+ }
+ 
++static u32 engine_status_xe3(const struct xe_hw_engine * const hwe,
++			     u32 rcu_debug1)
++{
++	const unsigned int first = 6;
++	const unsigned int incr = 4;
++	const unsigned int i = rcu_debug1_engine_index(hwe);
++	const unsigned int shift = first + (i * incr);
++
++	return (rcu_debug1 >> shift) & RCU_DEBUG_1_ENGINE_STATUS;
++}
++
+ static u32 engine_status(const struct xe_hw_engine * const hwe,
+ 			 u32 rcu_debug1)
+ {
+@@ -1472,6 +1483,8 @@ static u32 engine_status(const struct xe_hw_engine * const hwe,
+ 		status = engine_status_xe1(hwe, rcu_debug1);
+ 	else if (GRAPHICS_VER(gt_to_xe(hwe->gt)) < 30)
+ 		status = engine_status_xe2(hwe, rcu_debug1);
++	else if (GRAPHICS_VER(gt_to_xe(hwe->gt)) < 35)
++		status = engine_status_xe3(hwe, rcu_debug1);
+ 	else
+ 		XE_WARN_ON(GRAPHICS_VER(gt_to_xe(hwe->gt)));
+ 
+-- 
+2.43.0
+

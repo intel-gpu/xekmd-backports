@@ -1,0 +1,115 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Date: Fri, 24 Jan 2025 15:27:11 +0200
+Subject: drm/xe: Reset engines before gt reset
+
+On BMG eudebug has had problems when two separate contexts
+are run where first one is debuggable and other is not
+and then hardware is forced to enter exception handler.
+
+This will lead to confused hardware state where we
+will lose access to the GPU first and then to CPU
+leading to full machine hang.
+
+We have had similarish problem in i915/dg2 but the
+exact workaround to fix it is not required for BMG.
+
+Regardless, if we do reset the render engine before gt
+reset, our problem of hanging the GPU is solved.
+
+If eudebug is enabled, do engine reset beforehand
+in order to prevent gt hardware hang on resetting
+while debuggable context is present.
+
+Reference: Wa_22011100796
+Cc: Chris Wilson <chris@chris-wilson.co.uk>
+Cc: Joonas Lahtinen <joonas.lahtinen@linux.intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry-picked from commit a270139c414d29d3d4a3167680d5ceb2ff620e2e drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_gt_regs.h |  1 +
+ drivers/gpu/drm/xe/xe_gt.c           | 38 ++++++++++++++++++++++++++++
+ 2 files changed, 39 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+index bfe5f8e8dc26..b772771591d0 100644
+--- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+@@ -241,6 +241,7 @@
+ 
+ #define GDRST					XE_REG(0x941c)
+ #define   GRDOM_GUC				REG_BIT(3)
++#define   GRDOM_RENDER				REG_BIT(1)
+ #define   GRDOM_FULL				REG_BIT(0)
+ 
+ #define MISCCPCTL				XE_REG(0x9424)
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index c8eda36546d3..cfe6de596f94 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -5,6 +5,7 @@
+ 
+ #include "xe_gt.h"
+ 
++#include <linux/delay.h>
+ #include <linux/minmax.h>
+ 
+ #include <drm/drm_managed.h>
+@@ -708,8 +709,42 @@ void xe_gt_record_user_engines(struct xe_gt *gt)
+ 		     == gt->info.engine_mask);
+ }
+ 
++
++static void do_render_reset(struct xe_gt *gt)
++{
++	/*
++	 * Original workaround suggest that we reset all engines before gt.
++	 * with igt/xe-eudebug-online/interrupt-other test, it looks like
++	 * render seems to be enough to release the hardware state so
++	 * that gt reset will succeed without a failure.
++	 */
++	const u32 mask = GRDOM_RENDER;
++	int loops = 2;
++	int err;
++	u32 val;
++
++	if (gt->info.id != 0)
++		return;
++
++	do {
++		xe_mmio_write32(&gt->mmio, GDRST, mask);
++
++		err = xe_mmio_wait32(&gt->mmio, GDRST, mask, 0,
++				     10000, &val, true);
++	} while (err && --loops);
++
++	if (err)
++		xe_gt_err(gt, "engine reset failed 0x%08x:0x%08x (%d)\n", mask, val, err);
++	/*
++	 * As we have observed that the engine state is still volatile
++	 * after GDRST is acked, impose a small delay to let everything settle.
++	 */
++	udelay(50);
++}
++
+ static int do_gt_reset(struct xe_gt *gt)
+ {
++	struct xe_device *xe = gt_to_xe(gt);
+ 	int err;
+ 
+ 	if (IS_SRIOV_VF(gt_to_xe(gt)))
+@@ -717,6 +752,9 @@ static int do_gt_reset(struct xe_gt *gt)
+ 
+ 	xe_gsc_wa_14015076503(gt, true);
+ 
++	if (xe->eudebug.enable)
++		do_render_reset(gt);
++
+ 	xe_mmio_write32(&gt->mmio, GDRST, GRDOM_FULL);
+ 	err = xe_mmio_wait32(&gt->mmio, GDRST, GRDOM_FULL, 0, 5000, NULL, false);
+ 	if (err)
+-- 
+2.43.0
+

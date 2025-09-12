@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Soham Purkait <soham.purkait@intel.com>
 Date: Wed, 16 Jul 2025 15:44:12 +0530
-Subject: drm/xe/xe_debugfs: Exposure of G-State and pcie link state
+Subject: [PATCH] drm/xe/xe_debugfs: Exposure of G-State and pcie link state
  residency counters through debugfs
 
 Add debug nodes, "dgfx_pkg_residencies" for G-states (G2, G6, G8, G10,
@@ -46,7 +46,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  2 files changed, 95 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_pmt.h b/drivers/gpu/drm/xe/regs/xe_pmt.h
-index b0efd9b48d1e..3b3cd72f5f42 100644
+index 2995d72c3f78..264e9baf949c 100644
 --- a/drivers/gpu/drm/xe/regs/xe_pmt.h
 +++ b/drivers/gpu/drm/xe/regs/xe_pmt.h
 @@ -21,4 +21,14 @@
@@ -65,10 +65,10 @@ index b0efd9b48d1e..3b3cd72f5f42 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index 92e6fa8fe3a1..b59c1e727d1e 100644
+index 26e9d146ccbf..9f742fe77b07 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
-@@ -11,15 +11,18 @@
+@@ -11,18 +11,21 @@
  
  #include <drm/drm_debugfs.h>
  
@@ -81,13 +81,16 @@ index 92e6fa8fe3a1..b59c1e727d1e 100644
  #include "xe_guc_ads.h"
 +#include "xe_mmio.h"
  #include "xe_pm.h"
+ #include "xe_pxp_debugfs.h"
  #include "xe_sriov.h"
+ #include "xe_sriov_pf.h"
  #include "xe_step.h"
+ #include "xe_wa.h"
 +#include "xe_vsec.h"
  
  #ifdef CONFIG_DRM_XE_DEBUG
  #include "xe_bo_evict.h"
-@@ -29,6 +32,23 @@
+@@ -32,6 +35,23 @@
  
  DECLARE_FAULT_ATTR(gt_reset_failure);
  
@@ -111,7 +114,7 @@ index 92e6fa8fe3a1..b59c1e727d1e 100644
  static struct xe_device *node_to_xe(struct drm_info_node *node)
  {
  	return to_xe_device(node->minor->dev);
-@@ -81,11 +101,71 @@ static int sriov_info(struct seq_file *m, void *data)
+@@ -102,12 +122,72 @@ static int workaround_info(struct seq_file *m, void *data)
  	return 0;
  }
  
@@ -126,8 +129,8 @@ index 92e6fa8fe3a1..b59c1e727d1e 100644
 +	xe_pm_runtime_get(xe);
 +	mmio = xe_root_tile_mmio(xe);
 +	struct {
-+		u32 offset;
-+		char *name;
++			u32 offset;
++			char *name;
 +	} residencies[] = {
 +		{BMG_G2_RESIDENCY_OFFSET, "Package G2"},
 +		{BMG_G6_RESIDENCY_OFFSET, "Package G6"},
@@ -173,6 +176,7 @@ index 92e6fa8fe3a1..b59c1e727d1e 100644
  static const struct drm_info_list debugfs_list[] = {
  	{"info", info, 0},
  	{ .name = "sriov_info", .show = sriov_info, },
+ 	{ .name = "workarounds", .show = workaround_info, },
  };
  
 +static const struct drm_info_list debugfs_residencies[] = {
@@ -183,7 +187,7 @@ index 92e6fa8fe3a1..b59c1e727d1e 100644
  static int forcewake_open(struct inode *inode, struct file *file)
  {
  	struct xe_device *xe = inode->i_private;
-@@ -204,6 +284,11 @@ void xe_debugfs_register(struct xe_device *xe)
+@@ -261,6 +341,11 @@ void xe_debugfs_register(struct xe_device *xe)
  				 ARRAY_SIZE(debugfs_list),
  				 root, minor);
  

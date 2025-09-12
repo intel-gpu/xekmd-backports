@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Fri, 26 May 2023 12:30:42 +0200
-Subject: drm/xe/eudebug: hw enablement for eudebug
+Subject: [PATCH] drm/xe/eudebug: hw enablement for eudebug
 
 In order to turn on debug capabilities, (i.e. breakpoints), TD_CTL
 and some other registers needs to be programmed. Implement eudebug
@@ -14,9 +14,8 @@ v3: get rid of undefining XE_MCR_REG (Mika)
 
 Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
-Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
-(backported from commit 2b295144b5f3c1805dad5f2b5ab13717dc8e060c eudebug-dev)
-Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(backported from commit e121661e670d146ef902e693628adab002d4aa02 drm-tip-eudebug)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_engine_regs.h |  4 ++
@@ -28,7 +27,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  6 files changed, 70 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_engine_regs.h b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
-index db2d7bd7e..e190d16fc 100644
+index 7ade41e2b7b3..f2d29595a3f2 100644
 --- a/drivers/gpu/drm/xe/regs/xe_engine_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
 @@ -120,6 +120,10 @@
@@ -43,10 +42,10 @@ index db2d7bd7e..e190d16fc 100644
  #define RING_BBADDR_UDW(base)			XE_REG((base) + 0x168)
  
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 1f149ba7e..dbc01463c 100644
+index 5cd5ab8529c5..497e2f9a57f6 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -473,6 +473,14 @@
+@@ -474,6 +474,14 @@
  #define   DG2_DISABLE_ROUND_ENABLE_ALLOW_FOR_SSLA	REG_BIT(15)
  #define   CLEAR_OPTIMIZATION_DISABLE			REG_BIT(6)
  
@@ -61,7 +60,7 @@ index 1f149ba7e..dbc01463c 100644
  #define CACHE_MODE_SS				XE_REG_MCR(0xe420, XE_REG_OPTION_MASKED)
  #define   DISABLE_ECC				REG_BIT(5)
  #define   ENABLE_PREFETCH_INTO_IC		REG_BIT(3)
-@@ -500,11 +508,13 @@
+@@ -501,11 +509,13 @@
  #define   MDQ_ARBITRATION_MODE			REG_BIT(12)
  #define   STALL_DOP_GATING_DISABLE		REG_BIT(5)
  #define   EARLY_EOT_DIS				REG_BIT(1)
@@ -76,7 +75,7 @@ index 1f149ba7e..dbc01463c 100644
  #define   DISABLE_TDL_SVHS_GATING		REG_BIT(1)
  #define   DISABLE_DOP_GATING			REG_BIT(0)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index cbcf7a72f..fecb7c8a9 100644
+index c595ea386ab0..5378432f9d46 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -10,13 +10,21 @@
@@ -101,7 +100,7 @@ index cbcf7a72f..fecb7c8a9 100644
  
  /*
   * If there is no detected event read by userspace, during this period, assume
-@@ -947,6 +955,47 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
+@@ -967,6 +975,47 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
  	return ret;
  }
  
@@ -150,10 +149,10 @@ index cbcf7a72f..fecb7c8a9 100644
  {
  	spin_lock_init(&xe->eudebug.lock);
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
-index 326ddbd50..3cd6bc7bb 100644
+index c1fdfc288741..4a04cec985d6 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
-@@ -11,6 +11,7 @@ struct xe_device;
+@@ -12,6 +12,7 @@ struct xe_device;
  struct xe_file;
  struct xe_vm;
  struct xe_exec_queue;
@@ -161,7 +160,7 @@ index 326ddbd50..3cd6bc7bb 100644
  
  #if IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)
  
-@@ -20,6 +21,7 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
+@@ -21,6 +22,7 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
  
  void xe_eudebug_init(struct xe_device *xe);
  void xe_eudebug_fini(struct xe_device *xe);
@@ -169,7 +168,7 @@ index 326ddbd50..3cd6bc7bb 100644
  
  void xe_eudebug_file_open(struct xe_file *xef);
  void xe_eudebug_file_close(struct xe_file *xef);
-@@ -38,6 +40,7 @@ static inline int xe_eudebug_connect_ioctl(struct drm_device *dev,
+@@ -39,6 +41,7 @@ static inline int xe_eudebug_connect_ioctl(struct drm_device *dev,
  
  static inline void xe_eudebug_init(struct xe_device *xe) { }
  static inline void xe_eudebug_fini(struct xe_device *xe) { }
@@ -178,18 +177,18 @@ index 326ddbd50..3cd6bc7bb 100644
  static inline void xe_eudebug_file_open(struct xe_file *xef) { }
  static inline void xe_eudebug_file_close(struct xe_file *xef) { }
 diff --git a/drivers/gpu/drm/xe/xe_hw_engine.c b/drivers/gpu/drm/xe/xe_hw_engine.c
-index b26b6fb5c..a2bc42a94 100644
+index 796ba8c34a16..d19e529e5c90 100644
 --- a/drivers/gpu/drm/xe/xe_hw_engine.c
 +++ b/drivers/gpu/drm/xe/xe_hw_engine.c
-@@ -16,6 +16,7 @@
- #include "xe_assert.h"
+@@ -19,6 +19,7 @@
  #include "xe_bo.h"
+ #include "xe_configfs.h"
  #include "xe_device.h"
 +#include "xe_eudebug.h"
  #include "xe_execlist.h"
  #include "xe_force_wake.h"
  #include "xe_gsc.h"
-@@ -559,6 +560,7 @@ static void hw_engine_init_early(struct xe_gt *gt, struct xe_hw_engine *hwe,
+@@ -563,6 +564,7 @@ static void hw_engine_init_early(struct xe_gt *gt, struct xe_hw_engine *hwe,
  	xe_tuning_process_engine(hwe);
  	xe_wa_process_engine(hwe);
  	hw_engine_setup_default_state(hwe);
@@ -198,18 +197,18 @@ index b26b6fb5c..a2bc42a94 100644
  	xe_reg_sr_init(&hwe->reg_whitelist, hwe->name, gt_to_xe(gt));
  	xe_reg_whitelist_process_engine(hwe);
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
-index ab5a4be2b..2c986715a 100644
+index e990f20eccfe..a88c79c327d6 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
-@@ -41,6 +41,8 @@
- 16023588340	GRAPHICS_VERSION(2001), FUNC(xe_rtp_match_not_sriov_vf)
- 14019789679	GRAPHICS_VERSION(1255)
- 		GRAPHICS_VERSION_RANGE(1270, 2004)
+@@ -66,6 +66,8 @@ no_media_l3	MEDIA_VERSION(3000)
+ 		MEDIA_VERSION_RANGE(1300, 3000)
+ 		MEDIA_VERSION(3002)
+ 		GRAPHICS_VERSION(3003)
 +18022722726	GRAPHICS_VERSION_RANGE(1250, 1274)
 +14015474168	PLATFORM(PVC)
- no_media_l3	MEDIA_VERSION(3000)
- 14022866841	GRAPHICS_VERSION(3000), GRAPHICS_STEP(A0, B0)
- 		MEDIA_VERSION(3000), MEDIA_STEP(A0, B0)
+ 
+ # SoC workaround - currently applies to all platforms with the following
+ # primary GT GMDID
 -- 
 2.43.0
 

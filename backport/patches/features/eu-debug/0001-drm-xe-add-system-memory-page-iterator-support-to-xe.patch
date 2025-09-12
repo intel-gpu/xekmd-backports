@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Hajda <andrzej.hajda@intel.com>
 Date: Wed, 9 Oct 2024 10:00:57 +0200
-Subject: drm/xe: add system memory page iterator support to
+Subject: [PATCH] drm/xe: add system memory page iterator support to
  xe_res_cursor
 
 Currently xe_res_cursor allows iteration only over DMA side of scatter
@@ -11,14 +11,14 @@ Signed-off-by: Andrzej Hajda <andrzej.hajda@intel.com>
 (cherry picked from commit 2f67df8f241746d80e2a8b40d9298aacb514ae50 eudebug-dev)
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 ---
- drivers/gpu/drm/xe/xe_res_cursor.h | 51 +++++++++++++++++++++++-------
- 1 file changed, 39 insertions(+), 12 deletions(-)
+ drivers/gpu/drm/xe/xe_res_cursor.h | 52 +++++++++++++++++++++++-------
+ 1 file changed, 40 insertions(+), 12 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_res_cursor.h b/drivers/gpu/drm/xe/xe_res_cursor.h
-index dca374b6521c..c1f39a680ae0 100644
+index d1a403cfb628..a3e6a0cbc818 100644
 --- a/drivers/gpu/drm/xe/xe_res_cursor.h
 +++ b/drivers/gpu/drm/xe/xe_res_cursor.h
-@@ -129,18 +129,35 @@ static inline void __xe_res_sg_next(struct xe_res_cursor *cur)
+@@ -152,15 +152,19 @@ static inline void __xe_res_sg_next(struct xe_res_cursor *cur)
  {
  	struct scatterlist *sgl = cur->sgl;
  	u64 start = cur->start;
@@ -34,31 +34,36 @@ index dca374b6521c..c1f39a680ae0 100644
  		sgl = sg_next(sgl);
  		XE_WARN_ON(!sgl);
  	}
--
+ 
  	cur->start = start;
 -	cur->size = sg_dma_len(sgl) - start;
 +	cur->size = len - start;
  	cur->sgl = sgl;
  }
  
+@@ -194,6 +198,21 @@ static inline void __xe_res_dma_next(struct xe_res_cursor *cur)
+ 	cur->size = cur->dma_seg_size - start;
+ }
+ 
 +static inline void __xe_res_first_sg(const struct sg_table *sg,
-+				   u64 start, u64 size,
-+				   struct xe_res_cursor *cur, u32 mem_type)
++				    u64 start, u64 size,
++				    struct xe_res_cursor *cur, u32 mem_type)
 +{
 +	XE_WARN_ON(!sg);
 +	cur->node = NULL;
 +	cur->start = start;
 +	cur->remaining = size;
 +	cur->size = 0;
++	cur->dma_addr = NULL;
 +	cur->sgl = sg->sgl;
-+	cur->mem_type = mem_type;
++	cur->mem_type = XE_PL_TT;
 +	__xe_res_sg_next(cur);
 +}
 +
  /**
   * xe_res_first_sg - initialize a xe_res_cursor with a scatter gather table
   *
-@@ -155,14 +172,24 @@ static inline void xe_res_first_sg(const struct sg_table *sg,
+@@ -208,15 +227,24 @@ static inline void xe_res_first_sg(const struct sg_table *sg,
  				   u64 start, u64 size,
  				   struct xe_res_cursor *cur)
  {
@@ -67,6 +72,7 @@ index dca374b6521c..c1f39a680ae0 100644
 -	cur->start = start;
 -	cur->remaining = size;
 -	cur->size = 0;
+-	cur->dma_addr = NULL;
 -	cur->sgl = sg->sgl;
 -	cur->mem_type = XE_PL_TT;
 -	__xe_res_sg_next(cur);
@@ -84,13 +90,13 @@ index dca374b6521c..c1f39a680ae0 100644
 + * Start walking over the range of allocations between @start and @size
 + */
 +static inline void xe_res_first_sg_system(const struct sg_table *sg,
-+				   u64 start, u64 size,
-+				   struct xe_res_cursor *cur)
++					u64 start, u64 size,
++					struct xe_res_cursor *cur)
 +{
 +	__xe_res_first_sg(sg, start, size, cur, XE_PL_SYSTEM);
  }
  
  /**
 -- 
-2.25.1
+2.43.0
 

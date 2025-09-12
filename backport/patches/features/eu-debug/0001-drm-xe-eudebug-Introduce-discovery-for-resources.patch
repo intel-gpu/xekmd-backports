@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Tue, 31 Jan 2023 11:40:42 +0200
-Subject: drm/xe/eudebug: Introduce discovery for resources
+Subject: [PATCH] drm/xe/eudebug: Introduce discovery for resources
 
 Debugger connection can happen way after the client has
 created and destroyed arbitrary number of resources.
@@ -22,9 +22,8 @@ Co-developed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Acked-by: Matthew Brost <matthew.brost@intel.com> #locking
-Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
-(backported from commit 9dde4e4ba3dd91c82aa297112001659956089c30 eudebug-dev)
-Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Acked-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry-picked from commit 0b8cc74fc463de20291cc43230d16bdd39d5f4af drm-tip-eudebug)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_device.c        |  10 +-
@@ -35,10 +34,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  5 files changed, 185 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index eee54d6a5..873e133a7 100644
+index 90a111459c0e..a2110e421a36 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -209,8 +209,11 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+@@ -218,8 +218,11 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
  		return -ECANCELED;
  
  	ret = xe_pm_runtime_get_ioctl(xe);
@@ -51,7 +50,7 @@ index eee54d6a5..873e133a7 100644
  	xe_pm_runtime_put(xe);
  
  	return ret;
-@@ -227,8 +230,11 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
+@@ -236,8 +239,11 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
  		return -ECANCELED;
  
  	ret = xe_pm_runtime_get_ioctl(xe);
@@ -65,7 +64,7 @@ index eee54d6a5..873e133a7 100644
  
  	return ret;
 diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
-index fc3c2af3f..c882c3527 100644
+index bc802e066a7d..fbe2b63fbb42 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
 @@ -7,6 +7,7 @@
@@ -76,7 +75,7 @@ index fc3c2af3f..c882c3527 100644
  
  #include "xe_device_types.h"
  #include "xe_gt_types.h"
-@@ -204,4 +205,37 @@ void xe_file_put(struct xe_file *xef);
+@@ -208,4 +209,37 @@ int xe_is_injection_active(void);
  #define LNL_FLUSH_WORK(wrk__) \
  	flush_work(wrk__)
  
@@ -115,10 +114,10 @@ index fc3c2af3f..c882c3527 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 9e8591d67..b62dc2567 100644
+index 1f4d38b502b5..d7072f9905c4 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -558,6 +558,12 @@ struct xe_device {
+@@ -650,6 +650,12 @@ struct xe_device {
  
  		/** @available: is the debugging functionality available */
  		bool available;
@@ -132,10 +131,10 @@ index 9e8591d67..b62dc2567 100644
  #endif
  
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index bbb5f1e81..228bc3634 100644
+index 79b25f6bb5be..7fb865e3fe7c 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -299,6 +299,8 @@ static bool xe_eudebug_detach(struct xe_device *xe,
+@@ -311,6 +311,8 @@ static bool xe_eudebug_detach(struct xe_device *xe,
  	}
  	spin_unlock(&d->connection.lock);
  
@@ -144,7 +143,7 @@ index bbb5f1e81..228bc3634 100644
  	if (!detached)
  		return false;
  
-@@ -409,7 +411,7 @@ static struct task_struct *find_task_get(struct xe_file *xef)
+@@ -421,7 +423,7 @@ static struct task_struct *find_task_get(struct xe_file *xef)
  }
  
  static struct xe_eudebug *
@@ -153,7 +152,7 @@ index bbb5f1e81..228bc3634 100644
  {
  	struct task_struct *task;
  	struct xe_eudebug *d;
-@@ -433,6 +435,24 @@ xe_eudebug_get(struct xe_file *xef)
+@@ -445,6 +447,24 @@ xe_eudebug_get(struct xe_file *xef)
  	return d;
  }
  
@@ -178,7 +177,7 @@ index bbb5f1e81..228bc3634 100644
  static int xe_eudebug_queue_event(struct xe_eudebug *d,
  				  struct xe_eudebug_event *event)
  {
-@@ -813,6 +833,10 @@ static long xe_eudebug_ioctl(struct file *file,
+@@ -833,6 +853,10 @@ static long xe_eudebug_ioctl(struct file *file,
  	struct xe_eudebug * const d = file->private_data;
  	long ret;
  
@@ -189,7 +188,7 @@ index bbb5f1e81..228bc3634 100644
  	switch (cmd) {
  	case DRM_XE_EUDEBUG_IOCTL_READ_EVENT:
  		ret = xe_eudebug_read_event(d, arg,
-@@ -834,6 +858,8 @@ static const struct file_operations fops = {
+@@ -854,6 +878,8 @@ static const struct file_operations fops = {
  	.unlocked_ioctl	= xe_eudebug_ioctl,
  };
  
@@ -198,7 +197,7 @@ index bbb5f1e81..228bc3634 100644
  static int
  xe_eudebug_connect(struct xe_device *xe,
  		   struct drm_xe_eudebug_connect *param)
-@@ -868,9 +894,11 @@ xe_eudebug_connect(struct xe_device *xe,
+@@ -888,9 +914,11 @@ xe_eudebug_connect(struct xe_device *xe,
  	spin_lock_init(&d->connection.lock);
  	init_waitqueue_head(&d->events.write_done);
  	init_waitqueue_head(&d->events.read_done);
@@ -210,7 +209,7 @@ index bbb5f1e81..228bc3634 100644
  
  	d->res = xe_eudebug_resources_alloc();
  	if (IS_ERR(d->res)) {
-@@ -888,6 +916,9 @@ xe_eudebug_connect(struct xe_device *xe,
+@@ -908,6 +936,9 @@ xe_eudebug_connect(struct xe_device *xe,
  		goto err_detach;
  	}
  
@@ -220,7 +219,7 @@ index bbb5f1e81..228bc3634 100644
  	eu_dbg(d, "connected session %lld", d->session);
  
  	return fd;
-@@ -922,13 +953,18 @@ void xe_eudebug_init(struct xe_device *xe)
+@@ -942,13 +973,18 @@ void xe_eudebug_init(struct xe_device *xe)
  
  	spin_lock_init(&xe->clients.lock);
  	INIT_LIST_HEAD(&xe->clients.list);
@@ -240,7 +239,7 @@ index bbb5f1e81..228bc3634 100644
  }
  
  static int send_open_event(struct xe_eudebug *d, u32 flags, const u64 handle,
-@@ -994,21 +1030,25 @@ void xe_eudebug_file_open(struct xe_file *xef)
+@@ -1014,21 +1050,25 @@ void xe_eudebug_file_open(struct xe_file *xef)
  	struct xe_eudebug *d;
  
  	INIT_LIST_HEAD(&xef->eudebug.client_link);
@@ -269,7 +268,7 @@ index bbb5f1e81..228bc3634 100644
  	d = xe_eudebug_get(xef);
  	if (d)
  		xe_eudebug_event_put(d, client_destroy_event(d, xef));
-@@ -1016,6 +1056,8 @@ void xe_eudebug_file_close(struct xe_file *xef)
+@@ -1036,6 +1076,8 @@ void xe_eudebug_file_close(struct xe_file *xef)
  	spin_lock(&xef->xe->clients.lock);
  	list_del_init(&xef->eudebug.client_link);
  	spin_unlock(&xef->xe->clients.lock);
@@ -278,7 +277,7 @@ index bbb5f1e81..228bc3634 100644
  }
  
  static int send_vm_event(struct xe_eudebug *d, u32 flags,
-@@ -1116,3 +1158,86 @@ void xe_eudebug_vm_destroy(struct xe_file *xef, struct xe_vm *vm)
+@@ -1136,3 +1178,86 @@ void xe_eudebug_vm_destroy(struct xe_file *xef, struct xe_vm *vm)
  
  	xe_eudebug_event_put(d, vm_destroy_event(d, xef, vm));
  }
@@ -366,10 +365,10 @@ index bbb5f1e81..228bc3634 100644
 +	xe_eudebug_put(d);
 +}
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index a5185f18f..080a821db 100644
+index 9af1825ebfbd..e55e59e598af 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
-@@ -19,6 +19,7 @@
+@@ -20,6 +20,7 @@
  struct xe_device;
  struct task_struct;
  struct xe_eudebug_event;
@@ -377,7 +376,7 @@ index a5185f18f..080a821db 100644
  
  #define CONFIG_DRM_XE_DEBUGGER_EVENT_QUEUE_SIZE 64
  
-@@ -96,6 +97,12 @@ struct xe_eudebug {
+@@ -97,6 +98,12 @@ struct xe_eudebug {
  	/** @session: session number for this connection (for logs) */
  	u64 session;
  
@@ -391,5 +390,5 @@ index a5185f18f..080a821db 100644
  	struct {
  		/** @lock: guards access to fifo */
 -- 
-2.34.1
+2.43.0
 

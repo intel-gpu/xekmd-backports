@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Mon, 28 Oct 2024 17:45:02 +0100
-Subject: drm/xe/eudebug: Introduce exec queue placements event
+Subject: [PATCH] drm/xe/eudebug: Introduce exec queue placements event
 
 This commit introduces the DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE_PLACEMENTS,
 which provides dbgUMD with information about the hw engines utilized during execution.
@@ -19,28 +19,28 @@ Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
  3 files changed, 133 insertions(+), 9 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 3ca46ec838b9..cbcf7a72fdba 100644
+index ea510b117e7d..7764b6034235 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -717,7 +717,7 @@ static struct xe_eudebug_event *
+@@ -931,7 +931,7 @@ static struct xe_eudebug_event *
  xe_eudebug_create_event(struct xe_eudebug *d, u16 type, u64 seqno, u16 flags,
  			u32 len)
  {
--	const u16 max_event = DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE;
+-	const u16 max_event = DRM_XE_EUDEBUG_EVENT_PAGEFAULT;
 +	const u16 max_event = DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE_PLACEMENTS;
  	const u16 known_flags =
  		DRM_XE_EUDEBUG_EVENT_CREATE |
  		DRM_XE_EUDEBUG_EVENT_DESTROY |
-@@ -752,7 +752,7 @@ static long xe_eudebug_read_event(struct xe_eudebug *d,
+@@ -966,7 +966,7 @@ static long xe_eudebug_read_event(struct xe_eudebug *d,
  		u64_to_user_ptr(arg);
  	struct drm_xe_eudebug_event user_event;
- 	struct xe_eudebug_event *event;
--	const unsigned int max_event = DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE;
+ 	struct xe_eudebug_event *pending, *event_out;
+-	const unsigned int max_event = DRM_XE_EUDEBUG_EVENT_PAGEFAULT;
 +	const unsigned int max_event = DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE_PLACEMENTS;
  	long ret = 0;
  
  	if (XE_IOCTL_DBG(xe, copy_from_user(&user_event, user_orig, sizeof(user_event))))
-@@ -1206,12 +1206,88 @@ static int send_exec_queue_event(struct xe_eudebug *d, u32 flags,
+@@ -2805,12 +2805,88 @@ static int send_exec_queue_event(struct xe_eudebug *d, u32 flags,
  	return xe_eudebug_queue_event(d, event);
  }
  
@@ -57,21 +57,21 @@ index 3ca46ec838b9..cbcf7a72fdba 100644
 +	struct xe_eudebug_event *event;
 +
 +	event = xe_eudebug_create_event(d,
-+					DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE_PLACEMENTS,
-+					seqno, DRM_XE_EUDEBUG_EVENT_CREATE, sz);
++									DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE_PLACEMENTS,
++									seqno, DRM_XE_EUDEBUG_EVENT_CREATE, sz);
 +	if (!event)
 +		return -ENOMEM;
-+
++	
 +	e = cast_event(e, event);
 +
 +	write_member(struct drm_xe_eudebug_event_exec_queue_placements, e, client_handle,
-+		     client_handle);
++				client_handle);
 +	write_member(struct drm_xe_eudebug_event_exec_queue_placements, e, vm_handle, vm_handle);
 +	write_member(struct drm_xe_eudebug_event_exec_queue_placements, e, exec_queue_handle,
-+		     exec_queue_handle);
++				exec_queue_handle);
 +	write_member(struct drm_xe_eudebug_event_exec_queue_placements, e, lrc_handle, lrc_handle);
 +	write_member(struct drm_xe_eudebug_event_exec_queue_placements, e, num_placements,
-+		     num_placements);
++				num_placements);
 +
 +	memcpy(e->instances, instances, num_placements * sizeof(*instances));
 +
@@ -79,10 +79,10 @@ index 3ca46ec838b9..cbcf7a72fdba 100644
 +}
 +
 +static int send_exec_queue_placements_events(struct xe_eudebug *d, struct xe_exec_queue *q,
-+					     u64 client_handle, u64 vm_handle,
-+					     u64 exec_queue_handle, u64 *lrc_handles)
++                                            u64 client_handle, u64 vm_handle,
++                                            u64 exec_queue_handle, u64 *lrc_handles)
 +{
-+
++	
 +	struct drm_xe_engine_class_instance eci[XE_HW_ENGINE_MAX_INSTANCE] = {};
 +	unsigned long mask = q->logical_mask;
 +	u32 num_placements = 0;
@@ -91,8 +91,8 @@ index 3ca46ec838b9..cbcf7a72fdba 100644
 +
 +	for_each_set_bit(i, &mask, sizeof(q->logical_mask) * 8) {
 +		if (XE_WARN_ON(num_placements == XE_HW_ENGINE_MAX_INSTANCE))
-+			break;
-+
++				break;
++	
 +		eci[num_placements].engine_class = xe_to_user_engine_class[q->class];
 +		eci[num_placements].engine_instance = i;
 +		eci[num_placements++].gt_id = q->gt->info.id;
@@ -101,20 +101,20 @@ index 3ca46ec838b9..cbcf7a72fdba 100644
 +	ret = 0;
 +	for (i = 0; i < q->width; i++) {
 +		seqno = atomic_long_inc_return(&d->events.seqno);
-+
++			
 +		ret = send_exec_queue_placements_event(d, client_handle, vm_handle,
-+						       exec_queue_handle, lrc_handles[i],
-+						       num_placements, (u64 *)eci, seqno);
++											exec_queue_handle, lrc_handles[i],
++											num_placements, (u64 *)eci, seqno);
 +		if (ret)
-+			return ret;
++				return ret;
 +
 +		/*
-+		 * Parallel submissions must be logically contiguous,
-+		 * so the next placement is just q->logical_mask >> 1
-+		 */
++		* Parallel submissions must be logically contiguous,
++		* so the next placement is just q->logical_mask >> 1
++		*/
 +		for (j = 0; j < num_placements; j++) {
-+			eci[j].engine_instance++;
-+			XE_WARN_ON(eci[j].engine_instance >= XE_HW_ENGINE_MAX_INSTANCE);
++				eci[j].engine_instance++;
++				XE_WARN_ON(eci[j].engine_instance >= XE_HW_ENGINE_MAX_INSTANCE);
 +		}
 +	}
 +
@@ -122,16 +122,16 @@ index 3ca46ec838b9..cbcf7a72fdba 100644
 +}
 +
 +static int exec_queue_create_events(struct xe_eudebug *d,
-+				    struct xe_file *xef, struct xe_exec_queue *q)
++                                   struct xe_file *xef, struct xe_exec_queue *q)
  {
  	int h_c, h_vm, h_queue;
  	u64 h_lrc[XE_HW_ENGINE_MAX_INSTANCE], seqno;
  	int i;
 +	int ret = 0;
  
- 	if (!xe_exec_queue_is_lr(q))
+ 	if (!xe_exec_queue_is_debuggable(q))
  		return 0;
-@@ -1252,9 +1328,14 @@ static int exec_queue_create_event(struct xe_eudebug *d,
+@@ -2851,9 +2927,14 @@ static int exec_queue_create_event(struct xe_eudebug *d,
  	 * we disconnect
  	 */
  
@@ -149,7 +149,7 @@ index 3ca46ec838b9..cbcf7a72fdba 100644
  }
  
  static int exec_queue_destroy_event(struct xe_eudebug *d,
-@@ -1317,7 +1398,7 @@ void xe_eudebug_exec_queue_create(struct xe_file *xef, struct xe_exec_queue *q)
+@@ -2916,7 +2997,7 @@ void xe_eudebug_exec_queue_create(struct xe_file *xef, struct xe_exec_queue *q)
  	if (!d)
  		return;
  
@@ -158,7 +158,7 @@ index 3ca46ec838b9..cbcf7a72fdba 100644
  }
  
  void xe_eudebug_exec_queue_destroy(struct xe_file *xef, struct xe_exec_queue *q)
-@@ -1355,7 +1436,7 @@ static int discover_client(struct xe_eudebug *d, struct xe_file *xef)
+@@ -3620,7 +3701,7 @@ static int discover_client(struct xe_eudebug *d, struct xe_file *xef)
  		if (!exec_queue_class_is_tracked(q->class))
  			continue;
  
@@ -168,11 +168,11 @@ index 3ca46ec838b9..cbcf7a72fdba 100644
  			break;
  	}
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index 4824c4159036..bdffdfb1abff 100644
+index 2c1b9e287e69..e8b6cb25638f 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
-@@ -202,4 +202,30 @@ struct xe_eudebug_event_exec_queue {
- 	u64 lrc_handle[] __counted_by(width);
+@@ -435,4 +435,30 @@ struct xe_eudebug_pagefault {
+ 	bool deferred_resolved;
  };
  
 +struct xe_eudebug_event_exec_queue_placements {
@@ -201,21 +201,21 @@ index 4824c4159036..bdffdfb1abff 100644
 +	u64 instances[]; __counted_by(num_placements);
 +};
 +
- #endif
+ #endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
-index ac44e890152a..21690008a869 100644
+index 6a6fc46a6827..3500b0a1c854 100644
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ b/include/uapi/drm/xe_drm_eudebug.h
-@@ -27,6 +27,7 @@ struct drm_xe_eudebug_event {
- #define DRM_XE_EUDEBUG_EVENT_OPEN		2
- #define DRM_XE_EUDEBUG_EVENT_VM			3
- #define DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE		4
-+#define DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE_PLACEMENTS 5
+@@ -38,6 +38,7 @@ struct drm_xe_eudebug_event {
+ #define DRM_XE_EUDEBUG_EVENT_METADATA		9
+ #define DRM_XE_EUDEBUG_EVENT_VM_BIND_OP_METADATA 10
+ #define DRM_XE_EUDEBUG_EVENT_PAGEFAULT		11
++#define DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE_PLACEMENTS 13
  
  	__u16 flags;
  #define DRM_XE_EUDEBUG_EVENT_CREATE		(1 << 0)
-@@ -61,6 +62,22 @@ struct drm_xe_eudebug_event_exec_queue {
- 	__u64 lrc_handle[];
+@@ -232,6 +233,22 @@ struct drm_xe_eudebug_event_pagefault {
+ 	__u8 bitmask[];
  };
  
 +struct drm_xe_eudebug_event_exec_queue_placements {
@@ -228,9 +228,9 @@ index ac44e890152a..21690008a869 100644
 +	__u32 num_placements;
 +	__u32 pad;
 +	/**
-+	 * @instances: user pointer to num_placements sized array of struct
-+	 * drm_xe_engine_class_instance
-+	 */
++	* @instances: user pointer to num_placements sized array of struct
++	* drm_xe_engine_class_instance
++	*/
 +	__u64 instances[];
 +};
 +
@@ -238,5 +238,5 @@ index ac44e890152a..21690008a869 100644
  }
  #endif
 -- 
-2.25.1
+2.43.0
 

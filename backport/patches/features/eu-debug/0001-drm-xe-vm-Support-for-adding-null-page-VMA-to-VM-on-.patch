@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Date: Mon, 11 Nov 2024 12:03:47 +0200
-Subject: drm/xe/vm: Support for adding null page VMA to VM on request
+Subject: [PATCH] drm/xe/vm: Support for adding null page VMA to VM on request
 
 The XE2 (and PVC) HW has a limitation that the pagefault due to invalid
 access will halt the corresponding EUs. So, in order to activate the
@@ -19,23 +19,24 @@ Cc: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
 Cc: Stuart Summers <stuart.summers@intel.com>
 Cc: Matthew Brost <matthew.brost@intel.com>
 Co-developed-by: Bruce Chang <yu.bruce.chang@intel.com>
+Signed-off-by: Bruce Chang <yu.bruce.chang@intel.com>
 Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
-(backported from commit 845ebc0e92a0f40079cd102e4b57d9d74414b42c eudebug-dev)
-Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(backported from commit b948c4a734a55451340bea34b2113da0a86b1ce8 drm-tip-eudebug)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_vm.c | 23 +++++++++++++++++++++++
- drivers/gpu/drm/xe/xe_vm.h |  2 ++
- 2 files changed, 25 insertions(+)
+ drivers/gpu/drm/xe/xe_vm.h |  3 +++
+ 2 files changed, 26 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 37eed15bb..1525f4902 100644
+index a51f56fe4f42..3939f16542b3 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -3620,3 +3620,26 @@ int xe_vm_userptr_access(struct xe_userptr_vma *uvma, u64 offset,
- 	up_read(&vm->userptr.notifier_lock);
- 	return ret;
+@@ -4276,3 +4276,26 @@ void xe_vm_snapshot_free(struct xe_vm_snapshot *snap)
+ 	}
+ 	kvfree(snap);
  }
 +
 +struct xe_vma *xe_vm_create_null_vma(struct xe_vm *vm, u64 addr)
@@ -61,18 +62,17 @@ index 37eed15bb..1525f4902 100644
 +	return vma;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index 55996114b..86a13fee3 100644
+index 2ecb417c19a2..0c5a75f9a7e0 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
-@@ -283,6 +283,8 @@ void xe_vm_snapshot_free(struct xe_vm_snapshot *snap);
- int xe_vm_userptr_access(struct xe_userptr_vma *uvma, u64 offset,
- 			 void *buf, u64 len, bool write);
- 
+@@ -390,4 +390,7 @@ static inline void xe_vma_userptr_force_invalidate(struct xe_userptr_vma *uvma)
+ {
+ }
+ #endif
++
 +struct xe_vma *xe_vm_create_null_vma(struct xe_vm *vm, u64 addr);
 +
- #if IS_ENABLED(CONFIG_DRM_XE_USERPTR_INVAL_INJECT)
- void xe_vma_userptr_force_invalidate(struct xe_userptr_vma *uvma);
- #else
+ #endif
 -- 
-2.34.1
+2.43.0
 

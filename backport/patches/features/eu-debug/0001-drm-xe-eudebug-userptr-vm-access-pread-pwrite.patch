@@ -1,0 +1,72 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Date: Thu, 12 Dec 2024 12:59:22 +0200
+Subject: [PATCH] drm/xe/eudebug: userptr vm access pread/pwrite
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Implement debugger vm access for userptrs.
+
+When userptr bind is done, mmu notifier is added by core xe.
+Later when debugger wants to access the target memory, this
+notifier can be used as it carries the struct mm of target.
+
+Implement userptr vm access, for debugger pread/pwrite
+using notifier mm passed to access_remote_vm().
+
+This is based on suggestions from Thomas, Joonas and Simona.
+
+v2: need to add offset into vma (Dominik)
+v3: use exported access_remote_vm (Thomas)
+
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Andrzej Hajda <andrzej.hajda@intel.com>
+Cc: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Cc: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
+Cc: Christian König <christian.koenig@amd.com>
+Cc: Joonas Lahtinen <joonas.lahtinen@linux.intel.com>
+Cc: Simona Vetter <simona@ffwll.ch>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry-picked from commit e359dc85ba77ea6df5d090c2f77f12cc28dc02b3 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_eudebug.c | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
+index 678ec275302f..dbbe71624958 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/xe_eudebug.c
+@@ -3022,6 +3022,27 @@ static int xe_eudebug_vma_access(struct xe_vma *vma,
+ 
+ 		xe_bo_put(bo);
+ 
++		return ret;
++	} else if (xe_vma_is_userptr(vma)) {
++		struct xe_userptr *userptr = &to_userptr_vma(vma)->userptr;
++		struct xe_vm *vm = xe_vma_vm(vma);
++		struct mm_struct *mm = NULL;
++		int ret;
++
++		down_read(&vm->userptr.notifier_lock);
++		if (mmget_not_zero(userptr->notifier.mm))
++			mm = userptr->notifier.mm;
++		up_read(&vm->userptr.notifier_lock);
++
++		if (!mm)
++			return -EFAULT;
++
++		ret = access_remote_vm(mm,
++				       xe_vma_userptr(vma) + offset_in_vma,
++				       buf, bytes,
++				       write ? FOLL_WRITE : 0);
++		mmput(mm);
++
+ 		return ret;
+ 	}
+ 
+-- 
+2.43.0
+

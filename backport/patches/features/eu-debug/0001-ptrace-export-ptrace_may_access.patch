@@ -31,15 +31,14 @@ Cc: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
 Reviewed-by: Andi Shyti <andi.shyti@linux.intel.com>
-Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
-(cherry picked from commit c94a90ab4170a71cf8eb25ce0e8ae7814dbc6382 eudebug-dev)
-Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+(cherry-picked from commit 135e555989cdf9c7f0f872c74b8b161c30d9e09b drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  kernel/ptrace.c | 1 +
  1 file changed, 1 insertion(+)
 
 diff --git a/kernel/ptrace.c b/kernel/ptrace.c
-index d5f89f9ef29f..86be1805ebd8 100644
+index 75a84efad40f..71399647caa3 100644
 --- a/kernel/ptrace.c
 +++ b/kernel/ptrace.c
 @@ -354,6 +354,7 @@ bool ptrace_may_access(struct task_struct *task, unsigned int mode)
@@ -51,5 +50,5 @@ index d5f89f9ef29f..86be1805ebd8 100644
  static int check_ptrace_options(unsigned long data)
  {
 -- 
-2.25.1
+2.43.0
 

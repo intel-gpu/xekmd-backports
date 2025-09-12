@@ -23,34 +23,28 @@ v2: - checkpatch (Maciej)
     - assert vm write held for vma (Matthew)
 
 v3: - fw ref, ttm_bo_access
+    - timeout boundary check (Dominik)
+    - dont try to copy to user on zero bytes (Mika)
+
+v4: - offset as unsigned long (Thomas)
+    - check XE_VMA_DESTROYED
 
 Cc: Matthew Brost <matthew.brost@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
-
-We dont guard against setting timeout. Its nasty
-because we hold the eu_lock during it.
-
-Further work would be to separate the upper timeout
-handling from actual mmio timeouts so that the lock
-hold would be only during per individual op.
-
-Reported-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
-Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
-Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
-(rebase from commit af4634dc0db9527cc4b657fdd4ae8fcd0c8922af eudebug-dev)
-Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry-picked from commit 1f61e2c49595072378377b85308ae4428f2d9766 drm-tip-eudebug)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h |  24 ++
- drivers/gpu/drm/xe/xe_eudebug.c      | 442 +++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_eudebug.c      | 446 +++++++++++++++++++++++++++
  include/uapi/drm/xe_drm_eudebug.h    |  19 ++
- 3 files changed, 485 insertions(+)
+ 3 files changed, 489 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 5fcf06835..4c620f95b 100644
+index f6b23faf314c..c2b817f617e4 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -551,6 +551,30 @@
+@@ -574,6 +574,30 @@
  #define   CCS_MODE_CSLICE(cslice, ccs) \
  	((ccs) << ((cslice) * CCS_MODE_CSLICE_WIDTH))
  
@@ -82,7 +76,7 @@ index 5fcf06835..4c620f95b 100644
  #define   RCU_DEBUG_1_ENGINE_STATUS		REG_GENMASK(2, 0)
  #define   RCU_DEBUG_1_RUNALONE_ACTIVE		REG_BIT(2)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 3cf3616e5..06b98746c 100644
+index 42343cd00861..678ec275302f 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -5,9 +5,12 @@
@@ -106,7 +100,7 @@ index 3cf3616e5..06b98746c 100644
  #include "xe_device.h"
  #include "xe_eudebug.h"
  #include "xe_eudebug_types.h"
-@@ -1222,6 +1226,8 @@ static long xe_eudebug_eu_control(struct xe_eudebug *d, const u64 arg)
+@@ -1242,6 +1246,8 @@ static long xe_eudebug_eu_control(struct xe_eudebug *d, const u64 arg)
  	return ret;
  }
  
@@ -115,7 +109,7 @@ index 3cf3616e5..06b98746c 100644
  static long xe_eudebug_ioctl(struct file *file,
  			     unsigned int cmd,
  			     unsigned long arg)
-@@ -1246,6 +1252,11 @@ static long xe_eudebug_ioctl(struct file *file,
+@@ -1266,6 +1272,11 @@ static long xe_eudebug_ioctl(struct file *file,
  		ret = xe_eudebug_ack_event_ioctl(d, cmd, arg);
  		eu_dbg(d, "ioctl cmd=EVENT_ACK ret=%ld\n", ret);
  		break;
@@ -127,13 +121,14 @@ index 3cf3616e5..06b98746c 100644
  	default:
  		ret = -EINVAL;
  	}
-@@ -3038,3 +3049,434 @@ void xe_eudebug_ufence_fini(struct xe_user_fence *ufence)
+@@ -2983,3 +2994,438 @@ void xe_eudebug_ufence_fini(struct xe_user_fence *ufence)
  	xe_eudebug_put(ufence->eudebug.debugger);
  	ufence->eudebug.debugger = NULL;
  }
 +
-+static int xe_eudebug_vma_access(struct xe_vma *vma, u64 offset_in_vma,
-+				 void *buf, u64 len, bool write)
++static int xe_eudebug_vma_access(struct xe_vma *vma,
++				 unsigned long offset_in_vma,
++				 void *buf, unsigned long len, bool write)
 +{
 +	struct xe_bo *bo;
 +	u64 bytes;
@@ -141,6 +136,9 @@ index 3cf3616e5..06b98746c 100644
 +	lockdep_assert_held_write(&xe_vma_vm(vma)->lock);
 +
 +	if (XE_WARN_ON(offset_in_vma >= xe_vma_size(vma)))
++		return -EINVAL;
++
++	if (vma->gpuva.flags & XE_VMA_DESTROYED)
 +		return -EINVAL;
 +
 +	bytes = min_t(u64, len, xe_vma_size(vma) - offset_in_vma);
@@ -161,8 +159,8 @@ index 3cf3616e5..06b98746c 100644
 +	return -EINVAL;
 +}
 +
-+static int xe_eudebug_vm_access(struct xe_vm *vm, u64 offset,
-+				void *buf, u64 len, bool write)
++static int xe_eudebug_vm_access(struct xe_vm *vm, unsigned long offset,
++				void *buf, unsigned long len, bool write)
 +{
 +	struct xe_vma *vma;
 +	int ret;
@@ -220,13 +218,13 @@ index 3cf3616e5..06b98746c 100644
 +			return -EFAULT;
 +
 +		ret = xe_eudebug_vm_access(vm, offset, bb, len, true);
-+		if (ret < 0)
++		if (ret <= 0)
 +			return ret;
 +
 +		len = ret;
 +	} else {
 +		ret = xe_eudebug_vm_access(vm, offset, bb, len, false);
-+		if (ret < 0)
++		if (ret <= 0)
 +			return ret;
 +
 +		len = ret;
@@ -563,7 +561,7 @@ index 3cf3616e5..06b98746c 100644
 +	return ret;
 +}
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
-index 1d5f1411c..a5f13563b 100644
+index 821d9dac4f16..11e14156abbf 100644
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ b/include/uapi/drm/xe_drm_eudebug.h
 @@ -18,6 +18,7 @@ extern "C" {
@@ -574,7 +572,7 @@ index 1d5f1411c..a5f13563b 100644
  
  /* XXX: Document events to match their internal counterparts when moved to xe_drm.h */
  struct drm_xe_eudebug_event {
-@@ -187,6 +188,24 @@ struct drm_xe_eudebug_ack_event {
+@@ -170,6 +171,24 @@ struct drm_xe_eudebug_ack_event {
  	__u64 seqno;
  };
  
@@ -600,5 +598,5 @@ index 1d5f1411c..a5f13563b 100644
  }
  #endif
 -- 
-2.34.1
+2.43.0
 

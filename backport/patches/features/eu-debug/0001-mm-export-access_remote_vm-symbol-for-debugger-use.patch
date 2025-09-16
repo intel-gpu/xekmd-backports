@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Date: Wed, 8 Jan 2025 13:19:32 +0200
+Subject: mm: export access_remote_vm symbol for debugger use
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Export access_remote_vm as GPL symbol to allow debuggers (eudebug)
+to access and modify memory in target VMs by tracking VM_BIND
+operations. While access_process_vm() is already exported, it would
+require maintaining task references in the debugger.
+
+Since the mm reference is already present in the userptr's mm notifier
+implementation, exporting access_remote_vm allows that existing reference
+to be used directly without needing to obtain and maintain additional
+task references just for memory access.
+
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Andrzej Hajda <andrzej.hajda@intel.com>
+Cc: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Cc: Christian König <christian.koenig@amd.com>
+Cc: Joonas Lahtinen <joonas.lahtinen@linux.intel.com>
+Cc: Simona Vetter <simona@ffwll.ch>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry-picked from commit 8641fb84d870e595c2991cced0636e630cebb0e6 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ mm/memory.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/mm/memory.c b/mm/memory.c
+index 0ba4f6b71847..c40935984a48 100644
+--- a/mm/memory.c
++++ b/mm/memory.c
+@@ -6778,6 +6778,7 @@ int access_remote_vm(struct mm_struct *mm, unsigned long addr,
+ {
+ 	return __access_remote_vm(mm, addr, buf, len, gup_flags);
+ }
++EXPORT_SYMBOL_GPL(access_remote_vm);
+ 
+ /*
+  * Access another process' address space.
+-- 
+2.43.0
+

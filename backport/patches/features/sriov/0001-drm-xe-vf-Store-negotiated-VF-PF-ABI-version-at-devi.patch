@@ -1,0 +1,176 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Sun, 13 Jul 2025 12:36:25 +0200
+Subject: drm/xe/vf: Store negotiated VF/PF ABI version at device level
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+There is no need to maintain PF ABI version on per-GT level.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://lore.kernel.org/r/20250713103625.1964-8-michal.wajdeczko@intel.com
+(backported from commit b533b8e5a1f90aa15bb6e021cbf84cba2ea23e00 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c       | 31 +++++++++++++----------
+ drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h | 12 ---------
+ drivers/gpu/drm/xe/xe_sriov_vf_types.h    | 14 ++++++++++
+ 3 files changed, 32 insertions(+), 25 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index 44c4693e4ba5..3026b6a1510a 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -694,21 +694,22 @@ static int relay_action_handshake(struct xe_gt *gt, u32 *major, u32 *minor)
+ 	return 0;
+ }
+ 
+-static void vf_connect_pf(struct xe_gt *gt, u16 major, u16 minor)
++static void vf_connect_pf(struct xe_device *xe, u16 major, u16 minor)
+ {
+-	xe_gt_assert(gt, IS_SRIOV_VF(gt_to_xe(gt)));
++	xe_assert(xe, IS_SRIOV_VF(xe));
+ 
+-	gt->sriov.vf.pf_version.major = major;
+-	gt->sriov.vf.pf_version.minor = minor;
++	xe->sriov.vf.pf_version.major = major;
++	xe->sriov.vf.pf_version.minor = minor;
+ }
+ 
+-static void vf_disconnect_pf(struct xe_gt *gt)
++static void vf_disconnect_pf(struct xe_device *xe)
+ {
+-	vf_connect_pf(gt, 0, 0);
++	vf_connect_pf(xe, 0, 0);
+ }
+ 
+ static int vf_handshake_with_pf(struct xe_gt *gt)
+ {
++	struct xe_device *xe = gt_to_xe(gt);
+ 	u32 major_wanted = GUC_RELAY_VERSION_LATEST_MAJOR;
+ 	u32 minor_wanted = GUC_RELAY_VERSION_LATEST_MINOR;
+ 	u32 major = major_wanted, minor = minor_wanted;
+@@ -724,13 +725,13 @@ static int vf_handshake_with_pf(struct xe_gt *gt)
+ 	}
+ 
+ 	xe_gt_sriov_dbg(gt, "using VF/PF ABI %u.%u\n", major, minor);
+-	vf_connect_pf(gt, major, minor);
++	vf_connect_pf(xe, major, minor);
+ 	return 0;
+ 
+ failed:
+ 	xe_gt_sriov_err(gt, "Unable to confirm VF/PF ABI version %u.%u (%pe)\n",
+ 			major, minor, ERR_PTR(err));
+-	vf_disconnect_pf(gt);
++	vf_disconnect_pf(xe);
+ 	return err;
+ }
+ 
+@@ -783,10 +784,12 @@ void xe_gt_sriov_vf_migrated_event_handler(struct xe_gt *gt)
+ 
+ static bool vf_is_negotiated(struct xe_gt *gt, u16 major, u16 minor)
+ {
+-	xe_gt_assert(gt, IS_SRIOV_VF(gt_to_xe(gt)));
++	struct xe_device *xe = gt_to_xe(gt);
+ 
+-	return major == gt->sriov.vf.pf_version.major &&
+-	       minor <= gt->sriov.vf.pf_version.minor;
++	xe_gt_assert(gt, IS_SRIOV_VF(xe));
++
++	return major == xe->sriov.vf.pf_version.major &&
++	       minor <= xe->sriov.vf.pf_version.minor;
+ }
+ 
+ static int vf_prepare_runtime_info(struct xe_gt *gt, unsigned int num_regs)
+@@ -972,9 +975,10 @@ u32 xe_gt_sriov_vf_read32(struct xe_gt *gt, struct xe_reg reg)
+ {
+ 	u32 addr = xe_mmio_adjusted_addr(&gt->mmio, reg.addr);
+ 	struct vf_runtime_reg *rr;
++	struct xe_device *xe = gt_to_xe(gt);
+ 
+ 	xe_gt_assert(gt, IS_SRIOV_VF(gt_to_xe(gt)));
+-	xe_gt_assert(gt, gt->sriov.vf.pf_version.major);
++	xe_gt_assert(gt, xe->sriov.vf.pf_version.major);
+ 	xe_gt_assert(gt, !reg.vf);
+ 
+ 	if (reg.addr == GMD_ID.addr) {
+@@ -1080,8 +1084,9 @@ void xe_gt_sriov_vf_print_runtime(struct xe_gt *gt, struct drm_printer *p)
+  */
+ void xe_gt_sriov_vf_print_version(struct xe_gt *gt, struct drm_printer *p)
+ {
++	struct xe_device *xe = gt_to_xe(gt);
+ 	struct xe_gt_sriov_vf_guc_version *guc_version = &gt->sriov.vf.guc_version;
+-	struct xe_gt_sriov_vf_relay_version *pf_version = &gt->sriov.vf.pf_version;
++	struct xe_sriov_vf_relay_version *pf_version = &xe->sriov.vf.pf_version;
+ 	u32 branch, major, minor;
+ 
+ 	xe_gt_assert(gt, IS_SRIOV_VF(gt_to_xe(gt)));
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
+index a57f13b5afcd..7df95f88f4f4 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
+@@ -22,16 +22,6 @@ struct xe_gt_sriov_vf_guc_version {
+ 	u8 patch;
+ };
+ 
+-/**
+- * struct xe_gt_sriov_vf_relay_version - PF ABI version details.
+- */
+-struct xe_gt_sriov_vf_relay_version {
+-	/** @major: major version. */
+-	u16 major;
+-	/** @minor: minor version. */
+-	u16 minor;
+-};
+-
+ /**
+  * struct xe_gt_sriov_vf_selfconfig - VF configuration data.
+  */
+@@ -75,8 +65,6 @@ struct xe_gt_sriov_vf {
+ 	struct xe_gt_sriov_vf_guc_version guc_version;
+ 	/** @self_config: resource configurations. */
+ 	struct xe_gt_sriov_vf_selfconfig self_config;
+-	/** @pf_version: negotiated VF/PF ABI version. */
+-	struct xe_gt_sriov_vf_relay_version pf_version;
+ 	/** @runtime: runtime data retrieved from the PF. */
+ 	struct xe_gt_sriov_vf_runtime runtime;
+ };
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_types.h b/drivers/gpu/drm/xe/xe_sriov_vf_types.h
+index 55c2421d4b2e..8300416a6226 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf_types.h
++++ b/drivers/gpu/drm/xe/xe_sriov_vf_types.h
+@@ -6,8 +6,19 @@
+ #ifndef _XE_SRIOV_VF_TYPES_H_
+ #define _XE_SRIOV_VF_TYPES_H_
+ 
++#include <linux/types.h>
+ #include <linux/workqueue_types.h>
+ 
++/**
++ * struct xe_sriov_vf_relay_version - PF ABI version details.
++ */
++struct xe_sriov_vf_relay_version {
++	/** @major: major version. */
++	u16 major;
++	/** @minor: minor version. */
++	u16 minor;
++};
++
+ /**
+  * struct xe_device_vf - Xe Virtual Function related data
+  *
+@@ -15,6 +26,9 @@
+  * @XE_SRIOV_MODE_VF mode.
+  */
+ struct xe_device_vf {
++	/** @pf_version: negotiated VF/PF ABI version. */
++	struct xe_sriov_vf_relay_version pf_version;
++
+ 	/** @migration: VF Migration state data */
+ 	struct {
+ 		/** @migration.worker: VF migration recovery worker */
+-- 
+2.43.0
+

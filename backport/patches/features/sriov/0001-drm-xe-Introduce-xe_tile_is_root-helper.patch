@@ -1,0 +1,81 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Sun, 13 Jul 2025 12:36:21 +0200
+Subject: drm/xe: Introduce xe_tile_is_root helper
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Instead of looking at the tile->id member provide a small helper
+to explicitly express our intentions.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://lore.kernel.org/r/20250713103625.1964-4-michal.wajdeczko@intel.com
+(backported from commit 76293a83a9db7fb52e48f5ee320c3c6708f05a8e linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gsc_proxy.c | 3 ++-
+ drivers/gpu/drm/xe/xe_irq.c       | 3 ++-
+ drivers/gpu/drm/xe/xe_tile.h      | 5 +++++
+ 3 files changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gsc_proxy.c b/drivers/gpu/drm/xe/xe_gsc_proxy.c
+index 76636da3d06c..a3966e809adf 100644
+--- a/drivers/gpu/drm/xe/xe_gsc_proxy.c
++++ b/drivers/gpu/drm/xe/xe_gsc_proxy.c
+@@ -23,6 +23,7 @@
+ #include "xe_map.h"
+ #include "xe_mmio.h"
+ #include "xe_pm.h"
++#include "xe_tile.h"
+ 
+ /*
+  * GSC proxy:
+@@ -455,7 +456,7 @@ int xe_gsc_proxy_init(struct xe_gsc *gsc)
+ 	}
+ 
+ 	/* no multi-tile devices with this feature yet */
+-	if (tile->id > 0) {
++	if (!xe_tile_is_root(tile)) {
+ 		xe_gt_err(gt, "unexpected GSC proxy init on tile %u\n", tile->id);
+ 		return -EINVAL;
+ 	}
+diff --git a/drivers/gpu/drm/xe/xe_irq.c b/drivers/gpu/drm/xe/xe_irq.c
+index 08552ee3fb94..c88eb10b23ce 100644
+--- a/drivers/gpu/drm/xe/xe_irq.c
++++ b/drivers/gpu/drm/xe/xe_irq.c
+@@ -21,6 +21,7 @@
+ #include "xe_memirq.h"
+ #include "xe_mmio.h"
+ #include "xe_sriov.h"
++#include "xe_tile.h"
+ 
+ /*
+  * Interrupt registers for a unit are always consecutive and ordered
+@@ -532,7 +533,7 @@ static void xelp_irq_reset(struct xe_tile *tile)
+ 
+ static void dg1_irq_reset(struct xe_tile *tile)
+ {
+-	if (tile->id == 0)
++	if (xe_tile_is_root(tile))
+ 		dg1_intr_disable(tile_to_xe(tile));
+ 
+ 	gt_irq_reset(tile);
+diff --git a/drivers/gpu/drm/xe/xe_tile.h b/drivers/gpu/drm/xe/xe_tile.h
+index eb939316d55b..b20bab82c460 100644
+--- a/drivers/gpu/drm/xe/xe_tile.h
++++ b/drivers/gpu/drm/xe/xe_tile.h
+@@ -16,4 +16,9 @@ int xe_tile_init(struct xe_tile *tile);
+ 
+ void xe_tile_migrate_wait(struct xe_tile *tile);
+ 
++static inline bool xe_tile_is_root(struct xe_tile *tile)
++{
++	return tile->id == 0;
++}
++
+ #endif
+-- 
+2.43.0
+

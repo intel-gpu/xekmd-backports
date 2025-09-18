@@ -1,0 +1,98 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Tue, 26 Aug 2025 12:04:17 +0530
+Subject: [PATCH] drm/xe/xe_hw_error: Add fault injection to trigger csc error
+ handler
+
+Add a debugfs fault handler to trigger csc error handler that
+wedges the device and enables runtime survivability mode.
+
+v2: add debugfs only for bmg (Umesh)
+v3: do not use csc_fault attribute if debugfs is not enabled
+v4: rebase
+
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link: https://lore.kernel.org/r/20250826063419.3022216-11-riana.tauro@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(backported from commit d1f51a4f953da4ada15fa585c800ca98d627ce47 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_debugfs.c  |  6 +++++-
+ drivers/gpu/drm/xe/xe_hw_error.c | 11 +++++++++++
+ 2 files changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
+index e9e5c1f79303..f988f1f78b50 100644
+--- a/drivers/gpu/drm/xe/xe_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_debugfs.c
+@@ -31,6 +31,7 @@
+ #endif
+ 
+ DECLARE_FAULT_ATTR(gt_reset_failure);
++DECLARE_FAULT_ATTR(inject_csc_hw_error);
+ 
+ static void read_residency_counter(struct xe_device *xe, struct xe_mmio *mmio,
+ 				   u32 offset, char *name, struct drm_printer *p)
+@@ -284,10 +285,13 @@ void xe_debugfs_register(struct xe_device *xe)
+ 				 ARRAY_SIZE(debugfs_list),
+ 				 root, minor);
+ 
+-	if (xe->info.platform == XE_BATTLEMAGE && !IS_SRIOV_VF(xe))
++	if (xe->info.platform == XE_BATTLEMAGE) {
+ 		drm_debugfs_create_files(debugfs_residencies,
+ 					 ARRAY_SIZE(debugfs_residencies),
+ 					 root, minor);
++		fault_create_debugfs_attr("inject_csc_hw_error", root,
++					  &inject_csc_hw_error);
++	}
+ 
+ 	debugfs_create_file("forcewake_all", 0400, root, xe,
+ 			    &forcewake_all_fops);
+diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
+index 4099ed1262e1..8c65291f36fc 100644
+--- a/drivers/gpu/drm/xe/xe_hw_error.c
++++ b/drivers/gpu/drm/xe/xe_hw_error.c
+@@ -3,6 +3,8 @@
+  * Copyright © 2025 Intel Corporation
+  */
+ 
++#include <linux/fault-inject.h>
++
+ #include "regs/xe_gsc_regs.h"
+ #include "regs/xe_hw_error_regs.h"
+ #include "regs/xe_irq_regs.h"
+@@ -13,6 +15,7 @@
+ #include "xe_survivability_mode.h"
+ 
+ #define  HEC_UNCORR_FW_ERR_BITS 4
++extern struct fault_attr inject_csc_hw_error;
+ 
+ /* Error categories reported by hardware */
+ enum hardware_error {
+@@ -43,6 +46,11 @@ static const char *hw_error_to_str(const enum hardware_error hw_err)
+ 	}
+ }
+ 
++static bool fault_inject_csc_hw_error(void)
++{
++	return IS_ENABLED(CONFIG_DEBUG_FS) && should_fail(&inject_csc_hw_error, 1);
++}
++
+ static void csc_hw_error_work(struct work_struct *work)
+ {
+ 	struct xe_tile *tile = container_of(work, typeof(*tile), csc_hw_error_work);
+@@ -130,6 +138,9 @@ void xe_hw_error_irq_handler(struct xe_tile *tile, const u32 master_ctl)
+ {
+ 	enum hardware_error hw_err;
+ 
++	if (fault_inject_csc_hw_error())
++		schedule_work(&tile->csc_hw_error_work);
++
+ 	for (hw_err = 0; hw_err < HARDWARE_ERROR_MAX; hw_err++)
+ 		if (master_ctl & ERROR_IRQ(hw_err))
+ 			hw_error_source_handler(tile, hw_err);
+-- 
+2.43.0
+

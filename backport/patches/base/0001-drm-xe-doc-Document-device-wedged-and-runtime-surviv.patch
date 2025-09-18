@@ -1,0 +1,155 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Tue, 26 Aug 2025 12:04:14 +0530
+Subject: [PATCH] drm/xe/doc: Document device wedged and runtime survivability
+
+Add documentation for vendor specific device wedged recovery method
+and runtime survivability.
+
+v2: fix documentation (Raag)
+v3: add userspace tool for firmware update (Raag)
+v4: use consistent documentation (Raag)
+v5: add more documentation
+
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link: https://lore.kernel.org/r/20250826063419.3022216-8-riana.tauro@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit f646c9f9371b28b8f93e619fe003415f6aaeb416 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ Documentation/gpu/xe/xe_pcode.rst          |  6 ++--
+ drivers/gpu/drm/xe/xe_device.c             | 27 +++++++++++++++++
+ drivers/gpu/drm/xe/xe_survivability_mode.c | 35 +++++++++++++++++-----
+ 3 files changed, 58 insertions(+), 10 deletions(-)
+
+diff --git a/Documentation/gpu/xe/xe_pcode.rst b/Documentation/gpu/xe/xe_pcode.rst
+index 5937ef3599b0..2a43601123cb 100644
+--- a/Documentation/gpu/xe/xe_pcode.rst
++++ b/Documentation/gpu/xe/xe_pcode.rst
+@@ -13,9 +13,11 @@ Internal API
+ .. kernel-doc:: drivers/gpu/drm/xe/xe_pcode.c
+    :internal:
+ 
++.. _xe-survivability-mode:
++
+ ==================
+-Boot Survivability
++Survivability Mode
+ ==================
+ 
+ .. kernel-doc:: drivers/gpu/drm/xe/xe_survivability_mode.c
+-   :doc: Xe Boot Survivability
++   :doc: Survivability Mode
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 07a4a1898277..eb4fea329e61 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -1053,6 +1053,33 @@ static void xe_device_wedged_fini(struct drm_device *drm, void *arg)
+  * used. Certain critical errors like gt reset failure, firmware failures can cause
+  * the device to be wedged. The default recovery method for a wedged state
+  * is rebind/bus-reset.
++ *
++ * Another recovery method is vendor-specific. Below are the cases that send
++ * ``WEDGED=vendor-specific`` recovery method in drm device wedged uevent.
++ *
++ * Case: Firmware Flash
++ * --------------------
++ *
++ * Identification Hint
++ * +++++++++++++++++++
++ *
++ * ``WEDGED=vendor-specific`` drm device wedged uevent with
++ * :ref:`Runtime Survivability mode <xe-survivability-mode>` is used to notify
++ * admin/userspace consumer about the need for a firmware flash.
++ *
++ * Recovery Procedure
++ * ++++++++++++++++++
++ *
++ * Once ``WEDGED=vendor-specific`` drm device wedged uevent is received, follow
++ * the below steps
++ *
++ * - Check Runtime Survivability mode sysfs.
++ *   If enabled, firmware flash is required to recover the device.
++ *
++ *   /sys/bus/pci/devices/<device>/survivability_mode
++ *
++ * - Admin/userpsace consumer can use firmware flashing tools like fwupd to flash
++ *   firmware and restore device to normal operation.
+  */
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
+index ec45289a6e49..91a8723aae7c 100644
+--- a/drivers/gpu/drm/xe/xe_survivability_mode.c
++++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
+@@ -21,15 +21,18 @@
+ #define MAX_SCRATCH_MMIO 8
+ 
+ /**
+- * DOC: Xe Boot Survivability
++ * DOC: Survivability Mode
+  *
+- * Boot Survivability is a software based workflow for recovering a system in a failed boot state
++ * Survivability Mode is a software based workflow for recovering a system in a failed boot state
+  * Here system recoverability is concerned with recovering the firmware responsible for boot.
+  *
+- * This is implemented by loading the driver with bare minimum (no drm card) to allow the firmware
+- * to be flashed through mei and collect telemetry. The driver's probe flow is modified
+- * such that it enters survivability mode when pcode initialization is incomplete and boot status
+- * denotes a failure.
++ * Boot Survivability
++ * ===================
++ *
++ * Boot Survivability is implemented by loading the driver with bare minimum (no drm card) to allow
++ * the firmware to be flashed through mei driver and collect telemetry. The driver's probe flow is
++ * modified such that it enters survivability mode when pcode initialization is incomplete and boot
++ * status denotes a failure.
+  *
+  * Survivability mode can also be entered manually using the survivability mode attribute available
+  * through configfs which is beneficial in several usecases. It can be used to address scenarios
+@@ -45,7 +48,7 @@
+  * Survivability mode is indicated by the below admin-only readable sysfs which provides additional
+  * debug information::
+  *
+- *	/sys/bus/pci/devices/<device>/surivability_mode
++ *	/sys/bus/pci/devices/<device>/survivability_mode
+  *
+  * Capability Information:
+  *	Provides boot status
+@@ -55,6 +58,22 @@
+  *	Provides history of previous failures
+  * Auxiliary Information
+  *	Certain failures may have information in addition to postcode information
++ *
++ * Runtime Survivability
++ * =====================
++ *
++ * Certain runtime firmware errors can cause the device to enter a wedged state
++ * (:ref:`xe-device-wedging`) requiring a firmware flash to restore normal operation.
++ * Runtime Survivability Mode indicates that a firmware flash is necessary to recover the device and
++ * is indicated by the presence of survivability mode sysfs::
++ *
++ *	/sys/bus/pci/devices/<device>/survivability_mode
++ *
++ * Survivability mode sysfs provides information about the type of survivability mode.
++ *
++ * When such errors occur, userspace is notified with the drm device wedged uevent and runtime
++ * survivability mode. User can then initiate a firmware flash using userspace tools like fwupd
++ * to restore device to normal operation.
+  */
+ 
+ static u32 aux_history_offset(u32 reg_value)
+@@ -316,7 +335,7 @@ int xe_survivability_mode_runtime_enable(struct xe_device *xe)
+ 
+ 	xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_VENDOR);
+ 	xe_device_declare_wedged(xe);
+-	dev_err(&pdev->dev, "Firmware update required, Refer the userspace documentation for more details!\n");
++	dev_err(&pdev->dev, "Firmware flash required, Refer the userspace documentation for more details!\n");
+ 
+ 	return 0;
+ }
+-- 
+2.43.0
+

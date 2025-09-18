@@ -1,0 +1,72 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Tue, 26 Aug 2025 12:04:08 +0530
+Subject: drm/xe: Add documentation for Xe Device Wedging
+
+Add documentation for Xe Device Wedging so that
+file can be referenced in following patches.
+
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250826063419.3022216-2-riana.tauro@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 38fc73b8c7d692a099ddda37b700eeb330a03ff1 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ Documentation/gpu/xe/index.rst     |  1 +
+ Documentation/gpu/xe/xe_device.rst | 10 ++++++++++
+ drivers/gpu/drm/xe/xe_device.c     | 10 ++++++++++
+ 3 files changed, 21 insertions(+)
+ create mode 100644 Documentation/gpu/xe/xe_device.rst
+
+diff --git a/Documentation/gpu/xe/index.rst b/Documentation/gpu/xe/index.rst
+index b2369561f24e..dafcdf35b31d 100644
+--- a/Documentation/gpu/xe/index.rst
++++ b/Documentation/gpu/xe/index.rst
+@@ -24,5 +24,6 @@ DG2, etc is provided to prototype the driver.
+    xe_tile
+    xe_debugging
+    xe_devcoredump
++   xe_device
+    xe-drm-usage-stats.rst
+    xe_configfs
+diff --git a/Documentation/gpu/xe/xe_device.rst b/Documentation/gpu/xe/xe_device.rst
+new file mode 100644
+index 000000000000..39a937b97cd3
+--- /dev/null
++++ b/Documentation/gpu/xe/xe_device.rst
+@@ -0,0 +1,10 @@
++.. SPDX-License-Identifier: (GPL-2.0+ OR MIT)
++
++.. _xe-device-wedging:
++
++==================
++Xe Device Wedging
++==================
++
++.. kernel-doc:: drivers/gpu/drm/xe/xe_device.c
++   :doc: Xe Device Wedging
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index b439ba7c5288..10f076e40231 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -1045,6 +1045,16 @@ static void xe_device_wedged_fini(struct drm_device *drm, void *arg)
+ 	xe_pm_runtime_put(xe);
+ }
+ 
++/**
++ * DOC: Xe Device Wedging
++ *
++ * Xe driver uses drm device wedged uevent as documented in Documentation/gpu/drm-uapi.rst.
++ * When device is in wedged state, every IOCTL will be blocked and GT cannot be
++ * used. Certain critical errors like gt reset failure, firmware failures can cause
++ * the device to be wedged. The default recovery method for a wedged state
++ * is rebind/bus-reset.
++ */
++
+ /**
+  * xe_device_declare_wedged - Declare device wedged
+  * @xe: xe device instance
+-- 
+2.43.0
+

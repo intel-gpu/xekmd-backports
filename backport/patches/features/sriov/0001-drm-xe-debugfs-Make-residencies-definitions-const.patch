@@ -28,11 +28,11 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  1 file changed, 5 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index a21007ade..e605a39d0 100644
+index 4a7986348..52a1d6ebc 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
-@@ -37,7 +37,7 @@
- DECLARE_FAULT_ATTR(gt_reset_failure);
+@@ -38,7 +38,7 @@ DECLARE_FAULT_ATTR(gt_reset_failure);
+ DECLARE_FAULT_ATTR(inject_csc_hw_error);
  
  static void read_residency_counter(struct xe_device *xe, struct xe_mmio *mmio,
 -				   u32 offset, char *name, struct drm_printer *p)
@@ -40,7 +40,7 @@ index a21007ade..e605a39d0 100644
  {
  	u64 residency = 0;
  	int ret;
-@@ -115,9 +115,9 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
+@@ -116,9 +116,9 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
  	p = drm_seq_file_printer(m);
  	xe_pm_runtime_get(xe);
  	mmio = xe_root_tile_mmio(xe);
@@ -52,7 +52,7 @@ index a21007ade..e605a39d0 100644
  	} residencies[] = {
  		{BMG_G2_RESIDENCY_OFFSET, "Package G2"},
  		{BMG_G6_RESIDENCY_OFFSET, "Package G6"},
-@@ -144,9 +144,9 @@ static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
+@@ -145,9 +145,9 @@ static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
  	xe_pm_runtime_get(xe);
  	mmio = xe_root_tile_mmio(xe);
  
@@ -65,5 +65,5 @@ index a21007ade..e605a39d0 100644
  		{BMG_PCIE_LINK_L0_RESIDENCY_OFFSET, "PCIE LINK L0 RESIDENCY"},
  		{BMG_PCIE_LINK_L1_RESIDENCY_OFFSET, "PCIE LINK L1 RESIDENCY"},
 -- 
-2.34.1
+2.43.0
 

@@ -1,0 +1,188 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Tue, 26 Aug 2025 12:04:09 +0530
+Subject: drm: Add a vendor-specific recovery method to drm device
+ wedged uevent
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Address the need for a recovery method (firmware flash on Firmware errors)
+introduced in the later patches of Xe KMD.
+Whenever XE KMD detects a firmware error, a firmware flash is required to
+recover the device to normal operation.
+
+The initial proposal to use 'firmware-flash' as a recovery method was
+not applicable to other drivers and could cause multiple recovery
+methods specific to vendors to be added.
+To address this a more generic 'vendor-specific' method is introduced,
+guiding users to refer to vendor specific documentation and system logs
+for detailed vendor specific recovery procedure.
+
+Add a recovery method 'WEDGED=vendor-specific' for such errors.
+Vendors must provide additional recovery documentation if this method
+is used.
+
+It is the responsibility of the consumer to refer to the correct vendor
+specific documentation and usecase before attempting a recovery.
+
+For example: If driver is XE KMD, the consumer must refer
+to the documentation of 'Device Wedging' under 'Documentation/gpu/xe/'.
+
+v2: fix documentation (Raag)
+v3: add more details to commit message (Sima, Rodrigo, Raag)
+    add an example script to the documentation (Raag)
+v4: use consistent naming (Raag)
+v5: fix commit message
+v6: add more documentation
+
+Cc: André Almeida <andrealmeid@igalia.com>
+Cc: Christian König <christian.koenig@amd.com>
+Cc: David Airlie <airlied@gmail.com>
+Cc: Simona Vetter <simona.vetter@ffwll.ch>
+Cc: Maxime Ripard <mripard@kernel.org>
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Acked-by: Maxime Ripard <mripard@kernel.org>
+Link: https://lore.kernel.org/r/20250826063419.3022216-3-riana.tauro@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(backported from commit 9c857a9d84e01332d031b55c4e38a66daecbae73 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ Documentation/gpu/drm-uapi.rst | 63 ++++++++++++++++++++++++++++++----
+ drivers/gpu/drm/drm_drv.c      |  2 ++
+ include/drm/drm_device.h       |  4 +++
+ 3 files changed, 62 insertions(+), 7 deletions(-)
+
+diff --git a/Documentation/gpu/drm-uapi.rst b/Documentation/gpu/drm-uapi.rst
+index 69f72e71a96e..81af54ce931c 100644
+--- a/Documentation/gpu/drm-uapi.rst
++++ b/Documentation/gpu/drm-uapi.rst
+@@ -418,13 +418,12 @@ needed.
+ Recovery
+ --------
+ 
+-Current implementation defines three recovery methods, out of which, drivers
++Current implementation defines four recovery methods, out of which, drivers
+ can use any one, multiple or none. Method(s) of choice will be sent in the
+ uevent environment as ``WEDGED=<method1>[,..,<methodN>]`` in order of less to
+-more side-effects. If driver is unsure about recovery or method is unknown
+-(like soft/hard system reboot, firmware flashing, physical device replacement
+-or any other procedure which can't be attempted on the fly), ``WEDGED=unknown``
+-will be sent instead.
++more side-effects. See the section `Vendor Specific Recovery`_
++for ``WEDGED=vendor-specific``. If driver is unsure about recovery or
++method is unknown, ``WEDGED=unknown`` will be sent instead.
+ 
+ Userspace consumers can parse this event and attempt recovery as per the
+ following expectations.
+@@ -435,6 +434,7 @@ following expectations.
+     none            optional telemetry collection
+     rebind          unbind + bind driver
+     bus-reset       unbind + bus reset/re-enumeration + bind
++    vendor-specific vendor specific recovery method
+     unknown         consumer policy
+     =============== ========================================
+ 
+@@ -446,6 +446,51 @@ telemetry information (devcoredump, syslog). This is useful because the first
+ hang is usually the most critical one which can result in consequential hangs or
+ complete wedging.
+ 
++Vendor Specific Recovery
++------------------------
++
++When ``WEDGED=vendor-specific`` is sent, it indicates that the device requires
++a recovery procedure specific to the hardware vendor and is not one of the
++standardized approaches.
++
++``WEDGED=vendor-specific`` may be used to indicate different cases within a
++single vendor driver, each requiring a distinct recovery procedure.
++In such scenarios, the vendor driver must provide comprehensive documentation
++that describes each case, include additional hints to identify specific case and
++outline the corresponding recovery procedure. The documentation includes:
++
++Case - A list of all cases that sends the ``WEDGED=vendor-specific`` recovery method.
++
++Hints - Additional Information to assist the userspace consumer in identifying and
++differentiating between different cases. This can be exposed through sysfs, debugfs,
++traces, dmesg etc.
++
++Recovery Procedure - Clear instructions and guidance for recovering each case.
++This may include userspace scripts, tools needed for the recovery procedure.
++
++It is the responsibility of the admin/userspace consumer to identify the case and
++verify additional identification hints before attempting a recovery procedure.
++
++Example: If the device uses the Xe driver, then userspace consumer should refer to
++:ref:`Xe Device Wedging <xe-device-wedging>` for the detailed documentation.
++
++Task information
++----------------
++
++The information about which application (if any) was involved in the device
++wedging is useful for userspace if they want to notify the user about what
++happened (e.g. the compositor display a message to the user "The <task name>
++caused a graphical error and the system recovered") or to implement policies
++(e.g. the daemon may "ban" an task that keeps resetting the device). If the task
++information is available, the uevent will display as ``PID=<pid>`` and
++``TASK=<task name>``. Otherwise, ``PID`` and ``TASK`` will not appear in the
++event string.
++
++The reliability of this information is driver and hardware specific, and should
++be taken with a caution regarding it's precision. To have a big picture of what
++really happened, the devcoredump file provides much more detailed information
++about the device state and about the event.
++
+ Consumer prerequisites
+ ----------------------
+ 
+@@ -455,8 +500,12 @@ erroring out, all device memory should be unmapped and file descriptors should
+ be closed to prevent leaks or undefined behaviour. The idea here is to clear the
+ device of all user context beforehand and set the stage for a clean recovery.
+ 
+-Example
+--------
++For ``WEDGED=vendor-specific`` recovery method, it is the responsibility of the
++consumer to check the driver documentation and the usecase before attempting
++a recovery.
++
++Example - rebind
++----------------
+ 
+ Udev rule::
+ 
+diff --git a/drivers/gpu/drm/drm_drv.c b/drivers/gpu/drm/drm_drv.c
+index 17fc5dc708f4..5a473e919529 100644
+--- a/drivers/gpu/drm/drm_drv.c
++++ b/drivers/gpu/drm/drm_drv.c
+@@ -513,6 +513,8 @@ static const char *drm_get_wedge_recovery(unsigned int opt)
+ 		return "rebind";
+ 	case DRM_WEDGE_RECOVERY_BUS_RESET:
+ 		return "bus-reset";
++	case DRM_WEDGE_RECOVERY_VENDOR:
++		return "vendor-specific";
+ 	default:
+ 		return NULL;
+ 	}
+diff --git a/include/drm/drm_device.h b/include/drm/drm_device.h
+index 6ea54a578cda..544b40876530 100644
+--- a/include/drm/drm_device.h
++++ b/include/drm/drm_device.h
+@@ -25,10 +25,14 @@ struct pci_controller;
+  * Recovery methods for wedged device in order of less to more side-effects.
+  * To be used with drm_dev_wedged_event() as recovery @method. Callers can
+  * use any one, multiple (or'd) or none depending on their needs.
++ *
++ * Refer to "Device Wedging" chapter in Documentation/gpu/drm-uapi.rst for more
++ * details.
+  */
+ #define DRM_WEDGE_RECOVERY_NONE		BIT(0)	/* optional telemetry collection */
+ #define DRM_WEDGE_RECOVERY_REBIND	BIT(1)	/* unbind + bind driver */
+ #define DRM_WEDGE_RECOVERY_BUS_RESET	BIT(2)	/* unbind + reset bus device + bind */
++#define DRM_WEDGE_RECOVERY_VENDOR	BIT(3)	/* vendor specific recovery method */
+ 
+ /**
+  * enum switch_power_state - power state of drm device
+-- 
+2.43.0
+

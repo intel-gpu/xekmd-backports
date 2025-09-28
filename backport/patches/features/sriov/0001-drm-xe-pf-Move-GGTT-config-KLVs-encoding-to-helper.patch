@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 11 Jul 2025 21:33:13 +0200
+Subject: drm/xe/pf: Move GGTT config KLVs encoding to helper
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In upcoming patch we will want to encode GGTT config KLVs based
+on raw numbers, without relying on the allocated GGTT node.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+(backported from commit 92ba2032a18dd61ca65ac832134217493fbc8bcf linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://lore.kernel.org/r/20250711193316.1920-4-michal.wajdeczko@intel.com
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 31 ++++++++++++++--------
+ 1 file changed, 20 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index 52c8e37a6..c9cf73a36 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -238,25 +238,34 @@ static struct xe_gt_sriov_config *pf_pick_vf_config(struct xe_gt *gt, unsigned i
+ }
+ 
+ /* Return: number of configuration dwords written */
+-static u32 encode_config_ggtt(u32 *cfg, const struct xe_gt_sriov_config *config, bool details)
++static u32 encode_ggtt(u32 *cfg, u64 start, u64 size, bool details)
+ {
+ 	u32 n = 0;
+ 
+-	if (xe_ggtt_node_allocated(config->ggtt_region)) {
+-		if (details) {
+-			cfg[n++] = PREP_GUC_KLV_TAG(VF_CFG_GGTT_START);
+-			cfg[n++] = lower_32_bits(config->ggtt_region->base.start);
+-			cfg[n++] = upper_32_bits(config->ggtt_region->base.start);
+-		}
+-
+-		cfg[n++] = PREP_GUC_KLV_TAG(VF_CFG_GGTT_SIZE);
+-		cfg[n++] = lower_32_bits(config->ggtt_region->base.size);
+-		cfg[n++] = upper_32_bits(config->ggtt_region->base.size);
++	if (details) {
++		cfg[n++] = PREP_GUC_KLV_TAG(VF_CFG_GGTT_START);
++		cfg[n++] = lower_32_bits(start);
++		cfg[n++] = upper_32_bits(start);
+ 	}
+ 
++	cfg[n++] = PREP_GUC_KLV_TAG(VF_CFG_GGTT_SIZE);
++	cfg[n++] = lower_32_bits(size);
++	cfg[n++] = upper_32_bits(size);
++
+ 	return n;
+ }
+ 
++/* Return: number of configuration dwords written */
++static u32 encode_config_ggtt(u32 *cfg, const struct xe_gt_sriov_config *config, bool details)
++{
++	struct xe_ggtt_node *node = config->ggtt_region;
++
++	if (!xe_ggtt_node_allocated(node))
++		return 0;
++
++	return encode_ggtt(cfg, node->base.start, node->base.size, details);
++}
++
+ /* Return: number of configuration dwords written */
+ static u32 encode_config(u32 *cfg, const struct xe_gt_sriov_config *config, bool details)
+ {
+-- 
+2.34.1
+

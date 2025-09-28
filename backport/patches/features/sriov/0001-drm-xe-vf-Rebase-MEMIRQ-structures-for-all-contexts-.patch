@@ -1,0 +1,318 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tomasz Lis <tomasz.lis@intel.com>
+Date: Sat, 2 Aug 2025 05:10:42 +0200
+Subject: drm/xe/vf: Rebase MEMIRQ structures for all contexts after
+ migration
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+All contexts require an update of state data, as the data includes
+GGTT references to memirq-related buffers.
+
+Default contexts need these references updated as well, because they
+are not refreshed when a new context is created from them.
+
+The way we write to vram requires scratch buffer to be used
+before the whole block is memcopied. Since using kalloc() within
+specific recovery functions would lead to unintended relations
+between locks, we are allocating the buffer earlier, before
+any locks are taken. The same buffer will be used for other steps
+of the recovery.
+
+v2: Update addresses by xe_lrc_write_ctx_reg() rather than
+  set_memory_based_intr()
+v3: Renamed parameter, reordered parameters in some functs
+v4: Check if have MEMIRQ, move `xe_gt*` funct to proper file
+v5: Revert back to requiring scratch buffer, but allocate it
+  earlier this time
+
+Signed-off-by: Tomasz Lis <tomasz.lis@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Michal Winiarski <michal.winiarski@intel.com>
+Acked-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Reviewed-by: Michal Winiarski <michal.winiarski@intel.com>
+Link: https://lore.kernel.org/r/20250802031045.1127138-6-tomasz.lis@intel.com
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+(backported from commit 30d137ddcee514d3ee5a498713628bd50d41e87b linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c  |  7 ++--
+ drivers/gpu/drm/xe/xe_exec_queue.h  |  2 +-
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c | 14 ++++++++
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.h |  1 +
+ drivers/gpu/drm/xe/xe_guc_submit.c  |  5 +--
+ drivers/gpu/drm/xe/xe_guc_submit.h  |  2 +-
+ drivers/gpu/drm/xe/xe_lrc.c         | 51 +++++++++++++++++++++++++++--
+ drivers/gpu/drm/xe/xe_lrc.h         |  4 +++
+ drivers/gpu/drm/xe/xe_sriov_vf.c    | 20 +++++++++--
+ 9 files changed, 96 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index 3ff3b80d7..b32972861 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -992,11 +992,14 @@ int xe_exec_queue_last_fence_test_dep(struct xe_exec_queue *q, struct xe_vm *vm)
+  * xe_exec_queue_contexts_hwsp_rebase - Re-compute GGTT references
+  * within all LRCs of a queue.
+  * @q: the &xe_exec_queue struct instance containing target LRCs
++ * @scratch: scratch buffer to be used as temporary storage
+  */
+-void xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q)
++void xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch)
+ {
+ 	int i;
+ 
+-	for (i = 0; i < q->width; ++i)
++	for (i = 0; i < q->width; ++i) {
++		xe_lrc_update_memirq_regs_with_address(q->lrc[i], q->hwe, scratch);
+ 		xe_lrc_update_hwctx_regs_with_address(q->lrc[i]);
++	}
+ }
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
+index 4d12891d5..b93b3f93d 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue.h
+@@ -84,6 +84,6 @@ void xe_exec_queue_last_fence_set(struct xe_exec_queue *e, struct xe_vm *vm,
+ int xe_exec_queue_last_fence_test_dep(struct xe_exec_queue *q,
+ 				      struct xe_vm *vm);
+ void xe_exec_queue_update_run_ticks(struct xe_exec_queue *q);
+-void xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q);
++void xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch);
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index 260d44997..d5bd5369f 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -25,6 +25,7 @@
+ #include "xe_guc.h"
+ #include "xe_guc_hxg_helpers.h"
+ #include "xe_guc_relay.h"
++#include "xe_lrc.h"
+ #include "xe_mmio.h"
+ #include "xe_sriov.h"
+ #include "xe_sriov_vf.h"
+@@ -750,6 +751,19 @@ int xe_gt_sriov_vf_connect(struct xe_gt *gt)
+ 	return err;
+ }
+ 
++/**
++ * xe_gt_sriov_vf_default_lrcs_hwsp_rebase - Update GGTT references in HWSP of default LRCs.
++ * @gt: the &xe_gt struct instance
++ */
++void xe_gt_sriov_vf_default_lrcs_hwsp_rebase(struct xe_gt *gt)
++{
++	struct xe_hw_engine *hwe;
++	enum xe_hw_engine_id id;
++
++	for_each_hw_engine(hwe, gt, id)
++		xe_default_lrc_update_memirq_regs_with_address(hwe);
++}
++
+ /**
+  * xe_gt_sriov_vf_migrated_event_handler - Start a VF migration recovery,
+  *   or just mark that a GuC is ready for it.
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.h b/drivers/gpu/drm/xe/xe_gt_sriov_vf.h
+index e0357f341..0af1dc769 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.h
+@@ -21,6 +21,7 @@ void xe_gt_sriov_vf_guc_versions(struct xe_gt *gt,
+ int xe_gt_sriov_vf_query_config(struct xe_gt *gt);
+ int xe_gt_sriov_vf_connect(struct xe_gt *gt);
+ int xe_gt_sriov_vf_query_runtime(struct xe_gt *gt);
++void xe_gt_sriov_vf_default_lrcs_hwsp_rebase(struct xe_gt *gt);
+ int xe_gt_sriov_vf_notify_resfix_done(struct xe_gt *gt);
+ void xe_gt_sriov_vf_migrated_event_handler(struct xe_gt *gt);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index 019cc9c04..4f5c7a25e 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -2465,14 +2465,15 @@ void xe_guc_submit_print(struct xe_guc *guc, struct drm_printer *p)
+  * xe_guc_contexts_hwsp_rebase - Re-compute GGTT references within all
+  * exec queues registered to given GuC.
+  * @guc: the &xe_guc struct instance
++ * @scratch: scratch buffer to be used as temporary storage
+  */
+-void xe_guc_contexts_hwsp_rebase(struct xe_guc *guc)
++void xe_guc_contexts_hwsp_rebase(struct xe_guc *guc, void *scratch)
+ {
+ 	struct xe_exec_queue *q;
+ 	unsigned long index;
+ 
+ 	mutex_lock(&guc->submission_state.lock);
+ 	xa_for_each(&guc->submission_state.exec_queue_lookup, index, q)
+-		xe_exec_queue_contexts_hwsp_rebase(q);
++		xe_exec_queue_contexts_hwsp_rebase(q, scratch);
+ 	mutex_unlock(&guc->submission_state.lock);
+ }
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.h b/drivers/gpu/drm/xe/xe_guc_submit.h
+index d22f2d36d..9a2718c81 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.h
++++ b/drivers/gpu/drm/xe/xe_guc_submit.h
+@@ -46,6 +46,6 @@ xe_guc_exec_queue_snapshot_free(struct xe_guc_submit_exec_queue_snapshot *snapsh
+ void xe_guc_submit_print(struct xe_guc *guc, struct drm_printer *p);
+ void xe_guc_register_exec_queue(struct xe_exec_queue *q, int ctx_type);
+ 
+-void xe_guc_contexts_hwsp_rebase(struct xe_guc *guc);
++void xe_guc_contexts_hwsp_rebase(struct xe_guc *guc, void *scratch);
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index bca433885..6191556cb 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -659,7 +659,13 @@ u32 xe_lrc_regs_offset(struct xe_lrc *lrc)
+ 	return xe_lrc_pphwsp_offset(lrc) + LRC_PPHWSP_SIZE;
+ }
+ 
+-static size_t lrc_reg_size(struct xe_device *xe)
++/**
++ * xe_lrc_reg_size() - Get size of the LRC registers area within queues
++ * @xe: the &xe_device struct instance
++ *
++ * Returns: Size of the LRC registers area for current platform
++ */
++size_t xe_lrc_reg_size(struct xe_device *xe)
+ {
+ 	if (GRAPHICS_VERx100(xe) >= 1250)
+ 		return 96 * sizeof(u32);
+@@ -669,7 +675,7 @@ static size_t lrc_reg_size(struct xe_device *xe)
+ 
+ size_t xe_lrc_skip_size(struct xe_device *xe)
+ {
+-	return LRC_PPHWSP_SIZE + lrc_reg_size(xe);
++	return LRC_PPHWSP_SIZE + xe_lrc_reg_size(xe);
+ }
+ 
+ static inline u32 __xe_lrc_seqno_offset(struct xe_lrc *lrc)
+@@ -895,6 +901,47 @@ static void *empty_lrc_data(struct xe_hw_engine *hwe)
+ 	return data;
+ }
+ 
++/**
++ * xe_default_lrc_update_memirq_regs_with_address - Re-compute GGTT references in default LRC
++ * of given engine.
++ * @hwe: the &xe_hw_engine struct instance
++ */
++void xe_default_lrc_update_memirq_regs_with_address(struct xe_hw_engine *hwe)
++{
++	struct xe_gt *gt = hwe->gt;
++	u32 *regs;
++
++	if (!gt->default_lrc[hwe->class])
++		return;
++
++	regs = gt->default_lrc[hwe->class] + LRC_PPHWSP_SIZE;
++	set_memory_based_intr(regs, hwe);
++}
++
++/**
++ * xe_lrc_update_memirq_regs_with_address - Re-compute GGTT references in mem interrupt data
++ * for given LRC.
++ * @lrc: the &xe_lrc struct instance
++ * @hwe: the &xe_hw_engine struct instance
++ * @regs: scratch buffer to be used as temporary storage
++ */
++void xe_lrc_update_memirq_regs_with_address(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
++					    u32 *regs)
++{
++	struct xe_gt *gt = hwe->gt;
++	struct iosys_map map;
++	size_t regs_len;
++
++	if (!xe_device_uses_memirq(gt_to_xe(gt)))
++		return;
++
++	map = __xe_lrc_regs_map(lrc);
++	regs_len = xe_lrc_reg_size(gt_to_xe(gt));
++	xe_map_memcpy_from(gt_to_xe(gt), regs, &map, 0, regs_len);
++	set_memory_based_intr(regs, hwe);
++	xe_map_memcpy_to(gt_to_xe(gt), &map, 0, regs, regs_len);
++}
++
+ static void xe_lrc_set_ppgtt(struct xe_lrc *lrc, struct xe_vm *vm)
+ {
+ 	u64 desc = xe_vm_pdp4_descriptor(vm, gt_to_tile(lrc->gt));
+diff --git a/drivers/gpu/drm/xe/xe_lrc.h b/drivers/gpu/drm/xe/xe_lrc.h
+index d358f85c9..25fed9fb6 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.h
++++ b/drivers/gpu/drm/xe/xe_lrc.h
+@@ -86,6 +86,9 @@ u32 xe_lrc_indirect_ring_ggtt_addr(struct xe_lrc *lrc);
+ u32 xe_lrc_ggtt_addr(struct xe_lrc *lrc);
+ u32 *xe_lrc_regs(struct xe_lrc *lrc);
+ void xe_lrc_update_hwctx_regs_with_address(struct xe_lrc *lrc);
++void xe_default_lrc_update_memirq_regs_with_address(struct xe_hw_engine *hwe);
++void xe_lrc_update_memirq_regs_with_address(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
++					    u32 *regs);
+ 
+ u32 xe_lrc_read_ctx_reg(struct xe_lrc *lrc, int reg_nr);
+ void xe_lrc_write_ctx_reg(struct xe_lrc *lrc, int reg_nr, u32 val);
+@@ -104,6 +107,7 @@ s32 xe_lrc_start_seqno(struct xe_lrc *lrc);
+ u32 xe_lrc_parallel_ggtt_addr(struct xe_lrc *lrc);
+ struct iosys_map xe_lrc_parallel_map(struct xe_lrc *lrc);
+ 
++size_t xe_lrc_reg_size(struct xe_device *xe);
+ size_t xe_lrc_skip_size(struct xe_device *xe);
+ 
+ void xe_lrc_dump_default(struct drm_printer *p,
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf.c b/drivers/gpu/drm/xe/xe_sriov_vf.c
+index 54a6218e4..43ac73e43 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_sriov_vf.c
+@@ -13,6 +13,7 @@
+ #include "xe_guc_ct.h"
+ #include "xe_guc_submit.h"
+ #include "xe_irq.h"
++#include "xe_lrc.h"
+ #include "xe_pm.h"
+ #include "xe_sriov.h"
+ #include "xe_sriov_printk.h"
+@@ -244,6 +245,11 @@ static int vf_get_next_migrated_gt_id(struct xe_device *xe)
+ 	return -1;
+ }
+ 
++static size_t post_migration_scratch_size(struct xe_device *xe)
++{
++	return xe_lrc_reg_size(xe);
++}
++
+ /**
+  * Perform post-migration fixups on a single GT.
+  *
+@@ -260,19 +266,29 @@ static int vf_get_next_migrated_gt_id(struct xe_device *xe)
+ static int gt_vf_post_migration_fixups(struct xe_gt *gt)
+ {
+ 	s64 shift;
++	void *buf;
+ 	int err;
+ 
++	buf = kmalloc(post_migration_scratch_size(gt_to_xe(gt)), GFP_KERNEL);
++	if (!buf)
++		return -ENOMEM;
++
+ 	err = xe_gt_sriov_vf_query_config(gt);
+-	if (err)
++	if (err) {
++		kfree(buf);
+ 		return err;
++	}
+ 
+ 	shift = xe_gt_sriov_vf_ggtt_shift(gt);
+ 	if (shift) {
+ 		xe_tile_sriov_vf_fixup_ggtt_nodes(gt_to_tile(gt), shift);
+-		xe_guc_contexts_hwsp_rebase(&gt->uc.guc);
++		xe_gt_sriov_vf_default_lrcs_hwsp_rebase(gt);
++		xe_guc_contexts_hwsp_rebase(&gt->uc.guc, buf);
+ 		/* FIXME: add the recovery steps */
+ 		xe_guc_ct_fixup_messages_with_ggtt(&gt->uc.guc.ct, shift);
+ 	}
++
++	kfree(buf);
+ 	return 0;
+ }
+ 
+-- 
+2.34.1
+

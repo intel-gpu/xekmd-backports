@@ -1,0 +1,105 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Piotr=20Pi=C3=B3rkowski?= <piotr.piorkowski@intel.com>
+Date: Mon, 14 Jul 2025 20:48:17 +0200
+Subject: drm/xe: Split xe_migrate allocation from initialization
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Currently, xe_migrate_init handled both allocation and initialization,
+Lets moves allocation to xe_tile_alloc via a new xe_migrate_alloc
+function, and keep initialization in xe_migrate_init.
+This will allow the migration pointers to be passed to other structures
+before full initialization.
+Also replaces devm_kzalloc with drmm_kzalloc for better
+DRM-managed memory.
+
+Signed-off-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250714184818.89201-5-piotr.piorkowski@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit a843b9894705d5d171e97f167fc5290f6a3ecaee linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_migrate.c | 25 ++++++++++++++++++-------
+ drivers/gpu/drm/xe/xe_migrate.h |  1 +
+ drivers/gpu/drm/xe/xe_tile.c    |  5 +++++
+ 3 files changed, 24 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 2181dae7f..58ca0b75f 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -379,6 +379,23 @@ static bool xe_migrate_needs_ccs_emit(struct xe_device *xe)
+ 	return xe_device_has_flat_ccs(xe) && !(GRAPHICS_VER(xe) >= 20 && IS_DGFX(xe));
+ }
+ 
++/**
++ * xe_migrate_alloc - Allocate a migrate struct for a given &xe_tile
++ * @tile: &xe_tile
++ *
++ * Allocates a &xe_migrate for a given tile.
++ *
++ * Return: &xe_migrate on success, or NULL when out of memory.
++ */
++struct xe_migrate *xe_migrate_alloc(struct xe_tile *tile)
++{
++	struct xe_migrate *m = drmm_kzalloc(&tile_to_xe(tile)->drm, sizeof(*m), GFP_KERNEL);
++
++	if (m)
++		m->tile = tile;
++	return m;
++}
++
+ /**
+  * xe_migrate_init() - Initialize a migrate context
+  * @tile: Back-pointer to the tile we're initializing for.
+@@ -389,16 +406,10 @@ struct xe_migrate *xe_migrate_init(struct xe_tile *tile)
+ {
+ 	struct xe_device *xe = tile_to_xe(tile);
+ 	struct xe_gt *primary_gt = tile->primary_gt;
+-	struct xe_migrate *m;
++	struct xe_migrate *m = tile->migrate;
+ 	struct xe_vm *vm;
+ 	int err;
+ 
+-	m = drmm_kzalloc(&xe->drm, sizeof(*m), GFP_KERNEL);
+-	if (!m)
+-		return ERR_PTR(-ENOMEM);
+-
+-	m->tile = tile;
+-
+ 	/* Special layout, prepared below.. */
+ 	vm = xe_vm_create(xe, XE_VM_FLAG_MIGRATION |
+ 			  XE_VM_FLAG_SET_TILE_ID(tile));
+diff --git a/drivers/gpu/drm/xe/xe_migrate.h b/drivers/gpu/drm/xe/xe_migrate.h
+index f59a348ed..b42a32e7b 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.h
++++ b/drivers/gpu/drm/xe/xe_migrate.h
+@@ -95,6 +95,7 @@ struct xe_migrate_pt_update {
+ 	u8 tile_id;
+ };
+ 
++struct xe_migrate *xe_migrate_alloc(struct xe_tile *tile);
+ struct xe_migrate *xe_migrate_init(struct xe_tile *tile);
+ 
+ struct dma_fence *xe_migrate_copy(struct xe_migrate *m,
+diff --git a/drivers/gpu/drm/xe/xe_tile.c b/drivers/gpu/drm/xe/xe_tile.c
+index 0ec3d6ddd..c83ae8f6f 100644
+--- a/drivers/gpu/drm/xe/xe_tile.c
++++ b/drivers/gpu/drm/xe/xe_tile.c
+@@ -95,6 +95,11 @@ static int xe_tile_alloc(struct xe_tile *tile)
+ 				      GFP_KERNEL);
+ 	if (!tile->mem.ggtt)
+ 		return -ENOMEM;
++
++	tile->migrate = xe_migrate_alloc(tile);
++	if (!tile->migrate)
++		return -ENOMEM;
++
+ 	tile->mem.ggtt->tile = tile;
+ 
+ 	return 0;
+-- 
+2.34.1
+

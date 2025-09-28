@@ -1,0 +1,81 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Aradhya Bhatia <aradhya.bhatia@intel.com>
+Date: Fri, 16 May 2025 14:19:02 +0000
+Subject: drm/xe/guc: Make creation of SLPC debugfs files
+ conditional
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Platforms that do not support SLPC are exempted from the GuC PC support.
+The GuC PC does not get initialized, and neither do its BOs get created.
+
+This causes a problem because the GuC PC debugfs file is still being
+created. Whenever the file is attempted to read, it causes a NULL
+pointer dereference on the supposed BO of the GuC PC.
+
+So, make the creation of SLPC debugfs files conditional to when SLPC
+features are supported.
+
+Fixes: aaab5404b16f ("drm/xe: Introduce GuC PC debugfs")
+Suggested-by: Matt Roper <matthew.d.roper@intel.com>
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Reviewed-by: Stuart Summers <stuart.summers@intel.com>
+Signed-off-by: Aradhya Bhatia <aradhya.bhatia@intel.com>
+Link: https://lore.kernel.org/r/20250516141902.5614-1-aradhya.bhatia@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry picked from commit 17486cf3df5320752cc67ee8bcb2379d1b9de76c)
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+(backported from commit b08494a8f7416e5f09907318c5460ad6f6e2a548 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_debugfs.c | 22 +++++++++++++++++-----
+ 1 file changed, 17 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_debugfs.c b/drivers/gpu/drm/xe/xe_guc_debugfs.c
+index a82ea7343..c4773abc1 100644
+--- a/drivers/gpu/drm/xe/xe_guc_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_guc_debugfs.c
+@@ -112,7 +112,11 @@ static int guc_pc(struct seq_file *m, void *data)
+ static const struct drm_info_list vf_safe_debugfs_list[] = {
+ 	{ "guc_info", .show = guc_debugfs_show, .data = xe_guc_print_info },
+ 	{ "guc_ctb", .show = guc_debugfs_show, .data = guc_ctb },
+-	{"guc_pc", guc_pc, 0},
++};
++
++/* For GuC debugfs files that require the SLPC support */
++static const struct drm_info_list slpc_debugfs_list[] = {
++	{ "guc_pc", .show = guc_debugfs_show, .data = guc_pc },
+ };
+ 
+ /* everything else should be added here */
+@@ -122,14 +126,22 @@ static const struct drm_info_list pf_only_debugfs_list[] = {
+ 
+ void xe_guc_debugfs_register(struct xe_guc *guc, struct dentry *parent)
+ {
+-	struct drm_minor *minor = guc_to_xe(guc)->drm.primary;
++	struct xe_device *xe =  guc_to_xe(guc);
++	struct drm_minor *minor = xe->drm.primary;
+ 
+ 	drm_debugfs_create_files(vf_safe_debugfs_list,
+ 				 ARRAY_SIZE(vf_safe_debugfs_list),
+ 				 parent, minor);
+ 
+-	if (!IS_SRIOV_VF(guc_to_xe(guc)))
++	if (!IS_SRIOV_VF(xe)) {
+ 		drm_debugfs_create_files(pf_only_debugfs_list,
+-					 ARRAY_SIZE(pf_only_debugfs_list),
+-					 parent, minor);
++				ARRAY_SIZE(pf_only_debugfs_list),
++				parent, minor);
++
++		if (!xe->info.skip_guc_pc)
++			drm_debugfs_create_files(slpc_debugfs_list,
++					ARRAY_SIZE(slpc_debugfs_list),
++					parent, minor);
++	}
+ }
++
+-- 
+2.34.1
+

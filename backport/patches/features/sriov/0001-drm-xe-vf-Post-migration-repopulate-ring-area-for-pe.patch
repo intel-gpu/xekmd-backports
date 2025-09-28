@@ -1,0 +1,146 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tomasz Lis <tomasz.lis@intel.com>
+Date: Sat, 2 Aug 2025 05:10:43 +0200
+Subject: drm/xe/vf: Post migration, repopulate ring area for pending
+ request
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The commands within ring area allocated for a request may contain
+references to GGTT. These references require update after VF
+migration, in order to continue any preempted LRCs, or jobs which
+were emitted to the ring but not sent to GuC yet.
+
+This change calls the emit function again for all such jobs,
+as part of post-migration recovery.
+
+v2: Moved few functions to better files
+v3: Take job_list_lock
+v4: Rephrased comments
+
+Signed-off-by: Tomasz Lis <tomasz.lis@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Michal Winiarski <michal.winiarski@intel.com>
+Reviewed-by: Michal Winiarski <michal.winiarski@intel.com>
+Cc: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Link: https://lore.kernel.org/r/20250802031045.1127138-7-tomasz.lis@intel.com
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+(backported from commit a0dda25d24e636df5c30a9370464b7cebc709faf linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c | 24 ++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_exec_queue.h |  1 +
+ drivers/gpu/drm/xe/xe_guc_submit.c | 24 ++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_guc_submit.h |  2 ++
+ drivers/gpu/drm/xe/xe_sriov_vf.c   |  2 +-
+ 5 files changed, 52 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index b32972861..4ed60618a 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -1003,3 +1003,27 @@ void xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch)
+ 		xe_lrc_update_hwctx_regs_with_address(q->lrc[i]);
+ 	}
+ }
++
++/**
++ * xe_exec_queue_jobs_ring_restore - Re-emit ring commands of requests pending on given queue.
++ * @q: the &xe_exec_queue struct instance
++ */
++void xe_exec_queue_jobs_ring_restore(struct xe_exec_queue *q)
++{
++	struct xe_gpu_scheduler *sched = &q->guc->sched;
++	struct xe_sched_job *job;
++
++	/*
++	 * This routine is used within VF migration recovery. This means
++	 * using the lock here introduces a restriction: we cannot wait
++	 * for any GFX HW response while the lock is taken.
++	 */
++	spin_lock(&sched->base.job_list_lock);
++	list_for_each_entry(job, &sched->base.pending_list, drm.list) {
++		if (xe_sched_job_is_error(job))
++			continue;
++
++		q->ring_ops->emit_job(job);
++	}
++	spin_unlock(&sched->base.job_list_lock);
++}
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
+index b93b3f93d..9780a0104 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue.h
+@@ -85,5 +85,6 @@ int xe_exec_queue_last_fence_test_dep(struct xe_exec_queue *q,
+ 				      struct xe_vm *vm);
+ void xe_exec_queue_update_run_ticks(struct xe_exec_queue *q);
+ void xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch);
++void xe_exec_queue_jobs_ring_restore(struct xe_exec_queue *q);
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index 4f5c7a25e..797a96106 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -768,6 +768,30 @@ guc_exec_queue_run_job(struct drm_sched_job *drm_job)
+ 	return fence;
+ }
+ 
++/**
++ * xe_guc_jobs_ring_rebase - Re-emit ring commands of requests pending
++ * on all queues under a guc.
++ * @guc: the &xe_guc struct instance
++ */
++void xe_guc_jobs_ring_rebase(struct xe_guc *guc)
++{
++	struct xe_exec_queue *q;
++	unsigned long index;
++
++	/*
++	 * This routine is used within VF migration recovery. This means
++	 * using the lock here introduces a restriction: we cannot wait
++	 * for any GFX HW response while the lock is taken.
++	 */
++	mutex_lock(&guc->submission_state.lock);
++	xa_for_each(&guc->submission_state.exec_queue_lookup, index, q) {
++		if (exec_queue_killed_or_banned_or_wedged(q))
++			continue;
++		xe_exec_queue_jobs_ring_restore(q);
++	}
++	mutex_unlock(&guc->submission_state.lock);
++}
++
+ static void guc_exec_queue_free_job(struct drm_sched_job *drm_job)
+ {
+ 	struct xe_sched_job *job = to_xe_sched_job(drm_job);
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.h b/drivers/gpu/drm/xe/xe_guc_submit.h
+index 9a2718c81..92a6f0ade 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.h
++++ b/drivers/gpu/drm/xe/xe_guc_submit.h
+@@ -34,6 +34,8 @@ int xe_guc_exec_queue_memory_cat_error_handler(struct xe_guc *guc, u32 *msg,
+ int xe_guc_exec_queue_reset_failure_handler(struct xe_guc *guc, u32 *msg, u32 len);
+ int xe_guc_error_capture_handler(struct xe_guc *guc, u32 *msg, u32 len);
+ 
++void xe_guc_jobs_ring_rebase(struct xe_guc *guc);
++
+ struct xe_guc_submit_exec_queue_snapshot *
+ xe_guc_exec_queue_snapshot_capture(struct xe_exec_queue *q);
+ void
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf.c b/drivers/gpu/drm/xe/xe_sriov_vf.c
+index 43ac73e43..a219395c1 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_sriov_vf.c
+@@ -284,7 +284,7 @@ static int gt_vf_post_migration_fixups(struct xe_gt *gt)
+ 		xe_tile_sriov_vf_fixup_ggtt_nodes(gt_to_tile(gt), shift);
+ 		xe_gt_sriov_vf_default_lrcs_hwsp_rebase(gt);
+ 		xe_guc_contexts_hwsp_rebase(&gt->uc.guc, buf);
+-		/* FIXME: add the recovery steps */
++		xe_guc_jobs_ring_rebase(&gt->uc.guc);
+ 		xe_guc_ct_fixup_messages_with_ggtt(&gt->uc.guc.ct, shift);
+ 	}
+ 
+-- 
+2.34.1
+

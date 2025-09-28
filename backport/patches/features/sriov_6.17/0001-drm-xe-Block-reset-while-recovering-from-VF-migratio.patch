@@ -1,0 +1,201 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tomasz Lis <tomasz.lis@intel.com>
+Date: Sat, 2 Aug 2025 05:10:40 +0200
+Subject: drm/xe: Block reset while recovering from VF migration
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resetting GuC during recovery could interfere with the recovery
+process. Such reset might be also triggered without justification,
+due to migration taking time, rather than due to the workload not
+progressing.
+
+Doing GuC reset during the recovery would cause exit of RESFIX state,
+and therefore continuation of GuC work while fixups are still being
+applied. To avoid that, reset needs to be blocked during the recovery.
+
+This patch blocks the reset during recovery. Reset request in that
+time range will be stalled, and unblocked only after GuC goes out
+of RESFIX state.
+
+In case a reset procedure already started while the recovery is
+triggered, there isn't much we can do - we cannot wait for it to
+finish as it involves waiting for hardware, and we can't be sure
+at which exact point of the reset procedure the GPU got switched.
+Therefore, the rare cases where migration happens while reset is
+in progress, are still dangerous. Resets are not a part of the
+standard flow, and cause unfinished workloads - that will happen
+during the reset interrupted by migration as well, so it doesn't
+diverge that much from what normally happens during such resets.
+
+v2: Introduce a new atomic for reset blocking, as we cannot reuse
+  `stopped` atomic (that could lead to losing a workload).
+v3: Switched atomic functs to ones which include proper barriers
+
+Signed-off-by: Tomasz Lis <tomasz.lis@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Michal Winiarski <michal.winiarski@intel.com>
+Reviewed-by: Michal Winiarski <michal.winiarski@intel.com>
+Link: https://lore.kernel.org/r/20250802031045.1127138-4-tomasz.lis@intel.com
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+(backported from commit a0840b1ce95e37a1a870a3e794ed25c69080cecf linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt.c         | 10 ++++++++
+ drivers/gpu/drm/xe/xe_guc_submit.c | 37 ++++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_guc_submit.h |  3 +++
+ drivers/gpu/drm/xe/xe_guc_types.h  |  6 +++++
+ drivers/gpu/drm/xe/xe_sriov_vf.c   | 12 ++++++++--
+ 5 files changed, 66 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index 00dd5ffa2..c31e540b8 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -40,6 +40,7 @@
+ #include "xe_gt_topology.h"
+ #include "xe_guc_exec_queue_types.h"
+ #include "xe_guc_pc.h"
++#include "xe_guc_submit.h"
+ #include "xe_hw_fence.h"
+ #include "xe_hw_engine_class_sysfs.h"
+ #include "xe_irq.h"
+@@ -812,6 +813,11 @@ static int do_gt_restart(struct xe_gt *gt)
+ 	return 0;
+ }
+ 
++static int gt_wait_reset_unblock(struct xe_gt *gt)
++{
++	return xe_guc_wait_reset_unblock(&gt->uc.guc);
++}
++
+ static int gt_reset(struct xe_gt *gt)
+ {
+ 	unsigned int fw_ref;
+@@ -826,6 +832,10 @@ static int gt_reset(struct xe_gt *gt)
+ 
+ 	xe_gt_info(gt, "reset started\n");
+ 
++	err = gt_wait_reset_unblock(gt);
++	if (!err)
++		xe_gt_warn(gt, "reset block failed to get lifted");
++
+ 	xe_pm_runtime_get(gt_to_xe(gt));
+ 
+ 	if (xe_fault_inject_gt_reset()) {
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index 5ffcbf3ca..da61cb5dc 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -1756,6 +1756,43 @@ static void guc_exec_queue_stop(struct xe_guc *guc, struct xe_exec_queue *q)
+ 	}
+ }
+ 
++/**
++ * xe_guc_submit_reset_block - Disallow reset calls on given GuC.
++ * @guc: the &xe_guc struct instance
++ */
++int xe_guc_submit_reset_block(struct xe_guc *guc)
++{
++	return atomic_fetch_or(1, &guc->submission_state.reset_blocked);
++}
++
++/**
++ * xe_guc_submit_reset_unblock - Allow back reset calls on given GuC.
++ * @guc: the &xe_guc struct instance
++ */
++void xe_guc_submit_reset_unblock(struct xe_guc *guc)
++{
++	atomic_set_release(&guc->submission_state.reset_blocked, 0);
++	wake_up_all(&guc->ct.wq);
++}
++
++static int guc_submit_reset_is_blocked(struct xe_guc *guc)
++{
++	return atomic_read_acquire(&guc->submission_state.reset_blocked);
++}
++
++/* Maximum time of blocking reset */
++#define RESET_BLOCK_PERIOD_MAX (HZ * 5)
++
++/**
++ * xe_guc_wait_reset_unblock - Wait until reset blocking flag is lifted, or timeout.
++ * @guc: the &xe_guc struct instance
++ */
++int xe_guc_wait_reset_unblock(struct xe_guc *guc)
++{
++	return wait_event_timeout(guc->ct.wq,
++				  !guc_submit_reset_is_blocked(guc), RESET_BLOCK_PERIOD_MAX);
++}
++
+ int xe_guc_submit_reset_prepare(struct xe_guc *guc)
+ {
+ 	int ret;
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.h b/drivers/gpu/drm/xe/xe_guc_submit.h
+index ff44500f3..4dd278f5f 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.h
++++ b/drivers/gpu/drm/xe/xe_guc_submit.h
+@@ -20,6 +20,9 @@ void xe_guc_submit_stop(struct xe_guc *guc);
+ int xe_guc_submit_start(struct xe_guc *guc);
+ void xe_guc_submit_pause(struct xe_guc *guc);
+ void xe_guc_submit_unpause(struct xe_guc *guc);
++int xe_guc_submit_reset_block(struct xe_guc *guc);
++void xe_guc_submit_reset_unblock(struct xe_guc *guc);
++int xe_guc_wait_reset_unblock(struct xe_guc *guc);
+ void xe_guc_submit_wedge(struct xe_guc *guc);
+ 
+ int xe_guc_read_stopped(struct xe_guc *guc);
+diff --git a/drivers/gpu/drm/xe/xe_guc_types.h b/drivers/gpu/drm/xe/xe_guc_types.h
+index 63bac6442..f74844d75 100644
+--- a/drivers/gpu/drm/xe/xe_guc_types.h
++++ b/drivers/gpu/drm/xe/xe_guc_types.h
+@@ -85,6 +85,12 @@ struct xe_guc {
+ 		struct xarray exec_queue_lookup;
+ 		/** @submission_state.stopped: submissions are stopped */
+ 		atomic_t stopped;
++		/**
++		 * @submission_state.reset_blocked: reset attempts are blocked;
++		 * blocking reset in order to delay it may be required if running
++		 * an operation which is sensitive to resets.
++		 */
++		atomic_t reset_blocked;
+ 		/** @submission_state.lock: protects submission state */
+ 		struct mutex lock;
+ 		/** @submission_state.enabled: submission is enabled */
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf.c b/drivers/gpu/drm/xe/xe_sriov_vf.c
+index c66b17da1..71d28b30d 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_sriov_vf.c
+@@ -163,9 +163,15 @@ static void vf_post_migration_shutdown(struct xe_device *xe)
+ {
+ 	struct xe_gt *gt;
+ 	unsigned int id;
++	int ret = 0;
+ 
+-	for_each_gt(gt, xe, id)
++	for_each_gt(gt, xe, id) {
+ 		xe_guc_submit_pause(&gt->uc.guc);
++		ret |= xe_guc_submit_reset_block(&gt->uc.guc);
++	}
++
++	if (ret)
++		drm_info(&xe->drm, "migration recovery encountered ongoing reset\n");
+ }
+ 
+ /**
+@@ -187,8 +193,10 @@ static void vf_post_migration_kickstart(struct xe_device *xe)
+ 	 */
+ 	xe_irq_resume(xe);
+ 
+-	for_each_gt(gt, xe, id)
++	for_each_gt(gt, xe, id) {
++		xe_guc_submit_reset_unblock(&gt->uc.guc);
+ 		xe_guc_submit_unpause(&gt->uc.guc);
++	}
+ }
+ 
+ static bool gt_vf_post_migration_needed(struct xe_gt *gt)
+-- 
+2.34.1
+

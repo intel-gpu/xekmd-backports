@@ -1,0 +1,661 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Piotr=20Pi=C3=B3rkowski?= <piotr.piorkowski@intel.com>
+Date: Mon, 14 Jul 2025 20:48:15 +0200
+Subject: drm/xe: Use dynamic allocation for tile and device VRAM
+ region structures
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In future platforms, we will need to represent the device and tile
+VRAM regions in a more dynamic way, so let's abandon the static
+allocation of these structures and start use a dynamic allocation.
+
+v2:
+ - Add a helpers for accessing fields of the xe_vram_region structure
+v3:
+- Add missing EXPORT_SYMBOL_IF_KUNIT for
+  xe_vram_region_actual_physical_size
+
+Signed-off-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Cc: Stuart Summers <stuart.summers@intel.com>
+Cc: Matthew Auld <matthew.auld@intel.com>
+Cc: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Reviewed-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Acked-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250714184818.89201-3-piotr.piorkowski@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit f92cfd72d9a650f90260c54accd840c6500c4c3a linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/display/xe_fb_pin.c        |   4 +-
+ drivers/gpu/drm/xe/display/xe_plane_initial.c |   2 +-
+ drivers/gpu/drm/xe/xe_assert.h                |   4 +-
+ drivers/gpu/drm/xe/xe_device.c                |  19 +++
+ drivers/gpu/drm/xe/xe_device_types.h          |   6 +-
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c    |   2 +-
+ drivers/gpu/drm/xe/xe_migrate.c               |  31 +++--
+ drivers/gpu/drm/xe/xe_pci.c                   |   6 +
+ drivers/gpu/drm/xe/xe_query.c                 |   2 +-
+ drivers/gpu/drm/xe/xe_tile.c                  |  32 ++++-
+ drivers/gpu/drm/xe/xe_tile.h                  |   1 +
+ drivers/gpu/drm/xe/xe_ttm_stolen_mgr.c        |  10 +-
+ drivers/gpu/drm/xe/xe_ttm_vram_mgr.c          |   7 +-
+ drivers/gpu/drm/xe/xe_vram.c                  | 121 +++++++++++++-----
+ drivers/gpu/drm/xe/xe_vram.h                  |   9 ++
+ 15 files changed, 196 insertions(+), 60 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/display/xe_fb_pin.c b/drivers/gpu/drm/xe/display/xe_fb_pin.c
+index 95828101a..021141243 100644
+--- a/drivers/gpu/drm/xe/display/xe_fb_pin.c
++++ b/drivers/gpu/drm/xe/display/xe_fb_pin.c
+@@ -292,7 +292,7 @@ static struct i915_vma *__xe_pin_fb_vma(const struct intel_framebuffer *fb,
+ 	if (IS_DGFX(to_xe_device(bo->ttm.base.dev)) &&
+ 	    intel_fb_rc_ccs_cc_plane(&fb->base) >= 0 &&
+ 	    !(bo->flags & XE_BO_FLAG_NEEDS_CPU_ACCESS)) {
+-		struct xe_tile *tile = xe_device_get_root_tile(xe);
++		struct xe_vram_region *vram = xe_device_get_root_tile(xe)->mem.vram;
+ 
+ 		/*
+ 		 * If we need to able to access the clear-color value stored in
+@@ -300,7 +300,7 @@ static struct i915_vma *__xe_pin_fb_vma(const struct intel_framebuffer *fb,
+ 		 * accessible.  This is important on small-bar systems where
+ 		 * only some subset of VRAM is CPU accessible.
+ 		 */
+-		if (tile->mem.vram.io_size < tile->mem.vram.usable_size) {
++		if (xe_vram_region_io_size(vram) < xe_vram_region_usable_size(vram)) {
+ 			ret = -EINVAL;
+ 			goto err;
+ 		}
+diff --git a/drivers/gpu/drm/xe/display/xe_plane_initial.c b/drivers/gpu/drm/xe/display/xe_plane_initial.c
+index c13fdf0ec..581c16049 100644
+--- a/drivers/gpu/drm/xe/display/xe_plane_initial.c
++++ b/drivers/gpu/drm/xe/display/xe_plane_initial.c
+@@ -89,7 +89,7 @@ initial_plane_bo(struct xe_device *xe,
+ 		 * We don't currently expect this to ever be placed in the
+ 		 * stolen portion.
+ 		 */
+-		if (phys_base >= tile0->mem.vram.usable_size) {
++		if (phys_base >= xe_vram_region_usable_size(tile0->mem.vram)) {
+ 			drm_err(&xe->drm,
+ 				"Initial plane programming using invalid range, phys_base=%pa\n",
+ 				&phys_base);
+diff --git a/drivers/gpu/drm/xe/xe_assert.h b/drivers/gpu/drm/xe/xe_assert.h
+index 68fe70ce2..a818eaa05 100644
+--- a/drivers/gpu/drm/xe/xe_assert.h
++++ b/drivers/gpu/drm/xe/xe_assert.h
+@@ -12,6 +12,7 @@
+ 
+ #include "xe_gt_types.h"
+ #include "xe_step.h"
++#include "xe_vram.h"
+ 
+ /**
+  * DOC: Xe Asserts
+@@ -145,7 +146,8 @@
+ 	const struct xe_tile *__tile = (tile);							\
+ 	char __buf[10] __maybe_unused;								\
+ 	xe_assert_msg(tile_to_xe(__tile), condition, "tile: %u VRAM %s\n" msg,			\
+-		      __tile->id, ({ string_get_size(__tile->mem.vram.actual_physical_size, 1,	\
++		      __tile->id, ({ string_get_size(						\
++				     xe_vram_region_actual_physical_size(__tile->mem.vram), 1,	\
+ 				     STRING_UNITS_2, __buf, sizeof(__buf)); __buf; }), ## arg);	\
+ })
+ 
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index a6c5f5b47..8ea2b97d9 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -575,6 +575,21 @@ static void update_device_info(struct xe_device *xe)
+ 	}
+ }
+ 
++static int xe_device_vram_alloc(struct xe_device *xe)
++{
++	struct xe_vram_region *vram;
++
++	if (!IS_DGFX(xe))
++		return 0;
++
++	vram = drmm_kzalloc(&xe->drm, sizeof(*vram), GFP_KERNEL);
++	if (!vram)
++		return -ENOMEM;
++
++	xe->mem.vram = vram;
++	return 0;
++}
++
+ /**
+  * xe_device_probe_early: Device early probe
+  * @xe: xe device instance
+@@ -619,6 +634,10 @@ int xe_device_probe_early(struct xe_device *xe)
+ 
+ 	xe->wedged.mode = xe_modparam.wedged_mode;
+ 
++	err = xe_device_vram_alloc(xe);
++	if (err)
++		return err;
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index 2036f4566..376ecde7f 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -79,6 +79,8 @@ struct xe_pat_ops;
+  * device, such as HBM memory or CXL extension memory.
+  */
+ struct xe_vram_region {
++	/** @tile: Back pointer to tile */
++	struct xe_tile *tile;
+ 	/** @io_start: IO start address of this VRAM instance */
+ 	resource_size_t io_start;
+ 	/**
+@@ -210,7 +212,7 @@ struct xe_tile {
+ 		 * Although VRAM is associated with a specific tile, it can
+ 		 * still be accessed by all tiles' GTs.
+ 		 */
+-		struct xe_vram_region vram;
++		struct xe_vram_region *vram;
+ 
+ 		/** @mem.ggtt: Global graphics translation table */
+ 		struct xe_ggtt *ggtt;
+@@ -394,7 +396,7 @@ struct xe_device {
+ 	/** @mem: memory info for device */
+ 	struct {
+ 		/** @mem.vram: VRAM info for device */
+-		struct xe_vram_region vram;
++		struct xe_vram_region *vram;
+ 		/** @mem.sys_mgr: system TTM manager */
+ 		struct ttm_resource_manager sys_mgr;
+ 	} mem;
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index 93ba49577..238bb1a2d 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -1604,7 +1604,7 @@ static u64 pf_query_free_lmem(struct xe_gt *gt)
+ {
+ 	struct xe_tile *tile = gt->tile;
+ 
+-	return xe_ttm_vram_get_avail(&tile->mem.vram.ttm.manager);
++	return xe_ttm_vram_get_avail(&tile->mem.vram->ttm.manager);
+ }
+ 
+ static u64 pf_query_max_lmem(struct xe_gt *gt)
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index d5ada2506..2181dae7f 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -35,6 +35,7 @@
+ #include "xe_sync.h"
+ #include "xe_trace_bo.h"
+ #include "xe_vm.h"
++#include "xe_vram.h"
+ 
+ /**
+  * struct xe_migrate - migrate context.
+@@ -118,34 +119,36 @@ static u64 xe_migrate_vram_ofs(struct xe_device *xe, u64 addr, bool is_comp_pte)
+ 	u64 identity_offset = IDENTITY_OFFSET;
+ 
+ 	if (GRAPHICS_VER(xe) >= 20 && is_comp_pte)
+-		identity_offset += DIV_ROUND_UP_ULL(xe->mem.vram.actual_physical_size, SZ_1G);
++		identity_offset += DIV_ROUND_UP_ULL(xe_vram_region_actual_physical_size
++							(xe->mem.vram), SZ_1G);
+ 
+-	addr -= xe->mem.vram.dpa_base;
++	addr -= xe_vram_region_dpa_base(xe->mem.vram);
+ 	return addr + (identity_offset << xe_pt_shift(2));
+ }
+ 
+ static void xe_migrate_program_identity(struct xe_device *xe, struct xe_vm *vm, struct xe_bo *bo,
+ 					u64 map_ofs, u64 vram_offset, u16 pat_index, u64 pt_2m_ofs)
+ {
++	struct xe_vram_region *vram = xe->mem.vram;
++	resource_size_t dpa_base = xe_vram_region_dpa_base(vram);
+ 	u64 pos, ofs, flags;
+ 	u64 entry;
+ 	/* XXX: Unclear if this should be usable_size? */
+-	u64 vram_limit =  xe->mem.vram.actual_physical_size +
+-		xe->mem.vram.dpa_base;
++	u64 vram_limit = xe_vram_region_actual_physical_size(vram) + dpa_base;
+ 	u32 level = 2;
+ 
+ 	ofs = map_ofs + XE_PAGE_SIZE * level + vram_offset * 8;
+ 	flags = vm->pt_ops->pte_encode_addr(xe, 0, pat_index, level,
+ 					    true, 0);
+ 
+-	xe_assert(xe, IS_ALIGNED(xe->mem.vram.usable_size, SZ_2M));
++	xe_assert(xe, IS_ALIGNED(xe_vram_region_usable_size(vram), SZ_2M));
+ 
+ 	/*
+ 	 * Use 1GB pages when possible, last chunk always use 2M
+ 	 * pages as mixing reserved memory (stolen, WOCPM) with a single
+ 	 * mapping is not allowed on certain platforms.
+ 	 */
+-	for (pos = xe->mem.vram.dpa_base; pos < vram_limit;
++	for (pos = dpa_base; pos < vram_limit;
+ 	     pos += SZ_1G, ofs += 8) {
+ 		if (pos + SZ_1G >= vram_limit) {
+ 			entry = vm->pt_ops->pde_encode_bo(bo, pt_2m_ofs,
+@@ -295,11 +298,12 @@ static int xe_migrate_prepare_vm(struct xe_tile *tile, struct xe_migrate *m,
+ 	/* Identity map the entire vram at 256GiB offset */
+ 	if (IS_DGFX(xe)) {
+ 		u64 pt30_ofs = bo->size - 2 * XE_PAGE_SIZE;
++		resource_size_t actual_phy_size = xe_vram_region_actual_physical_size(xe->mem.vram);
++
+ 
+ 		xe_migrate_program_identity(xe, vm, bo, map_ofs, IDENTITY_OFFSET,
+-					    pat_index, pt30_ofs);
+-		xe_assert(xe, xe->mem.vram.actual_physical_size <=
+-					(MAX_NUM_PTE - IDENTITY_OFFSET) * SZ_1G);
++				pat_index, pt30_ofs);
++		xe_assert(xe, actual_phy_size <= (MAX_NUM_PTE - IDENTITY_OFFSET) * SZ_1G);
+ 
+ 		/*
+ 		 * Identity map the entire vram for compressed pat_index for xe2+
+@@ -308,13 +312,14 @@ static int xe_migrate_prepare_vm(struct xe_tile *tile, struct xe_migrate *m,
+ 		if (GRAPHICS_VER(xe) >= 20 && xe_device_has_flat_ccs(xe)) {
+ 			u16 comp_pat_index = xe->pat.idx[XE_CACHE_NONE_COMPRESSION];
+ 			u64 vram_offset = IDENTITY_OFFSET +
+-				DIV_ROUND_UP_ULL(xe->mem.vram.actual_physical_size, SZ_1G);
++				DIV_ROUND_UP_ULL(actual_phy_size, SZ_1G);
+ 			u64 pt31_ofs = bo->size - XE_PAGE_SIZE;
+ 
+-			xe_assert(xe, xe->mem.vram.actual_physical_size <= (MAX_NUM_PTE -
+-						IDENTITY_OFFSET - IDENTITY_OFFSET / 2) * SZ_1G);
++			xe_assert(xe, actual_phy_size <= (MAX_NUM_PTE - IDENTITY_OFFSET -
++						IDENTITY_OFFSET / 2) * SZ_1G);
++
+ 			xe_migrate_program_identity(xe, vm, bo, map_ofs, vram_offset,
+-						    comp_pat_index, pt31_ofs);
++					comp_pat_index, pt31_ofs);
+ 		}
+ 	}
+ 
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 7520d3d36..088e443d9 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -725,12 +725,18 @@ static int xe_info_init(struct xe_device *xe,
+ 	}
+ 
+ 	for_each_tile(tile, xe, id) {
++		int err;
++
+ 		gt = tile->primary_gt;
+ 		gt->info.id = xe->info.gt_count++;
+ 		gt->info.type = XE_GT_TYPE_MAIN;
+ 		gt->info.has_indirect_ring_state = graphics_desc->has_indirect_ring_state;
+ 		gt->info.engine_mask = graphics_desc->hw_engine_mask;
+ 
++		err = xe_tile_alloc_vram(tile);
++		if (err)
++			return err;
++
+ 		if (MEDIA_VER(xe) < 13 && media_desc)
+ 			gt->info.engine_mask |= media_desc->hw_engine_mask;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_query.c b/drivers/gpu/drm/xe/xe_query.c
+index f43d05365..44649dd80 100644
+--- a/drivers/gpu/drm/xe/xe_query.c
++++ b/drivers/gpu/drm/xe/xe_query.c
+@@ -335,7 +335,7 @@ static int query_config(struct xe_device *xe, struct drm_xe_device_query *query)
+ 	config->num_params = num_params;
+ 	config->info[DRM_XE_QUERY_CONFIG_REV_AND_DEVICE_ID] =
+ 		xe->info.devid | (xe->info.revid << 16);
+-	if (xe_device_get_root_tile(xe)->mem.vram.usable_size)
++	if (xe->mem.vram)
+ 		config->info[DRM_XE_QUERY_CONFIG_FLAGS] =
+ 			DRM_XE_QUERY_CONFIG_FLAG_HAS_VRAM;
+ 	config->info[DRM_XE_QUERY_CONFIG_FLAGS] |=
+diff --git a/drivers/gpu/drm/xe/xe_tile.c b/drivers/gpu/drm/xe/xe_tile.c
+index be760c7fb..3be650d88 100644
+--- a/drivers/gpu/drm/xe/xe_tile.c
++++ b/drivers/gpu/drm/xe/xe_tile.c
+@@ -18,6 +18,7 @@
+ #include "xe_tile_sysfs.h"
+ #include "xe_ttm_vram_mgr.h"
+ #include "xe_wa.h"
++#include "xe_vram.h"
+ 
+ /**
+  * DOC: Multi-tile Design
+@@ -98,6 +99,33 @@ static int xe_tile_alloc(struct xe_tile *tile)
+ 	return 0;
+ }
+ 
++/**
++ * xe_tile_alloc_vram - Perform per-tile VRAM structs allocation
++ * @tile: Tile to perform allocations for
++ *
++ * Allocates VRAM per-tile data structures using DRM-managed allocations.
++ * Does not touch the hardware.
++ *
++ * Returns -ENOMEM if allocations fail, otherwise 0.
++ */
++int xe_tile_alloc_vram(struct xe_tile *tile)
++{
++	struct xe_device *xe = tile_to_xe(tile);
++	struct xe_vram_region *vram;
++
++	if (!IS_DGFX(xe))
++		return 0;
++
++	vram = drmm_kzalloc(&xe->drm, sizeof(*vram), GFP_KERNEL);
++	if (!vram)
++		return -ENOMEM;
++
++	vram->tile = tile;
++	tile->mem.vram = vram;
++
++	return 0;
++}
++
+ /**
+  * xe_tile_init_early - Initialize the tile and primary GT
+  * @tile: Tile to initialize
+@@ -135,8 +163,8 @@ static int tile_ttm_mgr_init(struct xe_tile *tile)
+ 	struct xe_device *xe = tile_to_xe(tile);
+ 	int err;
+ 
+-	if (tile->mem.vram.usable_size) {
+-		err = xe_ttm_vram_mgr_init(tile, &tile->mem.vram.ttm);
++	if (tile->mem.vram) {
++		err = xe_ttm_vram_mgr_init(tile, &tile->mem.vram->ttm);
+ 		if (err)
+ 			return err;
+ 		xe->info.mem_region_mask |= BIT(tile->id) << 1;
+diff --git a/drivers/gpu/drm/xe/xe_tile.h b/drivers/gpu/drm/xe/xe_tile.h
+index b20bab82c..0e750a87a 100644
+--- a/drivers/gpu/drm/xe/xe_tile.h
++++ b/drivers/gpu/drm/xe/xe_tile.h
+@@ -14,6 +14,7 @@ int xe_tile_init_early(struct xe_tile *tile, struct xe_device *xe, u8 id);
+ int xe_tile_init_noalloc(struct xe_tile *tile);
+ int xe_tile_init(struct xe_tile *tile);
+ 
++int xe_tile_alloc_vram(struct xe_tile *tile);
+ void xe_tile_migrate_wait(struct xe_tile *tile);
+ 
+ static inline bool xe_tile_is_root(struct xe_tile *tile)
+diff --git a/drivers/gpu/drm/xe/xe_ttm_stolen_mgr.c b/drivers/gpu/drm/xe/xe_ttm_stolen_mgr.c
+index d9c9d2547..9a9733447 100644
+--- a/drivers/gpu/drm/xe/xe_ttm_stolen_mgr.c
++++ b/drivers/gpu/drm/xe/xe_ttm_stolen_mgr.c
+@@ -25,6 +25,7 @@
+ #include "xe_ttm_stolen_mgr.h"
+ #include "xe_ttm_vram_mgr.h"
+ #include "xe_wa.h"
++#include "xe_vram.h"
+ 
+ struct xe_ttm_stolen_mgr {
+ 	struct xe_ttm_vram_mgr base;
+@@ -82,15 +83,16 @@ static u32 get_wopcm_size(struct xe_device *xe)
+ 
+ static s64 detect_bar2_dgfx(struct xe_device *xe, struct xe_ttm_stolen_mgr *mgr)
+ {
+-	struct xe_tile *tile = xe_device_get_root_tile(xe);
++	struct xe_vram_region *tile_vram = xe_device_get_root_tile(xe)->mem.vram;
++	resource_size_t tile_io_start = xe_vram_region_io_start(tile_vram);
+ 	struct xe_mmio *mmio = xe_root_tile_mmio(xe);
+ 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+ 	u64 stolen_size, wopcm_size;
+ 	u64 tile_offset;
+ 	u64 tile_size;
+ 
+-	tile_offset = tile->mem.vram.io_start - xe->mem.vram.io_start;
+-	tile_size = tile->mem.vram.actual_physical_size;
++	tile_offset = tile_io_start - xe_vram_region_io_start(xe->mem.vram);
++	tile_size = xe_vram_region_actual_physical_size(tile_vram);
+ 
+ 	/* Use DSM base address instead for stolen memory */
+ 	mgr->stolen_base = (xe_mmio_read64_2x32(mmio, DSMBASE) & BDSM_MASK) - tile_offset;
+@@ -107,7 +109,7 @@ static s64 detect_bar2_dgfx(struct xe_device *xe, struct xe_ttm_stolen_mgr *mgr)
+ 
+ 	/* Verify usage fits in the actual resource available */
+ 	if (mgr->stolen_base + stolen_size <= pci_resource_len(pdev, LMEM_BAR))
+-		mgr->io_base = tile->mem.vram.io_start + mgr->stolen_base;
++		mgr->io_base = tile_io_start + mgr->stolen_base;
+ 
+ 	/*
+ 	 * There may be few KB of platform dependent reserved memory at the end
+diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
+index 9e375a40a..3de2df479 100644
+--- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
++++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
+@@ -340,10 +340,11 @@ int __xe_ttm_vram_mgr_init(struct xe_device *xe, struct xe_ttm_vram_mgr *mgr,
+ int xe_ttm_vram_mgr_init(struct xe_tile *tile, struct xe_ttm_vram_mgr *mgr)
+ {
+ 	struct xe_device *xe = tile_to_xe(tile);
+-	struct xe_vram_region *vram = &tile->mem.vram;
++	struct xe_vram_region *vram = tile->mem.vram;
+ 
+ 	return __xe_ttm_vram_mgr_init(xe, mgr, XE_PL_VRAM0 + tile->id,
+-				      vram->usable_size, vram->io_size,
++				      xe_vram_region_usable_size(vram),
++				      xe_vram_region_io_size(vram),
+ 				      PAGE_SIZE);
+ }
+ 
+@@ -392,7 +393,7 @@ int xe_ttm_vram_mgr_alloc_sgt(struct xe_device *xe,
+ 	 */
+ 	xe_res_first(res, offset, length, &cursor);
+ 	for_each_sgtable_sg((*sgt), sg, i) {
+-		phys_addr_t phys = cursor.start + tile->mem.vram.io_start;
++		phys_addr_t phys = cursor.start + xe_vram_region_io_start(tile->mem.vram);
+ 		size_t size = min_t(u64, cursor.size, SZ_2G);
+ 		dma_addr_t addr;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_vram.c b/drivers/gpu/drm/xe/xe_vram.c
+index d7016ecb0..74294a6d6 100644
+--- a/drivers/gpu/drm/xe/xe_vram.c
++++ b/drivers/gpu/drm/xe/xe_vram.c
+@@ -3,6 +3,7 @@
+  * Copyright © 2021-2024 Intel Corporation
+  */
+ 
++#include <kunit/visibility.h>
+ #include <linux/pci.h>
+ 
+ #include <drm/drm_managed.h>
+@@ -144,17 +145,17 @@ static int determine_lmem_bar_size(struct xe_device *xe)
+ 
+ 	resize_vram_bar(xe);
+ 
+-	xe->mem.vram.io_start = pci_resource_start(pdev, LMEM_BAR);
+-	xe->mem.vram.io_size = pci_resource_len(pdev, LMEM_BAR);
+-	if (!xe->mem.vram.io_size)
++	xe->mem.vram->io_start = pci_resource_start(pdev, LMEM_BAR);
++	xe->mem.vram->io_size = pci_resource_len(pdev, LMEM_BAR);
++	if (!xe->mem.vram->io_size)
+ 		return -EIO;
+ 
+ 	/* XXX: Need to change when xe link code is ready */
+-	xe->mem.vram.dpa_base = 0;
++	xe->mem.vram->dpa_base = 0;
+ 
+ 	/* set up a map to the total memory area. */
+-	xe->mem.vram.mapping = devm_ioremap_wc(&pdev->dev, xe->mem.vram.io_start,
+-					       xe->mem.vram.io_size);
++	xe->mem.vram->mapping = devm_ioremap_wc(&pdev->dev, xe->mem.vram->io_start,
++						xe->mem.vram->io_size);
+ 
+ 	return 0;
+ }
+@@ -276,10 +277,10 @@ static void vram_fini(void *arg)
+ 	struct xe_tile *tile;
+ 	int id;
+ 
+-	xe->mem.vram.mapping = NULL;
++	xe->mem.vram->mapping = NULL;
+ 
+ 	for_each_tile(tile, xe, id)
+-		tile->mem.vram.mapping = NULL;
++		tile->mem.vram->mapping = NULL;
+ }
+ 
+ /**
+@@ -315,10 +316,10 @@ int xe_vram_probe(struct xe_device *xe)
+ 	if (err)
+ 		return err;
+ 
+-	drm_info(&xe->drm, "VISIBLE VRAM: %pa, %pa\n", &xe->mem.vram.io_start,
+-		 &xe->mem.vram.io_size);
++	drm_info(&xe->drm, "VISIBLE VRAM: %pa, %pa\n", &xe->mem.vram->io_start,
++		 &xe->mem.vram->io_size);
+ 
+-	io_size = xe->mem.vram.io_size;
++	io_size = xe->mem.vram->io_size;
+ 
+ 	/* tile specific ranges */
+ 	for_each_tile(tile, xe, id) {
+@@ -326,45 +327,105 @@ int xe_vram_probe(struct xe_device *xe)
+ 		if (err)
+ 			return err;
+ 
+-		tile->mem.vram.actual_physical_size = tile_size;
+-		tile->mem.vram.io_start = xe->mem.vram.io_start + tile_offset;
+-		tile->mem.vram.io_size = min_t(u64, vram_size, io_size);
++		tile->mem.vram->actual_physical_size = tile_size;
++		tile->mem.vram->io_start = xe->mem.vram->io_start + tile_offset;
++		tile->mem.vram->io_size = min_t(u64, vram_size, io_size);
+ 
+-		if (!tile->mem.vram.io_size) {
++		if (!tile->mem.vram->io_size) {
+ 			drm_err(&xe->drm, "Tile without any CPU visible VRAM. Aborting.\n");
+ 			return -ENODEV;
+ 		}
+ 
+-		tile->mem.vram.dpa_base = xe->mem.vram.dpa_base + tile_offset;
+-		tile->mem.vram.usable_size = vram_size;
+-		tile->mem.vram.mapping = xe->mem.vram.mapping + tile_offset;
++		tile->mem.vram->dpa_base = xe->mem.vram->dpa_base + tile_offset;
++		tile->mem.vram->usable_size = vram_size;
++		tile->mem.vram->mapping = xe->mem.vram->mapping + tile_offset;
+ 
+-		if (tile->mem.vram.io_size < tile->mem.vram.usable_size)
++		if (tile->mem.vram->io_size < tile->mem.vram->usable_size)
+ 			drm_info(&xe->drm, "Small BAR device\n");
+-		drm_info(&xe->drm, "VRAM[%u, %u]: Actual physical size %pa, usable size exclude stolen %pa, CPU accessible size %pa\n", id,
+-			 tile->id, &tile->mem.vram.actual_physical_size, &tile->mem.vram.usable_size, &tile->mem.vram.io_size);
+-		drm_info(&xe->drm, "VRAM[%u, %u]: DPA range: [%pa-%llx], io range: [%pa-%llx]\n", id, tile->id,
+-			 &tile->mem.vram.dpa_base, tile->mem.vram.dpa_base + (u64)tile->mem.vram.actual_physical_size,
+-			 &tile->mem.vram.io_start, tile->mem.vram.io_start + (u64)tile->mem.vram.io_size);
++		drm_info(&xe->drm,
++			 "VRAM[%u, %u]: Actual physical size %pa, usable size exclude stolen %pa, CPU accessible size %pa\n",
++			 id, tile->id, &tile->mem.vram->actual_physical_size,
++			 &tile->mem.vram->usable_size, &tile->mem.vram->io_size);
++		drm_info(&xe->drm, "VRAM[%u, %u]: DPA range: [%pa-%llx], io range: [%pa-%llx]\n",
++			 id, tile->id, &tile->mem.vram->dpa_base,
++			 tile->mem.vram->dpa_base + (u64)tile->mem.vram->actual_physical_size,
++			 &tile->mem.vram->io_start,
++			 tile->mem.vram->io_start + (u64)tile->mem.vram->io_size);
+ 
+ 		/* calculate total size using tile size to get the correct HW sizing */
+ 		total_size += tile_size;
+ 		available_size += vram_size;
+ 
+-		if (total_size > xe->mem.vram.io_size) {
++		if (total_size > xe->mem.vram->io_size) {
+ 			drm_info(&xe->drm, "VRAM: %pa is larger than resource %pa\n",
+-				 &total_size, &xe->mem.vram.io_size);
++				 &total_size, &xe->mem.vram->io_size);
+ 		}
+ 
+ 		io_size -= min_t(u64, tile_size, io_size);
+ 	}
+ 
+-	xe->mem.vram.actual_physical_size = total_size;
++	xe->mem.vram->actual_physical_size = total_size;
+ 
+-	drm_info(&xe->drm, "Total VRAM: %pa, %pa\n", &xe->mem.vram.io_start,
+-		 &xe->mem.vram.actual_physical_size);
+-	drm_info(&xe->drm, "Available VRAM: %pa, %pa\n", &xe->mem.vram.io_start,
++	drm_info(&xe->drm, "Total VRAM: %pa, %pa\n", &xe->mem.vram->io_start,
++		 &xe->mem.vram->actual_physical_size);
++	drm_info(&xe->drm, "Available VRAM: %pa, %pa\n", &xe->mem.vram->io_start,
+ 		 &available_size);
+ 
+ 	return devm_add_action_or_reset(xe->drm.dev, vram_fini, xe);
+ }
++
++/**
++ * xe_vram_region_io_start - Get the IO start of a VRAM region
++ * @vram: the VRAM region
++ *
++ * Return: the IO start of the VRAM region, or 0 if not valid
++ */
++resource_size_t xe_vram_region_io_start(const struct xe_vram_region *vram)
++{
++	return vram ? vram->io_start : 0;
++}
++
++/**
++ * xe_vram_region_io_size - Get the IO size of a VRAM region
++ * @vram: the VRAM region
++ *
++ * Return: the IO size of the VRAM region, or 0 if not valid
++ */
++resource_size_t xe_vram_region_io_size(const struct xe_vram_region *vram)
++{
++	return vram ? vram->io_size : 0;
++}
++
++/**
++ * xe_vram_region_dpa_base - Get the DPA base of a VRAM region
++ * @vram: the VRAM region
++ *
++ * Return: the DPA base of the VRAM region, or 0 if not valid
++ */
++resource_size_t xe_vram_region_dpa_base(const struct xe_vram_region *vram)
++{
++	return vram ? vram->dpa_base : 0;
++}
++
++/**
++ * xe_vram_region_usable_size - Get the usable size of a VRAM region
++ * @vram: the VRAM region
++ *
++ * Return: the usable size of the VRAM region, or 0 if not valid
++ */
++resource_size_t xe_vram_region_usable_size(const struct xe_vram_region *vram)
++{
++	return vram ? vram->usable_size : 0;
++}
++
++/**
++ * xe_vram_region_actual_physical_size - Get the actual physical size of a VRAM region
++ * @vram: the VRAM region
++ *
++ * Return: the actual physical size of the VRAM region, or 0 if not valid
++ */
++resource_size_t xe_vram_region_actual_physical_size(const struct xe_vram_region *vram)
++{
++	return vram ? vram->actual_physical_size : 0;
++}
++EXPORT_SYMBOL_IF_KUNIT(xe_vram_region_actual_physical_size);
+diff --git a/drivers/gpu/drm/xe/xe_vram.h b/drivers/gpu/drm/xe/xe_vram.h
+index e31cc04ec..d4bf1f9c2 100644
+--- a/drivers/gpu/drm/xe/xe_vram.h
++++ b/drivers/gpu/drm/xe/xe_vram.h
+@@ -6,8 +6,17 @@
+ #ifndef _XE_VRAM_H_
+ #define _XE_VRAM_H_
+ 
++#include <linux/types.h>
++
+ struct xe_device;
++struct xe_vram_region;
+ 
+ int xe_vram_probe(struct xe_device *xe);
+ 
++resource_size_t xe_vram_region_io_start(const struct xe_vram_region *vram);
++resource_size_t xe_vram_region_io_size(const struct xe_vram_region *vram);
++resource_size_t xe_vram_region_dpa_base(const struct xe_vram_region *vram);
++resource_size_t xe_vram_region_usable_size(const struct xe_vram_region *vram);
++resource_size_t xe_vram_region_actual_physical_size(const struct xe_vram_region *vram);
++
+ #endif
+-- 
+2.34.1
+

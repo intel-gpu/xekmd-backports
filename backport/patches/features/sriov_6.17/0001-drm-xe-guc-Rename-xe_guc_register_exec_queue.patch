@@ -1,0 +1,99 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Mon, 8 Sep 2025 14:30:18 +0200
+Subject: drm/xe/guc: Rename xe_guc_register_exec_queue
+
+This function is dedicated for use by the VFs, we shouldn't use
+name that might suggests it's general purpose. While there, update
+asserts to better reflect intended usage.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+(backported from commit dd432009f19671f3d474f0db437333433cb1a27d linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+Cc: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Link: https://lore.kernel.org/r/20250908123025.747-2-michal.wajdeczko@intel.com
+---
+ drivers/gpu/drm/xe/xe_guc_submit.c   | 14 ++++++++------
+ drivers/gpu/drm/xe/xe_guc_submit.h   |  2 +-
+ drivers/gpu/drm/xe/xe_sriov_vf_ccs.c |  5 ++---
+ 3 files changed, 11 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index d62ad7a01..af177be67 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -2489,7 +2489,7 @@ static void guc_exec_queue_print(struct xe_exec_queue *q, struct drm_printer *p)
+ }
+ 
+ /**
+- * xe_guc_register_exec_queue - Register exec queue for a given context type.
++ * xe_guc_register_vf_exec_queue - Register exec queue for a given context type.
+  * @q: Execution queue
+  * @ctx_type: Type of the context
+  *
+@@ -2500,15 +2500,17 @@ static void guc_exec_queue_print(struct xe_exec_queue *q, struct drm_printer *p)
+  *
+  * Returns - None.
+  */
+-void xe_guc_register_exec_queue(struct xe_exec_queue *q, int ctx_type)
++void xe_guc_register_vf_exec_queue(struct xe_exec_queue *q, int ctx_type)
+ {
+ 	struct xe_guc *guc = exec_queue_to_guc(q);
+ 	struct xe_device *xe = guc_to_xe(guc);
++	struct xe_gt *gt = guc_to_gt(guc);
+ 
+-	xe_assert(xe, IS_SRIOV_VF(xe));
+-	xe_assert(xe, !IS_DGFX(xe));
+-	xe_assert(xe, (ctx_type > GUC_CONTEXT_NORMAL &&
+-		       ctx_type < GUC_CONTEXT_COUNT));
++	xe_gt_assert(gt, IS_SRIOV_VF(xe));
++	xe_gt_assert(gt, !IS_DGFX(xe));
++	xe_gt_assert(gt, ctx_type == GUC_CONTEXT_COMPRESSION_SAVE ||
++		     ctx_type == GUC_CONTEXT_COMPRESSION_RESTORE);
++	xe_gt_assert(gt, GUC_SUBMIT_VER(guc) >= MAKE_GUC_VER(1, 23, 0));
+ 
+ 	register_exec_queue(q, ctx_type);
+ 	enable_scheduling(q);
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.h b/drivers/gpu/drm/xe/xe_guc_submit.h
+index 6b5df5d09..9e6f19b03 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.h
++++ b/drivers/gpu/drm/xe/xe_guc_submit.h
+@@ -46,7 +46,7 @@ xe_guc_exec_queue_snapshot_print(struct xe_guc_submit_exec_queue_snapshot *snaps
+ void
+ xe_guc_exec_queue_snapshot_free(struct xe_guc_submit_exec_queue_snapshot *snapshot);
+ void xe_guc_submit_print(struct xe_guc *guc, struct drm_printer *p);
+-void xe_guc_register_exec_queue(struct xe_exec_queue *q, int ctx_type);
++void xe_guc_register_vf_exec_queue(struct xe_exec_queue *q, int ctx_type);
+ 
+ int xe_guc_contexts_hwsp_rebase(struct xe_guc *guc, void *scratch);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
+index 820310b8b..f9b27657a 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
++++ b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
+@@ -186,7 +186,6 @@ static void ccs_rw_update_ring(struct xe_tile_vf_ccs *ctx)
+ 
+ static int register_save_restore_context(struct xe_tile_vf_ccs *ctx)
+ {
+-	int err = -EINVAL;
+ 	int ctx_type;
+ 
+ 	switch (ctx->ctx_id) {
+@@ -197,10 +196,10 @@ static int register_save_restore_context(struct xe_tile_vf_ccs *ctx)
+ 		ctx_type = GUC_CONTEXT_COMPRESSION_RESTORE;
+ 		break;
+ 	default:
+-		return err;
++		return -EINVAL;
+ 	}
+ 
+-	xe_guc_register_exec_queue(ctx->mig_q, ctx_type);
++	xe_guc_register_vf_exec_queue(ctx->mig_q, ctx_type);
+ 	return 0;
+ }
+ 
+-- 
+2.34.1
+

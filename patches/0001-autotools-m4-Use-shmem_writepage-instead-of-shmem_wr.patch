@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Date: Fri, 31 Oct 2025 00:15:55 +0530
+Subject: [PATCH] autotools/m4: Use shmem_writepage instead of shmem_writeout
+
+shmem_writepage() api is replaced by shmem_writeout() from 6.16 kernel.
+Hence observing shmem_writeout api missing error against 6.6 LTS.
+To fix this error, call writepage function pointer which calls
+shmem_writepage() api when shmem_writeout() api is not present.
+
+Reference:
+	84798514db50 mm: Remove swap_writepage() and shmem_writepage()
+
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+---
+ drivers/gpu/drm/ttm/ttm_backup.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/drivers/gpu/drm/ttm/ttm_backup.c b/drivers/gpu/drm/ttm/ttm_backup.c
+index 32530c7..ea34053 100644
+--- a/drivers/gpu/drm/ttm/ttm_backup.c
++++ b/drivers/gpu/drm/ttm/ttm_backup.c
+@@ -115,7 +115,19 @@ ttm_backup_backup_page(struct file *backup, struct page *page,
+ 	if (writeback && !folio_mapped(to_folio) &&
+ 	    folio_clear_dirty_for_io(to_folio)) {
+ 		folio_set_reclaim(to_folio);
++#ifdef BPM_SHMEM_WRITEOUT_NOT_PRESENT
++		struct writeback_control wbc = {
++			.sync_mode = WB_SYNC_NONE,
++			.nr_to_write = SWAP_CLUSTER_MAX,
++			.range_start = 0,
++			.range_end = LLONG_MAX,
++			.for_reclaim = 1,
++		};
++
++		ret = mapping->a_ops->writepage(folio_file_page(to_folio, idx), &wbc);
++#else
+ 		ret = shmem_writeout(to_folio, NULL, NULL);
++#endif
+ 		if (!folio_test_writeback(to_folio))
+ 			folio_clear_reclaim(to_folio);
+ 		/*
+-- 
+2.43.0
+

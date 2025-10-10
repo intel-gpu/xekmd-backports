@@ -13,4 +13,8 @@
 #define drm_buddy_block_trim(a,b,c,d) drm_buddy_block_trim(a,c,d)
 #endif
 
+#ifdef BPM_DRMM_WORKQUEUE_RELEASE_NOT_PRESENT
+void __drmm_workqueue_release(struct drm_device *device, void *wq);
+#endif
+
 #endif /* __BACKPORT_DRM_BUDDY_H__ */

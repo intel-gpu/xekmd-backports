@@ -4,6 +4,6 @@ obj-m += xe-compat.o
 else
 obj-y += xe-compat.o
 endif
-xe-compat-y += main.o ptrace.o iov.o
+xe-compat-y += main.o ptrace.o iov.o vsec.o
 
 # Kernel backport compatibility code

@@ -1,4 +1,4 @@
-all clean xedkmsdeb-pkg:
+all clean xe-dkms-deb-pkg:
 	$(MAKE) -C src $@
 
 modules olddefconfig menuconfig savedefconfig:

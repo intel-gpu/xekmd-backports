@@ -42,6 +42,7 @@ obj-y += compat/
 # XE Drivers
 obj-$(CPTCFG_DRM_XE) += drivers/gpu/drm/xe/
 obj-$(CPTCFG_DRM_TTM)   += drivers/gpu/drm/ttm/
+obj-$(CPTCFG_DRM_SCHED) += drivers/gpu/drm/scheduler/
 drm_ttm_helper-y := drivers/gpu/drm/drm_gem_ttm_helper.o
 obj-$(CPTCFG_DRM_TTM_HELPER) += drm_ttm_helper.o
 # Only compile drm_gpuvm if config is enabled and base kernel doesn't have it

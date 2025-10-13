@@ -5,6 +5,10 @@
 #include <linux/types.h>
 #include_next <drm/drm_drv.h>
 
+#ifndef BPM_DRV_DATE_NOT_PRESENT
+#define DRIVER_DATE             "20201103"
+#endif
+
 #ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
 #include <linux/cgroup_dmem.h>
 #include <drm/drm_managed.h>

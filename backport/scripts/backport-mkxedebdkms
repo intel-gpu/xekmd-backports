@@ -55,6 +55,28 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
 	BUILT_MODULE_LOCATION[3]="src"
 	DEST_MODULE_LOCATION[3]="/updates"
 
+	BUILT_MODULE_NAME[4]="gpu-sched"
+	BUILT_MODULE_LOCATION[4]="src/drivers/gpu/drm/scheduler"
+	DEST_MODULE_LOCATION[4]="/updates"
+
+	select_drm_gpuvm() {
+		if [ -z "\$kernelver" ]; then
+			echo "false"
+			return
+		fi
+		kver_short=\$(echo "\$kernelver" | cut -d. -f1,2)
+		case "\$kver_short" in
+			6.6|6.7) echo "true" ;;
+			*) echo "false" ;;
+		esac
+	}
+
+	if [ "\$(select_drm_gpuvm)" = "true" ]; then
+		BUILT_MODULE_NAME[5]="drm_gpuvm"
+		BUILT_MODULE_LOCATION[5]="src"
+		DEST_MODULE_LOCATION[5]="/updates"
+	fi
+
 	# Find out how many CPU cores can be use if we pass appropriate -j option to make.
 	# DKMS could use all cores on multicore systems to build the kernel module.
 	num_cpu_cores()
@@ -73,5 +95,4 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
 
 	MAKE="export LEX=flex; export YACC=bison; pwd; autoreconf --install; autoconf ; autoheader ;automake --add-missing ;./configure --enable-linux-builtin --with-linux=/lib/modules/\$kernelver/build; cp src/defconfigs/$XE_CONFIG src/.config ; make olddefconfig; make -j\$(num_cpu_cores) modules"
 	CLEAN="export LEX=flex; export YACC=bison; 'make' mrproper"
-
 EOF

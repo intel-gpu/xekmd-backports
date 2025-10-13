@@ -44,3 +44,8 @@ obj-$(CPTCFG_DRM_XE) += drivers/gpu/drm/xe/
 obj-$(CPTCFG_DRM_TTM)   += drivers/gpu/drm/ttm/
 drm_ttm_helper-y := drivers/gpu/drm/drm_gem_ttm_helper.o
 obj-$(CPTCFG_DRM_TTM_HELPER) += drm_ttm_helper.o
+# Only compile drm_gpuvm if config is enabled and base kernel doesn't have it
+ifneq ($(filter m y, $(CPTCFG_DRM_GPUVM)),)
+obj-$(CPTCFG_DRM_GPUVM) += drm_gpuvm.o
+drm_gpuvm-y := drivers/gpu/drm/drm_gpuvm.o
+endif

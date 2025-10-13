@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Date: Wed, 8 Oct 2025 22:05:47 +0530
+Subject: [PATCH] xe/Kconfig: Add CONFIG_DRM_GPUVM configuration option
+
+The Intel XE GPU driver depends on the DRM_GPUVM subsystem which was
+introduced in Linux kernel 6.8. For kernels prior to 6.8, the
+DRM_GPUVM functionality needs to be backported to provide the GPUVM
+management framework that XE relies on.
+
+Reference:
+    b06d47be7c83
+    drm/xe: Port Xe to GPUVA
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/xe/Kconfig | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/Kconfig b/drivers/gpu/drm/xe/Kconfig
+index 3372998..b2d9c34 100644
+--- a/drivers/gpu/drm/xe/Kconfig
++++ b/drivers/gpu/drm/xe/Kconfig
+@@ -1,4 +1,11 @@
+ # SPDX-License-Identifier: GPL-2.0-only
++config DRM_GPUVM
++	tristate "Enable Xe-specific DRM GPUVM support"
++	depends on DRM
++	default m
++	help
++	  GPU-VM representation providing helpers to manage a GPUs virtual
++          address space (Xe-specific backport version)
+ config DRM_XE
+ 	tristate "Intel Xe Graphics"
+ 	depends on DRM && PCI && MMU && (m || (y && KUNIT=y))
+-- 
+2.43.0
+

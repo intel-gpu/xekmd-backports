@@ -41,10 +41,11 @@ Creating xe DKMS packages
 $ make <DKMS Package Target>
 
 Example:
+	$./compile.sh configure
 	$ make xe-dkms-deb-pkg
 
 Generated package name :
-	intel-xe-dkms_1.586.241121.0+i1-1_all.deb
+	intel-xe-dkms_1.250811.7.0+i1-1_all.deb
 ```
 Above command will create Debian package in parent folder. **intel-xe-dkms_<**release version**>.<**kernel-version**>.deb**
 
@@ -75,10 +76,10 @@ $ sudo reboot
 Autotools have a series of commands to generate configure and Makefile. In order
 to make life simple, use script created. 
 
-Command to build:
+Command to compile:
 
 `
-./compile.sh <headers-path>
+./compile.sh compile <headers-path>
 `
 
 By default, "<headers-path>" is set as standard headers path of currently booted kernel i.e., /lib/modules/<uname -r>/build

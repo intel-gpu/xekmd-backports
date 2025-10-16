@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dan Carpenter <dan.carpenter@linaro.org>
+Date: Fri, 1 Aug 2025 16:32:35 +0300
+Subject: [PATCH 22/62] drm/xe/vf: Fix IS_ERR() vs NULL check in
+ xe_sriov_vf_ccs_init()
+
+The xe_migrate_alloc() function returns NULL on error.  It doesn't return
+error pointers.  Update the checking to match.
+
+Fixes: a843b9894705 ("drm/xe/vf: Fix VM crash during VF driver release")
+Signed-off-by: Dan Carpenter <dan.carpenter@linaro.org>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/aIzB8-Y6wtZvfNQT@stanley.mountain
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 7d3a5962d74ee7ce2d0051d4d1e106c06b432ce8 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_vf_ccs.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
+index bf9fa1238462..e363240a3455 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
++++ b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
+@@ -271,8 +271,8 @@ int xe_sriov_vf_ccs_init(struct xe_device *xe)
+ 		ctx->ctx_id = ctx_id;
+ 
+ 		migrate = xe_migrate_alloc(tile);
+-		if (IS_ERR(migrate)) {
+-			err = PTR_ERR(migrate);
++		if (!migrate) {
++			err = -ENOMEM;
+ 			goto err_ret;
+ 		}
+ 
+-- 
+2.43.0
+

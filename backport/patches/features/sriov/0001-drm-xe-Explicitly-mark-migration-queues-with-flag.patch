@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Thu, 24 Jul 2025 12:12:10 -0700
+Subject: [PATCH 31/62] drm/xe: Explicitly mark migration queues with flag
+
+Rather than inferring if an exec queue is a migration queue for a flag,
+explicitly mark migration queues with a flag.
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Francois Dugast <francois.dugast@intel.com>
+Reviewed-by: Stuart Summers <stuart.summers@intel.com>
+Link: https://lore.kernel.org/r/20250724191216.4076566-2-matthew.brost@intel.com
+(cherry-picked from commit c3ead4ecfc4c02806aa1c202a595ee3ecb2c039a linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue_types.h | 2 ++
+ drivers/gpu/drm/xe/xe_migrate.c          | 6 ++++--
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
+index 1c9d03f2a3e5..95ea179189d2 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
+@@ -87,6 +87,8 @@ struct xe_exec_queue {
+ #define EXEC_QUEUE_FLAG_HIGH_PRIORITY		BIT(4)
+ /* flag to indicate low latency hint to guc */
+ #define EXEC_QUEUE_FLAG_LOW_LATENCY		BIT(5)
++/* for migration (kernel copy, clear, bind) jobs */
++#define EXEC_QUEUE_FLAG_MIGRATE			BIT(6)
+ 
+ 	/**
+ 	 * @flags: flags for this exec queue, should statically setup aside from ban
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 201a41cc4254..2a9e3d1f3775 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -439,12 +439,14 @@ int xe_migrate_init(struct xe_migrate *m)
+ 		m->q = xe_exec_queue_create(xe, vm, logical_mask, 1, hwe,
+ 					    EXEC_QUEUE_FLAG_KERNEL |
+ 					    EXEC_QUEUE_FLAG_PERMANENT |
+-					    EXEC_QUEUE_FLAG_HIGH_PRIORITY, 0);
++					    EXEC_QUEUE_FLAG_HIGH_PRIORITY |
++					    EXEC_QUEUE_FLAG_MIGRATE, 0);
+ 	} else {
+ 		m->q = xe_exec_queue_create_class(xe, primary_gt, vm,
+ 						  XE_ENGINE_CLASS_COPY,
+ 						  EXEC_QUEUE_FLAG_KERNEL |
+-						  EXEC_QUEUE_FLAG_PERMANENT, 0);
++						  EXEC_QUEUE_FLAG_PERMANENT |
++						  EXEC_QUEUE_FLAG_MIGRATE, 0);
+ 	}
+ 	if (IS_ERR(m->q)) {
+ 		err = PTR_ERR(m->q);
+-- 
+2.43.0
+

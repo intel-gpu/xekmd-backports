@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: John Harrison <John.C.Harrison@Intel.com>
+Date: Wed, 10 Sep 2025 14:02:33 -0700
+Subject: [PATCH 08/62] drm/xe/guc: Add firmware build type to available info
+
+Some test features are not available in production builds of the GuC
+firmware. So add the build type field to the available information
+that tests can inspect to decide if they should skip or run.
+
+Signed-off-by: John Harrison <John.C.Harrison@Intel.com>
+Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Link: https://lore.kernel.org/r/20250910210237.603576-3-John.C.Harrison@Intel.com
+(cherry-picked from commit acf01c79f0684e3cbaa8e6326b970d7a7381c2ee linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_uc_fw.c       | 1 +
+ drivers/gpu/drm/xe/xe_uc_fw_types.h | 3 +++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_uc_fw.c b/drivers/gpu/drm/xe/xe_uc_fw.c
+index 57b8230cec58..622b76078567 100644
+--- a/drivers/gpu/drm/xe/xe_uc_fw.c
++++ b/drivers/gpu/drm/xe/xe_uc_fw.c
+@@ -347,6 +347,7 @@ static int guc_read_css_info(struct xe_uc_fw *uc_fw, struct uc_css_guc_info *guc
+ 	compatibility->minor = FIELD_GET(CSS_SW_VERSION_UC_MINOR, guc_info->submission_version);
+ 	compatibility->patch = FIELD_GET(CSS_SW_VERSION_UC_PATCH, guc_info->submission_version);
+ 
++	uc_fw->build_type = FIELD_GET(CSS_UKERNEL_INFO_BUILDTYPE, guc_info->ukernel_info);
+ 	uc_fw->private_data_size = guc_info->private_data_size;
+ 
+ 	return 0;
+diff --git a/drivers/gpu/drm/xe/xe_uc_fw_types.h b/drivers/gpu/drm/xe/xe_uc_fw_types.h
+index 914026015019..77a1dcf8b4ed 100644
+--- a/drivers/gpu/drm/xe/xe_uc_fw_types.h
++++ b/drivers/gpu/drm/xe/xe_uc_fw_types.h
+@@ -147,6 +147,9 @@ struct xe_uc_fw {
+ 
+ 	/** @private_data_size: size of private data found in uC css header */
+ 	u32 private_data_size;
++
++	/** @build_type: Firmware build type (see CSS_UKERNEL_INFO_BUILDTYPE for definitions) */
++	u32 build_type;
+ };
+ 
+ #endif
+-- 
+2.43.0
+

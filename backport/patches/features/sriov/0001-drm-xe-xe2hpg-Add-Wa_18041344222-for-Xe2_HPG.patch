@@ -1,0 +1,129 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Harish Chegondi <harish.chegondi@intel.com>
+Date: Tue, 2 Sep 2025 16:42:00 -0700
+Subject: [PATCH 51/62] drm/xe/xe2hpg: Add Wa_18041344222 for Xe2_HPG
+
+Add Wa_18041344222 for Xe2_HPG that requires disabling
+the perf mode for subslice count for eustall sampling
+when the enabled slices are discontiguous.
+
+Bspec: 79483, 56024
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Reviewed-by: Matt Atwood <matthew.s.atwood@intel.com>
+Signed-off-by: Harish Chegondi <harish.chegondi@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/b6a631a13a9fb7360e89d679e0797fae42d5a09e.1756855529.git.harish.chegondi@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit 5952d80514054d12d2ec72aa111c2e09eb70e881 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_gt_regs.h |  1 +
+ drivers/gpu/drm/xe/xe_gt_topology.c  | 17 +++++++++++++++++
+ drivers/gpu/drm/xe/xe_gt_topology.h  |  2 ++
+ drivers/gpu/drm/xe/xe_rtp.c          |  6 ++++++
+ drivers/gpu/drm/xe/xe_rtp.h          |  3 +++
+ drivers/gpu/drm/xe/xe_wa.c           |  7 +++++++
+ 6 files changed, 36 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+index 5cd5ab8529c5..cec9c5ec8d6b 100644
+--- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+@@ -522,6 +522,7 @@
+ 
+ #define TDL_CHICKEN				XE_REG_MCR(0xe5f4, XE_REG_OPTION_MASKED)
+ #define   QID_WAIT_FOR_THREAD_NOT_RUN_DISABLE	REG_BIT(12)
++#define   EUSTALL_PERF_SAMPLING_DISABLE		REG_BIT(5)
+ 
+ #define LSC_CHICKEN_BIT_0			XE_REG_MCR(0xe7c8)
+ #define   DISABLE_D8_D16_COASLESCE		REG_BIT(30)
+diff --git a/drivers/gpu/drm/xe/xe_gt_topology.c b/drivers/gpu/drm/xe/xe_gt_topology.c
+index 8c63e3263643..1b34554c2709 100644
+--- a/drivers/gpu/drm/xe/xe_gt_topology.c
++++ b/drivers/gpu/drm/xe/xe_gt_topology.c
+@@ -12,6 +12,7 @@
+ #include "regs/xe_gt_regs.h"
+ #include "xe_assert.h"
+ #include "xe_gt.h"
++#include "xe_gt_mcr.h"
+ #include "xe_gt_printk.h"
+ #include "xe_mmio.h"
+ #include "xe_wa.h"
+@@ -328,3 +329,19 @@ bool xe_gt_has_compute_dss(struct xe_gt *gt, unsigned int dss)
+ {
+ 	return test_bit(dss, gt->fuse_topo.c_dss_mask);
+ }
++
++bool xe_gt_has_discontiguous_dss_groups(const struct xe_gt *gt)
++{
++	unsigned int xecore;
++	int last_group = -1;
++	u16 group, instance;
++
++	for_each_dss_steering(xecore, gt, group, instance) {
++		if (last_group != group) {
++			if (group - last_group > 1)
++				return true;
++			last_group = group;
++		}
++	}
++	return false;
++}
+diff --git a/drivers/gpu/drm/xe/xe_gt_topology.h b/drivers/gpu/drm/xe/xe_gt_topology.h
+index c8140704ad4c..d95cdd6e45be 100644
+--- a/drivers/gpu/drm/xe/xe_gt_topology.h
++++ b/drivers/gpu/drm/xe/xe_gt_topology.h
+@@ -47,4 +47,6 @@ xe_gt_topology_has_dss_in_quadrant(struct xe_gt *gt, int quad);
+ bool xe_gt_has_geometry_dss(struct xe_gt *gt, unsigned int dss);
+ bool xe_gt_has_compute_dss(struct xe_gt *gt, unsigned int dss);
+ 
++bool xe_gt_has_discontiguous_dss_groups(const struct xe_gt *gt);
++
+ #endif /* _XE_GT_TOPOLOGY_H_ */
+diff --git a/drivers/gpu/drm/xe/xe_rtp.c b/drivers/gpu/drm/xe/xe_rtp.c
+index 95571b87aa73..04400b4889fb 100644
+--- a/drivers/gpu/drm/xe/xe_rtp.c
++++ b/drivers/gpu/drm/xe/xe_rtp.c
+@@ -363,3 +363,9 @@ bool xe_rtp_match_not_sriov_vf(const struct xe_gt *gt,
+ {
+ 	return !IS_SRIOV_VF(gt_to_xe(gt));
+ }
++
++bool xe_rtp_match_gt_has_discontiguous_dss_groups(const struct xe_gt *gt,
++						  const struct xe_hw_engine *hwe)
++{
++	return xe_gt_has_discontiguous_dss_groups(gt);
++}
+diff --git a/drivers/gpu/drm/xe/xe_rtp.h b/drivers/gpu/drm/xe/xe_rtp.h
+index 5ed6c14b9ae3..b3ff568550ae 100644
+--- a/drivers/gpu/drm/xe/xe_rtp.h
++++ b/drivers/gpu/drm/xe/xe_rtp.h
+@@ -477,4 +477,7 @@ bool xe_rtp_match_first_render_or_compute(const struct xe_gt *gt,
+ bool xe_rtp_match_not_sriov_vf(const struct xe_gt *gt,
+ 			       const struct xe_hw_engine *hwe);
+ 
++bool xe_rtp_match_gt_has_discontiguous_dss_groups(const struct xe_gt *gt,
++						  const struct xe_hw_engine *hwe);
++
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_wa.c b/drivers/gpu/drm/xe/xe_wa.c
+index 22a98600fd8f..798a1b3f174b 100644
+--- a/drivers/gpu/drm/xe/xe_wa.c
++++ b/drivers/gpu/drm/xe/xe_wa.c
+@@ -602,6 +602,13 @@ static const struct xe_rtp_entry_sr engine_was[] = {
+ 		       FUNC(xe_rtp_match_first_render_or_compute)),
+ 	  XE_RTP_ACTIONS(SET(TDL_TSL_CHICKEN, STK_ID_RESTRICT))
+ 	},
++	{ XE_RTP_NAME("18041344222"),
++	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(2001, 2002),
++		       FUNC(xe_rtp_match_first_render_or_compute),
++		       FUNC(xe_rtp_match_not_sriov_vf),
++		       FUNC(xe_rtp_match_gt_has_discontiguous_dss_groups)),
++	  XE_RTP_ACTIONS(SET(TDL_CHICKEN, EUSTALL_PERF_SAMPLING_DISABLE))
++	},
+ 
+ 	/* Xe2_LPM */
+ 
+-- 
+2.43.0
+

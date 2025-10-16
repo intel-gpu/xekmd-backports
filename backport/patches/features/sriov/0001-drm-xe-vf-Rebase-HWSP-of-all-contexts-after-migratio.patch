@@ -1,0 +1,161 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tomasz Lis <tomasz.lis@intel.com>
+Date: Sat, 2 Aug 2025 05:10:41 +0200
+Subject: [PATCH 26/62] drm/xe/vf: Rebase HWSP of all contexts after migration
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+All contexts require an update due to GGTT range shift, as that
+affects their HWSP.
+
+The HW status page of a context contains GGTT references, which
+need to be shifted to a new range (or re-computed using the
+previously updated vma nodes). The references include ring start
+address and indirect state address.
+
+v2: move some functions to better matched files
+v3: Add missing kerneldocs
+v4: Style fix
+
+Signed-off-by: Tomasz Lis <tomasz.lis@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Michal Winiarski <michal.winiarski@intel.com>
+Acked-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Reviewed-by: Michal Winiarski <michal.winiarski@intel.com>
+Link: https://lore.kernel.org/r/20250802031045.1127138-5-tomasz.lis@intel.com
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+(cherry-picked from commit b46ef766737c4ecc11aad9742fd7f70f8f922246 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c | 13 +++++++++++++
+ drivers/gpu/drm/xe/xe_exec_queue.h |  2 ++
+ drivers/gpu/drm/xe/xe_guc_submit.c | 16 ++++++++++++++++
+ drivers/gpu/drm/xe/xe_guc_submit.h |  2 ++
+ drivers/gpu/drm/xe/xe_lrc.c        | 17 +++++++++++++++++
+ drivers/gpu/drm/xe/xe_lrc.h        |  1 +
+ drivers/gpu/drm/xe/xe_sriov_vf.c   |  1 +
+ 7 files changed, 52 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index c07edcda99c5..b4f30d2855b6 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -1036,3 +1036,16 @@ int xe_exec_queue_last_fence_test_dep(struct xe_exec_queue *q, struct xe_vm *vm)
+ 
+ 	return err;
+ }
++
++/**
++ * xe_exec_queue_contexts_hwsp_rebase - Re-compute GGTT references
++ * within all LRCs of a queue.
++ * @q: the &xe_exec_queue struct instance containing target LRCs
++ */
++void xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q)
++{
++	int i;
++
++	for (i = 0; i < q->width; ++i)
++		xe_lrc_update_hwctx_regs_with_address(q->lrc[i]);
++}
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
+index 17bc50a7f05a..1d399a33c5c0 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue.h
+@@ -90,4 +90,6 @@ int xe_exec_queue_last_fence_test_dep(struct xe_exec_queue *q,
+ 				      struct xe_vm *vm);
+ void xe_exec_queue_update_run_ticks(struct xe_exec_queue *q);
+ 
++void xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q);
++
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index 0a11e72c568a..9816e90d436a 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -2575,3 +2575,19 @@ void xe_guc_submit_print(struct xe_guc *guc, struct drm_printer *p)
+ 		guc_exec_queue_print(q, p);
+ 	mutex_unlock(&guc->submission_state.lock);
+ }
++
++/**
++ * xe_guc_contexts_hwsp_rebase - Re-compute GGTT references within all
++ * exec queues registered to given GuC.
++ * @guc: the &xe_guc struct instance
++ */
++void xe_guc_contexts_hwsp_rebase(struct xe_guc *guc)
++{
++	struct xe_exec_queue *q;
++	unsigned long index;
++
++	mutex_lock(&guc->submission_state.lock);
++	xa_for_each(&guc->submission_state.exec_queue_lookup, index, q)
++		xe_exec_queue_contexts_hwsp_rebase(q);
++	mutex_unlock(&guc->submission_state.lock);
++}
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.h b/drivers/gpu/drm/xe/xe_guc_submit.h
+index 02fce4a7243b..aae947baba7b 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.h
++++ b/drivers/gpu/drm/xe/xe_guc_submit.h
+@@ -48,4 +48,6 @@ xe_guc_exec_queue_snapshot_free(struct xe_guc_submit_exec_queue_snapshot *snapsh
+ void xe_guc_submit_print(struct xe_guc *guc, struct drm_printer *p);
+ void xe_guc_register_exec_queue(struct xe_exec_queue *q, int ctx_type);
+ 
++void xe_guc_contexts_hwsp_rebase(struct xe_guc *guc);
++
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index 6d38411bdeba..45184626b7fa 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1374,6 +1374,23 @@ void xe_lrc_destroy(struct kref *ref)
+ 	kfree(lrc);
+ }
+ 
++/**
++ * xe_lrc_update_hwctx_regs_with_address - Re-compute GGTT references within given LRC.
++ * @lrc: the &xe_lrc struct instance
++ */
++void xe_lrc_update_hwctx_regs_with_address(struct xe_lrc *lrc)
++{
++	if (xe_lrc_has_indirect_ring_state(lrc)) {
++		xe_lrc_write_ctx_reg(lrc, CTX_INDIRECT_RING_STATE,
++				     __xe_lrc_indirect_ring_ggtt_addr(lrc));
++
++		xe_lrc_write_indirect_ctx_reg(lrc, INDIRECT_CTX_RING_START,
++					      __xe_lrc_ring_ggtt_addr(lrc));
++	} else {
++		xe_lrc_write_ctx_reg(lrc, CTX_RING_START, __xe_lrc_ring_ggtt_addr(lrc));
++	}
++}
++
+ void xe_lrc_set_ring_tail(struct xe_lrc *lrc, u32 tail)
+ {
+ 	if (xe_lrc_has_indirect_ring_state(lrc))
+diff --git a/drivers/gpu/drm/xe/xe_lrc.h b/drivers/gpu/drm/xe/xe_lrc.h
+index b6c8053c581b..cc231bec709c 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.h
++++ b/drivers/gpu/drm/xe/xe_lrc.h
+@@ -88,6 +88,7 @@ bool xe_lrc_ring_is_idle(struct xe_lrc *lrc);
+ u32 xe_lrc_indirect_ring_ggtt_addr(struct xe_lrc *lrc);
+ u32 xe_lrc_ggtt_addr(struct xe_lrc *lrc);
+ u32 *xe_lrc_regs(struct xe_lrc *lrc);
++void xe_lrc_update_hwctx_regs_with_address(struct xe_lrc *lrc);
+ 
+ u32 xe_lrc_read_ctx_reg(struct xe_lrc *lrc, int reg_nr);
+ void xe_lrc_write_ctx_reg(struct xe_lrc *lrc, int reg_nr, u32 val);
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf.c b/drivers/gpu/drm/xe/xe_sriov_vf.c
+index 71d28b30de43..54a6218e48b0 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_sriov_vf.c
+@@ -269,6 +269,7 @@ static int gt_vf_post_migration_fixups(struct xe_gt *gt)
+ 	shift = xe_gt_sriov_vf_ggtt_shift(gt);
+ 	if (shift) {
+ 		xe_tile_sriov_vf_fixup_ggtt_nodes(gt_to_tile(gt), shift);
++		xe_guc_contexts_hwsp_rebase(&gt->uc.guc);
+ 		/* FIXME: add the recovery steps */
+ 		xe_guc_ct_fixup_messages_with_ggtt(&gt->uc.guc.ct, shift);
+ 	}
+-- 
+2.43.0
+

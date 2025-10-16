@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Tue, 13 May 2025 00:00:17 +0200
+Subject: drm/xe/guc: Unblock GuC buffer cache for all modes
+
+Today we were using GuC buffer cache only in the PF mode, but
+shortly we will want to use it also in native and VF mode.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Link: https://lore.kernel.org/r/20250512220018.172-2-michal.wajdeczko@intel.com
+(backported from commit b86babc9d92f0a5fbbc7ab4c7d09bce688f94ebf linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc.c     | 4 ++++
+ drivers/gpu/drm/xe/xe_guc_buf.c | 4 ----
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
+index f04682b81..83cfd53e2 100644
+--- a/drivers/gpu/drm/xe/xe_guc.c
++++ b/drivers/gpu/drm/xe/xe_guc.c
+@@ -710,6 +710,10 @@ static int vf_guc_init_post_hwconfig(struct xe_guc *guc)
+ 	if (err)
+ 		return err;
+ 
++	err = xe_guc_buf_cache_init(&guc->buf);
++	if (err)
++		return err;
++
+ 	/* XXX xe_guc_db_mgr_init not needed for now */
+ 
+ 	return 0;
+diff --git a/drivers/gpu/drm/xe/xe_guc_buf.c b/drivers/gpu/drm/xe/xe_guc_buf.c
+index 72de25903..502ca3a4e 100644
+--- a/drivers/gpu/drm/xe/xe_guc_buf.c
++++ b/drivers/gpu/drm/xe/xe_guc_buf.c
+@@ -37,10 +37,6 @@ int xe_guc_buf_cache_init(struct xe_guc_buf_cache *cache)
+ 	struct xe_gt *gt = cache_to_gt(cache);
+ 	struct xe_sa_manager *sam;
+ 
+-	/* XXX: currently it's useful only for the PF actions */
+-	if (!IS_SRIOV_PF(gt_to_xe(gt)))
+-		return 0;
+-
+ 	sam = __xe_sa_bo_manager_init(gt_to_tile(gt), SZ_8K, 0, sizeof(u32));
+ 	if (IS_ERR(sam))
+ 		return PTR_ERR(sam);
+-- 
+2.34.1
+

@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 5 Sep 2025 20:02:25 +0200
+Subject: drm/xe/debugfs: Make residencies definitions const
+
+No need to keep them non-const. Also fix declaration of .name
+member, as it points to the const string. This translates to:
+
+  add/remove: 1/0 grow/shrink: 0/2 up/down: 80/-248 (-168)
+  Function                                     old     new   delta
+  residencies                                    -      80     +80
+  dgfx_pcie_link_residencies_show              365     263    -102
+  dgfx_pkg_residencies_show                    454     308    -146
+  Total: Before=2821548, After=2821380, chg -0.01%
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Soham Purkait <soham.purkait@intel.com>
+Cc: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Cc: Karthik Poosa <karthik.poosa@intel.com>
+Cc: Riana Tauro <riana.tauro@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20250905180225.8434-1-michal.wajdeczko@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit e57ae80fe01a2b039c689b2d14fef51b1ebbd7f8 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_debugfs.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
+index a21007ade..e605a39d0 100644
+--- a/drivers/gpu/drm/xe/xe_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_debugfs.c
+@@ -37,7 +37,7 @@
+ DECLARE_FAULT_ATTR(gt_reset_failure);
+ 
+ static void read_residency_counter(struct xe_device *xe, struct xe_mmio *mmio,
+-				   u32 offset, char *name, struct drm_printer *p)
++				   u32 offset, const char *name, struct drm_printer *p)
+ {
+ 	u64 residency = 0;
+ 	int ret;
+@@ -115,9 +115,9 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
+ 	p = drm_seq_file_printer(m);
+ 	xe_pm_runtime_get(xe);
+ 	mmio = xe_root_tile_mmio(xe);
+-	struct {
++	static const struct {
+ 		u32 offset;
+-		char *name;
++		const char *name;
+ 	} residencies[] = {
+ 		{BMG_G2_RESIDENCY_OFFSET, "Package G2"},
+ 		{BMG_G6_RESIDENCY_OFFSET, "Package G6"},
+@@ -144,9 +144,9 @@ static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
+ 	xe_pm_runtime_get(xe);
+ 	mmio = xe_root_tile_mmio(xe);
+ 
+-	struct {
++	static const struct {
+ 		u32 offset;
+-		char *name;
++		const char *name;
+ 	} residencies[] = {
+ 		{BMG_PCIE_LINK_L0_RESIDENCY_OFFSET, "PCIE LINK L0 RESIDENCY"},
+ 		{BMG_PCIE_LINK_L1_RESIDENCY_OFFSET, "PCIE LINK L1 RESIDENCY"},
+-- 
+2.34.1
+

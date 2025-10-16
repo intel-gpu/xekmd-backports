@@ -1,0 +1,218 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Sun, 28 Sep 2025 16:00:25 +0200
+Subject: [PATCH 56/62] drm/xe/pf: Populate SR-IOV debugfs tree with tiles
+
+Populate new per SR-IOV function debugfs directories with next
+level directories that represent tiles. There are no files yet,
+but we will continue updating that tree in upcoming patches.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20250928140029.198847-4-michal.wajdeczko@intel.com
+(cherry-picked from commit 5489e7d44ab3b5f4e48dc789f11521daeef74fbe linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/Makefile                   |  3 +-
+ drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c      | 14 +++
+ drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c | 98 +++++++++++++++++++
+ drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.h | 15 +++
+ 4 files changed, 129 insertions(+), 1 deletion(-)
+ create mode 100644 drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c
+ create mode 100644 drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.h
+
+diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
+index 34b53e175d3e..878cb523bd07 100644
+--- a/drivers/gpu/drm/xe/Makefile
++++ b/drivers/gpu/drm/xe/Makefile
+@@ -168,7 +168,8 @@ xe-$(CONFIG_PCI_IOV) += \
+ 	xe_pci_sriov.o \
+ 	xe_sriov_pf.o \
+ 	xe_sriov_pf_debugfs.o \
+-	xe_sriov_pf_service.o
++	xe_sriov_pf_service.o \
++	xe_tile_sriov_pf_debugfs.o
+ 
+ # include helpers for tests even when XE is built-in
+ ifdef CONFIG_DRM_XE_KUNIT_TEST
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
+index 37cc3a297667..2ab0b1f4818a 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
+@@ -6,12 +6,14 @@
+ #include <linux/debugfs.h>
+ #include <drm/drm_debugfs.h>
+ 
++#include "xe_device.h"
+ #include "xe_device_types.h"
+ #include "xe_sriov_pf.h"
+ #include "xe_sriov_pf_debugfs.h"
+ #include "xe_sriov_pf_helpers.h"
+ #include "xe_sriov_pf_service.h"
+ #include "xe_sriov_printk.h"
++#include "xe_tile_sriov_pf_debugfs.h"
+ 
+ static int simple_show(struct seq_file *m, void *data)
+ {
+@@ -37,6 +39,15 @@ static void pf_populate_pf(struct xe_device *xe, struct dentry *pfdent)
+ 	drm_debugfs_create_files(debugfs_list, ARRAY_SIZE(debugfs_list), pfdent, minor);
+ }
+ 
++static void pf_populate_with_tiles(struct xe_device *xe, struct dentry *dent, unsigned int vfid)
++{
++	struct xe_tile *tile;
++	unsigned int id;
++
++	for_each_tile(tile, xe, id)
++		xe_tile_sriov_pf_debugfs_populate(tile, dent, vfid);
++}
++
+ /**
+  * xe_sriov_pf_debugfs_register - Register PF debugfs attributes.
+  * @xe: the &xe_device
+@@ -76,6 +87,7 @@ void xe_sriov_pf_debugfs_register(struct xe_device *xe, struct dentry *root)
+ 	pfdent->d_inode->i_private = xe;
+ 
+ 	pf_populate_pf(xe, pfdent);
++	pf_populate_with_tiles(xe, pfdent, PFID);
+ 
+ 	/*
+ 	 *      /sys/kernel/debug/dri/BDF/
+@@ -90,5 +102,7 @@ void xe_sriov_pf_debugfs_register(struct xe_device *xe, struct dentry *root)
+ 		if (IS_ERR(vfdent))
+ 			return;
+ 		vfdent->d_inode->i_private = (void *)(uintptr_t)VFID(n);
++
++		pf_populate_with_tiles(xe, vfdent, VFID(n));
+ 	}
+ }
+diff --git a/drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c b/drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c
+new file mode 100644
+index 000000000000..91973ee9bb05
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c
+@@ -0,0 +1,98 @@
++// SPDX-License-Identifier: MIT
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#include <linux/debugfs.h>
++#include <drm/drm_debugfs.h>
++
++#include "xe_device_types.h"
++#include "xe_tile_sriov_pf_debugfs.h"
++#include "xe_sriov.h"
++
++/*
++ *      /sys/kernel/debug/dri/BDF/
++ *      ├── sriov		# d_inode->i_private = (xe_device*)
++ *      │   ├── pf		# d_inode->i_private = (xe_device*)
++ *      │   │   ├── tile0	# d_inode->i_private = (xe_tile*)
++ *      │   │   ├── tile1
++ *      │   │   :   :
++ *      │   ├── vf1		# d_inode->i_private = VFID(1)
++ *      │   │   ├── tile0	# d_inode->i_private = (xe_tile*)
++ *      │   │   ├── tile1
++ *      │   │   :   :
++ *      │   ├── vfN		# d_inode->i_private = VFID(N)
++ *      │   │   ├── tile0	# d_inode->i_private = (xe_tile*)
++ *      │   │   ├── tile1
++ *      :   :   :   :
++ */
++
++static void *extract_priv(struct dentry *d)
++{
++	return d->d_inode->i_private;
++}
++
++__maybe_unused
++static struct xe_tile *extract_tile(struct dentry *d)
++{
++	return extract_priv(d);
++}
++
++static struct xe_device *extract_xe(struct dentry *d)
++{
++	return extract_priv(d->d_parent->d_parent);
++}
++
++__maybe_unused
++static unsigned int extract_vfid(struct dentry *d)
++{
++	void *pp = extract_priv(d->d_parent);
++
++	return pp == extract_xe(d) ? PFID : (uintptr_t)pp;
++}
++
++/**
++ * xe_tile_sriov_pf_debugfs_populate() - Populate SR-IOV debugfs tree with tile files.
++ * @tile: the &xe_tile to register
++ * @parent: the parent &dentry that represents the SR-IOV @vfid function
++ * @vfid: the VF identifier
++ *
++ * Add to the @parent directory new debugfs directory that will represent a @tile and
++ * populate it with files that are related to the SR-IOV @vfid function.
++ *
++ * This function can only be called on PF.
++ */
++void xe_tile_sriov_pf_debugfs_populate(struct xe_tile *tile, struct dentry *parent,
++				       unsigned int vfid)
++{
++	struct xe_device *xe = tile->xe;
++	struct dentry *dent;
++	char name[10]; /* should be enough up to "tile%u\0" for 2^16 - 1 */
++
++	xe_tile_assert(tile, IS_SRIOV_PF(xe));
++	xe_tile_assert(tile, extract_priv(parent->d_parent) == xe);
++	xe_tile_assert(tile, extract_priv(parent) == tile->xe ||
++		       (uintptr_t)extract_priv(parent) == vfid);
++
++	/*
++	 *      /sys/kernel/debug/dri/BDF/
++	 *      ├── sriov
++	 *      │   ├── pf		# parent, d_inode->i_private = (xe_device*)
++	 *      │   │   ├── tile0	# d_inode->i_private = (xe_tile*)
++	 *      │   │   ├── tile1
++	 *      │   │   :   :
++	 *      │   ├── vf1		# parent, d_inode->i_private = VFID(1)
++	 *      │   │   ├── tile0	# d_inode->i_private = (xe_tile*)
++	 *      │   │   ├── tile1
++	 *      :   :   :   :
++	 */
++	snprintf(name, sizeof(name), "tile%u", tile->id);
++	dent = debugfs_create_dir(name, parent);
++	if (IS_ERR(dent))
++		return;
++	dent->d_inode->i_private = tile;
++
++	xe_tile_assert(tile, extract_tile(dent) == tile);
++	xe_tile_assert(tile, extract_vfid(dent) == vfid);
++	xe_tile_assert(tile, extract_xe(dent) == xe);
++}
+diff --git a/drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.h b/drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.h
+new file mode 100644
+index 000000000000..55d179c44634
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.h
+@@ -0,0 +1,15 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#ifndef _XE_TILE_SRIOV_PF_DEBUGFS_H_
++#define _XE_TILE_SRIOV_PF_DEBUGFS_H_
++
++struct dentry;
++struct xe_tile;
++
++void xe_tile_sriov_pf_debugfs_populate(struct xe_tile *tile, struct dentry *parent,
++				       unsigned int vfid);
++
++#endif
+-- 
+2.43.0
+

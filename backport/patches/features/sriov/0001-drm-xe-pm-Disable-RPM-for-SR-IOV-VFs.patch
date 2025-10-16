@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Date: Tue, 12 Aug 2025 22:06:13 +0530
+Subject: [PATCH 29/43] drm/xe/pm: Disable RPM for SR-IOV VFs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+VFs without native PCIe Power Management (PM) capabilities inherit their
+PF's power state as per PCIe specifications(§5.10.1 PCIe Base Spec 7.0).
+Enabling Runtime Power Management (RPM) for these VFs trigger unnecessary
+driver suspend/resume operations that ultimately perform no PCI-level power
+transition.
+
+Since VFs without PM capabilities cannot independently enter low-power
+states, the existing RPM workflow becomes redundant:
+1. Driver executes full suspend/resume sequence
+2. PCI PM transition step becomes no-op
+3. VF power state remains tied to PF's status
+
+Disabling RPM for VFs eliminates this redundant processing while
+maintaining proper power management through PF dependency. This
+optimization ensures VFs follow their PF's power state without superfluous
+runtime handling.
+
+Signed-off-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Michał Winiarski <michal.winiarski@intel.com>
+Cc: Anshuman Gupta <anshuman.gupta@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Maarten Lankhorst <dev@lankhorst.se>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250812163613.9954-1-satyanarayana.k.v.p@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 14fcd7361ed1c74dad4062313f2863b643409f6f linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pm.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
+index 5e472f5c7600..fb92458263f6 100644
+--- a/drivers/gpu/drm/xe/xe_pm.c
++++ b/drivers/gpu/drm/xe/xe_pm.c
+@@ -248,6 +248,10 @@ static void xe_pm_runtime_init(struct xe_device *xe)
+ {
+ 	struct device *dev = xe->drm.dev;
+ 
++	/* Our current VFs do not support RPM. so, disable it */
++	if (IS_SRIOV_VF(xe))
++		return;
++
+ 	/*
+ 	 * Disable the system suspend direct complete optimization.
+ 	 * We need to ensure that the regular device suspend/resume functions
+@@ -393,6 +397,10 @@ static void xe_pm_runtime_fini(struct xe_device *xe)
+ {
+ 	struct device *dev = xe->drm.dev;
+ 
++	/* Our current VFs do not support RPM. so, disable it */
++	if (IS_SRIOV_VF(xe))
++		return;
++
+ 	pm_runtime_get_sync(dev);
+ 	pm_runtime_forbid(dev);
+ }
+-- 
+2.43.0
+

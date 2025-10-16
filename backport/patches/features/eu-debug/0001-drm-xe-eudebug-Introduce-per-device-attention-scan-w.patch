@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From a15d69a6d4d2263f4cb702953c8504c6e1a2fb5c Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Sat, 17 Jun 2023 14:40:31 +0200
-Subject: [PATCH] drm/xe/eudebug: Introduce per device attention scan worker
+Subject: drm/xe/eudebug: Introduce per device attention scan worker
 
 Scan for EU debugging attention bits periodically to detect if some EU
 thread has entered the system routine (SIP) due to EU thread exception.
@@ -29,6 +29,7 @@ Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
 (cherry picked from commit e6cd96d976905e1917b98344e6616efd52cd58d7 eudebug-dev)
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/Makefile              |   1 +
  drivers/gpu/drm/xe/regs/xe_engine_regs.h |   3 +
@@ -46,10 +47,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_gt_debug.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 1bdd4c54c..e3a1691a2 100644
+index aa783a6fc..c02838357 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -48,6 +48,7 @@ xe-y += xe_bb.o \
+@@ -55,6 +55,7 @@ xe-y += xe_bb.o \
  	xe_gt_clock.o \
  	xe_gt_freq.o \
  	xe_gt_idle.o \
@@ -58,12 +59,12 @@ index 1bdd4c54c..e3a1691a2 100644
  	xe_gt_pagefault.o \
  	xe_gt_sysfs.o \
 diff --git a/drivers/gpu/drm/xe/regs/xe_engine_regs.h b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
-index 7742e2c90..6202d5903 100644
+index 73bef7202..0d851b6ca 100644
 --- a/drivers/gpu/drm/xe/regs/xe_engine_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
-@@ -135,6 +135,9 @@
- #define RING_EXECLIST_STATUS_LO(base)		XE_REG((base) + 0x234)
- #define RING_EXECLIST_STATUS_HI(base)		XE_REG((base) + 0x234 + 4)
+@@ -142,6 +142,9 @@
+ #define   INHIBIT_SWITCH_UNTIL_PREEMPTED       REG_BIT(31)
+ #define   IDLE_DELAY                           REG_GENMASK(20, 0)
  
 +#define RING_CURRENT_LRCA(base)			XE_REG((base) + 0x240)
 +#define   CURRENT_LRCA_VALID			REG_BIT(0)
@@ -72,10 +73,10 @@ index 7742e2c90..6202d5903 100644
  #define	  CTX_CTRL_OAC_CONTEXT_ENABLE		REG_BIT(8)
  #define	  CTX_CTRL_RUN_ALONE			REG_BIT(7)
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index cd8c49a90..a20331b6c 100644
+index ac060aa76..4b9020902 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -467,6 +467,8 @@
+@@ -485,6 +485,8 @@
  #define   DISABLE_ECC				REG_BIT(5)
  #define   ENABLE_PREFETCH_INTO_IC		REG_BIT(3)
  
@@ -84,7 +85,7 @@ index cd8c49a90..a20331b6c 100644
  #define ROW_CHICKEN4				XE_REG_MCR(0xe48c, XE_REG_OPTION_MASKED)
  #define   DISABLE_GRF_CLEAR			REG_BIT(13)
  #define   XEHP_DIS_BBL_SYSPIPE			REG_BIT(11)
-@@ -547,6 +549,11 @@
+@@ -570,6 +572,11 @@
  #define   CCS_MODE_CSLICE(cslice, ccs) \
  	((ccs) << ((cslice) * CCS_MODE_CSLICE_WIDTH))
  
@@ -97,10 +98,10 @@ index cd8c49a90..a20331b6c 100644
  
  /* Applicable for all FORCEWAKE_DOMAIN and FORCEWAKE_ACK_DOMAIN regs */
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 873e133a7..dd249180f 100644
+index 72c0368ba..5630cc79a 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -778,6 +778,8 @@ int xe_device_probe(struct xe_device *xe)
+@@ -844,6 +844,8 @@ int xe_device_probe(struct xe_device *xe)
  
  	xe_debugfs_register(xe);
  
@@ -110,10 +111,10 @@ index 873e133a7..dd249180f 100644
  
  	for_each_gt(gt, xe, id)
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index b62dc2567..eac8f4863 100644
+index 60eb87064..76f1ae8f3 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -564,6 +564,9 @@ struct xe_device {
+@@ -576,6 +576,9 @@ struct xe_device {
  
  		/** discovery_lock: used for discovery to block xe ioctls */
  		struct rw_semaphore discovery_lock;

@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 9 Jul 2025 19:40:36 +0200
+Subject: drm/xe/guc: Rename CT state change helper
+
+In this helper we are already doing much more than just setting
+a new CT state and its name was little misleading. Rename it.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Acked-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250709174038.1876-2-michal.wajdeczko@intel.com
+(backported from commit 1b822b7f564b8e06ac49509baad4468927a9f852 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_ct.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
+index f73bab722..d7914a58a 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ct.c
++++ b/drivers/gpu/drm/xe/xe_guc_ct.c
+@@ -376,7 +376,7 @@ static int guc_ct_control_toggle(struct xe_guc_ct *ct, bool enable)
+ 	return ret > 0 ? -EPROTO : ret;
+ }
+ 
+-static void xe_guc_ct_set_state(struct xe_guc_ct *ct,
++static void guc_ct_change_state(struct xe_guc_ct *ct,
+ 				enum xe_guc_ct_state state)
+ {
+ 	mutex_lock(&ct->lock);		/* Serialise dequeue_one_g2h() */
+@@ -461,7 +461,7 @@ int xe_guc_ct_enable(struct xe_guc_ct *ct)
+ 	if (err)
+ 		goto err_out;
+ 
+-	xe_guc_ct_set_state(ct, XE_GUC_CT_STATE_ENABLED);
++	guc_ct_change_state(ct, XE_GUC_CT_STATE_ENABLED);
+ 
+ 	smp_mb();
+ 	wake_up_all(&ct->wq);
+@@ -506,7 +506,7 @@ static void stop_g2h_handler(struct xe_guc_ct *ct)
+  */
+ void xe_guc_ct_disable(struct xe_guc_ct *ct)
+ {
+-	xe_guc_ct_set_state(ct, XE_GUC_CT_STATE_DISABLED);
++	guc_ct_change_state(ct, XE_GUC_CT_STATE_DISABLED);
+ 	ct_exit_safe_mode(ct);
+ 	stop_g2h_handler(ct);
+ }
+@@ -519,7 +519,7 @@ void xe_guc_ct_disable(struct xe_guc_ct *ct)
+  */
+ void xe_guc_ct_stop(struct xe_guc_ct *ct)
+ {
+-	xe_guc_ct_set_state(ct, XE_GUC_CT_STATE_STOPPED);
++	guc_ct_change_state(ct, XE_GUC_CT_STATE_STOPPED);
+ 	stop_g2h_handler(ct);
+ }
+ 
+-- 
+2.34.1
+

@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Harish Chegondi <harish.chegondi@intel.com>
+Date: Tue, 2 Sep 2025 16:41:59 -0700
+Subject: drm/xe/mcr: Make xe_gt_mcr_get_dss_steering() input gt
+ a const
+
+Make gt, input parameter to xe_gt_mcr_get_dss_steering(), a
+constant. This would allow xe_gt_mcr_get_dss_steering() to
+be called from functions that have gt as const to struct xe_gt.
+
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Reviewed-by: Matt Atwood <matthew.s.atwood@intel.com>
+Signed-off-by: Harish Chegondi <harish.chegondi@intel.com>
+Link: https://lore.kernel.org/r/9dc621a90880f62ac8e2951afea7952277f7eb0e.1756855529.git.harish.chegondi@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit 6ee8adf124102aa679d13b8c3cbe391f544ba90a linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_mcr.c | 2 +-
+ drivers/gpu/drm/xe/xe_gt_mcr.h | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_mcr.c b/drivers/gpu/drm/xe/xe_gt_mcr.c
+index a1676b787..d73b98b7d 100644
+--- a/drivers/gpu/drm/xe/xe_gt_mcr.c
++++ b/drivers/gpu/drm/xe/xe_gt_mcr.c
+@@ -357,7 +357,7 @@ static unsigned int dss_per_group(struct xe_gt *gt)
+  * @group: pointer to storage for steering group ID
+  * @instance: pointer to storage for steering instance ID
+  */
+-void xe_gt_mcr_get_dss_steering(struct xe_gt *gt, unsigned int dss, u16 *group, u16 *instance)
++void xe_gt_mcr_get_dss_steering(const struct xe_gt *gt, unsigned int dss, u16 *group, u16 *instance)
+ {
+ 	xe_gt_assert(gt, dss < XE_MAX_DSS_FUSE_BITS);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_gt_mcr.h b/drivers/gpu/drm/xe/xe_gt_mcr.h
+index bc06520be..283a1c977 100644
+--- a/drivers/gpu/drm/xe/xe_gt_mcr.h
++++ b/drivers/gpu/drm/xe/xe_gt_mcr.h
+@@ -31,7 +31,8 @@ bool xe_gt_mcr_get_nonterminated_steering(struct xe_gt *gt,
+ 					  u8 *group, u8 *instance);
+ 
+ void xe_gt_mcr_steering_dump(struct xe_gt *gt, struct drm_printer *p);
+-void xe_gt_mcr_get_dss_steering(struct xe_gt *gt, unsigned int dss, u16 *group, u16 *instance);
++void xe_gt_mcr_get_dss_steering(const struct xe_gt *gt,
++				unsigned int dss, u16 *group, u16 *instance);
+ u32 xe_gt_mcr_steering_info_to_dss_id(struct xe_gt *gt, u16 group, u16 instance);
+ 
+ /*
+-- 
+2.34.1
+

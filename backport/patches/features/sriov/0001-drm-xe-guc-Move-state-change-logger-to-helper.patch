@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 9 Jul 2025 19:40:37 +0200
+Subject: drm/xe/guc: Move state change logger to helper
+
+In the state change helper we are already doing extra stuff,
+move debug state logger there to cover all state changes.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Acked-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250709174038.1876-3-michal.wajdeczko@intel.com
+(backported from commit 4ecdcf9caf519fbab1aa01b431339387fed00fb8 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_ct.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
+index d7914a58a..30725b9ac 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ct.c
++++ b/drivers/gpu/drm/xe/xe_guc_ct.c
+@@ -379,6 +379,8 @@ static int guc_ct_control_toggle(struct xe_guc_ct *ct, bool enable)
+ static void guc_ct_change_state(struct xe_guc_ct *ct,
+ 				enum xe_guc_ct_state state)
+ {
++	struct xe_gt *gt = ct_to_gt(ct);
++
+ 	mutex_lock(&ct->lock);		/* Serialise dequeue_one_g2h() */
+ 	spin_lock_irq(&ct->fast_lock);	/* Serialise CT fast-path */
+ 
+@@ -390,6 +392,10 @@ static void guc_ct_change_state(struct xe_guc_ct *ct,
+ 	ct->g2h_outstanding = 0;
+ 	ct->state = state;
+ 
++	xe_gt_dbg(gt, "GuC CT communication channel %s\n",
++		  state == XE_GUC_CT_STATE_STOPPED ? "stopped" :
++		  str_enabled_disabled(state == XE_GUC_CT_STATE_ENABLED));
++
+ 	spin_unlock_irq(&ct->fast_lock);
+ 
+ 	/*
+@@ -465,7 +471,6 @@ int xe_guc_ct_enable(struct xe_guc_ct *ct)
+ 
+ 	smp_mb();
+ 	wake_up_all(&ct->wq);
+-	xe_gt_dbg(gt, "GuC CT communication channel enabled\n");
+ 
+ 	if (ct_needs_safe_mode(ct))
+ 		ct_enter_safe_mode(ct);
+-- 
+2.34.1
+

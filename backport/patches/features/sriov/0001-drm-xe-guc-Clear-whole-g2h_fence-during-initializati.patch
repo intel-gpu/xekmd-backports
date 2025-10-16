@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 23 Jul 2025 19:56:39 +0200
+Subject: drm/xe/guc: Clear whole g2h_fence during initialization
+
+The struct g2h_fence must be explicitly initializated using the
+g2h_fence_init() function to avoid trash values in its members,
+but we missed to update this helper function with the new member.
+
+To fix that and avoid any future mistakes, memset the whole struct
+first, then update remaining non-zero members.
+
+Fixes: 94de94d24ea8 ("drm/xe/guc: Cancel ongoing H2G requests when stopping CT")
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Lukasz Laguna <lukasz.laguna@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250723175639.206875-1-michal.wajdeczko@intel.com
+(cherry picked from commit 159afd92bae8153bdd8d8b34aea0d463fe19c978)
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(backported from commit a2e1407eb8405e59c56b2325d910a73fd917eb3e linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_ct.c | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
+index e891c80a1..bc30e7c5b 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ct.c
++++ b/drivers/gpu/drm/xe/xe_guc_ct.c
+@@ -95,12 +95,8 @@ struct g2h_fence {
+ 
+ static void g2h_fence_init(struct g2h_fence *g2h_fence, u32 *response_buffer)
+ {
++	memset(g2h_fence, 0, sizeof(*g2h_fence));
+ 	g2h_fence->response_buffer = response_buffer;
+-	g2h_fence->response_data = 0;
+-	g2h_fence->response_len = 0;
+-	g2h_fence->fail = false;
+-	g2h_fence->retry = false;
+-	g2h_fence->done = false;
+ 	g2h_fence->seqno = ~0x0;
+ }
+ 
+-- 
+2.34.1
+

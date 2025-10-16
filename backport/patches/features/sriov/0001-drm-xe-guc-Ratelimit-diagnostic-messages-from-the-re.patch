@@ -1,0 +1,83 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Sun, 5 Oct 2025 19:39:46 +0200
+Subject: [PATCH 61/62] drm/xe/guc: Ratelimit diagnostic messages from the
+ relay
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+There might be some malicious VFs that by sending an invalid VF2PF
+relay messages will flood PF's dmesg with our diagnostics messages.
+
+Rate limit all relay messages, unless running in DEBUG_SRIOV mode.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://lore.kernel.org/r/20251005173946.2784-1-michal.wajdeczko@intel.com
+---
+ drivers/gpu/drm/xe/xe_guc_relay.c       | 17 +++++++++++++++--
+ drivers/gpu/drm/xe/xe_guc_relay_types.h |  4 ++++
+ 2 files changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_relay.c b/drivers/gpu/drm/xe/xe_guc_relay.c
+index e5dc94f3e618..0c0ff24ba62a 100644
+--- a/drivers/gpu/drm/xe/xe_guc_relay.c
++++ b/drivers/gpu/drm/xe/xe_guc_relay.c
+@@ -56,9 +56,19 @@ static struct xe_device *relay_to_xe(struct xe_guc_relay *relay)
+ 	return gt_to_xe(relay_to_gt(relay));
+ }
+ 
++#define XE_RELAY_DIAG_RATELIMIT_INTERVAL	(10 * HZ)
++#define XE_RELAY_DIAG_RATELIMIT_BURST		10
++
++#define relay_ratelimit_printk(relay, _level, fmt...) ({			\
++	typeof(relay) _r = (relay);						\
++	if (IS_ENABLED(CONFIG_DRM_XE_DEBUG_SRIOV) ||				\
++	    ___ratelimit(&_r->diag_ratelimit, "xe_guc_relay"))			\
++		xe_gt_sriov_##_level(relay_to_gt(_r), "relay: " fmt);		\
++})
++
+ #define relay_assert(relay, condition)	xe_gt_assert(relay_to_gt(relay), condition)
+-#define relay_notice(relay, msg...)	xe_gt_sriov_notice(relay_to_gt(relay), "relay: " msg)
+-#define relay_debug(relay, msg...)	xe_gt_sriov_dbg_verbose(relay_to_gt(relay), "relay: " msg)
++#define relay_notice(relay, msg...)	relay_ratelimit_printk((relay), notice, msg)
++#define relay_debug(relay, msg...)	relay_ratelimit_printk((relay), dbg_verbose, msg)
+ 
+ static int relay_get_totalvfs(struct xe_guc_relay *relay)
+ {
+@@ -345,6 +355,9 @@ int xe_guc_relay_init(struct xe_guc_relay *relay)
+ 	INIT_WORK(&relay->worker, relays_worker_fn);
+ 	INIT_LIST_HEAD(&relay->pending_relays);
+ 	INIT_LIST_HEAD(&relay->incoming_actions);
++	ratelimit_state_init(&relay->diag_ratelimit,
++			     XE_RELAY_DIAG_RATELIMIT_INTERVAL,
++			     XE_RELAY_DIAG_RATELIMIT_BURST);
+ 
+ 	err = mempool_init_kmalloc_pool(&relay->pool, XE_RELAY_MEMPOOL_MIN_NUM +
+ 					relay_get_totalvfs(relay),
+diff --git a/drivers/gpu/drm/xe/xe_guc_relay_types.h b/drivers/gpu/drm/xe/xe_guc_relay_types.h
+index 5999fcb77e96..20eee10856b2 100644
+--- a/drivers/gpu/drm/xe/xe_guc_relay_types.h
++++ b/drivers/gpu/drm/xe/xe_guc_relay_types.h
+@@ -7,6 +7,7 @@
+ #define _XE_GUC_RELAY_TYPES_H_
+ 
+ #include <linux/mempool.h>
++#include <linux/ratelimit_types.h>
+ #include <linux/spinlock.h>
+ #include <linux/workqueue.h>
+ 
+@@ -31,6 +32,9 @@ struct xe_guc_relay {
+ 
+ 	/** @last_rid: last Relay-ID used while sending a message. */
+ 	u32 last_rid;
++
++	/** @diag_ratelimit: ratelimit state used to throttle diagnostics messages. */
++	struct ratelimit_state diag_ratelimit;
+ };
+ 
+ #endif
+-- 
+2.43.0
+

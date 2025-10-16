@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Mon, 8 Sep 2025 12:20:52 +0200
+Subject: [PATCH 53/62] drm/xe/guc: Don't invoke disable_ct action during
+ replacement
+
+During second CT initialization step, known as post_hwconfig, we
+want to replace previously registered CT disable devm action to
+make sure it will be invoked prior to releasing underlying BO.
+
+But to replace this action we don't need to execute it right away
+since we know that CT was disabled prior to that late init step
+and we already assert that. Use devm_remove_action() instead to
+avoid extra message about 'disabling CT' that could be seen now:
+
+ [drm:guc_ct_change_state [xe]] GT0: GuC CT communication channel disabled
+ ...
+ DEVRES REM ff11000149320940 guc_action_disable_ct (16 bytes)
+ [drm:guc_ct_change_state [xe]] GT0: GuC CT communication channel disabled
+ DEVRES ADD ff110001664fc040 guc_action_disable_ct (16 bytes)
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Link: https://lore.kernel.org/r/20250908102053.539-3-michal.wajdeczko@intel.com
+(cherry-picked from commit 43fac1b2f015daedc6046863f7664f3178f0bbe2 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_ct.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
+index 22eff8476ad4..4813fb2e7979 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ct.c
++++ b/drivers/gpu/drm/xe/xe_guc_ct.c
+@@ -306,7 +306,7 @@ int xe_guc_ct_init_post_hwconfig(struct xe_guc_ct *ct)
+ 			return ret;
+ 	}
+ 
+-	devm_release_action(xe->drm.dev, guc_action_disable_ct, ct);
++	devm_remove_action(xe->drm.dev, guc_action_disable_ct, ct);
+ 	return devm_add_action_or_reset(xe->drm.dev, guc_action_disable_ct, ct);
+ }
+ 
+-- 
+2.43.0
+

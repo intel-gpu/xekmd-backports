@@ -1,0 +1,95 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Sun, 28 Sep 2025 16:00:27 +0200
+Subject: [PATCH 58/62] drm/xe/debugfs: Promote xe_tile_debugfs_simple_show
+
+We will want to use this helper function in other files.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20250928140029.198847-6-michal.wajdeczko@intel.com
+(backported from commit 8cd71c40e989124425fbc97f1495f54db078c6d4 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_tile_debugfs.c | 12 ++++++------
+ drivers/gpu/drm/xe/xe_tile_debugfs.h |  3 +++
+ 2 files changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_tile_debugfs.c b/drivers/gpu/drm/xe/xe_tile_debugfs.c
+index 5523874cba7b..c6a813ecb653 100644
+--- a/drivers/gpu/drm/xe/xe_tile_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_tile_debugfs.c
+@@ -16,7 +16,7 @@ static struct xe_tile *node_to_tile(struct drm_info_node *node)
+ }
+ 
+ /**
+- * tile_debugfs_simple_show - A show callback for struct drm_info_list
++ * xe_tile_debugfs_simple_show() - A show callback for struct drm_info_list
+  * @m: the &seq_file
+  * @data: data used by the drm debugfs helpers
+  *
+@@ -57,7 +57,7 @@ static struct xe_tile *node_to_tile(struct drm_info_node *node)
+  *
+  * Return: 0 on success or a negative error code on failure.
+  */
+-static int tile_debugfs_simple_show(struct seq_file *m, void *data)
++int xe_tile_debugfs_simple_show(struct seq_file *m, void *data)
+ {
+ 	struct drm_printer p = drm_seq_file_printer(m);
+ 	struct drm_info_node *node = m->private;
+@@ -68,7 +68,7 @@ static int tile_debugfs_simple_show(struct seq_file *m, void *data)
+ }
+ 
+ /**
+- * tile_debugfs_show_with_rpm - A show callback for struct drm_info_list
++ * xe_tile_debugfs_show_with_rpm() - A show callback for struct drm_info_list
+  * @m: the &seq_file
+  * @data: data used by the drm debugfs helpers
+  *
+@@ -76,7 +76,7 @@ static int tile_debugfs_simple_show(struct seq_file *m, void *data)
+  *
+  * Return: 0 on success or a negative error code on failure.
+  */
+-static int tile_debugfs_show_with_rpm(struct seq_file *m, void *data)
++int xe_tile_debugfs_show_with_rpm(struct seq_file *m, void *data)
+ {
+ 	struct drm_info_node *node = m->private;
+ 	struct xe_tile *tile = node_to_tile(node);
+@@ -84,7 +84,7 @@ static int tile_debugfs_show_with_rpm(struct seq_file *m, void *data)
+ 	int ret;
+ 
+ 	xe_pm_runtime_get(xe);
+-	ret = tile_debugfs_simple_show(m, data);
++	ret = xe_tile_debugfs_simple_show(m, data);
+ 	xe_pm_runtime_put(xe);
+ 
+ 	return ret;
+@@ -100,7 +100,7 @@ static int sa_info(struct xe_tile *tile, struct drm_printer *p)
+ 
+ /* only for debugfs files which can be safely used on the VF */
+ static const struct drm_info_list vf_safe_debugfs_list[] = {
+-	{ "sa_info", .show = tile_debugfs_show_with_rpm, .data = sa_info },
++	{ "sa_info", .show = xe_tile_debugfs_show_with_rpm, .data = sa_info },
+ };
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_tile_debugfs.h b/drivers/gpu/drm/xe/xe_tile_debugfs.h
+index 0e5f724de37f..4429c22542f4 100644
+--- a/drivers/gpu/drm/xe/xe_tile_debugfs.h
++++ b/drivers/gpu/drm/xe/xe_tile_debugfs.h
+@@ -6,8 +6,11 @@
+ #ifndef _XE_TILE_DEBUGFS_H_
+ #define _XE_TILE_DEBUGFS_H_
+ 
++struct seq_file;
+ struct xe_tile;
+ 
+ void xe_tile_debugfs_register(struct xe_tile *tile);
++int xe_tile_debugfs_simple_show(struct seq_file *m, void *data);
++int xe_tile_debugfs_show_with_rpm(struct seq_file *m, void *data);
+ 
+ #endif
+-- 
+2.43.0
+

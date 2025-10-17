@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Piotr=20Pi=C3=B3rkowski?= <piotr.piorkowski@intel.com>
+Date: Fri, 3 Oct 2025 18:26:18 +0200
+Subject: [PATCH 11/12] drm/xe/pf: Force use user VRAM for LMEM provisioning
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The LMEM assigned to VFs should be allocated from the general-purpose
+VRAM pool, not from the kernel-reserved region.
+Let's force the use of general-purpose VRAM for BOs intended for VFs.
+
+Signed-off-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20251003162619.1984236-5-piotr.piorkowski@intel.com
+(cherry-picked from commit b48140f4465090b5b21110a9df9a9aa546c69152 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index cac375b5ff4a..915e416108c0 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -1481,7 +1481,8 @@ static int pf_provision_vf_lmem(struct xe_gt *gt, unsigned int vfid, u64 size)
+ 					 XE_BO_FLAG_VRAM_IF_DGFX(tile) |
+ 					 XE_BO_FLAG_NEEDS_2M |
+ 					 XE_BO_FLAG_PINNED |
+-					 XE_BO_FLAG_PINNED_LATE_RESTORE);
++					 XE_BO_FLAG_PINNED_LATE_RESTORE |
++					 XE_BO_FLAG_FORCE_USER_VRAM);
+ 	if (IS_ERR(bo))
+ 		return PTR_ERR(bo);
+ 
+-- 
+2.43.0
+

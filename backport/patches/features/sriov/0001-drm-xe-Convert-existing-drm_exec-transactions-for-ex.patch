@@ -1,0 +1,440 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Thomas=20Hellstr=C3=B6m?= <thomas.hellstrom@linux.intel.com>
+Date: Mon, 8 Sep 2025 12:12:38 +0200
+Subject: [PATCH 05/16] drm/xe: Convert existing drm_exec transactions for
+ exhaustive eviction
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Convert existing drm_exec transactions, like GT pagefault validation,
+non-LR exec() IOCTL and the rebind worker to support
+exhaustive eviction using the xe_validation_guard().
+
+v2:
+- Adapt to signature change in xe_validation_guard() (Matt Brost)
+- Avoid gotos from within xe_validation_guard() (Matt Brost)
+- Check error return from xe_validation_guard()
+
+v3:
+- Rebase on gpu_madvise()
+
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com> #v1
+Link: https://lore.kernel.org/r/20250908101246.65025-6-thomas.hellstrom@linux.intel.com
+(backported from commit 8f25e5abcbfb9cbcd923021774f2e785db3f7f55 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec.c         |  20 ++--
+ drivers/gpu/drm/xe/xe_gt_pagefault.c |  20 ++--
+ drivers/gpu/drm/xe/xe_vm.c           | 137 ++++++++++++---------------
+ drivers/gpu/drm/xe/xe_vm.h           |   2 -
+ 4 files changed, 75 insertions(+), 104 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec.c b/drivers/gpu/drm/xe/xe_exec.c
+index a07138803f11..93c1030a4663 100644
+--- a/drivers/gpu/drm/xe/xe_exec.c
++++ b/drivers/gpu/drm/xe/xe_exec.c
+@@ -119,10 +119,10 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+ 	struct drm_gpuvm_exec vm_exec = {.extra.fn = xe_exec_fn};
+ 	struct drm_exec *exec = &vm_exec.exec;
+ 	u32 i, num_syncs, num_ufence = 0;
++	struct xe_validation_ctx ctx;
+ 	struct xe_sched_job *job;
+ 	struct xe_vm *vm;
+ 	bool write_locked, skip_retry = false;
+-	ktime_t end = 0;
+ 	int err = 0;
+ 	struct xe_hw_engine_group *group;
+ 	enum xe_hw_engine_group_execution_mode mode, previous_mode;
+@@ -250,17 +250,12 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+ 	if (err)
+ 		goto err_unlock_list;
+ 
+-	vm_exec.vm = &vm->gpuvm;
+-	vm_exec.flags = DRM_EXEC_INTERRUPTIBLE_WAIT;
+-	if (xe_vm_in_lr_mode(vm)) {
+-		drm_exec_init(exec, vm_exec.flags, 0);
+-	} else {
+-		err = drm_gpuvm_exec_lock(&vm_exec);
+-		if (err) {
+-			if (xe_vm_validate_should_retry(exec, err, &end))
+-				err = -EAGAIN;
++	if (!xe_vm_in_lr_mode(vm)) {
++		vm_exec.vm = &vm->gpuvm;
++		vm_exec.flags = DRM_EXEC_INTERRUPTIBLE_WAIT;
++		err = xe_validation_exec_lock(&ctx, &vm_exec, &xe->val);
++		if (err)
+ 			goto err_unlock_list;
+-		}
+ 	}
+ 
+ 	if (xe_vm_is_closed_or_banned(q->vm)) {
+@@ -354,7 +349,8 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+ 	if (err)
+ 		xe_sched_job_put(job);
+ err_exec:
+-	drm_exec_fini(exec);
++	if (!xe_vm_in_lr_mode(vm))
++		xe_validation_ctx_fini(&ctx);
+ err_unlock_list:
+ 	up_read(&vm->lock);
+ 	if (err == -EAGAIN && !skip_retry)
+diff --git a/drivers/gpu/drm/xe/xe_gt_pagefault.c b/drivers/gpu/drm/xe/xe_gt_pagefault.c
+index 4133b9b78f7d..6ef448bd331b 100644
+--- a/drivers/gpu/drm/xe/xe_gt_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_gt_pagefault.c
+@@ -112,9 +112,9 @@ static int handle_vma_pagefault(struct xe_gt *gt, struct xe_vma *vma,
+ {
+ 	struct xe_vm *vm = xe_vma_vm(vma);
+ 	struct xe_tile *tile = gt_to_tile(gt);
++	struct xe_validation_ctx ctx;
+ 	struct drm_exec exec;
+ 	struct dma_fence *fence;
+-	ktime_t end = 0;
+ 	int err;
+ 
+ 	lockdep_assert_held_write(&vm->lock);
+@@ -139,12 +139,11 @@ static int handle_vma_pagefault(struct xe_gt *gt, struct xe_vma *vma,
+ 	}
+ 
+ 	/* Lock VM and BOs dma-resv */
+-	drm_exec_init(&exec, 0, 0);
++	xe_validation_ctx_init(&ctx, &vm->xe->val, &exec, (struct xe_val_flags) {});
+ 	drm_exec_until_all_locked(&exec) {
+ 		err = xe_pf_begin(&exec, vma, atomic, tile->mem.vram);
+ 		drm_exec_retry_on_contention(&exec);
+-		if (xe_vm_validate_should_retry(&exec, err, &end))
+-			err = -EAGAIN;
++		xe_validation_retry_on_oom(&ctx, &err);
+ 		if (err)
+ 			goto unlock_dma_resv;
+ 
+@@ -155,8 +154,7 @@ static int handle_vma_pagefault(struct xe_gt *gt, struct xe_vma *vma,
+ 		xe_vm_set_validation_exec(vm, NULL);
+ 		if (IS_ERR(fence)) {
+ 			err = PTR_ERR(fence);
+-			if (xe_vm_validate_should_retry(&exec, err, &end))
+-				err = -EAGAIN;
++			xe_validation_retry_on_oom(&ctx, &err);
+ 			goto unlock_dma_resv;
+ 		}
+ 	}
+@@ -165,7 +163,7 @@ static int handle_vma_pagefault(struct xe_gt *gt, struct xe_vma *vma,
+ 	dma_fence_put(fence);
+ 
+ unlock_dma_resv:
+-	drm_exec_fini(&exec);
++	xe_validation_ctx_fini(&ctx);
+ 	if (err == -EAGAIN)
+ 		goto retry_userptr;
+ 
+@@ -547,6 +545,7 @@ static int handle_acc(struct xe_gt *gt, struct acc *acc)
+ {
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	struct xe_tile *tile = gt_to_tile(gt);
++	struct xe_validation_ctx ctx;
+ 	struct drm_exec exec;
+ 	struct xe_vm *vm;
+ 	struct xe_vma *vma;
+@@ -576,15 +575,14 @@ static int handle_acc(struct xe_gt *gt, struct acc *acc)
+ 		goto unlock_vm;
+ 
+ 	/* Lock VM and BOs dma-resv */
+-	drm_exec_init(&exec, 0, 0);
++	xe_validation_ctx_init(&ctx, &vm->xe->val, &exec, (struct xe_val_flags) {});
+ 	drm_exec_until_all_locked(&exec) {
+ 		ret = xe_pf_begin(&exec, vma, true, tile->mem.vram);
+ 		drm_exec_retry_on_contention(&exec);
+-		if (ret)
+-			break;
++		xe_validation_retry_on_oom(&ctx, &ret);
+ 	}
+ 
+-	drm_exec_fini(&exec);
++	xe_validation_ctx_fini(&ctx);
+ unlock_vm:
+ 	up_read(&vm->lock);
+ 	xe_vm_put(vm);
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index 3500ab087205..e9c842b052ae 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -241,6 +241,7 @@ int xe_vm_add_compute_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
+ 		.num_fences = 1,
+ 	};
+ 	struct drm_exec *exec = &vm_exec.exec;
++	struct xe_validation_ctx ctx;
+ 	struct dma_fence *pfence;
+ 	int err;
+ 	bool wait;
+@@ -248,7 +249,7 @@ int xe_vm_add_compute_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
+ 	xe_assert(vm->xe, xe_vm_in_preempt_fence_mode(vm));
+ 
+ 	down_write(&vm->lock);
+-	err = drm_gpuvm_exec_lock(&vm_exec);
++	err = xe_validation_exec_lock(&ctx, &vm_exec, &vm->xe->val);
+ 	if (err)
+ 		goto out_up_write;
+ 
+@@ -280,7 +281,7 @@ int xe_vm_add_compute_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
+ 	up_read(&vm->userptr.notifier_lock);
+ 
+ out_fini:
+-	drm_exec_fini(exec);
++	xe_validation_ctx_fini(&ctx);
+ out_up_write:
+ 	up_write(&vm->lock);
+ 
+@@ -363,39 +364,6 @@ void xe_vm_kill(struct xe_vm *vm, bool unlocked)
+ 	/* TODO: Inform user the VM is banned */
+ }
+ 
+-/**
+- * xe_vm_validate_should_retry() - Whether to retry after a validate error.
+- * @exec: The drm_exec object used for locking before validation.
+- * @err: The error returned from ttm_bo_validate().
+- * @end: A ktime_t cookie that should be set to 0 before first use and
+- * that should be reused on subsequent calls.
+- *
+- * With multiple active VMs, under memory pressure, it is possible that
+- * ttm_bo_validate() run into -EDEADLK and in such case returns -ENOMEM.
+- * Until ttm properly handles locking in such scenarios, best thing the
+- * driver can do is retry with a timeout. Check if that is necessary, and
+- * if so unlock the drm_exec's objects while keeping the ticket to prepare
+- * for a rerun.
+- *
+- * Return: true if a retry after drm_exec_init() is recommended;
+- * false otherwise.
+- */
+-bool xe_vm_validate_should_retry(struct drm_exec *exec, int err, ktime_t *end)
+-{
+-	ktime_t cur;
+-
+-	if (err != -ENOMEM)
+-		return false;
+-
+-	cur = ktime_get();
+-	*end = *end ? : ktime_add_ms(cur, XE_VM_REBIND_RETRY_TIMEOUT_MS);
+-	if (!ktime_before(cur, *end))
+-		return false;
+-
+-	msleep(20);
+-	return true;
+-}
+-
+ static int xe_gpuvm_validate(struct drm_gpuvm_bo *vm_bo, struct drm_exec *exec)
+ {
+ 	struct xe_vm *vm = gpuvm_to_vm(vm_bo->vm);
+@@ -526,10 +494,10 @@ void xe_vm_resume_rebind_worker(struct xe_vm *vm)
+ static void preempt_rebind_work_func(struct work_struct *w)
+ {
+ 	struct xe_vm *vm = container_of(w, struct xe_vm, preempt.rebind_work);
++	struct xe_validation_ctx ctx;
+ 	struct drm_exec exec;
+ 	unsigned int fence_count = 0;
+ 	LIST_HEAD(preempt_fences);
+-	ktime_t end = 0;
+ 	int err = 0;
+ 	long wait;
+ 	int __maybe_unused tries = 0;
+@@ -557,18 +525,19 @@ static void preempt_rebind_work_func(struct work_struct *w)
+ 			goto out_unlock_outer;
+ 	}
+ 
+-	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 0);
++	err = xe_validation_ctx_init(&ctx, &vm->xe->val, &exec,
++				     (struct xe_val_flags) {.interruptible = true});
++	if (err)
++		goto out_unlock_outer;
+ 
+ 	drm_exec_until_all_locked(&exec) {
+ 		bool done = false;
+ 
+ 		err = xe_preempt_work_begin(&exec, vm, &done);
+ 		drm_exec_retry_on_contention(&exec);
++		xe_validation_retry_on_oom(&ctx, &err);
+ 		if (err || done) {
+-			drm_exec_fini(&exec);
+-			if (err && xe_vm_validate_should_retry(&exec, err, &end))
+-				err = -EAGAIN;
+-
++			xe_validation_ctx_fini(&ctx);
+ 			goto out_unlock_outer;
+ 		}
+ 	}
+@@ -616,7 +585,7 @@ static void preempt_rebind_work_func(struct work_struct *w)
+ 	up_read(&vm->userptr.notifier_lock);
+ 
+ out_unlock:
+-	drm_exec_fini(&exec);
++	xe_validation_ctx_fini(&ctx);
+ out_unlock_outer:
+ 	if (err == -EAGAIN) {
+ 		trace_xe_vm_rebind_worker_retry(vm);
+@@ -1432,20 +1401,19 @@ int xe_vm_lock_vma(struct drm_exec *exec, struct xe_vma *vma)
+ 
+ static void xe_vma_destroy_unlocked(struct xe_vma *vma)
+ {
++	struct xe_device *xe = xe_vma_vm(vma)->xe;
++	struct xe_validation_ctx ctx;
+ 	struct drm_exec exec;
+-	int err;
++	int err = 0;
+ 
+-	drm_exec_init(&exec, 0, 0);
+-	drm_exec_until_all_locked(&exec) {
++	xe_validation_guard(&ctx, &xe->val, &exec, (struct xe_val_flags) {}, err) {
+ 		err = xe_vm_lock_vma(&exec, vma);
+ 		drm_exec_retry_on_contention(&exec);
+ 		if (XE_WARN_ON(err))
+ 			break;
++		xe_vma_destroy(vma, NULL);
+ 	}
+-
+-	xe_vma_destroy(vma, NULL);
+-
+-	drm_exec_fini(&exec);
++	xe_assert(xe, !err);
+ }
+ 
+ struct xe_vma *
+@@ -2503,6 +2471,7 @@ static struct xe_vma *new_vma(struct xe_vm *vm, struct drm_gpuva_op_map *op,
+ 			      u16 pat_index, unsigned int flags)
+ {
+ 	struct xe_bo *bo = op->gem.obj ? gem_to_xe_bo(op->gem.obj) : NULL;
++	struct xe_validation_ctx ctx;
+ 	struct drm_exec exec;
+ 	struct xe_vma *vma;
+ 	int err = 0;
+@@ -2510,9 +2479,9 @@ static struct xe_vma *new_vma(struct xe_vm *vm, struct drm_gpuva_op_map *op,
+ 	lockdep_assert_held_write(&vm->lock);
+ 
+ 	if (bo) {
+-		drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 0);
+-		drm_exec_until_all_locked(&exec) {
+-			err = 0;
++		err = 0;
++		xe_validation_guard(&ctx, &vm->xe->val, &exec,
++				    (struct xe_val_flags) {.interruptible = true}, err) {
+ 			if (!bo->vm) {
+ 				err = drm_exec_lock_obj(&exec, xe_vm_obj(vm));
+ 				drm_exec_retry_on_contention(&exec);
+@@ -2521,26 +2490,36 @@ static struct xe_vma *new_vma(struct xe_vm *vm, struct drm_gpuva_op_map *op,
+ 				err = drm_exec_lock_obj(&exec, &bo->ttm.base);
+ 				drm_exec_retry_on_contention(&exec);
+ 			}
+-			if (err) {
+-				drm_exec_fini(&exec);
++			if (err)
+ 				return ERR_PTR(err);
++
++			vma = xe_vma_create(vm, bo, op->gem.offset,
++					op->va.addr, op->va.addr +
++					op->va.range - 1, pat_index, flags);
++			if (IS_ERR(vma))
++				return vma;
++
++			if (!bo->vm) {
++				err = add_preempt_fences(vm, bo);
++				if (err) {
++					prep_vma_destroy(vm, vma, false);
++					xe_vma_destroy(vma, NULL);
++				}
+ 			}
+ 		}
+-	}
+-	vma = xe_vma_create(vm, bo, op->gem.offset,
+-			    op->va.addr, op->va.addr +
+-			    op->va.range - 1, pat_index, flags);
+-	if (IS_ERR(vma))
+-		goto err_unlock;
+ 
+-	if (xe_vma_is_userptr(vma))
+-		err = xe_vma_userptr_pin_pages(to_userptr_vma(vma));
+-	else if (!xe_vma_has_no_bo(vma) && !bo->vm)
+-		err = add_preempt_fences(vm, bo);
++		if (err)
++			return ERR_PTR(err);
++	} else {
++		vma = xe_vma_create(vm, NULL, op->gem.offset,
++				op->va.addr, op->va.addr +
++				op->va.range - 1, pat_index, flags);
++		if (IS_ERR(vma))
++			return vma;
+ 
+-err_unlock:
+-	if (bo)
+-		drm_exec_fini(&exec);
++		if (xe_vma_is_userptr(vma))
++			err = xe_vma_userptr_pin_pages(to_userptr_vma(vma));
++	}
+ 
+ 	if (err) {
+ 		prep_vma_destroy(vm, vma, false);
+@@ -3308,21 +3287,23 @@ static void vm_bind_ioctl_ops_fini(struct xe_vm *vm, struct xe_vma_ops *vops,
+ static struct dma_fence *vm_bind_ioctl_ops_execute(struct xe_vm *vm,
+ 						   struct xe_vma_ops *vops)
+ {
++	struct xe_validation_ctx ctx;
+ 	struct drm_exec exec;
+ 	struct dma_fence *fence;
+-	int err;
++	int err = 0;
+ 
+ 	lockdep_assert_held_write(&vm->lock);
+ 
+-	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT |
+-		      DRM_EXEC_IGNORE_DUPLICATES, 0);
+-	drm_exec_until_all_locked(&exec) {
++	xe_validation_guard(&ctx, &vm->xe->val, &exec,
++			    ((struct xe_val_flags) {
++				    .interruptible = true,
++				    .exec_ignore_duplicates = true,
++			    }), err) {
+ 		err = vm_bind_ioctl_ops_lock_and_prep(&exec, vm, vops);
+ 		drm_exec_retry_on_contention(&exec);
+-		if (err) {
+-			fence = ERR_PTR(err);
+-			goto unlock;
+-		}
++		xe_validation_retry_on_oom(&ctx, &err);
++		if (err)
++			return ERR_PTR(err);
+ 
+ 		xe_vm_set_validation_exec(vm, &exec);
+ 		fence = ops_execute(vm, vops);
+@@ -3330,15 +3311,13 @@ static struct dma_fence *vm_bind_ioctl_ops_execute(struct xe_vm *vm,
+ 		if (IS_ERR(fence)) {
+ 			if (PTR_ERR(fence) == -ENODATA)
+ 				vm_bind_ioctl_ops_fini(vm, vops, NULL);
+-			goto unlock;
++			return fence;
+ 		}
+ 
+ 		vm_bind_ioctl_ops_fini(vm, vops, fence);
+ 	}
+ 
+-unlock:
+-	drm_exec_fini(&exec);
+-	return fence;
++	return err ? ERR_PTR(err) : fence;
+ }
+ ALLOW_ERROR_INJECTION(vm_bind_ioctl_ops_execute, ERRNO);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
+index edb1c4ce5775..905fc518a5c7 100644
+--- a/drivers/gpu/drm/xe/xe_vm.h
++++ b/drivers/gpu/drm/xe/xe_vm.h
+@@ -262,8 +262,6 @@ int xe_vma_userptr_pin_pages(struct xe_userptr_vma *uvma);
+ 
+ int xe_vma_userptr_check_repin(struct xe_userptr_vma *uvma);
+ 
+-bool xe_vm_validate_should_retry(struct drm_exec *exec, int err, ktime_t *end);
+-
+ int xe_vm_lock_vma(struct drm_exec *exec, struct xe_vma *vma);
+ 
+ int xe_vm_validate_rebind(struct xe_vm *vm, struct drm_exec *exec,
+-- 
+2.43.0
+

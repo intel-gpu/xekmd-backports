@@ -1,0 +1,132 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:13 -0700
+Subject: [PATCH] drm/xe/vf: Teardown VF post migration worker on driver unload
+
+Be cautious and ensure the VF post-migration worker is not running
+during driver unload.
+
+v3:
+ - More teardown later in driver init, use devm (Tomasz)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Tomasz Lis <tomasz.lis@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-16-matthew.brost@intel.com
+(cherry-picked from commit b47c0c07c35022c56a7ab4d3ce8a9c5f8cce8453 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt.c                |  6 ++++
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c       | 34 ++++++++++++++++++++++-
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.h       |  1 +
+ drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h |  4 ++-
+ 4 files changed, 43 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index 940931938edd..b1e71455140b 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -653,6 +653,12 @@ int xe_gt_init(struct xe_gt *gt)
+ 	if (err)
+ 		return err;
+ 
++	if (IS_SRIOV_VF(gt_to_xe(gt))) {
++		err = xe_gt_sriov_vf_init(gt);
++		if (err)
++			return err;
++	}
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index a16f33fea4fc..1aae4e40a366 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -725,7 +725,8 @@ static void vf_start_migration_recovery(struct xe_gt *gt)
+ 
+ 	spin_lock(&gt->sriov.vf.migration.lock);
+ 
+-	if (!gt->sriov.vf.migration.recovery_queued) {
++	if (!gt->sriov.vf.migration.recovery_queued ||
++	    !gt->sriov.vf.migration.recovery_teardown) {
+ 		gt->sriov.vf.migration.recovery_queued = true;
+ 		WRITE_ONCE(gt->sriov.vf.migration.recovery_inprogress, true);
+ 
+@@ -1206,6 +1207,17 @@ static void migration_worker_func(struct work_struct *w)
+ 	vf_post_migration_recovery(gt);
+ }
+ 
++static void vf_migration_fini(void *arg)
++{
++	struct xe_gt *gt = arg;
++
++	spin_lock_irq(&gt->sriov.vf.migration.lock);
++	gt->sriov.vf.migration.recovery_teardown = true;
++	spin_unlock_irq(&gt->sriov.vf.migration.lock);
++
++	cancel_work_sync(&gt->sriov.vf.migration.worker);
++}
++
+ /**
+  * xe_gt_sriov_vf_init_early() - GT VF init early
+  * @gt: the &xe_gt
+@@ -1232,6 +1244,26 @@ int xe_gt_sriov_vf_init_early(struct xe_gt *gt)
+ 	return 0;
+ }
+ 
++/**
++ * xe_gt_sriov_vf_init() - GT VF init
++ * @gt: the &xe_gt
++ *
++ * Return 0 on success, errno on failure
++ */
++int xe_gt_sriov_vf_init(struct xe_gt *gt)
++{
++	if (!xe_sriov_vf_migration_supported(gt_to_xe(gt)))
++		return 0;
++
++	/*
++	 * We want to tear down the VF post-migration early during driver
++	 * unload; therefore, we add this finalization action later during
++	 * driver load.
++	 */
++	return devm_add_action_or_reset(gt_to_xe(gt)->drm.dev,
++					vf_migration_fini, gt);
++}
++
+ /**
+  * xe_gt_sriov_vf_recovery_pending() - VF post migration recovery pending
+  * @gt: the &xe_gt
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.h b/drivers/gpu/drm/xe/xe_gt_sriov_vf.h
+index 2eb793a2d8ba..1d2eaa52f804 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.h
+@@ -24,6 +24,7 @@ int xe_gt_sriov_vf_query_runtime(struct xe_gt *gt);
+ void xe_gt_sriov_vf_migrated_event_handler(struct xe_gt *gt);
+ 
+ int xe_gt_sriov_vf_init_early(struct xe_gt *gt);
++int xe_gt_sriov_vf_init(struct xe_gt *gt);
+ bool xe_gt_sriov_vf_recovery_pending(struct xe_gt *gt);
+ 
+ u32 xe_gt_sriov_vf_gmdid(struct xe_gt *gt);
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
+index 0d9e217989af..bdd9b968f204 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
+@@ -45,10 +45,12 @@ struct xe_gt_sriov_vf_runtime {
+ struct xe_gt_sriov_vf_migration {
+ 	/** @migration: VF migration recovery worker */
+ 	struct work_struct worker;
+-	/** @lock: Protects recovery_queued */
++	/** @lock: Protects recovery_queued, teardown */
+ 	spinlock_t lock;
+ 	/** @scratch: Scratch memory for VF recovery */
+ 	void *scratch;
++	/** @recovery_teardown: VF post migration recovery is being torn down */
++	bool recovery_teardown;
+ 	/** @recovery_queued: VF post migration recovery in queued */
+ 	bool recovery_queued;
+ 	/** @recovery_inprogress: VF post migration recovery in progress */
+-- 
+2.43.0
+

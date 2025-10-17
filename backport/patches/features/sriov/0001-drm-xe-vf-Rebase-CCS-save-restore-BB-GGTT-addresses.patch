@@ -1,0 +1,103 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:31 -0700
+Subject: [PATCH] drm/xe/vf: Rebase CCS save/restore BB GGTT addresses
+
+Rebase the CCS save/restore BB's GGTT addresses during VF post-migration
+recovery by setting the software ring tail to zero, the LRC ring head to
+zero, and rewriting the jump-to-BB instructions.
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-34-matthew.brost@intel.com
+(cherry-picked from commit 8f1e1e524cd8c0456edf2917c4296ad0260d7051 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c  |  4 ++++
+ drivers/gpu/drm/xe/xe_sriov_vf_ccs.c | 28 ++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_vf_ccs.h |  1 +
+ 3 files changed, 33 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index b527f78da295..46518e629ba3 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -34,6 +34,7 @@
+ #include "xe_pm.h"
+ #include "xe_sriov.h"
+ #include "xe_sriov_vf.h"
++#include "xe_sriov_vf_ccs.h"
+ #include "xe_tile_sriov_vf.h"
+ #include "xe_tlb_inval.h"
+ #include "xe_uc_fw.h"
+@@ -1149,6 +1150,9 @@ static int vf_post_migration_fixups(struct xe_gt *gt)
+ 	if (err)
+ 		return err;
+ 
++	if (xe_gt_is_main_type(gt))
++		xe_sriov_vf_ccs_rebase(gt_to_xe(gt));
++
+ 	xe_gt_sriov_vf_default_lrcs_hwsp_rebase(gt);
+ 	err = xe_guc_contexts_hwsp_rebase(&gt->uc.guc, buf);
+ 	if (err)
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
+index 8dec616c37c9..790249801364 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
++++ b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
+@@ -175,6 +175,15 @@ static void ccs_rw_update_ring(struct xe_sriov_vf_ccs_ctx *ctx)
+ 	struct xe_lrc *lrc = xe_exec_queue_lrc(ctx->mig_q);
+ 	u32 dw[10], i = 0;
+ 
++	/*
++	 * XXX: Save/restore fixes — for some reason, the GuC only accepts the
++	 * save/restore context if the LRC head pointer is zero. This is evident
++	 * from repeated VF migrations failing when the LRC head pointer is
++	 * non-zero.
++	 */
++	lrc->ring.tail = 0;
++	xe_lrc_set_ring_head(lrc, 0);
++
+ 	dw[i++] = MI_ARB_ON_OFF | MI_ARB_ENABLE;
+ 	dw[i++] = MI_BATCH_BUFFER_START | XE_INSTR_NUM_DW(3);
+ 	dw[i++] = lower_32_bits(addr);
+@@ -186,6 +195,25 @@ static void ccs_rw_update_ring(struct xe_sriov_vf_ccs_ctx *ctx)
+ 	xe_lrc_set_ring_tail(lrc, lrc->ring.tail);
+ }
+ 
++/**
++ * xe_sriov_vf_ccs_rebase - Rebase GGTT addresses for CCS save / restore
++ * @xe: the &xe_device.
++ */
++void xe_sriov_vf_ccs_rebase(struct xe_device *xe)
++{
++	enum xe_sriov_vf_ccs_rw_ctxs ctx_id;
++
++	if (!IS_VF_CCS_READY(xe))
++		return;
++
++	for_each_ccs_rw_ctx(ctx_id) {
++		struct xe_sriov_vf_ccs_ctx *ctx =
++			&xe->sriov.vf.ccs.contexts[ctx_id];
++
++		ccs_rw_update_ring(ctx);
++	}
++}
++
+ static int register_save_restore_context(struct xe_sriov_vf_ccs_ctx *ctx)
+ {
+ 	int ctx_type;
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.h b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.h
+index 0745c0ff0228..f8ca6efce9ee 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.h
++++ b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.h
+@@ -18,6 +18,7 @@ int xe_sriov_vf_ccs_init(struct xe_device *xe);
+ int xe_sriov_vf_ccs_attach_bo(struct xe_bo *bo);
+ int xe_sriov_vf_ccs_detach_bo(struct xe_bo *bo);
+ int xe_sriov_vf_ccs_register_context(struct xe_device *xe);
++void xe_sriov_vf_ccs_rebase(struct xe_device *xe);
+ void xe_sriov_vf_ccs_print(struct xe_device *xe, struct drm_printer *p);
+ 
+ static inline bool xe_sriov_vf_ccs_ready(struct xe_device *xe)
+-- 
+2.43.0
+

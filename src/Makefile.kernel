@@ -1,0 +1,52 @@
+ifeq ($(CONFIG_BACKPORT_INTEGRATE),)
+# Since 2.6.21, try-run is available, but cc-disable-warning
+# was only added later, so we add it here ourselves:
+backport-cc-disable-warning = $(call try-run,\
+	$(CC) $(KBUILD_CPPFLAGS) $(KBUILD_CFLAGS) -W$(strip $(1)) -c -x c /dev/null -o "$$TMP",-Wno-$(strip $(1)))
+
+NOSTDINC_FLAGS += \
+	-I$(M)/backport-include/ \
+	-I$(M)/include/ \
+	-I$(M)/include/drm \
+	-I$(M)/include/uapi \
+	-include $(M)/backport-include/backport/backport.h \
+	$(call backport-cc-disable-warning, unused-but-set-variable) \
+	-DCPTCFG_BACKPORTS_RELEASE_TAG=\"$(BACKPORTS_RELEASE_TAG)\" \
+	-DCPTCFG_BASE_KERNEL_HEAD=\"$(BASE_KERNEL_HEAD)\" \
+	-DCPTCFG_KERNEL_NAME=\"$(KERNEL_NAME)\" \
+	-DCPTCFG_BASE_KERNEL_TAG=\"$(BASE_KERNEL_TAG)\" \
+	-DCPTCFG_TARGET_KERNEL_NAME=\"$(TARGET_KERNEL_NAME)\" \
+	-DCPTCFG_OOT_BACKPORT=\"$(OOT_BACKPORT)\" \
+	$(BACKPORTS_GIT_TRACKER_DEF) \
+	$(CFLAGS)
+
+export backport_srctree = $(M)
+else
+export BACKPORT_DIR = backports/
+export backport_srctree = $(BACKPORT_DIR)
+NOSTDINC_FLAGS += \
+	-I$(BACKPORT_DIR)/backport-include/ \
+	-I$(BACKPORT_DIR)/include/ \
+	-I$(BACKPORT_DIR)/include/drm \
+	-I$(BACKPORT_DIR)/include/uapi \
+	-include $(BACKPORT_DIR)/backport-include/backport/backport.h \
+	$(CFLAGS)
+endif
+
+subdir-ccflags-y := $(call cc-option, -fno-pie) $(call cc-option, -no-pie)
+
+subdir-ccflags-y += -std=gnu11
+
+obj-y += compat/
+
+# XE Drivers
+obj-$(CPTCFG_DRM_XE) += drivers/gpu/drm/xe/
+obj-$(CPTCFG_DRM_TTM)   += drivers/gpu/drm/ttm/
+obj-$(CPTCFG_DRM_SCHED) += drivers/gpu/drm/scheduler/
+drm_ttm_helper-y := drivers/gpu/drm/drm_gem_ttm_helper.o
+obj-$(CPTCFG_DRM_TTM_HELPER) += drm_ttm_helper.o
+# Only compile drm_gpuvm if config is enabled and base kernel doesn't have it
+ifneq ($(filter m y, $(CPTCFG_DRM_GPUVM)),)
+obj-$(CPTCFG_DRM_GPUVM) += drm_gpuvm.o
+drm_gpuvm-y := drivers/gpu/drm/drm_gpuvm.o
+endif

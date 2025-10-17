@@ -1,0 +1,121 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config DRM_GPUVM
+	tristate "Enable Xe-specific DRM GPUVM support"
+	depends on m
+	depends on DRM
+	depends on BUILD_XE_DRM_GPUVM
+	default m
+	help
+	  GPU-VM representation providing helpers to manage a GPUs virtual
+          address space (Xe-specific backport version)
+config DRM_XE
+	tristate "Intel Xe Graphics"
+	depends on m
+	depends on DRM && PCI && MMU && (m || (y && KUNIT=y))
+	depends on INTERVAL_TREE
+	# we need shmfs for the swappable backing store, and in particular
+	# the shmem_readpage() which depends upon tmpfs
+	depends on SHMEM
+	depends on TMPFS
+	depends on DRM_BUDDY
+	#select DRM_CLIENT_SELECTION
+	depends on DRM_EXEC
+	#select DRM_KMS_HELPER
+	select DRM_KUNIT_TEST_HELPERS if DRM_XE_KUNIT_TEST != n
+	#select DRM_PANEL
+	#select DRM_SUBALLOC_HELPER
+	#select DRM_DISPLAY_DP_HELPER
+	#select DRM_DISPLAY_DSC_HELPER
+	#select DRM_DISPLAY_HDCP_HELPER
+	#select DRM_DISPLAY_HDMI_HELPER
+	#select DRM_DISPLAY_HELPER
+	#select DRM_MIPI_DSI
+	depends on RELAY
+	depends on IRQ_WORK
+	# xe depends on ACPI_VIDEO when ACPI is enabled
+	# but for select to work, need to select ACPI_VIDEO's dependencies, ick
+	select BACKLIGHT_CLASS_DEVICE if ACPI
+	select INPUT if ACPI
+	select ACPI_VIDEO if X86 && ACPI
+	select X86_PLATFORM_DEVICES if X86 && ACPI
+	select ACPI_WMI if X86 && ACPI
+	depends on SYNC_FILE
+	depends on IOSF_MBI
+	depends on CRC32
+	select SND_HDA_I915 if SND_HDA_CORE
+	select CEC_CORE if CEC_NOTIFIER
+	depends on VMAP_PFN
+	depends on DRM_TTM
+	depends on DRM_TTM_HELPER
+	depends on DRM_EXEC
+	select DRM_GPUVM if BUILD_XE_DRM_GPUVM
+	depends on DRM_SCHED
+	depends on MMU_NOTIFIER
+	depends on WANT_DEV_COREDUMP
+	depends on AUXILIARY_BUS
+	depends on HMM_MIRROR
+	help
+	  Experimental driver for Intel Xe series GPUs
+
+	  If "M" is selected, the module will be called xe.
+
+config DRM_XE_DISPLAY
+	bool "Enable display support"
+	depends on n
+	depends on DRM_XE && DRM_XE=m && HAS_IOPORT
+	select FB_IOMEM_HELPERS if DRM_FBDEV_EMULATION
+	depends on I2C
+	depends on I2C_ALGOBIT
+	default y
+	help
+	  Disable this option only if you want to compile out display support.
+
+config DRM_XE_FORCE_PROBE
+	string "Force probe xe for selected Intel hardware IDs"
+	depends on DRM_XE
+	help
+	  This is the default value for the xe.force_probe module
+	  parameter. Using the module parameter overrides this option.
+
+	  Force probe the xe for Intel graphics devices that are
+	  recognized but not properly supported by this kernel version. It is
+	  recommended to upgrade to a kernel version with proper support as soon
+	  as it is available.
+
+	  It can also be used to block the probe of recognized and fully
+	  supported devices.
+
+	  Use "" to disable force probe. If in doubt, use this.
+
+	  Use "<pci-id>[,<pci-id>,...]" to force probe the xe for listed
+	  devices. For example, "4500" or "4500,4571".
+
+	  Use "*" to force probe the driver for all known devices.
+
+	  Use "!" right before the ID to block the probe of the device. For
+	  example, "4500,!4571" forces the probe of 4500 and blocks the probe of
+	  4571.
+
+	  Use "!*" to block the probe of the driver for all known devices.
+
+config PRELIM_DRM_XE_EUDEBUG
+	bool "Enable gdb debugger support (eudebug)"
+	depends on DRM_XE
+	default y
+	help
+	  Choose this option if you want to add support for debugger (gdb) to
+	  attach into process using Xe and debug the gpu/gpgpu programs.
+	  With debugger support, Xe will provide interface for a debugger to
+	  process to track, inspect and modify resources.
+
+menu "drm/Xe Debugging"
+depends on DRM_XE
+depends on EXPERT
+source "drivers/gpu/drm/xe/Kconfig.debug"
+endmenu
+
+menu "drm/xe Profile Guided Optimisation"
+	visible if EXPERT
+	depends on DRM_XE
+	source "drivers/gpu/drm/xe/Kconfig.profile"
+endmenu

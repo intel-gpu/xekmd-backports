@@ -1,0 +1,115 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Tue, 23 Sep 2025 23:16:12 +0200
+Subject: [PATCH 06/12] drm/xe/debugfs: Update xe_mocs_dump signature
+
+Our debugfs helper xe_gt_debugfs_show_with_rpm() expects print()
+functions to return int. New signature allows us to drop wrapper.
+
+While around, move kernel-doc closer to the function definition,
+as suggested in the doc-guide.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250923211613.193347-5-michal.wajdeczko@intel.com
+(cherry-picked from commit ab6ccd4f7eb376157b3750d5ea067db6ffc614eb linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_debugfs.c |  8 +-------
+ drivers/gpu/drm/xe/xe_mocs.c       | 15 +++++++++++++--
+ drivers/gpu/drm/xe/xe_mocs.h       |  8 +-------
+ 3 files changed, 15 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_debugfs.c b/drivers/gpu/drm/xe/xe_gt_debugfs.c
+index 0726810fd364..83822276e391 100644
+--- a/drivers/gpu/drm/xe/xe_gt_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_gt_debugfs.c
+@@ -173,12 +173,6 @@ static int pat(struct xe_gt *gt, struct drm_printer *p)
+ 	return 0;
+ }
+ 
+-static int mocs(struct xe_gt *gt, struct drm_printer *p)
+-{
+-	xe_mocs_dump(gt, p);
+-	return 0;
+-}
+-
+ static int rcs_default_lrc(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	xe_lrc_dump_default(p, gt, XE_ENGINE_CLASS_RENDER);
+@@ -237,7 +231,7 @@ static const struct drm_info_list vf_safe_debugfs_list[] = {
+ /* everything else should be added here */
+ static const struct drm_info_list pf_only_debugfs_list[] = {
+ 	{ "hw_engines", .show = xe_gt_debugfs_show_with_rpm, .data = hw_engines },
+-	{ "mocs", .show = xe_gt_debugfs_show_with_rpm, .data = mocs },
++	{ "mocs", .show = xe_gt_debugfs_show_with_rpm, .data = xe_mocs_dump },
+ 	{ "pat", .show = xe_gt_debugfs_show_with_rpm, .data = pat },
+ 	{ "powergate_info", .show = xe_gt_debugfs_show_with_rpm, .data = xe_gt_idle_pg_print },
+ 	{ "steering", .show = xe_gt_debugfs_show_with_rpm, .data = steering },
+diff --git a/drivers/gpu/drm/xe/xe_mocs.c b/drivers/gpu/drm/xe/xe_mocs.c
+index 0c737413fcb6..7b68c22ff7bb 100644
+--- a/drivers/gpu/drm/xe/xe_mocs.c
++++ b/drivers/gpu/drm/xe/xe_mocs.c
+@@ -772,12 +772,20 @@ void xe_mocs_init(struct xe_gt *gt)
+ 		init_l3cc_table(gt, &table);
+ }
+ 
+-void xe_mocs_dump(struct xe_gt *gt, struct drm_printer *p)
++/**
++ * xe_mocs_dump() - Dump MOCS table.
++ * @gt: the &xe_gt with MOCS table
++ * @p: the &drm_printer to dump info to
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_mocs_dump(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	enum xe_force_wake_domains domain;
+ 	struct xe_mocs_info table;
+ 	unsigned int fw_ref, flags;
++	int err = 0;
+ 
+ 	flags = get_mocs_settings(xe, &table);
+ 
+@@ -785,14 +793,17 @@ void xe_mocs_dump(struct xe_gt *gt, struct drm_printer *p)
+ 	xe_pm_runtime_get_noresume(xe);
+ 	fw_ref = xe_force_wake_get(gt_to_fw(gt), domain);
+ 
+-	if (!xe_force_wake_ref_has_domain(fw_ref, domain))
++	if (!xe_force_wake_ref_has_domain(fw_ref, domain)) {
++		err = -ETIMEDOUT;
+ 		goto err_fw;
++	}
+ 
+ 	table.ops->dump(&table, flags, gt, p);
+ 
+ err_fw:
+ 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
+ 	xe_pm_runtime_put(xe);
++	return err;
+ }
+ 
+ #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
+diff --git a/drivers/gpu/drm/xe/xe_mocs.h b/drivers/gpu/drm/xe/xe_mocs.h
+index dc972ffd4d07..f00bbb269829 100644
+--- a/drivers/gpu/drm/xe/xe_mocs.h
++++ b/drivers/gpu/drm/xe/xe_mocs.h
+@@ -11,12 +11,6 @@ struct xe_gt;
+ 
+ void xe_mocs_init_early(struct xe_gt *gt);
+ void xe_mocs_init(struct xe_gt *gt);
+-
+-/**
+- * xe_mocs_dump - Dump mocs table
+- * @gt: GT structure
+- * @p: Printer to dump info to
+- */
+-void xe_mocs_dump(struct xe_gt *gt, struct drm_printer *p);
++int xe_mocs_dump(struct xe_gt *gt, struct drm_printer *p);
+ 
+ #endif
+-- 
+2.43.0
+

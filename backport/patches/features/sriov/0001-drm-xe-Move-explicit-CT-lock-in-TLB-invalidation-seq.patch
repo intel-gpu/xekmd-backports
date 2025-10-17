@@ -1,0 +1,118 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stuart Summers <stuart.summers@intel.com>
+Date: Tue, 26 Aug 2025 18:29:03 +0000
+Subject: [PATCH] drm/xe: Move explicit CT lock in TLB invalidation sequence
+
+Currently the CT lock is used to cover TLB invalidation
+sequence number updates. In an effort to separate the GuC
+back end tracking of communication with the firmware from
+the front end TLB sequence number tracking, add a new lock
+here to specifically track those sequence number updates
+coming in from the user.
+
+Apart from the CT lock, we also have a pending lock to
+cover both pending fences and sequence numbers received
+from the back end. Those cover interrupt cases and so
+it makes not to overload those with sequence numbers
+coming in from new transactions. In that way, we'll employ
+a mutex here.
+
+v2: Actually add the correct lock rather than just dropping
+    it... (Matt)
+
+Signed-off-by: Stuart Summers <stuart.summers@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250826182911.392550-2-stuart.summers@intel.com
+(cherry-picked from commit ce5059bf851b7286ec27797d786aab28c8a62e5e linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c | 19 +++++++++++++------
+ drivers/gpu/drm/xe/xe_gt_types.h            |  2 ++
+ 2 files changed, 15 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c b/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c
+index 02f0bb92d6e0..75854b963d66 100644
+--- a/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c
++++ b/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c
+@@ -118,6 +118,9 @@ static void xe_gt_tlb_fence_timeout(struct work_struct *work)
+  */
+ int xe_gt_tlb_invalidation_init_early(struct xe_gt *gt)
+ {
++	struct xe_device *xe = gt_to_xe(gt);
++	int err;
++
+ 	gt->tlb_invalidation.seqno = 1;
+ 	INIT_LIST_HEAD(&gt->tlb_invalidation.pending_fences);
+ 	spin_lock_init(&gt->tlb_invalidation.pending_lock);
+@@ -125,6 +128,10 @@ int xe_gt_tlb_invalidation_init_early(struct xe_gt *gt)
+ 	INIT_DELAYED_WORK(&gt->tlb_invalidation.fence_tdr,
+ 			  xe_gt_tlb_fence_timeout);
+ 
++	err = drmm_mutex_init(&xe->drm, &gt->tlb_invalidation.seqno_lock);
++	if (err)
++		return err;
++
+ 	gt->tlb_invalidation.job_wq =
+ 		drmm_alloc_ordered_workqueue(&gt_to_xe(gt)->drm, "gt-tbl-inval-job-wq",
+ 					     WQ_MEM_RECLAIM);
+@@ -158,7 +165,7 @@ void xe_gt_tlb_invalidation_reset(struct xe_gt *gt)
+ 	 * appear.
+ 	 */
+ 
+-	mutex_lock(&gt->uc.guc.ct.lock);
++	mutex_lock(&gt->tlb_invalidation.seqno_lock);
+ 	spin_lock_irq(&gt->tlb_invalidation.pending_lock);
+ 	cancel_delayed_work(&gt->tlb_invalidation.fence_tdr);
+ 	/*
+@@ -178,7 +185,7 @@ void xe_gt_tlb_invalidation_reset(struct xe_gt *gt)
+ 				 &gt->tlb_invalidation.pending_fences, link)
+ 		invalidation_fence_signal(gt_to_xe(gt), fence);
+ 	spin_unlock_irq(&gt->tlb_invalidation.pending_lock);
+-	mutex_unlock(&gt->uc.guc.ct.lock);
++	mutex_unlock(&gt->tlb_invalidation.seqno_lock);
+ }
+ 
+ static bool tlb_invalidation_seqno_past(struct xe_gt *gt, int seqno)
+@@ -211,13 +218,13 @@ static int send_tlb_invalidation(struct xe_guc *guc,
+ 	 * need to be updated.
+ 	 */
+ 
+-	mutex_lock(&guc->ct.lock);
++	mutex_lock(&gt->tlb_invalidation.seqno_lock);
+ 	seqno = gt->tlb_invalidation.seqno;
+ 	fence->seqno = seqno;
+ 	trace_xe_gt_tlb_invalidation_fence_send(xe, fence);
+ 	action[1] = seqno;
+-	ret = xe_guc_ct_send_locked(&guc->ct, action, len,
+-				    G2H_LEN_DW_TLB_INVALIDATE, 1);
++	ret = xe_guc_ct_send(&guc->ct, action, len,
++			     G2H_LEN_DW_TLB_INVALIDATE, 1);
+ 	if (!ret) {
+ 		spin_lock_irq(&gt->tlb_invalidation.pending_lock);
+ 		/*
+@@ -248,7 +255,7 @@ static int send_tlb_invalidation(struct xe_guc *guc,
+ 		if (!gt->tlb_invalidation.seqno)
+ 			gt->tlb_invalidation.seqno = 1;
+ 	}
+-	mutex_unlock(&guc->ct.lock);
++	mutex_unlock(&gt->tlb_invalidation.seqno_lock);
+ 	xe_gt_stats_incr(gt, XE_GT_STATS_ID_TLB_INVAL, 1);
+ 
+ 	return ret;
+diff --git a/drivers/gpu/drm/xe/xe_gt_types.h b/drivers/gpu/drm/xe/xe_gt_types.h
+index dfd4a16da5f0..420900ecaa97 100644
+--- a/drivers/gpu/drm/xe/xe_gt_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_types.h
+@@ -190,6 +190,8 @@ struct xe_gt {
+ 		/** @tlb_invalidation.seqno: TLB invalidation seqno, protected by CT lock */
+ #define TLB_INVALIDATION_SEQNO_MAX	0x100000
+ 		int seqno;
++		/** @tlb_invalidation.seqno_lock: protects @tlb_invalidation.seqno */
++		struct mutex seqno_lock;
+ 		/**
+ 		 * @tlb_invalidation.seqno_recv: last received TLB invalidation seqno,
+ 		 * protected by CT lock
+-- 
+2.43.0
+

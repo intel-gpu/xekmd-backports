@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
 Date: Mon, 1 Sep 2025 12:55:41 +0530
-Subject: drm/xe/guc: Add devm release action to safely tear down
- CT
+Subject: drm/xe/guc: Add devm release action to safely tear down CT
 
 When a buffer object (BO) is allocated with the XE_BO_FLAG_GGTT_INVALIDATE
 flag, the driver initiates TLB invalidation requests via the CTB mechanism
@@ -42,7 +41,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  3 files changed, 45 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
-index 7615b3d54..9784955bd 100644
+index a7f7505f4..bad5fd015 100644
 --- a/drivers/gpu/drm/xe/xe_guc.c
 +++ b/drivers/gpu/drm/xe/xe_guc.c
 @@ -701,10 +701,6 @@ static int xe_guc_realloc_post_hwconfig(struct xe_guc *guc)
@@ -56,7 +55,7 @@ index 7615b3d54..9784955bd 100644
  	return 0;
  }
  
-@@ -817,6 +813,10 @@ int xe_guc_init_post_hwconfig(struct xe_guc *guc)
+@@ -839,6 +835,10 @@ int xe_guc_init_post_hwconfig(struct xe_guc *guc)
  	if (ret)
  		return ret;
  
@@ -68,7 +67,7 @@ index 7615b3d54..9784955bd 100644
  
  	ret = xe_guc_submit_init(guc, ~0);
 diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
-index bc30e7c5b..7444c61fb 100644
+index cdd61aadf..794af6a93 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ct.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ct.c
 @@ -39,6 +39,8 @@ static void receive_g2h(struct xe_guc_ct *ct);
@@ -80,9 +79,9 @@ index bc30e7c5b..7444c61fb 100644
  
  #if IS_ENABLED(CONFIG_DRM_XE_DEBUG)
  enum {
-@@ -213,6 +215,13 @@ static void primelockdep(struct xe_guc_ct *ct)
- 	fs_reclaim_release(GFP_KERNEL);
+@@ -252,6 +254,13 @@ int xe_guc_ct_init_noalloc(struct xe_guc_ct *ct)
  }
+ ALLOW_ERROR_INJECTION(xe_guc_ct_init_noalloc, ERRNO); /* See xe_pci_probe() */
  
 +static void guc_action_disable_ct(void *arg)
 +{
@@ -94,10 +93,10 @@ index bc30e7c5b..7444c61fb 100644
  int xe_guc_ct_init(struct xe_guc_ct *ct)
  {
  	struct xe_device *xe = ct_to_xe(ct);
-@@ -260,10 +269,40 @@ int xe_guc_ct_init(struct xe_guc_ct *ct)
+@@ -268,10 +277,40 @@ int xe_guc_ct_init(struct xe_guc_ct *ct)
+ 		return PTR_ERR(bo);
  
- 	xe_gt_assert(gt, ct->state == XE_GUC_CT_STATE_NOT_INITIALIZED);
- 	ct->state = XE_GUC_CT_STATE_DISABLED;
+ 	ct->bo = bo;
 -	return 0;
 +
 +	return devm_add_action_or_reset(xe->drm.dev, guc_action_disable_ct, ct);
@@ -137,11 +136,11 @@ index bc30e7c5b..7444c61fb 100644
  	xe_map_rd_field(xe_, &guc_ctb__->desc, 0,		\
  			struct guc_ct_buffer_desc, field_)
 diff --git a/drivers/gpu/drm/xe/xe_guc_ct.h b/drivers/gpu/drm/xe/xe_guc_ct.h
-index 5649bda82..a4f3f2aac 100644
+index 588fc7d06..89a262e59 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ct.h
 +++ b/drivers/gpu/drm/xe/xe_guc_ct.h
-@@ -13,6 +13,7 @@ struct xe_device;
- 
+@@ -14,6 +14,7 @@ struct xe_device;
+ int xe_guc_ct_init_noalloc(struct xe_guc_ct *ct);
  int xe_guc_ct_init(struct xe_guc_ct *ct);
  int xe_guc_ct_enable(struct xe_guc_ct *ct);
 +int xe_guc_ct_init_post_hwconfig(struct xe_guc_ct *ct);

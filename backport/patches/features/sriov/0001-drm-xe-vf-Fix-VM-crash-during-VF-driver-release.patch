@@ -43,6 +43,7 @@ Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 (backported from commit 7d3a5962d74ee7ce2d0051d4d1e106c06b432ce8 linux-next )
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 Link: https://lore.kernel.org/r/20250729120720.13990-1-satyanarayana.k.v.p@intel.com
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_gt.c           |  6 ++----
  drivers/gpu/drm/xe/xe_migrate.c      | 31 ++++++++++++++++------------
@@ -51,10 +52,10 @@ Link: https://lore.kernel.org/r/20250729120720.13990-1-satyanarayana.k.v.p@intel
  4 files changed, 28 insertions(+), 20 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index 481ff9fac..9436340e0 100644
+index b553f35db..00dd5ffa2 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
-@@ -559,11 +559,9 @@ static int all_fw_domain_init(struct xe_gt *gt)
+@@ -588,11 +588,9 @@ static int gt_init_with_all_forcewake(struct xe_gt *gt)
  	if (xe_gt_is_main_type(gt)) {
  		struct xe_tile *tile = gt_to_tile(gt);
  
@@ -67,7 +68,7 @@ index 481ff9fac..9436340e0 100644
 -		}
  	}
  
- 	err = xe_uc_init_hw(&gt->uc);
+ 	err = xe_uc_load_hw(&gt->uc);
 diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
 index 58ca0b75f..9bf7ed6ff 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.c

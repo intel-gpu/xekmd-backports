@@ -1,0 +1,49 @@
+From c7fc51558fb7245c1f8d8349affad11520a4231c Mon Sep 17 00:00:00 2001
+From: Maarten Lankhorst <dev@lankhorst.se>
+Date: Thu, 19 Jun 2025 12:49:07 +0200
+Subject: drm/xe: Move xe_ttm_sys_mgr_init() downwards.
+
+Now that all previous allocations are gone, ensure no new allocations
+will ever be done before xe_display_init_early(), by moving the call
+that allows allocations downwards.
+
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20250619104858.418440-21-dev@lankhorst.se
+Signed-off-by: Maarten Lankhorst <dev@lankhorst.se>
+(backported from commit 3effd109c6ef1dfc66ef1f09092251bd8c2b35e9 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index a5bac2ad5..5c11f78ed 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -676,8 +676,6 @@ int xe_device_probe(struct xe_device *xe)
+ 	if (err)
+ 		return err;
+ 
+-	xe_ttm_sys_mgr_init(xe);
+-
+ 	for_each_gt(gt, xe, id) {
+ 		err = xe_gt_init_early(gt);
+ 		if (err)
+@@ -719,6 +717,14 @@ int xe_device_probe(struct xe_device *xe)
+ 			goto err;
+ 	}
+ 
++	/*
++	 * Allow allocations only now to ensure xe_display_init_early()
++	 * is the first to allocate, always.
++	 */
++	err = xe_ttm_sys_mgr_init(xe);
++	if (err)
++		return err;
++
+ 	/* Allocate and map stolen after potential VRAM resize */
+ 	err = xe_ttm_stolen_mgr_init(xe);
+ 	if (err)
+-- 
+2.34.1
+

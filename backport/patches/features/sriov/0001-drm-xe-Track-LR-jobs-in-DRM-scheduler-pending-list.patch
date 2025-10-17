@@ -1,0 +1,236 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:02 -0700
+Subject: [PATCH] drm/xe: Track LR jobs in DRM scheduler pending list
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+VF migration requires jobs to remain pending so they can be replayed
+after the VF comes back. Previously, LR job fences were intentionally
+signaled immediately after submission to avoid the risk of exporting
+them, as these fences do not naturally signal in a timely manner and
+could break dma-fence contracts. A side effect of this approach was that
+LR jobs were never added to the DRM scheduler’s pending list, preventing
+them from being tracked for later resubmission.
+
+We now avoid signaling LR job fences and ensure they are never exported;
+Xe already guards against exporting these internal fences. With that
+guarantee in place, we can safely track LR jobs in the scheduler’s
+pending list so they are eligible for resubmission during VF
+post-migration recovery (and similar recovery paths).
+
+An added benefit is that LR queues now gain the DRM scheduler’s built-in
+flow control over ring usage rather than rejecting new jobs in the exec
+IOCTL if the ring is full.
+
+v2:
+ - Ensure DRM scheduler TDR doesn't run for LR jobs
+ - Stack variable for killed_or_banned_or_wedged
+v4:
+ - Clarify commit message (Tomasz)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Tomasz Lis <tomasz.lis@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-5-matthew.brost@intel.com
+(cherry-picked from commit f6375fb3aa9485d572d967c2e6ee1dde22f5ca34 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec.c       | 12 ++-------
+ drivers/gpu/drm/xe/xe_exec_queue.c | 19 -------------
+ drivers/gpu/drm/xe/xe_exec_queue.h |  2 --
+ drivers/gpu/drm/xe/xe_guc_submit.c | 43 ++++++++++++++++++++----------
+ 4 files changed, 31 insertions(+), 45 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec.c b/drivers/gpu/drm/xe/xe_exec.c
+index 93c1030a4663..f87bc1d53e0d 100644
+--- a/drivers/gpu/drm/xe/xe_exec.c
++++ b/drivers/gpu/drm/xe/xe_exec.c
+@@ -122,7 +122,7 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+ 	struct xe_validation_ctx ctx;
+ 	struct xe_sched_job *job;
+ 	struct xe_vm *vm;
+-	bool write_locked, skip_retry = false;
++	bool write_locked;
+ 	int err = 0;
+ 	struct xe_hw_engine_group *group;
+ 	enum xe_hw_engine_group_execution_mode mode, previous_mode;
+@@ -264,12 +264,6 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+ 		goto err_exec;
+ 	}
+ 
+-	if (xe_exec_queue_is_lr(q) && xe_exec_queue_ring_full(q)) {
+-		err = -EWOULDBLOCK;	/* Aliased to -EAGAIN */
+-		skip_retry = true;
+-		goto err_exec;
+-	}
+-
+ 	if (xe_exec_queue_uses_pxp(q)) {
+ 		err = xe_vm_validate_protected(q->vm);
+ 		if (err)
+@@ -326,8 +320,6 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+ 		xe_sched_job_init_user_fence(job, &syncs[i]);
+ 	}
+ 
+-	if (xe_exec_queue_is_lr(q))
+-		q->ring_ops->emit_job(job);
+ 	if (!xe_vm_in_lr_mode(vm))
+ 		xe_exec_queue_last_fence_set(q, vm, &job->drm.s_fence->finished);
+ 	xe_sched_job_push(job);
+@@ -353,7 +345,7 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+ 		xe_validation_ctx_fini(&ctx);
+ err_unlock_list:
+ 	up_read(&vm->lock);
+-	if (err == -EAGAIN && !skip_retry)
++	if (err == -EAGAIN)
+ 		goto retry;
+ err_hw_exec_mode:
+ 	if (mode == EXEC_MODE_DMA_FENCE)
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index 065622cea66d..2293d1d6ac47 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -827,25 +827,6 @@ bool xe_exec_queue_is_lr(struct xe_exec_queue *q)
+ 		!(q->flags & EXEC_QUEUE_FLAG_VM);
+ }
+ 
+-static s32 xe_exec_queue_num_job_inflight(struct xe_exec_queue *q)
+-{
+-	return q->lrc[0]->fence_ctx.next_seqno - xe_lrc_seqno(q->lrc[0]) - 1;
+-}
+-
+-/**
+- * xe_exec_queue_ring_full() - Whether an exec_queue's ring is full
+- * @q: The exec_queue
+- *
+- * Return: True if the exec_queue's ring is full, false otherwise.
+- */
+-bool xe_exec_queue_ring_full(struct xe_exec_queue *q)
+-{
+-	struct xe_lrc *lrc = q->lrc[0];
+-	s32 max_job = lrc->ring.size / MAX_JOB_SIZE_BYTES;
+-
+-	return xe_exec_queue_num_job_inflight(q) >= max_job;
+-}
+-
+ /**
+  * xe_exec_queue_is_idle() - Whether an exec_queue is idle.
+  * @q: The exec_queue
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
+index 15ec852e7f7e..6ae11a1c7404 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue.h
+@@ -64,8 +64,6 @@ static inline bool xe_exec_queue_uses_pxp(struct xe_exec_queue *q)
+ 
+ bool xe_exec_queue_is_lr(struct xe_exec_queue *q);
+ 
+-bool xe_exec_queue_ring_full(struct xe_exec_queue *q);
+-
+ bool xe_exec_queue_is_idle(struct xe_exec_queue *q);
+ 
+ void xe_exec_queue_kill(struct xe_exec_queue *q);
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index c62297811060..61a85f395b6d 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -901,30 +901,31 @@ guc_exec_queue_run_job(struct drm_sched_job *drm_job)
+ 	struct xe_sched_job *job = to_xe_sched_job(drm_job);
+ 	struct xe_exec_queue *q = job->q;
+ 	struct xe_guc *guc = exec_queue_to_guc(q);
+-	struct dma_fence *fence = NULL;
+-	bool lr = xe_exec_queue_is_lr(q);
++	bool lr = xe_exec_queue_is_lr(q), killed_or_banned_or_wedged =
++		exec_queue_killed_or_banned_or_wedged(q);
+ 
+ 	xe_gt_assert(guc_to_gt(guc), !(exec_queue_destroyed(q) || exec_queue_pending_disable(q)) ||
+ 		     exec_queue_banned(q) || exec_queue_suspended(q));
+ 
+ 	trace_xe_sched_job_run(job);
+ 
+-	if (!exec_queue_killed_or_banned_or_wedged(q) && !xe_sched_job_is_error(job)) {
++	if (!killed_or_banned_or_wedged && !xe_sched_job_is_error(job)) {
+ 		if (!exec_queue_registered(q))
+ 			register_exec_queue(q, GUC_CONTEXT_NORMAL);
+-		if (!lr)	/* LR jobs are emitted in the exec IOCTL */
+-			q->ring_ops->emit_job(job);
++		q->ring_ops->emit_job(job);
+ 		submit_exec_queue(q);
+ 	}
+ 
+-	if (lr) {
+-		xe_sched_job_set_error(job, -EOPNOTSUPP);
+-		dma_fence_put(job->fence);	/* Drop ref from xe_sched_job_arm */
+-	} else {
+-		fence = job->fence;
+-	}
++	/*
++	 * We don't care about job-fence ordering in LR VMs because these fences
++	 * are never exported; they are used solely to keep jobs on the pending
++	 * list. Once a queue enters an error state, there's no need to track
++	 * them.
++	 */
++	if (killed_or_banned_or_wedged && lr)
++		xe_sched_job_set_error(job, -ECANCELED);
+ 
+-	return fence;
++	return job->fence;
+ }
+ 
+ /**
+@@ -990,7 +991,8 @@ static void disable_scheduling_deregister(struct xe_guc *guc,
+ 		xe_gt_warn(q->gt, "Pending enable/disable failed to respond\n");
+ 		xe_sched_submission_start(sched);
+ 		xe_gt_reset_async(q->gt);
+-		xe_sched_tdr_queue_imm(sched);
++		if (!xe_exec_queue_is_lr(q))
++			xe_sched_tdr_queue_imm(sched);
+ 		return;
+ 	}
+ 
+@@ -1082,6 +1084,7 @@ static void xe_guc_exec_queue_lr_cleanup(struct work_struct *w)
+ 	struct xe_exec_queue *q = ge->q;
+ 	struct xe_guc *guc = exec_queue_to_guc(q);
+ 	struct xe_gpu_scheduler *sched = &ge->sched;
++	struct xe_sched_job *job;
+ 	bool wedged = false;
+ 
+ 	xe_gt_assert(guc_to_gt(guc), xe_exec_queue_is_lr(q));
+@@ -1132,7 +1135,16 @@ static void xe_guc_exec_queue_lr_cleanup(struct work_struct *w)
+ 	if (!exec_queue_killed(q) && !xe_lrc_ring_is_idle(q->lrc[0]))
+ 		xe_devcoredump(q, NULL, "LR job cleanup, guc_id=%d", q->guc->id);
+ 
++	xe_hw_fence_irq_stop(q->fence_irq);
++
+ 	xe_sched_submission_start(sched);
++
++	spin_lock(&sched->base.job_list_lock);
++	list_for_each_entry(job, &sched->base.pending_list, drm.list)
++		xe_sched_job_set_error(job, -ECANCELED);
++	spin_unlock(&sched->base.job_list_lock);
++
++	xe_hw_fence_irq_start(q->fence_irq);
+ }
+ 
+ #define ADJUST_FIVE_PERCENT(__t)	mul_u64_u32_div(__t, 105, 100)
+@@ -1203,7 +1215,8 @@ static void enable_scheduling(struct xe_exec_queue *q)
+ 		xe_gt_warn(guc_to_gt(guc), "Schedule enable failed to respond");
+ 		set_exec_queue_banned(q);
+ 		xe_gt_reset_async(q->gt);
+-		xe_sched_tdr_queue_imm(&q->guc->sched);
++		if (!xe_exec_queue_is_lr(q))
++			xe_sched_tdr_queue_imm(&q->guc->sched);
+ 	}
+ }
+ 
+@@ -1261,6 +1274,8 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+ 	int i = 0;
+ 	bool wedged = false, skip_timeout_check;
+ 
++	xe_gt_assert(guc_to_gt(guc), !xe_exec_queue_is_lr(q));
++
+ 	/*
+ 	 * TDR has fired before free job worker. Common if exec queue
+ 	 * immediately closed after last fence signaled. Add back to pending
+-- 
+2.43.0
+

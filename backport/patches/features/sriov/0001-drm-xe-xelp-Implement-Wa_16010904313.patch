@@ -1,0 +1,133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tvrtko Ursulin <tvrtko.ursulin@igalia.com>
+Date: Fri, 11 Jul 2025 17:01:52 +0100
+Subject: [PATCH] drm/xe/xelp: Implement Wa_16010904313
+
+Add XeLP workaround 16010904313.
+
+The description calls for it to be emitted as the indirect context buffer
+workaround for render and compute, and from the workaround batch buffer
+for the other engines. Therefore we plug into the previously added
+respective top level emission functions.
+
+The actual command streamer programming sequence differs from what is
+described in the PRM, in that it assumes the listed LRCA offset was
+supposed to actually refer to the location of the CTX_TIMESTAMP register
+instead of LRCA + 0x180c (which is in GPR space). Latter appears to make
+more sense under the assumption that multiple writes are helping with
+restoring the CTX_TIMESTAMP register content from the saved context state.
+
+Signed-off-by: Tvrtko Ursulin <tvrtko.ursulin@igalia.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Cc: Matt Roper <matthew.d.roper@intel.com>
+Link: https://lore.kernel.org/r/20250711160153.49833-8-tvrtko.ursulin@igalia.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(cherry-picked from commit e8372edec948318934c71542e939d1a8fb8fabcf linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ .../gpu/drm/xe/instructions/xe_mi_commands.h  |  1 +
+ drivers/gpu/drm/xe/xe_lrc.c                   | 44 +++++++++++++++++++
+ drivers/gpu/drm/xe/xe_wa_oob.rules            |  1 +
+ 3 files changed, 46 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/instructions/xe_mi_commands.h b/drivers/gpu/drm/xe/instructions/xe_mi_commands.h
+index e3f5e8bb3ebc..c47b290e0e9f 100644
+--- a/drivers/gpu/drm/xe/instructions/xe_mi_commands.h
++++ b/drivers/gpu/drm/xe/instructions/xe_mi_commands.h
+@@ -65,6 +65,7 @@
+ 
+ #define MI_LOAD_REGISTER_MEM		(__MI_INSTR(0x29) | XE_INSTR_NUM_DW(4))
+ #define   MI_LRM_USE_GGTT		REG_BIT(22)
++#define   MI_LRM_ASYNC			REG_BIT(21)
+ 
+ #define MI_LOAD_REGISTER_REG		(__MI_INSTR(0x2a) | XE_INSTR_NUM_DW(3))
+ #define   MI_LRR_DST_CS_MMIO		REG_BIT(19)
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index 7dd72c4be97d..0c35d6349340 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -75,6 +75,11 @@ lrc_to_xe(struct xe_lrc *lrc)
+ static bool
+ gt_engine_needs_indirect_ctx(struct xe_gt *gt, enum xe_engine_class class)
+ {
++	if (XE_WA(gt, 16010904313) &&
++	    (class == XE_ENGINE_CLASS_RENDER ||
++	     class == XE_ENGINE_CLASS_COMPUTE))
++		return true;
++
+ 	return false;
+ }
+ 
+@@ -1060,6 +1065,43 @@ static ssize_t setup_utilization_wa(struct xe_lrc *lrc,
+ 	return cmd - batch;
+ }
+ 
++static ssize_t setup_timestamp_wa(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
++				  u32 *batch, size_t max_len)
++{
++	const u32 ts_addr = __xe_lrc_ctx_timestamp_ggtt_addr(lrc);
++	u32 *cmd = batch;
++
++	if (!XE_WA(lrc->gt, 16010904313) ||
++	    !(hwe->class == XE_ENGINE_CLASS_RENDER ||
++	      hwe->class == XE_ENGINE_CLASS_COMPUTE ||
++	      hwe->class == XE_ENGINE_CLASS_COPY ||
++	      hwe->class == XE_ENGINE_CLASS_VIDEO_DECODE ||
++	      hwe->class == XE_ENGINE_CLASS_VIDEO_ENHANCE))
++		return 0;
++
++	if (xe_gt_WARN_ON(lrc->gt, max_len < 12))
++		return -ENOSPC;
++
++	*cmd++ = MI_LOAD_REGISTER_MEM | MI_LRM_USE_GGTT | MI_LRI_LRM_CS_MMIO |
++		 MI_LRM_ASYNC;
++	*cmd++ = RING_CTX_TIMESTAMP(0).addr;
++	*cmd++ = ts_addr;
++	*cmd++ = 0;
++
++	*cmd++ = MI_LOAD_REGISTER_MEM | MI_LRM_USE_GGTT | MI_LRI_LRM_CS_MMIO |
++		 MI_LRM_ASYNC;
++	*cmd++ = RING_CTX_TIMESTAMP(0).addr;
++	*cmd++ = ts_addr;
++	*cmd++ = 0;
++
++	*cmd++ = MI_LOAD_REGISTER_MEM | MI_LRM_USE_GGTT | MI_LRI_LRM_CS_MMIO;
++	*cmd++ = RING_CTX_TIMESTAMP(0).addr;
++	*cmd++ = ts_addr;
++	*cmd++ = 0;
++
++	return cmd - batch;
++}
++
+ struct bo_setup {
+ 	ssize_t (*setup)(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+ 			 u32 *batch, size_t max_size);
+@@ -1137,6 +1179,7 @@ static void finish_bo(struct bo_setup_state *state)
+ int xe_lrc_setup_wa_bb_with_scratch(struct xe_lrc *lrc, struct xe_hw_engine *hwe, u32 *scratch)
+ {
+ 	static const struct bo_setup funcs[] = {
++		{ .setup = setup_timestamp_wa },
+ 		{ .setup = setup_utilization_wa },
+ 	};
+ 	struct bo_setup_state state = {
+@@ -1188,6 +1231,7 @@ static int
+ setup_indirect_ctx(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
+ {
+ 	static struct bo_setup rcs_funcs[] = {
++		{ .setup = setup_timestamp_wa },
+ 	};
+ 	struct bo_setup_state state = {
+ 		.lrc = lrc,
+diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
+index 710f4423726c..86f68d853ac8 100644
+--- a/drivers/gpu/drm/xe/xe_wa_oob.rules
++++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
+@@ -1,4 +1,5 @@
+ 1607983814	GRAPHICS_VERSION_RANGE(1200, 1210)
++16010904313	GRAPHICS_VERSION_RANGE(1200, 1210)
+ 22012773006	GRAPHICS_VERSION_RANGE(1200, 1250)
+ 14014475959	GRAPHICS_VERSION_RANGE(1270, 1271), GRAPHICS_STEP(A0, B0)
+ 		PLATFORM(DG2)
+-- 
+2.43.0
+

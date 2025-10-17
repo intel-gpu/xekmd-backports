@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:05 -0700
+Subject: [PATCH] drm/xe: Make LRC W/A scratch buffer usage consistent
+
+The LRC W/A currently checks for LRC being iomem in some places, while
+in others it checks if the scratch buffer is non-NULL. This
+inconsistency causes issues with the VF post-migration recovery code,
+which blindly passes in a scratch buffer.
+
+This patch standardizes the check by consistently verifying whether the
+LRC is iomem to determine if the scratch buffer should be used.
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Tomasz Lis <tomasz.lis@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-8-matthew.brost@intel.com
+(cherry-picked from commit 0ca229da92bf29b59410d9fae77e5f304df6ab6b linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_lrc.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index 7f77d29f13a5..7dd72c4be97d 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1119,7 +1119,7 @@ static int setup_bo(struct bo_setup_state *state)
+ 
+ static void finish_bo(struct bo_setup_state *state)
+ {
+-	if (!state->buffer)
++	if (!state->lrc->bo->vmap.is_iomem)
+ 		return;
+ 
+ 	xe_map_memcpy_to(gt_to_xe(state->lrc->gt), &state->lrc->bo->vmap,
+-- 
+2.43.0
+

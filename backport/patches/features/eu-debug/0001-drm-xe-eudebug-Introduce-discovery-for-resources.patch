@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Tue, 31 Jan 2023 11:40:42 +0200
-Subject: drm/xe/eudebug: Introduce discovery for resources
+Subject: [PATCH] drm/xe/eudebug: Introduce discovery for resources
 
 Debugger connection can happen way after the client has
 created and destroyed arbitrary number of resources.
@@ -34,10 +34,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  5 files changed, 185 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 90a111459c0e..a2110e421a36 100644
+index 01d98e837e3f..5f530e50b754 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -218,8 +218,11 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+@@ -219,8 +219,11 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
  		return -ECANCELED;
  
  	ret = xe_pm_runtime_get_ioctl(xe);
@@ -50,7 +50,7 @@ index 90a111459c0e..a2110e421a36 100644
  	xe_pm_runtime_put(xe);
  
  	return ret;
-@@ -236,8 +239,11 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
+@@ -237,8 +240,11 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
  		return -ECANCELED;
  
  	ret = xe_pm_runtime_get_ioctl(xe);
@@ -114,11 +114,11 @@ index bc802e066a7d..fbe2b63fbb42 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 1f4d38b502b5..d7072f9905c4 100644
+index d3a59fe9d8e1..929639469c57 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -650,6 +650,12 @@ struct xe_device {
- 
+@@ -613,6 +613,12 @@ struct xe_device {
+ 	
  		/** @available: is the debugging functionality available */
  		bool available;
 +

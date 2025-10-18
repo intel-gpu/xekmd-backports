@@ -56,14 +56,31 @@ generate_kernel() {
 case "$1" in
 	create-worktree)
 		set -e
-		{
-			git worktree add "$WORKTREE_BACKPORT" oot-backport/main || { echo "Error: Failed to add worktree for backport/main. Run clean-worktree first"; exit 2; }
-			git worktree add "$WORKTREE_RELEASES" releases/main || { echo "Error: Failed to add worktree for releases. Run clean-worktree first"; exit 2; }
-			git worktree add "$WORKTREE_KERNEL_SOURCES" kernel-backport/main || { echo "Error: Failed to add worktree for main. Run clean-worktree first"; exit 2; }
-		} || { echo "Error: One or more worktree operations failed."; exit 2; }
+		failure=0
+
+		git worktree add "$WORKTREE_KERNEL_SOURCES" kernel-backport/main || { echo "Error: Failed to add worktree for kernel-backport/main"; failure=1; }
+		git worktree add "$WORKTREE_BACKPORT" oot-backport/main || { echo "Error: Failed to add worktree for backport/main"; failure=1; }
+		git worktree add "$WORKTREE_RELEASES" releases/main || { echo "Error: Failed to add worktree for releases"; failure=1; }
+
+		if [ "$failure" -ne 0 ]; then
+			echo "Error: One or more worktree operations failed.";
+			"$0" clean-worktree
+			exit 2
+		fi
 
 		echo "Worktree created:"
 		git worktree list || { echo "Error: Failed to list worktree."; exit 2; }
+		echo ""
+		echo "Setting up submodules..."
+
+		REMOTE_URL=$(git remote get-url origin) || { echo "Error: Failed to get remote URL."; exit 2; }
+
+		git submodule add -b oot-backport/main -f "$REMOTE_URL" oot-backport || { echo "Error: Failed to add oot-backports submodule."; exit 2; }
+		git submodule add -b releases/main -f "$REMOTE_URL" releases || { echo "Error: Failed to add releases submodule."; exit 2; }
+		git submodule add -b kernel-backport/main -f "$REMOTE_URL" kernel-backport || { echo "Error: Failed to add kernel-backports submodule."; exit 2; }
+
+		echo "Submodules created:"
+		cat .gitmodules || { echo "Error: Failed to list submodules."; exit 2; }
 
 		# Generate the base kernel from the kernel-backport worktree
 		generate_kernel || { echo "Kernel generation failed or was skipped"; exit 3; }
@@ -92,9 +109,20 @@ case "$1" in
 			git worktree prune || echo "Warning: Failed to prune worktree."
 
 			rm -rf "$WORKTREE_BACKPORT" "$WORKTREE_RELEASES" "$WORKTREE_KERNEL_SOURCES"
+			# Remove submodules if they exist
+			if [ -f .gitmodules ]; then
+				git submodule deinit --force oot-backport || echo "Warning: Could not deinitialize oot-backport submodule."
+				git submodule deinit --force releases || echo "Warning: Could not deinitialize releases submodule."
+				git submodule deinit --force kernel-backport || echo "Warning: Could not deinitialize kernel-backport submodule."
+
+				git rm -f oot-backport releases kernel-backport
+				git rm --force .gitmodules || echo "Warning: Could not remove .gitmodules file."
+			else
+				echo "No .gitmodules file found, skipping submodule cleanup."
+			fi
 		} || { echo "Error: One or more clean operations failed."; exit 2; }
 
-		echo "Worktree cleaned."
+		echo "Worktree and submodules cleaned."
 		git worktree list || { echo "Error: Failed to list worktree."; exit 2; }
 		;;
 	list-worktree)

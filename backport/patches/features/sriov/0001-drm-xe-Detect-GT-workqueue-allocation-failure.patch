@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 1 Oct 2025 16:40:51 +0200
+Subject: drm/xe: Detect GT workqueue allocation failure
+
+The allocation of the per-GT workqueue may fail and we shouldn't
+ignore that.  While around use drm managed allocation function
+to drop our custom fini action.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20251001144051.202040-1-michal.wajdeczko@intel.com
+(cherry picked from commit 846a81abbee3e6cfd238c350658a32199c39313d)
+(backported from commit 846a81abbee3e6cfd238c350658a32199c39313d linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt.c | 20 +++++---------------
+ 1 file changed, 5 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index 0691cefbc..1fc64b56d 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -64,29 +64,19 @@
+ #include "xe_wa.h"
+ #include "xe_wopcm.h"
+ 
+-static void gt_fini(struct drm_device *drm, void *arg)
+-{
+-	struct xe_gt *gt = arg;
+-
+-	destroy_workqueue(gt->ordered_wq);
+-}
+-
+ struct xe_gt *xe_gt_alloc(struct xe_tile *tile)
+ {
++	struct drm_device *drm = &tile_to_xe(tile)->drm;
+ 	struct xe_gt *gt;
+-	int err;
+ 
+-	gt = drmm_kzalloc(&tile_to_xe(tile)->drm, sizeof(*gt), GFP_KERNEL);
++	gt = drmm_kzalloc(drm, sizeof(*gt), GFP_KERNEL);
+ 	if (!gt)
+ 		return ERR_PTR(-ENOMEM);
+ 
+ 	gt->tile = tile;
+-	gt->ordered_wq = alloc_ordered_workqueue("gt-ordered-wq",
+-						 WQ_MEM_RECLAIM);
+-
+-	err = drmm_add_action_or_reset(&gt_to_xe(gt)->drm, gt_fini, gt);
+-	if (err)
+-		return ERR_PTR(err);
++	gt->ordered_wq = drmm_alloc_ordered_workqueue(drm, "gt-ordered-wq", WQ_MEM_RECLAIM);
++	if (IS_ERR(gt->ordered_wq))
++		return ERR_CAST(gt->ordered_wq);
+ 
+ 	return gt;
+ }

@@ -1,0 +1,100 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Tue, 23 Sep 2025 23:16:11 +0200
+Subject: drm/xe/debugfs: Update xe_tuning_dump signature
+
+Our debugfs helper xe_gt_debugfs_show_with_rpm() expects print()
+functions to return int. New signature allows us to drop wrapper.
+
+While around, print additional separation lines using puts() to
+avoid output with leading \n which might confuse some printers.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250923211613.193347-4-michal.wajdeczko@intel.com
+(cherry picked from commit b2e0a89a4fb481d7b16e5b22b5b8f17dfbbe5fbc)
+(backported from commit 8980530abff4408f3cff23f1bddf745eb3f5cc8c linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_debugfs.c |  8 +-------
+ drivers/gpu/drm/xe/xe_tuning.c     | 17 ++++++++++++++---
+ drivers/gpu/drm/xe/xe_tuning.h     |  2 +-
+ 3 files changed, 16 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_debugfs.c b/drivers/gpu/drm/xe/xe_gt_debugfs.c
+index 83f303c0f..0560a019e 100644
+--- a/drivers/gpu/drm/xe/xe_gt_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_gt_debugfs.c
+@@ -167,12 +167,6 @@ static int register_save_restore(struct xe_gt *gt, struct drm_printer *p)
+ 	return 0;
+ }
+ 
+-static int tunings(struct xe_gt *gt, struct drm_printer *p)
+-{
+-	xe_tuning_dump(gt, p);
+-	return 0;
+-}
+-
+ static int pat(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	xe_pat_dump(gt, p);
+@@ -231,7 +225,7 @@ static const struct drm_info_list vf_safe_debugfs_list[] = {
+ 	{ "register-save-restore",
+ 		.show = xe_gt_debugfs_show_with_rpm, .data = register_save_restore },
+ 	{ "workarounds", .show = xe_gt_debugfs_show_with_rpm, .data = xe_wa_gt_dump },
+-	{ "tunings", .show = xe_gt_debugfs_show_with_rpm, .data = tunings },
++	{ "tunings", .show = xe_gt_debugfs_show_with_rpm, .data = xe_tuning_dump },
+ 	{ "default_lrc_rcs", .show = xe_gt_debugfs_show_with_rpm, .data = rcs_default_lrc },
+ 	{ "default_lrc_ccs", .show = xe_gt_debugfs_show_with_rpm, .data = ccs_default_lrc },
+ 	{ "default_lrc_bcs", .show = xe_gt_debugfs_show_with_rpm, .data = bcs_default_lrc },
+diff --git a/drivers/gpu/drm/xe/xe_tuning.c b/drivers/gpu/drm/xe/xe_tuning.c
+index a61a29175..5f2e0d65b 100644
+--- a/drivers/gpu/drm/xe/xe_tuning.c
++++ b/drivers/gpu/drm/xe/xe_tuning.c
+@@ -204,7 +204,14 @@ void xe_tuning_process_lrc(struct xe_hw_engine *hwe)
+ 	xe_rtp_process_to_sr(&ctx, lrc_tunings, ARRAY_SIZE(lrc_tunings), &hwe->reg_lrc);
+ }
+ 
+-void xe_tuning_dump(struct xe_gt *gt, struct drm_printer *p)
++/**
++ * xe_tuning_dump() - Dump GT tuning info into a drm printer.
++ * @gt: the &xe_gt
++ * @p: the &drm_printer
++ *
++ * Return: always 0.
++ */
++int xe_tuning_dump(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	size_t idx;
+ 
+@@ -212,11 +219,15 @@ void xe_tuning_dump(struct xe_gt *gt, struct drm_printer *p)
+ 	for_each_set_bit(idx, gt->tuning_active.gt, ARRAY_SIZE(gt_tunings))
+ 		drm_printf_indent(p, 1, "%s\n", gt_tunings[idx].name);
+ 
+-	drm_printf(p, "\nEngine Tunings\n");
++	drm_puts(p, "\n");
++	drm_printf(p, "Engine Tunings\n");
+ 	for_each_set_bit(idx, gt->tuning_active.engine, ARRAY_SIZE(engine_tunings))
+ 		drm_printf_indent(p, 1, "%s\n", engine_tunings[idx].name);
+ 
+-	drm_printf(p, "\nLRC Tunings\n");
++	drm_puts(p, "\n");
++	drm_printf(p, "LRC Tunings\n");
+ 	for_each_set_bit(idx, gt->tuning_active.lrc, ARRAY_SIZE(lrc_tunings))
+ 		drm_printf_indent(p, 1, "%s\n", lrc_tunings[idx].name);
++
++	return 0;
+ }
+diff --git a/drivers/gpu/drm/xe/xe_tuning.h b/drivers/gpu/drm/xe/xe_tuning.h
+index dd0d3ccc9..c1cc5927f 100644
+--- a/drivers/gpu/drm/xe/xe_tuning.h
++++ b/drivers/gpu/drm/xe/xe_tuning.h
+@@ -14,6 +14,6 @@ int xe_tuning_init(struct xe_gt *gt);
+ void xe_tuning_process_gt(struct xe_gt *gt);
+ void xe_tuning_process_engine(struct xe_hw_engine *hwe);
+ void xe_tuning_process_lrc(struct xe_hw_engine *hwe);
+-void xe_tuning_dump(struct xe_gt *gt, struct drm_printer *p);
++int xe_tuning_dump(struct xe_gt *gt, struct drm_printer *p);
+ 
+ #endif

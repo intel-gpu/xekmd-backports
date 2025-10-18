@@ -1,0 +1,234 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Tue, 23 Sep 2025 23:16:13 +0200
+Subject: drm/xe/debugfs: Update xe_pat_dump signature
+
+Our debugfs helper xe_gt_debugfs_show_with_rpm() expects print()
+functions to return int. New signature allows us to drop wrapper.
+
+While around, move kernel-doc closer to the function definition,
+as suggested in the doc-guide.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250923211613.193347-6-michal.wajdeczko@intel.com
+(cherry picked from commit 65774efef2d53c3ac37694d59ff9ec0d16be3f7f)
+(backported from commit 65774efef2d53c3ac37694d59ff9ec0d16be3f7f linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_debugfs.c |  8 +-----
+ drivers/gpu/drm/xe/xe_pat.c        | 40 +++++++++++++++++++-----------
+ drivers/gpu/drm/xe/xe_pat.h        |  7 +-----
+ 3 files changed, 28 insertions(+), 27 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_debugfs.c b/drivers/gpu/drm/xe/xe_gt_debugfs.c
+index cc2caf2f8..20602cc2e 100644
+--- a/drivers/gpu/drm/xe/xe_gt_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_gt_debugfs.c
+@@ -167,12 +167,6 @@ static int register_save_restore(struct xe_gt *gt, struct drm_printer *p)
+ 	return 0;
+ }
+ 
+-static int pat(struct xe_gt *gt, struct drm_printer *p)
+-{
+-	xe_pat_dump(gt, p);
+-	return 0;
+-}
+-
+ static int rcs_default_lrc(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	xe_lrc_dump_default(p, gt, XE_ENGINE_CLASS_RENDER);
+@@ -232,7 +226,7 @@ static const struct drm_info_list vf_safe_debugfs_list[] = {
+ static const struct drm_info_list pf_only_debugfs_list[] = {
+ 	{ "hw_engines", .show = xe_gt_debugfs_show_with_rpm, .data = hw_engines },
+ 	{ "mocs", .show = xe_gt_debugfs_show_with_rpm, .data = xe_mocs_dump },
+-	{ "pat", .show = xe_gt_debugfs_show_with_rpm, .data = pat },
++	{ "pat", .show = xe_gt_debugfs_show_with_rpm, .data = xe_pat_dump },
+ 	{ "powergate_info", .show = xe_gt_debugfs_show_with_rpm, .data = xe_gt_idle_pg_print },
+ 	{ "steering", .show = xe_gt_debugfs_show_with_rpm, .data = steering },
+ };
+diff --git a/drivers/gpu/drm/xe/xe_pat.c b/drivers/gpu/drm/xe/xe_pat.c
+index 30fdbdb93..866d79523 100644
+--- a/drivers/gpu/drm/xe/xe_pat.c
++++ b/drivers/gpu/drm/xe/xe_pat.c
+@@ -57,7 +57,7 @@ struct xe_pat_ops {
+ 				 int n_entries);
+ 	void (*program_media)(struct xe_gt *gt, const struct xe_pat_table_entry table[],
+ 			      int n_entries);
+-	void (*dump)(struct xe_gt *gt, struct drm_printer *p);
++	int (*dump)(struct xe_gt *gt, struct drm_printer *p);
+ };
+ 
+ static const struct xe_pat_table_entry xelp_pat_table[] = {
+@@ -179,7 +179,7 @@ static void program_pat_mcr(struct xe_gt *gt, const struct xe_pat_table_entry ta
+ 	}
+ }
+ 
+-static void xelp_dump(struct xe_gt *gt, struct drm_printer *p)
++static int xelp_dump(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	unsigned int fw_ref;
+@@ -187,7 +187,7 @@ static void xelp_dump(struct xe_gt *gt, struct drm_printer *p)
+ 
+ 	fw_ref = xe_force_wake_get(gt_to_fw(gt), XE_FW_GT);
+ 	if (!fw_ref)
+-		return;
++		return -ETIMEDOUT;
+ 
+ 	drm_printf(p, "PAT table:\n");
+ 
+@@ -200,6 +200,7 @@ static void xelp_dump(struct xe_gt *gt, struct drm_printer *p)
+ 	}
+ 
+ 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
++	return 0;
+ }
+ 
+ static const struct xe_pat_ops xelp_pat_ops = {
+@@ -207,7 +208,7 @@ static const struct xe_pat_ops xelp_pat_ops = {
+ 	.dump = xelp_dump,
+ };
+ 
+-static void xehp_dump(struct xe_gt *gt, struct drm_printer *p)
++static int xehp_dump(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	unsigned int fw_ref;
+@@ -215,7 +216,7 @@ static void xehp_dump(struct xe_gt *gt, struct drm_printer *p)
+ 
+ 	fw_ref = xe_force_wake_get(gt_to_fw(gt), XE_FW_GT);
+ 	if (!fw_ref)
+-		return;
++		return -ETIMEDOUT;
+ 
+ 	drm_printf(p, "PAT table:\n");
+ 
+@@ -230,6 +231,7 @@ static void xehp_dump(struct xe_gt *gt, struct drm_printer *p)
+ 	}
+ 
+ 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
++	return 0;
+ }
+ 
+ static const struct xe_pat_ops xehp_pat_ops = {
+@@ -237,7 +239,7 @@ static const struct xe_pat_ops xehp_pat_ops = {
+ 	.dump = xehp_dump,
+ };
+ 
+-static void xehpc_dump(struct xe_gt *gt, struct drm_printer *p)
++static int xehpc_dump(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	unsigned int fw_ref;
+@@ -245,7 +247,7 @@ static void xehpc_dump(struct xe_gt *gt, struct drm_printer *p)
+ 
+ 	fw_ref = xe_force_wake_get(gt_to_fw(gt), XE_FW_GT);
+ 	if (!fw_ref)
+-		return;
++		return -ETIMEDOUT;
+ 
+ 	drm_printf(p, "PAT table:\n");
+ 
+@@ -258,6 +260,7 @@ static void xehpc_dump(struct xe_gt *gt, struct drm_printer *p)
+ 	}
+ 
+ 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
++	return 0;
+ }
+ 
+ static const struct xe_pat_ops xehpc_pat_ops = {
+@@ -265,7 +268,7 @@ static const struct xe_pat_ops xehpc_pat_ops = {
+ 	.dump = xehpc_dump,
+ };
+ 
+-static void xelpg_dump(struct xe_gt *gt, struct drm_printer *p)
++static int xelpg_dump(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	unsigned int fw_ref;
+@@ -273,7 +276,7 @@ static void xelpg_dump(struct xe_gt *gt, struct drm_printer *p)
+ 
+ 	fw_ref = xe_force_wake_get(gt_to_fw(gt), XE_FW_GT);
+ 	if (!fw_ref)
+-		return;
++		return -ETIMEDOUT;
+ 
+ 	drm_printf(p, "PAT table:\n");
+ 
+@@ -291,6 +294,7 @@ static void xelpg_dump(struct xe_gt *gt, struct drm_printer *p)
+ 	}
+ 
+ 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
++	return 0;
+ }
+ 
+ /*
+@@ -323,7 +327,7 @@ static void xe2lpm_program_pat(struct xe_gt *gt, const struct xe_pat_table_entry
+ 		xe_mmio_write32(&gt->mmio, XE_REG(_PAT_PTA), xe2_pat_pta.value);
+ }
+ 
+-static void xe2_dump(struct xe_gt *gt, struct drm_printer *p)
++static int xe2_dump(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	unsigned int fw_ref;
+@@ -332,7 +336,7 @@ static void xe2_dump(struct xe_gt *gt, struct drm_printer *p)
+ 
+ 	fw_ref = xe_force_wake_get(gt_to_fw(gt), XE_FW_GT);
+ 	if (!fw_ref)
+-		return;
++		return -ETIMEDOUT;
+ 
+ 	drm_printf(p, "PAT table:\n");
+ 
+@@ -372,6 +376,7 @@ static void xe2_dump(struct xe_gt *gt, struct drm_printer *p)
+ 		   pat);
+ 
+ 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
++	return 0;
+ }
+ 
+ static const struct xe_pat_ops xe2_pat_ops = {
+@@ -464,12 +469,19 @@ void xe_pat_init(struct xe_gt *gt)
+ 		xe->pat.ops->program_graphics(gt, xe->pat.table, xe->pat.n_entries);
+ }
+ 
+-void xe_pat_dump(struct xe_gt *gt, struct drm_printer *p)
++/**
++ * xe_pat_dump() - Dump GT PAT table into a drm printer.
++ * @gt: the &xe_gt
++ * @p: the &drm_printer
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_pat_dump(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 
+ 	if (!xe->pat.ops)
+-		return;
++		return -EOPNOTSUPP;
+ 
+-	xe->pat.ops->dump(gt, p);
++	return xe->pat.ops->dump(gt, p);
+ }
+diff --git a/drivers/gpu/drm/xe/xe_pat.h b/drivers/gpu/drm/xe/xe_pat.h
+index fa0dfbe52..268c9a899 100644
+--- a/drivers/gpu/drm/xe/xe_pat.h
++++ b/drivers/gpu/drm/xe/xe_pat.h
+@@ -43,12 +43,7 @@ void xe_pat_init_early(struct xe_device *xe);
+  */
+ void xe_pat_init(struct xe_gt *gt);
+ 
+-/**
+- * xe_pat_dump - Dump PAT table
+- * @gt: GT structure
+- * @p: Printer to dump info to
+- */
+-void xe_pat_dump(struct xe_gt *gt, struct drm_printer *p);
++int xe_pat_dump(struct xe_gt *gt, struct drm_printer *p);
+ 
+ /**
+  * xe_pat_index_get_coh_mode - Extract the coherency mode for the given

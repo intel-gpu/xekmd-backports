@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Date: Thu, 11 Sep 2025 17:20:25 -0400
+Subject: drm/xe: Fix circular locking dependency
+
+Fix this:
+
+ ======================================================
+ WARNING: possible circular locking dependency detected
+ 6.17.0-rc4-lgci-xe-xe-pw-153723v2+ #1 Tainted: G S   U
+ ------------------------------------------------------
+ xe_pm/11324 is trying to acquire lock:
+ ffff8881085f22a0 (&pc->freq_lock){+.+.}-{3:3}, at:
+ 		  xe_guc_pc_start+0x39f/0xf70 [xe]
+
+but task is already holding lock:
+
+ ffffffffa1020420 (xe_rpm_nod3cold_map){+.+.}-{0:0}, at:
+ 		  xe_rpm_lockmap_acquire+0x1a/0x70 [xe]
+
+which lock already depends on the new lock.
+
+Possible unsafe locking scenario:
+      CPU0                    CPU1
+      ----                    ----
+ lock(xe_rpm_nod3cold_map);
+                              lock(&pc->freq_lock);
+                              lock(xe_rpm_nod3cold_map);
+ lock(&pc->freq_lock);
+
+Reported-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Closes: https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/6122
+Fixes: 60d2b7899142 ("drm/xe/guc: Add SLPC power profile interface")
+Cc: Vinay Belgaumkar <vinay.belgaumkar@intel.com>
+Reviewed-by: Vinay Belgaumkar <vinay.belgaumkar@intel.com>
+Tested-by: Vinay Belgaumkar <vinay.belgaumkar@intel.com>
+Link: https://lore.kernel.org/r/20250911212024.966757-2-rodrigo.vivi@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry picked from commit fed1a9d60fa39faa9b10b927681d85a81bcbe797)
+(backported from commit fed1a9d60fa39faa9b10b927681d85a81bcbe797 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_freq.c | 2 ++
+ drivers/gpu/drm/xe/xe_guc_pc.c  | 2 +-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_freq.c b/drivers/gpu/drm/xe/xe_gt_freq.c
+index 36cc054a5..0523c54e5 100644
+--- a/drivers/gpu/drm/xe/xe_gt_freq.c
++++ b/drivers/gpu/drm/xe/xe_gt_freq.c
+@@ -241,7 +241,9 @@ static ssize_t power_profile_store(struct kobject *kobj,
+ 	struct xe_guc_pc *pc = dev_to_pc(dev);
+ 	int err;
+ 
++	xe_pm_runtime_get(dev_to_xe(dev));
+ 	err = xe_guc_pc_set_power_profile(pc, buff);
++	xe_pm_runtime_put(dev_to_xe(dev));
+ 
+ 	return err ?: count;
+ }
+diff --git a/drivers/gpu/drm/xe/xe_guc_pc.c b/drivers/gpu/drm/xe/xe_guc_pc.c
+index b213a7c76..83697b5a6 100644
+--- a/drivers/gpu/drm/xe/xe_guc_pc.c
++++ b/drivers/gpu/drm/xe/xe_guc_pc.c
+@@ -1226,7 +1226,7 @@ int xe_guc_pc_set_power_profile(struct xe_guc_pc *pc, const char *buf)
+ 		return -EINVAL;
+ 
+ 	guard(mutex)(&pc->freq_lock);
+-	xe_pm_runtime_get(pc_to_xe(pc));
++	xe_pm_runtime_get_noresume(pc_to_xe(pc));
+ 
+ 	ret = pc_action_set_param(pc,
+ 				  SLPC_PARAM_POWER_PROFILE,

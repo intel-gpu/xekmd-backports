@@ -1,0 +1,212 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Sun, 28 Sep 2025 16:00:23 +0200
+Subject: drm/xe/pf: Promote PF debugfs function to its own file
+
+In upcoming patches, we will build on the PF separate debugfs
+tree for all SR-IOV related files and this new code will need
+dedicated file. To minimize large diffs later, move existing
+function now as-is, so any future modifications will be done
+directly in target file.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20250928140029.198847-2-michal.wajdeczko@intel.com
+(cherry picked from commit 4bd27bc0b7fb1b8c9a7d75d0e0a7ce6ae8e4e8e0)
+(backported from commit 1238b84ea305d5bb891761f3bd5f58763e2a6778 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/Makefile              |  1 +
+ drivers/gpu/drm/xe/xe_debugfs.c          |  2 +-
+ drivers/gpu/drm/xe/xe_sriov_pf.c         | 42 ------------------
+ drivers/gpu/drm/xe/xe_sriov_pf.h         |  5 ---
+ drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c | 54 ++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_pf_debugfs.h | 18 ++++++++
+ 6 files changed, 74 insertions(+), 48 deletions(-)
+ create mode 100644 drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
+ create mode 100644 drivers/gpu/drm/xe/xe_sriov_pf_debugfs.h
+
+diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
+index 7bced777f..1a9ef3989 100644
+--- a/drivers/gpu/drm/xe/Makefile
++++ b/drivers/gpu/drm/xe/Makefile
+@@ -159,6 +159,7 @@ xe-$(CONFIG_PCI_IOV) += \
+ 	xe_lmtt_ml.o \
+ 	xe_pci_sriov.o \
+ 	xe_sriov_pf.o \
++	xe_sriov_pf_debugfs.o \
+ 	xe_sriov_pf_service.o
+ 
+ # include helpers for tests even when XE is built-in
+diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
+index e605a39d0..7cba6eb3d 100644
+--- a/drivers/gpu/drm/xe/xe_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_debugfs.c
+@@ -21,7 +21,7 @@
+ #include "xe_mmio.h"
+ #include "xe_pm.h"
+ #include "xe_sriov.h"
+-#include "xe_sriov_pf.h"
++#include "xe_sriov_pf_debugfs.h"
+ #include "xe_sriov_vf.h"
+ #include "xe_step.h"
+ #include "xe_tile_debugfs.h"
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf.c b/drivers/gpu/drm/xe/xe_sriov_pf.c
+index 27ddf3cc8..4698348c0 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf.c
+@@ -146,45 +146,3 @@ void xe_sriov_pf_print_vfs_summary(struct xe_device *xe, struct drm_printer *p)
+ 	drm_printf(p, "supported: %u\n", xe->sriov.pf.driver_max_vfs);
+ 	drm_printf(p, "enabled: %u\n", pci_num_vf(pdev));
+ }
+-
+-static int simple_show(struct seq_file *m, void *data)
+-{
+-	struct drm_printer p = drm_seq_file_printer(m);
+-	struct drm_info_node *node = m->private;
+-	struct dentry *parent = node->dent->d_parent;
+-	struct xe_device *xe = parent->d_inode->i_private;
+-	void (*print)(struct xe_device *, struct drm_printer *) = node->info_ent->data;
+-
+-	print(xe, &p);
+-	return 0;
+-}
+-
+-static const struct drm_info_list debugfs_list[] = {
+-	{ .name = "vfs", .show = simple_show, .data = xe_sriov_pf_print_vfs_summary },
+-	{ .name = "versions", .show = simple_show, .data = xe_sriov_pf_service_print_versions },
+-};
+-
+-/**
+- * xe_sriov_pf_debugfs_register - Register PF debugfs attributes.
+- * @xe: the &xe_device
+- * @root: the root &dentry
+- *
+- * Prepare debugfs attributes exposed by the PF.
+- */
+-void xe_sriov_pf_debugfs_register(struct xe_device *xe, struct dentry *root)
+-{
+-	struct drm_minor *minor = xe->drm.primary;
+-	struct dentry *parent;
+-
+-	/*
+-	 *      /sys/kernel/debug/dri/0/
+-	 *      ├── pf
+-	 *      │   ├── ...
+-	 */
+-	parent = debugfs_create_dir("pf", root);
+-	if (IS_ERR(parent))
+-		return;
+-	parent->d_inode->i_private = xe;
+-
+-	drm_debugfs_create_files(debugfs_list, ARRAY_SIZE(debugfs_list), parent, minor);
+-}
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf.h b/drivers/gpu/drm/xe/xe_sriov_pf.h
+index e3b34f8f5..e6cf930ec 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf.h
++++ b/drivers/gpu/drm/xe/xe_sriov_pf.h
+@@ -16,7 +16,6 @@ struct xe_device;
+ bool xe_sriov_pf_readiness(struct xe_device *xe);
+ int xe_sriov_pf_init_early(struct xe_device *xe);
+ int xe_sriov_pf_wait_ready(struct xe_device *xe);
+-void xe_sriov_pf_debugfs_register(struct xe_device *xe, struct dentry *root);
+ void xe_sriov_pf_print_vfs_summary(struct xe_device *xe, struct drm_printer *p);
+ #else
+ static inline bool xe_sriov_pf_readiness(struct xe_device *xe)
+@@ -28,10 +27,6 @@ static inline int xe_sriov_pf_init_early(struct xe_device *xe)
+ {
+ 	return 0;
+ }
+-
+-static inline void xe_sriov_pf_debugfs_register(struct xe_device *xe, struct dentry *root)
+-{
+-}
+ #endif
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
+new file mode 100644
+index 000000000..2a1316048
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
+@@ -0,0 +1,54 @@
++// SPDX-License-Identifier: MIT
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#include <linux/debugfs.h>
++#include <drm/drm_debugfs.h>
++
++#include "xe_device_types.h"
++#include "xe_sriov_pf.h"
++#include "xe_sriov_pf_debugfs.h"
++#include "xe_sriov_pf_service.h"
++
++static int simple_show(struct seq_file *m, void *data)
++{
++	struct drm_printer p = drm_seq_file_printer(m);
++	struct drm_info_node *node = m->private;
++	struct dentry *parent = node->dent->d_parent;
++	struct xe_device *xe = parent->d_inode->i_private;
++	void (*print)(struct xe_device *, struct drm_printer *) = node->info_ent->data;
++
++	print(xe, &p);
++	return 0;
++}
++
++static const struct drm_info_list debugfs_list[] = {
++	{ .name = "vfs", .show = simple_show, .data = xe_sriov_pf_print_vfs_summary },
++	{ .name = "versions", .show = simple_show, .data = xe_sriov_pf_service_print_versions },
++};
++
++/**
++ * xe_sriov_pf_debugfs_register - Register PF debugfs attributes.
++ * @xe: the &xe_device
++ * @root: the root &dentry
++ *
++ * Prepare debugfs attributes exposed by the PF.
++ */
++void xe_sriov_pf_debugfs_register(struct xe_device *xe, struct dentry *root)
++{
++	struct drm_minor *minor = xe->drm.primary;
++	struct dentry *parent;
++
++	/*
++	 *      /sys/kernel/debug/dri/0/
++	 *      ├── pf
++	 *      │   ├── ...
++	 */
++	parent = debugfs_create_dir("pf", root);
++	if (IS_ERR(parent))
++		return;
++	parent->d_inode->i_private = xe;
++
++	drm_debugfs_create_files(debugfs_list, ARRAY_SIZE(debugfs_list), parent, minor);
++}
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.h b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.h
+new file mode 100644
+index 000000000..93db13585
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.h
+@@ -0,0 +1,18 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#ifndef _XE_SRIOV_PF_DEBUGFS_H_
++#define _XE_SRIOV_PF_DEBUGFS_H_
++
++struct dentry;
++struct xe_device;
++
++#ifdef CONFIG_PCI_IOV
++void xe_sriov_pf_debugfs_register(struct xe_device *xe, struct dentry *root);
++#else
++static inline void xe_sriov_pf_debugfs_register(struct xe_device *xe, struct dentry *root) { }
++#endif
++
++#endif

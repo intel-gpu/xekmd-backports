@@ -1,0 +1,109 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Tue, 23 Sep 2025 23:16:10 +0200
+Subject: drm/xe/debugfs: Update xe_wa_dump signature
+
+Our debugfs helper xe_gt_debugfs_show_with_rpm() expects print()
+functions to return int. New signature allows us to drop wrapper.
+
+While around, print additional separation lines using puts() to
+avoid output with leading \n which might confuse some printers.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250923211613.193347-3-michal.wajdeczko@intel.com
+(cherry picked from commit fa49ecdbecf5b9eaa78c4f509c8fdd84073c74b0)
+(backported from commit d06e0c33f3fcb4a60c9359c606b751ccfeaf5e5c linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_debugfs.c |  8 +-------
+ drivers/gpu/drm/xe/xe_wa.c         | 19 +++++++++++++++----
+ drivers/gpu/drm/xe/xe_wa.h         |  2 +-
+ 3 files changed, 17 insertions(+), 12 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_debugfs.c b/drivers/gpu/drm/xe/xe_gt_debugfs.c
+index 7fc541a57..83f303c0f 100644
+--- a/drivers/gpu/drm/xe/xe_gt_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_gt_debugfs.c
+@@ -167,12 +167,6 @@ static int register_save_restore(struct xe_gt *gt, struct drm_printer *p)
+ 	return 0;
+ }
+ 
+-static int workarounds(struct xe_gt *gt, struct drm_printer *p)
+-{
+-	xe_wa_dump(gt, p);
+-	return 0;
+-}
+-
+ static int tunings(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	xe_tuning_dump(gt, p);
+@@ -236,7 +230,7 @@ static const struct drm_info_list vf_safe_debugfs_list[] = {
+ 	{ "topology", .show = xe_gt_debugfs_show_with_rpm, .data = xe_gt_topology_dump },
+ 	{ "register-save-restore",
+ 		.show = xe_gt_debugfs_show_with_rpm, .data = register_save_restore },
+-	{ "workarounds", .show = xe_gt_debugfs_show_with_rpm, .data = workarounds },
++	{ "workarounds", .show = xe_gt_debugfs_show_with_rpm, .data = xe_wa_gt_dump },
+ 	{ "tunings", .show = xe_gt_debugfs_show_with_rpm, .data = tunings },
+ 	{ "default_lrc_rcs", .show = xe_gt_debugfs_show_with_rpm, .data = rcs_default_lrc },
+ 	{ "default_lrc_ccs", .show = xe_gt_debugfs_show_with_rpm, .data = ccs_default_lrc },
+diff --git a/drivers/gpu/drm/xe/xe_wa.c b/drivers/gpu/drm/xe/xe_wa.c
+index a9459faf5..de67ba9d8 100644
+--- a/drivers/gpu/drm/xe/xe_wa.c
++++ b/drivers/gpu/drm/xe/xe_wa.c
+@@ -1021,7 +1021,14 @@ void xe_wa_device_dump(struct xe_device *xe, struct drm_printer *p)
+ 			drm_printf_indent(p, 1, "%s\n", device_oob_was[idx].name);
+ }
+ 
+-void xe_wa_dump(struct xe_gt *gt, struct drm_printer *p)
++/**
++ * xe_wa_gt_dump() - Dump GT workarounds into a drm printer.
++ * @gt: the &xe_gt
++ * @p: the &drm_printer
++ *
++ * Return: always 0.
++ */
++int xe_wa_gt_dump(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	size_t idx;
+ 
+@@ -1029,18 +1036,22 @@ void xe_wa_dump(struct xe_gt *gt, struct drm_printer *p)
+ 	for_each_set_bit(idx, gt->wa_active.gt, ARRAY_SIZE(gt_was))
+ 		drm_printf_indent(p, 1, "%s\n", gt_was[idx].name);
+ 
+-	drm_printf(p, "\nEngine Workarounds\n");
++	drm_puts(p, "\n");
++	drm_printf(p, "Engine Workarounds\n");
+ 	for_each_set_bit(idx, gt->wa_active.engine, ARRAY_SIZE(engine_was))
+ 		drm_printf_indent(p, 1, "%s\n", engine_was[idx].name);
+ 
+-	drm_printf(p, "\nLRC Workarounds\n");
++	drm_puts(p, "\n");
++	drm_printf(p, "LRC Workarounds\n");
+ 	for_each_set_bit(idx, gt->wa_active.lrc, ARRAY_SIZE(lrc_was))
+ 		drm_printf_indent(p, 1, "%s\n", lrc_was[idx].name);
+ 
+-	drm_printf(p, "\nOOB Workarounds\n");
++	drm_puts(p, "\n");
++	drm_printf(p, "OOB Workarounds\n");
+ 	for_each_set_bit(idx, gt->wa_active.oob, ARRAY_SIZE(oob_was))
+ 		if (oob_was[idx].name)
+ 			drm_printf_indent(p, 1, "%s\n", oob_was[idx].name);
++	return 0;
+ }
+ 
+ /*
+diff --git a/drivers/gpu/drm/xe/xe_wa.h b/drivers/gpu/drm/xe/xe_wa.h
+index c290f4497..653b5603d 100644
+--- a/drivers/gpu/drm/xe/xe_wa.h
++++ b/drivers/gpu/drm/xe/xe_wa.h
+@@ -22,7 +22,7 @@ void xe_wa_process_engine(struct xe_hw_engine *hwe);
+ void xe_wa_process_lrc(struct xe_hw_engine *hwe);
+ void xe_wa_apply_tile_workarounds(struct xe_tile *tile);
+ void xe_wa_device_dump(struct xe_device *xe, struct drm_printer *p);
+-void xe_wa_dump(struct xe_gt *gt, struct drm_printer *p);
++int xe_wa_gt_dump(struct xe_gt *gt, struct drm_printer *p);
+ 
+ /**
+  * XE_WA - Out-of-band workarounds, to be queried and called as needed.

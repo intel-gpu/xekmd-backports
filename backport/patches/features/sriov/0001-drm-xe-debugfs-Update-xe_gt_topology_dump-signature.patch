@@ -1,0 +1,89 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Tue, 23 Sep 2025 23:16:09 +0200
+Subject: drm/xe/debugfs: Update xe_gt_topology_dump signature
+
+Our debugfs helper xe_gt_debugfs_show_with_rpm() expects print()
+functions to return int. New signature allows us to drop wrapper.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250923211613.193347-2-michal.wajdeczko@intel.com
+(cherry picked from commit 133e1f1ea9b0b3e1c5a5b73b7503f84b6c2d4cf8)
+(backported from commit 103094205d7dcc4c0d7504c279404e6b8f18c3f6 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_debugfs.c  |  8 +-------
+ drivers/gpu/drm/xe/xe_gt_topology.c | 11 +++++++++--
+ drivers/gpu/drm/xe/xe_gt_topology.h |  2 +-
+ 3 files changed, 11 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_debugfs.c b/drivers/gpu/drm/xe/xe_gt_debugfs.c
+index 81547633e..7fc541a57 100644
+--- a/drivers/gpu/drm/xe/xe_gt_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_gt_debugfs.c
+@@ -136,12 +136,6 @@ static int hw_engines(struct xe_gt *gt, struct drm_printer *p)
+ 	return ret;
+ }
+ 
+-static int topology(struct xe_gt *gt, struct drm_printer *p)
+-{
+-	xe_gt_topology_dump(gt, p);
+-	return 0;
+-}
+-
+ static int steering(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	xe_gt_mcr_steering_dump(gt, p);
+@@ -239,7 +233,7 @@ static int hwconfig(struct xe_gt *gt, struct drm_printer *p)
+  * - without access to the PF specific data
+  */
+ static const struct drm_info_list vf_safe_debugfs_list[] = {
+-	{ "topology", .show = xe_gt_debugfs_show_with_rpm, .data = topology },
++	{ "topology", .show = xe_gt_debugfs_show_with_rpm, .data = xe_gt_topology_dump },
+ 	{ "register-save-restore",
+ 		.show = xe_gt_debugfs_show_with_rpm, .data = register_save_restore },
+ 	{ "workarounds", .show = xe_gt_debugfs_show_with_rpm, .data = workarounds },
+diff --git a/drivers/gpu/drm/xe/xe_gt_topology.c b/drivers/gpu/drm/xe/xe_gt_topology.c
+index f67bd8bf2..dca167634 100644
+--- a/drivers/gpu/drm/xe/xe_gt_topology.c
++++ b/drivers/gpu/drm/xe/xe_gt_topology.c
+@@ -261,8 +261,14 @@ static const char *eu_type_to_str(enum xe_gt_eu_type eu_type)
+ 	return NULL;
+ }
+ 
+-void
+-xe_gt_topology_dump(struct xe_gt *gt, struct drm_printer *p)
++/**
++ * xe_gt_topology_dump() - Dump GT topology into a drm printer.
++ * @gt: the &xe_gt
++ * @p: the &drm_printer
++ *
++ * Return: always 0.
++ */
++int xe_gt_topology_dump(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	drm_printf(p, "dss mask (geometry): %*pb\n", XE_MAX_DSS_FUSE_BITS,
+ 		   gt->fuse_topo.g_dss_mask);
+@@ -276,6 +282,7 @@ xe_gt_topology_dump(struct xe_gt *gt, struct drm_printer *p)
+ 
+ 	drm_printf(p, "L3 bank mask:        %*pb\n", XE_MAX_L3_BANK_MASK_BITS,
+ 		   gt->fuse_topo.l3_bank_mask);
++	return 0;
+ }
+ 
+ /*
+diff --git a/drivers/gpu/drm/xe/xe_gt_topology.h b/drivers/gpu/drm/xe/xe_gt_topology.h
+index 23c5e49e8..4c09ef40b 100644
+--- a/drivers/gpu/drm/xe/xe_gt_topology.h
++++ b/drivers/gpu/drm/xe/xe_gt_topology.h
+@@ -23,7 +23,7 @@ struct drm_printer;
+ 
+ void xe_gt_topology_init(struct xe_gt *gt);
+ 
+-void xe_gt_topology_dump(struct xe_gt *gt, struct drm_printer *p);
++int xe_gt_topology_dump(struct xe_gt *gt, struct drm_printer *p);
+ 
+ unsigned int
+ xe_dss_mask_group_ffs(const xe_dss_mask_t mask, int groupsize, int groupnum);

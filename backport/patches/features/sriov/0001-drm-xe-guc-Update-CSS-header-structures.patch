@@ -1,0 +1,179 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: John Harrison <John.C.Harrison@Intel.com>
+Date: Wed, 10 Sep 2025 14:02:32 -0700
+Subject: drm/xe/guc: Update CSS header structures
+
+Rework the CSS header structure according to recent updates to the GuC
+API spec. Also include more field definitions.
+
+v2: Also pass the new GuC specific structure to a GuC specific
+function instead of the higher level, generic structure (review
+feedback from Daniele).
+Also correct naming of CSS_TIME_* fields.
+
+Signed-off-by: John Harrison <John.C.Harrison@Intel.com>
+Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Link: https://lore.kernel.org/r/20250910210237.603576-2-John.C.Harrison@Intel.com
+(cherry picked from commit 86e331e7d68dcf04c1a62b81e5ce14b78b8fe12a)
+(backported from commit 7d0ca56e9176578babd527736840e7c32c3ee5fc linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_uc_fw.c     | 24 ++++++------
+ drivers/gpu/drm/xe/xe_uc_fw_abi.h | 64 ++++++++++++++++++++-----------
+ 2 files changed, 53 insertions(+), 35 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_uc_fw.c b/drivers/gpu/drm/xe/xe_uc_fw.c
+index 73025b82b..158e36a26 100644
+--- a/drivers/gpu/drm/xe/xe_uc_fw.c
++++ b/drivers/gpu/drm/xe/xe_uc_fw.c
+@@ -327,7 +327,7 @@ static void uc_fw_fini(struct drm_device *drm, void *arg)
+ 	xe_uc_fw_change_status(uc_fw, XE_UC_FIRMWARE_SELECTED);
+ }
+ 
+-static int guc_read_css_info(struct xe_uc_fw *uc_fw, struct uc_css_header *css)
++static int guc_read_css_info(struct xe_uc_fw *uc_fw, struct uc_css_guc_info *guc_info)
+ {
+ 	struct xe_gt *gt = uc_fw_to_gt(uc_fw);
+ 	struct xe_uc_fw_version *release = &uc_fw->versions.found[XE_UC_FW_VER_RELEASE];
+@@ -342,11 +342,11 @@ static int guc_read_css_info(struct xe_uc_fw *uc_fw, struct uc_css_header *css)
+ 		return -EINVAL;
+ 	}
+ 
+-	compatibility->major = FIELD_GET(CSS_SW_VERSION_UC_MAJOR, css->submission_version);
+-	compatibility->minor = FIELD_GET(CSS_SW_VERSION_UC_MINOR, css->submission_version);
+-	compatibility->patch = FIELD_GET(CSS_SW_VERSION_UC_PATCH, css->submission_version);
++	compatibility->major = FIELD_GET(CSS_SW_VERSION_UC_MAJOR, guc_info->submission_version);
++	compatibility->minor = FIELD_GET(CSS_SW_VERSION_UC_MINOR, guc_info->submission_version);
++	compatibility->patch = FIELD_GET(CSS_SW_VERSION_UC_PATCH, guc_info->submission_version);
+ 
+-	uc_fw->private_data_size = css->private_data_size;
++	uc_fw->private_data_size = guc_info->private_data_size;
+ 
+ 	return 0;
+ }
+@@ -415,8 +415,8 @@ static int parse_css_header(struct xe_uc_fw *uc_fw, const void *fw_data, size_t
+ 	css = (struct uc_css_header *)fw_data;
+ 
+ 	/* Check integrity of size values inside CSS header */
+-	size = (css->header_size_dw - css->key_size_dw - css->modulus_size_dw -
+-		css->exponent_size_dw) * sizeof(u32);
++	size = (css->header_size_dw - css->rsa_info.key_size_dw - css->rsa_info.modulus_size_dw -
++		css->rsa_info.exponent_size_dw) * sizeof(u32);
+ 	if (unlikely(size != sizeof(struct uc_css_header))) {
+ 		drm_warn(&xe->drm,
+ 			 "%s firmware %s: unexpected header size: %zu != %zu\n",
+@@ -429,7 +429,7 @@ static int parse_css_header(struct xe_uc_fw *uc_fw, const void *fw_data, size_t
+ 	uc_fw->ucode_size = (css->size_dw - css->header_size_dw) * sizeof(u32);
+ 
+ 	/* now RSA */
+-	uc_fw->rsa_size = css->key_size_dw * sizeof(u32);
++	uc_fw->rsa_size = css->rsa_info.key_size_dw * sizeof(u32);
+ 
+ 	/* At least, it should have header, uCode and RSA. Size of all three. */
+ 	size = sizeof(struct uc_css_header) + uc_fw->ucode_size +
+@@ -442,12 +442,12 @@ static int parse_css_header(struct xe_uc_fw *uc_fw, const void *fw_data, size_t
+ 	}
+ 
+ 	/* Get version numbers from the CSS header */
+-	release->major = FIELD_GET(CSS_SW_VERSION_UC_MAJOR, css->sw_version);
+-	release->minor = FIELD_GET(CSS_SW_VERSION_UC_MINOR, css->sw_version);
+-	release->patch = FIELD_GET(CSS_SW_VERSION_UC_PATCH, css->sw_version);
++	release->major = FIELD_GET(CSS_SW_VERSION_UC_MAJOR, css->guc_info.sw_version);
++	release->minor = FIELD_GET(CSS_SW_VERSION_UC_MINOR, css->guc_info.sw_version);
++	release->patch = FIELD_GET(CSS_SW_VERSION_UC_PATCH, css->guc_info.sw_version);
+ 
+ 	if (uc_fw->type == XE_UC_FW_TYPE_GUC)
+-		return guc_read_css_info(uc_fw, css);
++		return guc_read_css_info(uc_fw, &css->guc_info);
+ 
+ 	return 0;
+ }
+diff --git a/drivers/gpu/drm/xe/xe_uc_fw_abi.h b/drivers/gpu/drm/xe/xe_uc_fw_abi.h
+index 87ade4120..faceb437f 100644
+--- a/drivers/gpu/drm/xe/xe_uc_fw_abi.h
++++ b/drivers/gpu/drm/xe/xe_uc_fw_abi.h
+@@ -44,6 +44,39 @@
+  *    in fw. So driver will load a truncated firmware in this case.
+  */
+ 
++struct uc_css_rsa_info {
++	u32 key_size_dw;
++	u32 modulus_size_dw;
++	u32 exponent_size_dw;
++} __packed;
++
++struct uc_css_guc_info {
++	u32 time;
++#define CSS_TIME_HOUR				(0xFF << 0)
++#define CSS_TIME_MIN				(0xFF << 8)
++#define CSS_TIME_SEC				(0xFFFF << 16)
++	u32 reserved0[5];
++	u32 sw_version;
++#define CSS_SW_VERSION_UC_MAJOR			(0xFF << 16)
++#define CSS_SW_VERSION_UC_MINOR			(0xFF << 8)
++#define CSS_SW_VERSION_UC_PATCH			(0xFF << 0)
++	u32 submission_version;
++	u32 reserved1[11];
++	u32 header_info;
++#define CSS_HEADER_INFO_SVN			(0xFF)
++#define CSS_HEADER_INFO_COPY_VALID		(0x1 << 31)
++	u32 private_data_size;
++	u32 ukernel_info;
++#define CSS_UKERNEL_INFO_DEVICEID		(0xFFFF << 16)
++#define CSS_UKERNEL_INFO_PRODKEY		(0xFF << 8)
++#define CSS_UKERNEL_INFO_BUILDTYPE		(0x3 << 2)
++#define CSS_UKERNEL_INFO_BUILDTYPE_PROD		0
++#define CSS_UKERNEL_INFO_BUILDTYPE_PREPROD	1
++#define CSS_UKERNEL_INFO_BUILDTYPE_DEBUG	2
++#define CSS_UKERNEL_INFO_ENCSTATUS		(0x1 << 1)
++#define CSS_UKERNEL_INFO_COPY_VALID		(0x1 << 0)
++} __packed;
++
+ struct uc_css_header {
+ 	u32 module_type;
+ 	/*
+@@ -52,36 +85,21 @@ struct uc_css_header {
+ 	 */
+ 	u32 header_size_dw;
+ 	u32 header_version;
+-	u32 module_id;
++	u32 reserved0;
+ 	u32 module_vendor;
+ 	u32 date;
+-#define CSS_DATE_DAY			(0xFF << 0)
+-#define CSS_DATE_MONTH			(0xFF << 8)
+-#define CSS_DATE_YEAR			(0xFFFF << 16)
++#define CSS_DATE_DAY				(0xFF << 0)
++#define CSS_DATE_MONTH				(0xFF << 8)
++#define CSS_DATE_YEAR				(0xFFFF << 16)
+ 	u32 size_dw; /* uCode plus header_size_dw */
+-	u32 key_size_dw;
+-	u32 modulus_size_dw;
+-	u32 exponent_size_dw;
+-	u32 time;
+-#define CSS_TIME_HOUR			(0xFF << 0)
+-#define CSS_DATE_MIN			(0xFF << 8)
+-#define CSS_DATE_SEC			(0xFFFF << 16)
+-	char username[8];
+-	char buildnumber[12];
+-	u32 sw_version;
+-#define CSS_SW_VERSION_UC_MAJOR		(0xFF << 16)
+-#define CSS_SW_VERSION_UC_MINOR		(0xFF << 8)
+-#define CSS_SW_VERSION_UC_PATCH		(0xFF << 0)
+ 	union {
+-		u32 submission_version; /* only applies to GuC */
+-		u32 reserved2;
++		u32 reserved1[3];
++		struct uc_css_rsa_info rsa_info;
+ 	};
+-	u32 reserved0[12];
+ 	union {
+-		u32 private_data_size; /* only applies to GuC */
+-		u32 reserved1;
++		u32 reserved2[22];
++		struct uc_css_guc_info guc_info;
+ 	};
+-	u32 header_info;
+ } __packed;
+ static_assert(sizeof(struct uc_css_header) == 128);
+ 

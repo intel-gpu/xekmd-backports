@@ -1,0 +1,225 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Vinay Belgaumkar <vinay.belgaumkar@intel.com>
+Date: Wed, 3 Sep 2025 16:21:20 -0700
+Subject: drm/xe/guc: Add SLPC power profile interface
+
+GuC has an interface to set a power profile for the SLPC algorithm.
+Base mode is default and ensures a balanced performance, power_saving
+mode has conservative up/down thresholds and is suitable for use with
+apps that typically need to be power efficient. This will result in
+lower GT frequencies, thus consuming lower power.
+
+Selected power profile will be displayed in this format:
+
+$ cat power_profile
+
+  [base]    power_saving
+
+$ echo power_saving > power_profile
+$ cat power_profile
+
+  base    [power_saving]
+
+v2: Address review comments (Rodrigo)
+
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Signed-off-by: Vinay Belgaumkar <vinay.belgaumkar@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250903232120.390190-1-vinay.belgaumkar@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry picked from commit 60d2b7899142d56654ba254a454eb282c1d181ca)
+(backported from commit 60d2b7899142d56654ba254a454eb282c1d181ca linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/abi/guc_actions_slpc_abi.h |  5 ++
+ drivers/gpu/drm/xe/xe_gt_freq.c               | 26 +++++++
+ drivers/gpu/drm/xe/xe_guc_pc.c                | 67 +++++++++++++++++++
+ drivers/gpu/drm/xe/xe_guc_pc.h                |  2 +
+ drivers/gpu/drm/xe/xe_guc_pc_types.h          |  2 +
+ 5 files changed, 102 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/abi/guc_actions_slpc_abi.h b/drivers/gpu/drm/xe/abi/guc_actions_slpc_abi.h
+index b28c8fa06..ce5c59517 100644
+--- a/drivers/gpu/drm/xe/abi/guc_actions_slpc_abi.h
++++ b/drivers/gpu/drm/xe/abi/guc_actions_slpc_abi.h
+@@ -210,6 +210,11 @@ struct slpc_shared_data {
+ 	u8 reserved_mode_definition[4096];
+ } __packed;
+ 
++enum slpc_power_profile {
++	SLPC_POWER_PROFILE_BASE = 0x0,
++	SLPC_POWER_PROFILE_POWER_SAVING = 0x1
++};
++
+ /**
+  * DOC: SLPC H2G MESSAGE FORMAT
+  *
+diff --git a/drivers/gpu/drm/xe/xe_gt_freq.c b/drivers/gpu/drm/xe/xe_gt_freq.c
+index 868a5d2c1..36cc054a5 100644
+--- a/drivers/gpu/drm/xe/xe_gt_freq.c
++++ b/drivers/gpu/drm/xe/xe_gt_freq.c
+@@ -222,6 +222,31 @@ static ssize_t max_freq_store(struct kobject *kobj,
+ }
+ static struct kobj_attribute attr_max_freq = __ATTR_RW(max_freq);
+ 
++static ssize_t power_profile_show(struct kobject *kobj,
++				  struct kobj_attribute *attr,
++				  char *buff)
++{
++	struct device *dev = kobj_to_dev(kobj);
++
++	xe_guc_pc_get_power_profile(dev_to_pc(dev), buff);
++
++	return strlen(buff);
++}
++
++static ssize_t power_profile_store(struct kobject *kobj,
++				   struct kobj_attribute *attr,
++				   const char *buff, size_t count)
++{
++	struct device *dev = kobj_to_dev(kobj);
++	struct xe_guc_pc *pc = dev_to_pc(dev);
++	int err;
++
++	err = xe_guc_pc_set_power_profile(pc, buff);
++
++	return err ?: count;
++}
++static struct kobj_attribute attr_power_profile = __ATTR_RW(power_profile);
++
+ static const struct attribute *freq_attrs[] = {
+ 	&attr_act_freq.attr,
+ 	&attr_cur_freq.attr,
+@@ -231,6 +256,7 @@ static const struct attribute *freq_attrs[] = {
+ 	&attr_rpn_freq.attr,
+ 	&attr_min_freq.attr,
+ 	&attr_max_freq.attr,
++	&attr_power_profile.attr,
+ 	NULL
+ };
+ 
+diff --git a/drivers/gpu/drm/xe/xe_guc_pc.c b/drivers/gpu/drm/xe/xe_guc_pc.c
+index 68b192fe3..b213a7c76 100644
+--- a/drivers/gpu/drm/xe/xe_guc_pc.c
++++ b/drivers/gpu/drm/xe/xe_guc_pc.c
+@@ -79,6 +79,11 @@
+  * Xe driver enables SLPC with all of its defaults features and frequency
+  * selection, which varies per platform.
+  *
++ * Power profiles add another level of control to SLPC. When power saving
++ * profile is chosen, SLPC will use conservative thresholds to ramp frequency,
++ * thus saving power. Base profile is default and ensures balanced performance
++ * for any workload.
++ *
+  * Render-C States:
+  * ================
+  *
+@@ -1182,6 +1187,61 @@ static int pc_action_set_strategy(struct xe_guc_pc *pc, u32 val)
+ 	return ret;
+ }
+ 
++static const char *power_profile_to_string(struct xe_guc_pc *pc)
++{
++	switch (pc->power_profile) {
++	case SLPC_POWER_PROFILE_BASE:
++		return "base";
++	case SLPC_POWER_PROFILE_POWER_SAVING:
++		return "power_saving";
++	default:
++		return "invalid";
++	}
++}
++
++void xe_guc_pc_get_power_profile(struct xe_guc_pc *pc, char *profile)
++{
++	switch (pc->power_profile) {
++	case SLPC_POWER_PROFILE_BASE:
++		sprintf(profile, "[%s]    %s\n", "base", "power_saving");
++		break;
++	case SLPC_POWER_PROFILE_POWER_SAVING:
++		sprintf(profile, "%s    [%s]\n", "base", "power_saving");
++		break;
++	default:
++		sprintf(profile, "invalid");
++	}
++}
++
++int xe_guc_pc_set_power_profile(struct xe_guc_pc *pc, const char *buf)
++{
++	int ret = 0;
++	u32 val;
++
++	if (strncmp("base", buf, strlen("base")) == 0)
++		val = SLPC_POWER_PROFILE_BASE;
++	else if (strncmp("power_saving", buf, strlen("power_saving")) == 0)
++		val = SLPC_POWER_PROFILE_POWER_SAVING;
++	else
++		return -EINVAL;
++
++	guard(mutex)(&pc->freq_lock);
++	xe_pm_runtime_get(pc_to_xe(pc));
++
++	ret = pc_action_set_param(pc,
++				  SLPC_PARAM_POWER_PROFILE,
++				  val);
++	if (ret)
++		xe_gt_err_once(pc_to_gt(pc), "Failed to set power profile to %d: %pe\n",
++			       val, ERR_PTR(ret));
++	else
++		pc->power_profile = val;
++
++	xe_pm_runtime_put(pc_to_xe(pc));
++
++	return ret;
++}
++
+ /**
+  * xe_guc_pc_start - Start GuC's Power Conservation component
+  * @pc: Xe_GuC_PC instance
+@@ -1260,6 +1320,11 @@ int xe_guc_pc_start(struct xe_guc_pc *pc)
+ 	/* Enable SLPC Optimized Strategy for compute */
+ 	ret = pc_action_set_strategy(pc, SLPC_OPTIMIZED_STRATEGY_COMPUTE);
+ 
++	/* Set cached value of power_profile */
++	ret = xe_guc_pc_set_power_profile(pc, power_profile_to_string(pc));
++	if (unlikely(ret))
++		xe_gt_err(gt, "Failed to set SLPC power profile: %pe\n", ERR_PTR(ret));
++
+ out:
+ 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
+ 	return ret;
+@@ -1338,6 +1403,8 @@ int xe_guc_pc_init(struct xe_guc_pc *pc)
+ 
+ 	pc->bo = bo;
+ 
++	pc->power_profile = SLPC_POWER_PROFILE_BASE;
++
+ 	return devm_add_action_or_reset(xe->drm.dev, xe_guc_pc_fini_hw, pc);
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_guc_pc.h b/drivers/gpu/drm/xe/xe_guc_pc.h
+index 52ecdd5dd..0e31396f1 100644
+--- a/drivers/gpu/drm/xe/xe_guc_pc.h
++++ b/drivers/gpu/drm/xe/xe_guc_pc.h
+@@ -31,6 +31,8 @@ int xe_guc_pc_get_min_freq(struct xe_guc_pc *pc, u32 *freq);
+ int xe_guc_pc_set_min_freq(struct xe_guc_pc *pc, u32 freq);
+ int xe_guc_pc_get_max_freq(struct xe_guc_pc *pc, u32 *freq);
+ int xe_guc_pc_set_max_freq(struct xe_guc_pc *pc, u32 freq);
++int xe_guc_pc_set_power_profile(struct xe_guc_pc *pc, const char *buf);
++void xe_guc_pc_get_power_profile(struct xe_guc_pc *pc, char *profile);
+ 
+ enum xe_gt_idle_state xe_guc_pc_c_status(struct xe_guc_pc *pc);
+ u64 xe_guc_pc_rc6_residency(struct xe_guc_pc *pc);
+diff --git a/drivers/gpu/drm/xe/xe_guc_pc_types.h b/drivers/gpu/drm/xe/xe_guc_pc_types.h
+index c02053948..5e4ea53fb 100644
+--- a/drivers/gpu/drm/xe/xe_guc_pc_types.h
++++ b/drivers/gpu/drm/xe/xe_guc_pc_types.h
+@@ -37,6 +37,8 @@ struct xe_guc_pc {
+ 	struct mutex freq_lock;
+ 	/** @freq_ready: Only handle freq changes, if they are really ready */
+ 	bool freq_ready;
++	/** @power_profile: Base or power_saving profile */
++	u32 power_profile;
+ };
+ 
+ #endif	/* _XE_GUC_PC_TYPES_H_ */

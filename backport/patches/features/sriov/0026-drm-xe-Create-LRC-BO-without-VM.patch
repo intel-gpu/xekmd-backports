@@ -1,0 +1,115 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Date: Wed, 28 May 2025 22:20:32 -0700
+Subject: drm/xe: Create LRC BO without VM
+
+Specifying VM during lrc->bo creation requires VM's reference
+to be held for the lifetime of lrc->bo as it will use VM's dma
+reservation object. Using VM's dma reservation object for
+lrc->bo doesn't provide any advantage. Hence do not pass VM
+while creating lrc->bo.
+
+v2: Use xe_bo_unpin_map_no_vm (Matthew Brost)
+
+Fixes: 264eecdba211 ("drm/xe: Decouple xe_exec_queue and xe_lrc")
+Signed-off-by: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Maarten Lankhorst <maarten.lankhorst@linux.intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250529052031.2429120-2-niranjana.vishwanathapura@intel.com
+(cherry picked from commit fbeaad071a98fef87deccee81d564de1c8e8e16d)
+(backported from commit e332935a540eb76dd656663ca908eb0544d96757 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c | 10 ----------
+ drivers/gpu/drm/xe/xe_lrc.c        | 16 ++--------------
+ 2 files changed, 2 insertions(+), 24 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index 0ea9091bb..8c7636683 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -110,15 +110,8 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
+ 
+ static int __xe_exec_queue_init(struct xe_exec_queue *q)
+ {
+-	struct xe_vm *vm = q->vm;
+ 	int i, err;
+ 
+-	if (vm) {
+-		err = xe_vm_lock(vm, true);
+-		if (err)
+-			return err;
+-	}
+-
+ 	for (i = 0; i < q->width; ++i) {
+ 		q->lrc[i] = xe_lrc_create(q->hwe, q->vm, SZ_16K, q->msix_vec);
+ 		if (IS_ERR(q->lrc[i])) {
+@@ -127,9 +120,6 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q)
+ 		}
+ 	}
+ 
+-	if (vm)
+-		xe_vm_unlock(vm);
+-
+ 	err = q->ops->init(q);
+ 	if (err)
+ 		goto err_lrc;
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index cf3dd0c94..75879795f 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1853,9 +1853,6 @@ struct xe_lrc_snapshot *xe_lrc_snapshot_capture(struct xe_lrc *lrc)
+ 	if (!snapshot)
+ 		return NULL;
+ 
+-	if (lrc->bo->vm)
+-		xe_vm_get(lrc->bo->vm);
+-
+ 	snapshot->context_desc = xe_lrc_ggtt_addr(lrc);
+ 	snapshot->ring_addr = __xe_lrc_ring_ggtt_addr(lrc);
+ 	snapshot->indirect_context_desc = xe_lrc_indirect_ring_ggtt_addr(lrc);
+@@ -1878,14 +1875,12 @@ struct xe_lrc_snapshot *xe_lrc_snapshot_capture(struct xe_lrc *lrc)
+ void xe_lrc_snapshot_capture_delayed(struct xe_lrc_snapshot *snapshot)
+ {
+ 	struct xe_bo *bo;
+-	struct xe_vm *vm;
+ 	struct iosys_map src;
+ 
+ 	if (!snapshot)
+ 		return;
+ 
+ 	bo = snapshot->lrc_bo;
+-	vm = bo->vm;
+ 	snapshot->lrc_bo = NULL;
+ 
+ 	snapshot->lrc_snapshot = kvmalloc(snapshot->lrc_size, GFP_KERNEL);
+@@ -1905,8 +1900,6 @@ void xe_lrc_snapshot_capture_delayed(struct xe_lrc_snapshot *snapshot)
+ 	xe_bo_unlock(bo);
+ put_bo:
+ 	xe_bo_put(bo);
+-	if (vm)
+-		xe_vm_put(vm);
+ }
+ 
+ void xe_lrc_snapshot_print(struct xe_lrc_snapshot *snapshot, struct drm_printer *p)
+@@ -1959,14 +1952,9 @@ void xe_lrc_snapshot_free(struct xe_lrc_snapshot *snapshot)
+ 		return;
+ 
+ 	kvfree(snapshot->lrc_snapshot);
+-	if (snapshot->lrc_bo) {
+-		struct xe_vm *vm;
+-
+-		vm = snapshot->lrc_bo->vm;
++	if (snapshot->lrc_bo)
+ 		xe_bo_put(snapshot->lrc_bo);
+-		if (vm)
+-			xe_vm_put(vm);
+-	}
++
+ 	kfree(snapshot);
+ }
+ 
+-- 
+2.34.1
+

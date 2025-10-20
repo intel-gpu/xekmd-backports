@@ -59,20 +59,15 @@ index fecb7c8a9..4644d6846 100644
  
  	h_c = find_handle(d->res, XE_EUDEBUG_RES_TYPE_CLIENT, xef);
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index fc8482a43..e0ab9b25f 100644
+index b595c6f41..b0d565a1a 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -112,6 +112,7 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
+@@ -111,10 +111,14 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
+ 
  static int __xe_exec_queue_init(struct xe_exec_queue *q)
  {
- 	struct xe_vm *vm = q->vm;
 +	u32 flags = 0;
  	int i, err;
- 
- 	if (vm) {
-@@ -120,8 +121,11 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q)
- 			return err;
- 	}
  
 +	if (q->eudebug_flags & EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)
 +		flags |= LRC_CREATE_RUNALONE;
@@ -82,8 +77,8 @@ index fc8482a43..e0ab9b25f 100644
 +		q->lrc[i] = xe_lrc_create(q->hwe, q->vm, SZ_16K, q->msix_vec, flags);
  		if (IS_ERR(q->lrc[i])) {
  			err = PTR_ERR(q->lrc[i]);
- 			goto err_unlock;
-@@ -406,6 +410,42 @@ static int exec_queue_set_timeslice(struct xe_device *xe, struct xe_exec_queue *
+ 			goto err_lrc;
+@@ -393,6 +397,42 @@ static int exec_queue_set_timeslice(struct xe_device *xe, struct xe_exec_queue *
  	return 0;
  }
  
@@ -126,7 +121,7 @@ index fc8482a43..e0ab9b25f 100644
  typedef int (*xe_exec_queue_set_property_fn)(struct xe_device *xe,
  					     struct xe_exec_queue *q,
  					     u64 value);
-@@ -413,6 +453,7 @@ typedef int (*xe_exec_queue_set_property_fn)(struct xe_device *xe,
+@@ -400,6 +440,7 @@ typedef int (*xe_exec_queue_set_property_fn)(struct xe_device *xe,
  static const xe_exec_queue_set_property_fn exec_queue_set_property_funcs[] = {
  	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY] = exec_queue_set_priority,
  	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_TIMESLICE] = exec_queue_set_timeslice,
@@ -134,7 +129,7 @@ index fc8482a43..e0ab9b25f 100644
  };
  
  static int exec_queue_user_ext_set_property(struct xe_device *xe,
-@@ -432,7 +473,8 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
+@@ -419,7 +460,8 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
  			 ARRAY_SIZE(exec_queue_set_property_funcs)) ||
  	    XE_IOCTL_DBG(xe, ext.pad) ||
  	    XE_IOCTL_DBG(xe, ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY &&
@@ -187,10 +182,10 @@ index 5ef96deaa..779a52daf 100644
  		err = PTR_ERR(port->lrc);
  		goto err;
 diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
-index 6191556cb..73ef35e06 100644
+index 75879795f..c13dee01c 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.c
 +++ b/drivers/gpu/drm/xe/xe_lrc.c
-@@ -1036,7 +1036,7 @@ static int xe_lrc_setup_utilization(struct xe_lrc *lrc)
+@@ -1039,7 +1039,7 @@ static int xe_lrc_setup_utilization(struct xe_lrc *lrc)
  #define PVC_CTX_ACC_CTR_THOLD	(0x2a + 1)
  
  static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
@@ -199,7 +194,7 @@ index 6191556cb..73ef35e06 100644
  {
  	struct xe_gt *gt = hwe->gt;
  	struct xe_tile *tile = gt_to_tile(gt);
-@@ -1177,6 +1177,16 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+@@ -1169,6 +1169,16 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
  	map = __xe_lrc_start_seqno_map(lrc);
  	xe_map_write32(lrc_to_xe(lrc), &map, lrc->fence_ctx.next_seqno - 1);
  
@@ -216,7 +211,7 @@ index 6191556cb..73ef35e06 100644
  	err = xe_lrc_setup_utilization(lrc);
  	if (err)
  		goto err_lrc_finish;
-@@ -1201,7 +1211,7 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+@@ -1193,7 +1203,7 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
   * upon failure.
   */
  struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
@@ -225,7 +220,7 @@ index 6191556cb..73ef35e06 100644
  {
  	struct xe_lrc *lrc;
  	int err;
-@@ -1210,7 +1220,7 @@ struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
+@@ -1202,7 +1212,7 @@ struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
  	if (!lrc)
  		return ERR_PTR(-ENOMEM);
  

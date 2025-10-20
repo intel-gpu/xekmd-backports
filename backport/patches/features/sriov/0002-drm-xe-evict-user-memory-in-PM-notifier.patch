@@ -1,0 +1,258 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Wed, 16 Apr 2025 16:09:15 +0100
+Subject: drm/xe: evict user memory in PM notifier
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In the case of VRAM we might need to allocate large amounts of
+GFP_KERNEL memory on suspend, however doing that directly in the driver
+.suspend()/.prepare() callback is not advisable (no swap for example).
+
+To improve on this we can instead hook up to the PM notifier framework
+which is invoked at an earlier stage. We effectively call the evict
+routine twice, where the notifier will have hopefully have cleared out
+most if not everything by the time we call it a second time when
+entering the .suspend() callback. For s4 we also get the added benefit
+of allocating the system pages before the hibernation image size is
+calculated, which looks more sensible.
+
+Note that the .suspend() hook is still responsible for dealing with all
+the pinned memory. Improving that is left to another patch.
+
+Link: https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/1181
+Link: https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/4288
+Link: https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/4566
+Suggested-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Reviewed-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Link: https://lore.kernel.org/r/20250416150913.434369-6-matthew.auld@intel.com
+(backported from commit 77c8ede611c6a70a95f7b15648551d0121b40d6c linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_bo_evict.c     | 45 ++++++++++++++++++--------
+ drivers/gpu/drm/xe/xe_bo_evict.h     |  1 +
+ drivers/gpu/drm/xe/xe_device_types.h |  3 ++
+ drivers/gpu/drm/xe/xe_pci.c          |  2 +-
+ drivers/gpu/drm/xe/xe_pm.c           | 48 ++++++++++++++++++++++++++--
+ drivers/gpu/drm/xe/xe_pm.h           |  2 +-
+ 6 files changed, 83 insertions(+), 18 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo_evict.c b/drivers/gpu/drm/xe/xe_bo_evict.c
+index 2bf74eb7f..748360fd2 100644
+--- a/drivers/gpu/drm/xe/xe_bo_evict.c
++++ b/drivers/gpu/drm/xe/xe_bo_evict.c
+@@ -47,25 +47,17 @@ static int xe_bo_apply_to_pinned(struct xe_device *xe,
+ }
+ 
+ /**
+- * xe_bo_evict_all - evict all BOs from VRAM
+- *
++ * xe_bo_evict_all_user - evict all non-pinned user BOs from VRAM
+  * @xe: xe device
+  *
+- * Evict non-pinned user BOs first (via GPU), evict pinned external BOs next
+- * (via GPU), wait for evictions, and finally evict pinned kernel BOs via CPU.
+- * All eviction magic done via TTM calls.
++ * Evict non-pinned user BOs (via GPU).
+  *
+  * Evict == move VRAM BOs to temporary (typically system) memory.
+- *
+- * This function should be called before the device goes into a suspend state
+- * where the VRAM loses power.
+  */
+-int xe_bo_evict_all(struct xe_device *xe)
++int xe_bo_evict_all_user(struct xe_device *xe)
+ {
+ 	struct ttm_device *bdev = &xe->ttm;
+-	struct xe_tile *tile;
+ 	u32 mem_type;
+-	u8 id;
+ 	int ret;
+ 
+ 	/* User memory */
+@@ -91,9 +83,34 @@ int xe_bo_evict_all(struct xe_device *xe)
+ 		}
+ 	}
+ 
+-	ret = xe_bo_apply_to_pinned(xe, &xe->pinned.late.external,
+-				    &xe->pinned.late.external,
+-				    xe_bo_evict_pinned);
++	return 0;
++}
++
++/**
++ * xe_bo_evict_all - evict all BOs from VRAM
++ * @xe: xe device
++ *
++ * Evict non-pinned user BOs first (via GPU), evict pinned external BOs next
++ * (via GPU), wait for evictions, and finally evict pinned kernel BOs via CPU.
++ * All eviction magic done via TTM calls.
++ *
++ * Evict == move VRAM BOs to temporary (typically system) memory.
++ *
++ * This function should be called before the device goes into a suspend state
++ * where the VRAM loses power.
++ */
++int xe_bo_evict_all(struct xe_device *xe)
++{
++	struct xe_tile *tile;
++	u8 id;
++	int ret;
++
++	ret = xe_bo_evict_all_user(xe);
++	if (ret)
++		return ret;
++
++	ret = xe_bo_apply_to_pinned(xe, &xe->pinned.late.kernel_bo_present,
++				    &xe->pinned.late.evicted, xe_bo_evict_pinned);
+ 
+ 	if (!ret)
+ 		ret = xe_bo_apply_to_pinned(xe, &xe->pinned.late.kernel_bo_present,
+diff --git a/drivers/gpu/drm/xe/xe_bo_evict.h b/drivers/gpu/drm/xe/xe_bo_evict.h
+index d63eb3fc5..e7f048634 100644
+--- a/drivers/gpu/drm/xe/xe_bo_evict.h
++++ b/drivers/gpu/drm/xe/xe_bo_evict.h
+@@ -9,6 +9,7 @@
+ struct xe_device;
+ 
+ int xe_bo_evict_all(struct xe_device *xe);
++int xe_bo_evict_all_user(struct xe_device *xe);
+ int xe_bo_restore_early(struct xe_device *xe);
+ int xe_bo_restore_late(struct xe_device *xe);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index 7344e4a9f..5cb98317d 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -499,6 +499,9 @@ struct xe_device {
+ 		struct mutex lock;
+ 	} d3cold;
+ 
++	/** @pm_notifier: Our PM notifier to perform actions in response to various PM events. */
++	struct notifier_block pm_notifier;
++
+ 	/** @pmt: Support the PMT driver callback interface */
+ 	struct {
+ 		/** @pmt.lock: protect access for telemetry data */
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 62acdb23b..740ef0f75 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -779,7 +779,7 @@ static void xe_pci_remove(struct pci_dev *pdev)
+ 		return;
+ 
+ 	xe_device_remove(xe);
+-	xe_pm_runtime_fini(xe);
++	xe_pm_fini(xe);
+ }
+ 
+ /*
+diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
+index 9e4d8ce2b..7a5f2f5fe 100644
+--- a/drivers/gpu/drm/xe/xe_pm.c
++++ b/drivers/gpu/drm/xe/xe_pm.c
+@@ -284,6 +284,29 @@ static u32 vram_threshold_value(struct xe_device *xe)
+ 	return DEFAULT_VRAM_THRESHOLD;
+ }
+ 
++static int xe_pm_notifier_callback(struct notifier_block *nb,
++				   unsigned long action, void *data)
++{
++	struct xe_device *xe = container_of(nb, struct xe_device, pm_notifier);
++	int err = 0;
++
++	switch (action) {
++	case PM_HIBERNATION_PREPARE:
++	case PM_SUSPEND_PREPARE:
++		xe_pm_runtime_get(xe);
++		err = xe_bo_evict_all_user(xe);
++		xe_pm_runtime_put(xe);
++		if (err)
++			drm_dbg(&xe->drm, "Notifier evict user failed (%d)\n", err);
++		break;
++	}
++
++	if (err)
++		return NOTIFY_BAD;
++
++	return NOTIFY_DONE;
++}
++
+ /**
+  * xe_pm_init - Initialize Xe Power Management
+  * @xe: xe device instance
+@@ -297,6 +320,11 @@ int xe_pm_init(struct xe_device *xe)
+ 	u32 vram_threshold;
+ 	int err;
+ 
++	xe->pm_notifier.notifier_call = xe_pm_notifier_callback;
++	err = register_pm_notifier(&xe->pm_notifier);
++	if (err)
++		return err;
++
+ 	/* For now suspend/resume is only allowed with GuC */
+ 	if (!xe_device_uc_enabled(xe))
+ 		return 0;
+@@ -306,19 +334,23 @@ int xe_pm_init(struct xe_device *xe)
+ 		vram_threshold = vram_threshold_value(xe);
+ 		err = xe_pm_set_vram_threshold(xe, vram_threshold);
+ 		if (err)
+-			return err;
++			goto err_unregister;
+ 	}
+ 
+ 	xe_pm_runtime_init(xe);
+ 
+ 	return 0;
++
++err_unregister:
++       unregister_pm_notifier(&xe->pm_notifier);
++       return err;
+ }
+ 
+ /**
+  * xe_pm_runtime_fini - Finalize Runtime PM
+  * @xe: xe device instance
+  */
+-void xe_pm_runtime_fini(struct xe_device *xe)
++static void xe_pm_runtime_fini(struct xe_device *xe)
+ {
+ 	struct device *dev = xe->drm.dev;
+ 
+@@ -330,6 +362,18 @@ void xe_pm_runtime_fini(struct xe_device *xe)
+ 	pm_runtime_forbid(dev);
+ }
+ 
++/**
++ * xe_pm_fini - Finalize PM
++ * @xe: xe device instance
++ */
++void xe_pm_fini(struct xe_device *xe)
++{
++	if (xe_device_uc_enabled(xe))
++		xe_pm_runtime_fini(xe);
++
++	unregister_pm_notifier(&xe->pm_notifier);
++}
++
+ static void xe_pm_write_callback_task(struct xe_device *xe,
+ 				      struct task_struct *task)
+ {
+diff --git a/drivers/gpu/drm/xe/xe_pm.h b/drivers/gpu/drm/xe/xe_pm.h
+index 998d1ed64..59678b310 100644
+--- a/drivers/gpu/drm/xe/xe_pm.h
++++ b/drivers/gpu/drm/xe/xe_pm.h
+@@ -17,7 +17,7 @@ int xe_pm_resume(struct xe_device *xe);
+ 
+ int xe_pm_init_early(struct xe_device *xe);
+ int xe_pm_init(struct xe_device *xe);
+-void xe_pm_runtime_fini(struct xe_device *xe);
++void xe_pm_fini(struct xe_device *xe);
+ bool xe_pm_runtime_suspended(struct xe_device *xe);
+ int xe_pm_runtime_suspend(struct xe_device *xe);
+ int xe_pm_runtime_resume(struct xe_device *xe);
+-- 
+2.34.1
+

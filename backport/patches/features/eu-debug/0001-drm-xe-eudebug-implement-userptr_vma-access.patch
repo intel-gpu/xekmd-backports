@@ -19,6 +19,7 @@ Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
 (backported from commit 3e789bcc3b49595e7d1fd0632ca9a5584504cd83 eudebug-dev)
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c |  3 ++-
  drivers/gpu/drm/xe/xe_vm.c      | 47 +++++++++++++++++++++++++++++++++
@@ -40,10 +41,10 @@ index 06b98746c..b450d38fa 100644
  
  static int xe_eudebug_vm_access(struct xe_vm *vm, u64 offset,
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index fb0c1a1c2..220edaad1 100644
+index ad9366159..6c63d0d7d 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -3515,3 +3515,50 @@ void xe_vm_snapshot_free(struct xe_vm_snapshot *snap)
+@@ -3584,3 +3584,50 @@ void xe_vm_snapshot_free(struct xe_vm_snapshot *snap)
  	}
  	kvfree(snap);
  }
@@ -95,11 +96,11 @@ index fb0c1a1c2..220edaad1 100644
 +	return ret;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index fdf4ad295..c1cd14201 100644
+index cc1fb062a..0788fcda7 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
-@@ -342,6 +342,9 @@ static inline bool xe_vm_is_validating(struct xe_vm *vm)
- 	return false;
+@@ -372,6 +372,9 @@ static inline struct drm_exec *xe_vm_validation_exec(struct xe_vm *vm)
+ 	return vm->validation._exec;
  }
  
 +int xe_vm_userptr_access(struct xe_userptr_vma *uvma, u64 offset,

@@ -21,10 +21,10 @@ Link: https://lore.kernel.org/r/20250908123025.747-2-michal.wajdeczko@intel.com
  3 files changed, 11 insertions(+), 10 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index d62ad7a01..af177be67 100644
+index 797a96106..9a7946845 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -2489,7 +2489,7 @@ static void guc_exec_queue_print(struct xe_exec_queue *q, struct drm_printer *p)
+@@ -2439,7 +2439,7 @@ static void guc_exec_queue_print(struct xe_exec_queue *q, struct drm_printer *p)
  }
  
  /**
@@ -33,7 +33,7 @@ index d62ad7a01..af177be67 100644
   * @q: Execution queue
   * @ctx_type: Type of the context
   *
-@@ -2500,15 +2500,17 @@ static void guc_exec_queue_print(struct xe_exec_queue *q, struct drm_printer *p)
+@@ -2450,15 +2450,17 @@ static void guc_exec_queue_print(struct xe_exec_queue *q, struct drm_printer *p)
   *
   * Returns - None.
   */
@@ -57,7 +57,7 @@ index d62ad7a01..af177be67 100644
  	register_exec_queue(q, ctx_type);
  	enable_scheduling(q);
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.h b/drivers/gpu/drm/xe/xe_guc_submit.h
-index 6b5df5d09..9e6f19b03 100644
+index 92a6f0ade..5e1b91ef9 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.h
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.h
 @@ -46,7 +46,7 @@ xe_guc_exec_queue_snapshot_print(struct xe_guc_submit_exec_queue_snapshot *snaps
@@ -67,7 +67,7 @@ index 6b5df5d09..9e6f19b03 100644
 -void xe_guc_register_exec_queue(struct xe_exec_queue *q, int ctx_type);
 +void xe_guc_register_vf_exec_queue(struct xe_exec_queue *q, int ctx_type);
  
- int xe_guc_contexts_hwsp_rebase(struct xe_guc *guc, void *scratch);
+ void xe_guc_contexts_hwsp_rebase(struct xe_guc *guc, void *scratch);
  
 diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
 index 820310b8b..f9b27657a 100644

@@ -1,7 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Piotr=20Pi=C3=B3rkowski?= <piotr.piorkowski@intel.com>
 Date: Fri, 3 Oct 2025 18:26:16 +0200
-Subject: drm/xe: Introduce new BO flag XE_BO_FLAG_FORCE_USER_VRAM
+Subject: drm/xe: Introduce new BO flag
+ XE_BO_FLAG_FORCE_USER_VRAM
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -34,10 +35,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  2 files changed, 5 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
-index a1bd1fd6c..7c5369ed0 100644
+index 7854d00c9..909fb100a 100644
 --- a/drivers/gpu/drm/xe/xe_bo.c
 +++ b/drivers/gpu/drm/xe/xe_bo.c
-@@ -200,14 +200,14 @@ static u8 vram_bo_flag_to_tile_id(struct xe_device *xe, u32 vram_bo_flag)
+@@ -202,14 +202,14 @@ static u8 vram_bo_flag_to_tile_id(struct xe_device *xe, u32 vram_bo_flag)
  	return __ffs(vram_bo_flag >> (__ffs(XE_BO_FLAG_VRAM0) - 1)) - 1;
  }
  
@@ -54,7 +55,7 @@ index a1bd1fd6c..7c5369ed0 100644
  		return xe->tiles[tile_id].mem.kernel_vram->placement;
  	else
  		return xe->tiles[tile_id].mem.vram->placement;
-@@ -250,7 +250,7 @@ static void try_add_vram(struct xe_device *xe, struct xe_bo *bo,
+@@ -252,7 +252,7 @@ static void try_add_vram(struct xe_device *xe, struct xe_bo *bo,
  	u32 vram_flag;
  
  	for_each_set_bo_vram_flag(vram_flag, bo_flags) {
@@ -63,7 +64,7 @@ index a1bd1fd6c..7c5369ed0 100644
  
  		add_vram(xe, bo, bo->placements, bo_flags, pl, c);
  	}
-@@ -1724,7 +1724,7 @@ static int __xe_bo_fixed_placement(struct xe_device *xe,
+@@ -2047,7 +2047,7 @@ static int __xe_bo_fixed_placement(struct xe_device *xe,
  	if (flags & XE_BO_FLAG_STOLEN)
  		place->mem_type = XE_PL_STOLEN;
  	else
@@ -73,10 +74,10 @@ index a1bd1fd6c..7c5369ed0 100644
  	bo->placement = (struct ttm_placement) {
  		.num_placement = 1,
 diff --git a/drivers/gpu/drm/xe/xe_bo.h b/drivers/gpu/drm/xe/xe_bo.h
-index 0017d5d07..da4171b94 100644
+index 87982b6d3..f32b2e0bf 100644
 --- a/drivers/gpu/drm/xe/xe_bo.h
 +++ b/drivers/gpu/drm/xe/xe_bo.h
-@@ -51,6 +51,7 @@
+@@ -52,6 +52,7 @@
  					 XE_BO_FLAG_GGTT1 | \
  					 XE_BO_FLAG_GGTT2 | \
  					 XE_BO_FLAG_GGTT3)
@@ -84,3 +85,6 @@ index 0017d5d07..da4171b94 100644
  
  /* this one is trigger internally only */
  #define XE_BO_FLAG_INTERNAL_TEST	BIT(30)
+-- 
+2.34.1
+

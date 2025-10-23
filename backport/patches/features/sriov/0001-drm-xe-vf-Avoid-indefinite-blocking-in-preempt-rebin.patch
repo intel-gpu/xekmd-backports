@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:16 -0700
+Subject: drm/xe/vf: Avoid indefinite blocking in preempt
+ rebind worker for VFs supporting migration
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Blocking in work queues on a hardware action that may never occur —
+especially when it depends on a software fixup also scheduled on the
+a work queue — is a recipe for deadlock. This situation arises with
+the preempt rebind worker and VF post-migration recovery. To prevent
+potential deadlocks, avoid indefinite blocking in the preempt rebind
+worker for VFs that support migration.
+
+v4:
+ - Use dma_fence_wait_timeout (CI)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Tomasz Lis <tomasz.lis@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-19-matthew.brost@intel.com
+(backported from commit 1faeeea056abb05a6513418e4cdb208326a67749 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vm.c | 26 +++++++++++++++++++++++++-
+ 1 file changed, 25 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index 9d8bbae86..5b9920e9b 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -34,6 +34,7 @@
+ #include "xe_pm.h"
+ #include "xe_preempt_fence.h"
+ #include "xe_pt.h"
++#include "xe_sriov_vf.h"
+ #include "xe_res_cursor.h"
+ #include "xe_sync.h"
+ #include "xe_trace_bo.h"
+@@ -140,12 +141,22 @@ static int alloc_preempt_fences(struct xe_vm *vm, struct list_head *list,
+ static int wait_for_existing_preempt_fences(struct xe_vm *vm)
+ {
+ 	struct xe_exec_queue *q;
++	bool vf_migration = IS_SRIOV_VF(vm->xe) &&
++		xe_sriov_vf_migration_supported(vm->xe);
++	signed long wait_time = vf_migration ? HZ / 5 : MAX_SCHEDULE_TIMEOUT;
+ 
+ 	xe_vm_assert_held(vm);
+ 
+ 	list_for_each_entry(q, &vm->preempt.exec_queues, lr.link) {
+ 		if (q->lr.pfence) {
+-			long timeout = dma_fence_wait(q->lr.pfence, false);
++			long timeout;
++
++			timeout = dma_fence_wait_timeout(q->lr.pfence, false,
++							 wait_time);
++			if (!timeout) {
++				xe_assert(vm->xe, vf_migration);
++				return -EAGAIN;
++			}
+ 
+ 			/* Only -ETIME on fence indicates VM needs to be killed */
+ 			if (timeout < 0 || q->lr.pfence->error == -ETIME)
+@@ -586,6 +597,19 @@ static void preempt_rebind_work_func(struct work_struct *w)
+ out_unlock_outer:
+ 	if (err == -EAGAIN) {
+ 		trace_xe_vm_rebind_worker_retry(vm);
++
++		/*
++		 * We can't block in workers on a VF which supports migration
++		 * given this can block the VF post-migration workers from
++		 * getting scheduled.
++		 */
++		if (IS_SRIOV_VF(vm->xe) &&
++		    xe_sriov_vf_migration_supported(vm->xe)) {
++			up_write(&vm->lock);
++			xe_vm_queue_rebind_worker(vm);
++			return;
++		}
++
+ 		goto retry;
+ 	}
+ 
+-- 
+2.34.1
+

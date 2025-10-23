@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Maarten Lankhorst <maarten.lankhorst@linux.intel.com>
+Date: Mon, 5 May 2025 14:19:15 +0200
+Subject: drm/xe: Add xe_ggtt_might_lock
+
+Another requirement of hiding more of struct xe_ggtt.
+
+Signed-off-by: Maarten Lankhorst <maarten.lankhorst@linux.intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250505121924.921544-3-dev@lankhorst.se
+Signed-off-by: Maarten Lankhorst <dev@lankhorst.se>
+(backported from commit b5fe33dcb8d4b6cf4d4664eaf2432617a7843bf9 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_bo.c   | 2 +-
+ drivers/gpu/drm/xe/xe_ggtt.c | 7 +++++++
+ drivers/gpu/drm/xe/xe_ggtt.h | 7 +++++++
+ 3 files changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
+index 909fb100a..04ab5fcdb 100644
+--- a/drivers/gpu/drm/xe/xe_bo.c
++++ b/drivers/gpu/drm/xe/xe_bo.c
+@@ -3191,7 +3191,7 @@ void xe_bo_put(struct xe_bo *bo)
+ #endif
+ 		for_each_tile(tile, xe_bo_device(bo), id)
+ 			if (bo->ggtt_node[id] && bo->ggtt_node[id]->ggtt)
+-				might_lock(&bo->ggtt_node[id]->ggtt->lock);
++				xe_ggtt_might_lock(bo->ggtt_node[id]->ggtt);
+ 		drm_gem_object_put(&bo->ttm.base);
+ 	}
+ }
+diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
+index 47dde2e5d..6a454741a 100644
+--- a/drivers/gpu/drm/xe/xe_ggtt.c
++++ b/drivers/gpu/drm/xe/xe_ggtt.c
+@@ -176,6 +176,13 @@ static void ggtt_fini(void *arg)
+ 	ggtt->scratch = NULL;
+ }
+ 
++#ifdef CONFIG_LOCKDEP
++void xe_ggtt_might_lock(struct xe_ggtt *ggtt)
++{
++	might_lock(&ggtt->lock);
++}
++#endif
++
+ static void primelockdep(struct xe_ggtt *ggtt)
+ {
+ 	if (!IS_ENABLED(CONFIG_LOCKDEP))
+diff --git a/drivers/gpu/drm/xe/xe_ggtt.h b/drivers/gpu/drm/xe/xe_ggtt.h
+index abebb6d46..293683df2 100644
+--- a/drivers/gpu/drm/xe/xe_ggtt.h
++++ b/drivers/gpu/drm/xe/xe_ggtt.h
+@@ -40,4 +40,11 @@ u64 xe_ggtt_print_holes(struct xe_ggtt *ggtt, u64 alignment, struct drm_printer
+ void xe_ggtt_assign(const struct xe_ggtt_node *node, u16 vfid);
+ #endif
+ 
++#ifndef CONFIG_LOCKDEP
++static inline void xe_ggtt_might_lock(struct xe_ggtt *ggtt)
++{ }
++#else
++void xe_ggtt_might_lock(struct xe_ggtt *ggtt);
++#endif
++
+ #endif
+-- 
+2.34.1
+

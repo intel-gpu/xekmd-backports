@@ -1,0 +1,99 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:23 -0700
+Subject: drm/xe/vf: Abort VF post migration recovery on
+ failure
+
+If VF post-migration recovery fails, the device is wedged. However,
+submission queues still need to be enabled for proper cleanup. In such
+cases, call into the GuC submission backend to restart all queues that
+were previously paused.
+
+v3:
+ - s/Avort/Abort (Tomasz)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Tomasz Lis <tomasz.lis@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-26-matthew.brost@intel.com
+(backported from commit 7c4b7e34c83bcde12d861cb28292622927839b85 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c | 10 ++++++++++
+ drivers/gpu/drm/xe/xe_guc_submit.c  | 20 ++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_guc_submit.h  |  1 +
+ 3 files changed, 31 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index 321178b60..3b6f56062 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -1144,6 +1144,15 @@ static void vf_post_migration_kickstart(struct xe_gt *gt)
+ 	xe_guc_submit_unpause(&gt->uc.guc);
+ }
+ 
++static void vf_post_migration_abort(struct xe_gt *gt)
++{
++	spin_lock_irq(&gt->sriov.vf.migration.lock);
++	WRITE_ONCE(gt->sriov.vf.migration.recovery_inprogress, false);
++	spin_unlock_irq(&gt->sriov.vf.migration.lock);
++
++	xe_guc_submit_pause_abort(&gt->uc.guc);
++}
++
+ static int vf_post_migration_notify_resfix_done(struct xe_gt *gt)
+ {
+ 	bool skip_resfix = false;
+@@ -1202,6 +1211,7 @@ static void vf_post_migration_recovery(struct xe_gt *gt)
+ 	xe_gt_sriov_notice(gt, "migration recovery ended\n");
+ 	return;
+ fail:
++	vf_post_migration_abort(gt);
+ 	xe_pm_runtime_put(xe);
+ 	xe_gt_sriov_err(gt, "migration recovery failed (%pe)\n", ERR_PTR(err));
+ 	xe_device_declare_wedged(xe);
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index 49eed3a47..990d7c35a 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -2154,6 +2154,26 @@ void xe_guc_submit_unpause(struct xe_guc *guc)
+ 	wake_up_all(&guc->ct.wq);
+ }
+ 
++/**
++ * xe_guc_submit_pause_abort - Abort all paused submission task on given GuC.
++ * @guc: the &xe_guc struct instance whose scheduler is to be aborted
++ */
++void xe_guc_submit_pause_abort(struct xe_guc *guc)
++{
++	struct xe_exec_queue *q;
++	unsigned long index;
++
++	mutex_lock(&guc->submission_state.lock);
++	xa_for_each(&guc->submission_state.exec_queue_lookup, index, q) {
++		struct xe_gpu_scheduler *sched = &q->guc->sched;
++
++		xe_sched_submission_start(sched);
++		if (exec_queue_killed_or_banned_or_wedged(q))
++			xe_guc_exec_queue_trigger_cleanup(q);
++	}
++	mutex_unlock(&guc->submission_state.lock);
++}
++
+ static struct xe_exec_queue *
+ g2h_exec_queue_lookup(struct xe_guc *guc, u32 guc_id)
+ {
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.h b/drivers/gpu/drm/xe/xe_guc_submit.h
+index 6cb4242ac..49e1d2cff 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.h
++++ b/drivers/gpu/drm/xe/xe_guc_submit.h
+@@ -22,6 +22,7 @@ void xe_guc_submit_stop(struct xe_guc *guc);
+ int xe_guc_submit_start(struct xe_guc *guc);
+ void xe_guc_submit_pause(struct xe_guc *guc);
+ void xe_guc_submit_unpause(struct xe_guc *guc);
++void xe_guc_submit_pause_abort(struct xe_guc *guc);
+ void xe_guc_submit_wedge(struct xe_guc *guc);
+ 
+ int xe_guc_read_stopped(struct xe_guc *guc);
+-- 
+2.34.1
+

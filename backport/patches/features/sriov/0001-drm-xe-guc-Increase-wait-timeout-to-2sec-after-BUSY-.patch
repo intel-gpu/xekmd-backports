@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Date: Wed, 8 Oct 2025 14:45:32 -0700
+Subject: drm/xe/guc: Increase wait timeout to 2sec after BUSY
+ reply from GuC
+
+Some VF2GUC actions may take longer to process. Increase default timeout
+after received BUSY indication to 2sec to cover all worst case scenarios.
+
+Signed-off-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-35-matthew.brost@intel.com
+(backported from commit 60e26675578f5a3d7375f5f80d2d70c33eca2ec7 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
+index 868bebdd3..c9708dde1 100644
+--- a/drivers/gpu/drm/xe/xe_guc.c
++++ b/drivers/gpu/drm/xe/xe_guc.c
+@@ -1454,7 +1454,7 @@ int xe_guc_mmio_send_recv(struct xe_guc *guc, const u32 *request,
+ 		BUILD_BUG_ON((GUC_HXG_TYPE_RESPONSE_SUCCESS ^ GUC_HXG_TYPE_RESPONSE_FAILURE) != 1);
+ 
+ 		ret = xe_mmio_wait32(mmio, reply_reg, resp_mask, resp_mask,
+-				     1000000, &header, false);
++				     2000000, &header, false);
+ 
+ 		if (unlikely(FIELD_GET(GUC_HXG_MSG_0_ORIGIN, header) !=
+ 			     GUC_HXG_ORIGIN_GUC))
+-- 
+2.34.1
+

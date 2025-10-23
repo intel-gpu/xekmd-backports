@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Lucas De Marchi <lucas.demarchi@intel.com>
+Date: Thu, 10 Jul 2025 13:33:51 -0700
+Subject: drm/xe/gt: Drop third submission for default context
+
+There's no need to submit the nop job again on the first queue. Any
+state needed is already saved when the first LRC is switched out. The
+comment is a little misleading regarding indirect W/A: first of all
+there's still no indirect W/A enabled and secondly, even after they are,
+there's no need to submit this job again for having their state
+propagated: the indirect W/A will actually run on every LRC switch.
+
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250710-lrc-refactors-v2-6-a5e2ca03f6bd@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit f4b538245f6a52fbe196b44a95c02aae566e3fb5 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt.c | 8 --------
+ 1 file changed, 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index 9855b3cdf..a36a8dad1 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -383,14 +383,6 @@ int xe_gt_record_default_lrcs(struct xe_gt *gt)
+ 			goto put_nop_q;
+ 		}
+ 
+-		/* Reload golden LRC to record the effect of any indirect W/A */
+-		err = emit_nop_job(gt, q);
+-		if (err) {
+-			xe_gt_err(gt, "hwe %s: emit_nop_job failed (%pe) guc_id=%u\n",
+-				  hwe->name, ERR_PTR(err), q->guc->id);
+-			goto put_nop_q;
+-		}
+-
+ 		xe_map_memcpy_from(xe, default_lrc,
+ 				   &q->lrc[0]->bo->vmap,
+ 				   xe_lrc_pphwsp_offset(q->lrc[0]),
+-- 
+2.34.1
+

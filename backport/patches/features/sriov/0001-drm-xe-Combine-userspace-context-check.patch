@@ -1,0 +1,133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Piotr=20Pi=C3=B3rkowski?= <piotr.piorkowski@intel.com>
+Date: Fri, 3 Oct 2025 18:26:19 +0200
+Subject: drm/xe: Combine userspace context check
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Both vm->xef and XE_LRC_CREATE_USER_CTX indicate in xe_lrc_init that
+the context originates from userspace. However, XE_LRC_CREATE_USER_CTX
+has a broader scope as it may be set even when no vm->xef is present.
+The XE_BO_FLAG_PINNED_LATE_RESTORE flag can be extended to both cases,
+so there is no point in handling the two cases separately.
+Let's combine vm->xef and XE_LRC_CREATE_USER_CTX checks to detect
+userspace context.
+
+Signed-off-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Suggested-by: Matthew Auld <matthew.auld@intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20251003162619.1984236-6-piotr.piorkowski@intel.com
+(backported from commit 8462d16d1b75325cb7220cd2731a47033baff863 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c |  3 ++-
+ drivers/gpu/drm/xe/xe_execlist.c   |  2 +-
+ drivers/gpu/drm/xe/xe_lrc.c        | 13 ++++++-------
+ drivers/gpu/drm/xe/xe_lrc.h        |  4 ++--
+ 4 files changed, 11 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index c1c37eeb0..1c2247e74 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -159,12 +159,13 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
+ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
+ {
+ 	int i, err;
++	u32 flags = 0;
+ 
+ 	if (!(exec_queue_flags & EXEC_QUEUE_FLAG_KERNEL))
+ 		flags |= XE_LRC_CREATE_USER_CTX;
+ 
+ 	for (i = 0; i < q->width; ++i) {
+-		q->lrc[i] = xe_lrc_create(q->hwe, q->vm, SZ_16K, q->msix_vec);
++		q->lrc[i] = xe_lrc_create(q->hwe, q->vm, SZ_16K, q->msix_vec, flags);
+ 		if (IS_ERR(q->lrc[i])) {
+ 			err = PTR_ERR(q->lrc[i]);
+ 			goto err_lrc;
+diff --git a/drivers/gpu/drm/xe/xe_execlist.c b/drivers/gpu/drm/xe/xe_execlist.c
+index 66001af5c..9fbed1a2f 100644
+--- a/drivers/gpu/drm/xe/xe_execlist.c
++++ b/drivers/gpu/drm/xe/xe_execlist.c
+@@ -269,7 +269,7 @@ struct xe_execlist_port *xe_execlist_port_create(struct xe_device *xe,
+ 
+ 	port->hwe = hwe;
+ 
+-	port->lrc = xe_lrc_create(hwe, NULL, SZ_16K, XE_IRQ_DEFAULT_MSIX);
++	port->lrc = xe_lrc_create(hwe, NULL, SZ_16K, XE_IRQ_DEFAULT_MSIX, 0);
+ 	if (IS_ERR(port->lrc)) {
+ 		err = PTR_ERR(port->lrc);
+ 		goto err;
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index 623b1dc3a..4c5eaba89 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1308,7 +1308,8 @@ setup_indirect_ctx(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
+ }
+ 
+ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+-		       struct xe_vm *vm, u32 ring_size, u16 msix_vec)
++		       struct xe_vm *vm, u32 ring_size, u16 msix_vec,
++		       u32 init_flags)
+ {
+ 	struct xe_gt *gt = hwe->gt;
+ 	const u32 lrc_size = xe_gt_lrc_size(gt, hwe->class);
+@@ -1337,11 +1338,9 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+ 
+ 	bo_flags = XE_BO_FLAG_VRAM_IF_DGFX(tile) | XE_BO_FLAG_GGTT |
+ 		XE_BO_FLAG_GGTT_INVALIDATE;
+-	if (vm && vm->xef) /* userspace */
+-		bo_flags |= XE_BO_FLAG_PINNED_LATE_RESTORE;
+ 
+-	if (init_flags & XE_LRC_CREATE_USER_CTX)
+-		bo_flags |= XE_BO_FLAG_FORCE_USER_VRAM;
++	if ((vm && vm->xef) || flags & XE_LRC_CREATE_USER_CTX) /* userspace */
++		bo_flags |= XE_BO_FLAG_PINNED_LATE_RESTORE | XE_BO_FLAG_FORCE_USER_VRAM;
+ 
+ 	lrc->bo = xe_bo_create_pin_map_novm(xe, tile,
+ 					    bo_size,
+@@ -1471,7 +1470,7 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+  * upon failure.
+  */
+ struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
+-			     u32 ring_size, u16 msix_vec)
++			     u32 ring_size, u16 msix_vec, u32 flags)
+ {
+ 	struct xe_lrc *lrc;
+ 	int err;
+@@ -1480,7 +1479,7 @@ struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
+ 	if (!lrc)
+ 		return ERR_PTR(-ENOMEM);
+ 
+-	err = xe_lrc_init(lrc, hwe, vm, ring_size, msix_vec);
++	err = xe_lrc_init(lrc, hwe, vm, ring_size, msix_vec, flags);
+ 	if (err) {
+ 		kfree(lrc);
+ 		return ERR_PTR(err);
+diff --git a/drivers/gpu/drm/xe/xe_lrc.h b/drivers/gpu/drm/xe/xe_lrc.h
+index 58cf48b17..a61c41086 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.h
++++ b/drivers/gpu/drm/xe/xe_lrc.h
+@@ -48,7 +48,7 @@ struct xe_lrc_snapshot {
+ #define XE_LRC_CREATE_USER_CTX         BIT(2)
+ 
+ struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
+-			     u32 ring_size, u16 msix_vec);
++			     u32 ring_size, u16 msix_vec, u32 flags);
+ void xe_lrc_destroy(struct kref *ref);
+ 
+ /**
+@@ -66,7 +66,7 @@ static inline struct xe_lrc *xe_lrc_get(struct xe_lrc *lrc)
+ /**
+  * xe_lrc_put - Put reference of the LRC
+  * @lrc: Logical Ring Context
+- *
++ , u32 flags*
+  * Decrement reference count of @lrc, call xe_lrc_destroy when
+  * reference count reaches 0.
+  */
+-- 
+2.34.1
+

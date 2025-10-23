@@ -1,7 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 19 Sep 2025 18:04:30 +0200
-Subject: drm/xe/debugfs: Improve .show() helper for GT-based attributes
+Subject: drm/xe/debugfs: Improve .show() helper for GT-based
+ attributes
 
 Like we did for tile-based attributes, introduce separate show()
 helper that implicitly takes an RPM reference prior to the call
@@ -284,3 +285,6 @@ index 05a6cc93c..32ee32640 100644
 +int xe_gt_debugfs_show_with_rpm(struct seq_file *m, void *data);
  
  #endif
+-- 
+2.34.1
+

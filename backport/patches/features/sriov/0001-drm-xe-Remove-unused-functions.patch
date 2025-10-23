@@ -1,0 +1,155 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Dr. David Alan Gilbert" <linux@treblig.org>
+Date: Sun, 13 Jul 2025 16:25:31 +0100
+Subject: drm/xe: Remove unused functions
+
+xe_bo_create_from_data() last use was removed in 2023 by
+commit 0e1a47fcabc8 ("drm/xe: Add a helper for DRM device-lifetime BO
+create")
+
+xe_rtp_match_first_gslice_fused_off() last use was removed in 2023 by
+commit 4e124151fcfc ("drm/xe/dg2: Drop pre-production workarounds")
+
+Remove them, and xe_dss_mask_empty whose last use was by
+xe_rtp_match_first_gslice_fused_off().
+
+(Xe has a bunch ofother symbols that have been added but not used,
+given how new it is, I've left those, as opposed to these that
+had the code that used them removed).
+
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Signed-off-by: Dr. David Alan Gilbert <linux@treblig.org>
+Link: https://lore.kernel.org/r/20250713152531.219326-1-linux@treblig.org
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit 8f3d1c9fb04e2ae018d06b4cacc49e146120facc linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_bo.c          | 16 ----------------
+ drivers/gpu/drm/xe/xe_bo.h          |  3 ---
+ drivers/gpu/drm/xe/xe_gt_topology.c |  5 -----
+ drivers/gpu/drm/xe/xe_gt_topology.h |  2 --
+ drivers/gpu/drm/xe/xe_rtp.c         | 15 ---------------
+ drivers/gpu/drm/xe/xe_rtp.h         | 11 -----------
+ 6 files changed, 52 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
+index 8b0a05cc5..64faed039 100644
+--- a/drivers/gpu/drm/xe/xe_bo.c
++++ b/drivers/gpu/drm/xe/xe_bo.c
+@@ -2389,22 +2389,6 @@ struct xe_bo *xe_bo_create_pin_map_novm(struct xe_device *xe, struct xe_tile *ti
+ 	return xe_bo_create_pin_map_at_novm(xe, tile, size, ~0ull, type, flags, 0, intr);
+ }
+ 
+-#if 0
+-struct xe_bo *xe_bo_create_from_data(struct xe_device *xe, struct xe_tile *tile,
+-				     const void *data, size_t size,
+-				     enum ttm_bo_type type, u32 flags)
+-{
+-	struct xe_bo *bo = xe_bo_create_pin_map(xe, tile, NULL,
+-						ALIGN(size, PAGE_SIZE),
+-						type, flags);
+-	if (IS_ERR(bo))
+-		return bo;
+-
+-	xe_map_memcpy_to(xe, &bo->vmap, 0, data, size);
+-
+-	return bo;
+-}
+-#endif
+ static void __xe_bo_unpin_map_no_vm(void *arg)
+ {
+ 	xe_bo_unpin_map_no_vm(arg);
+diff --git a/drivers/gpu/drm/xe/xe_bo.h b/drivers/gpu/drm/xe/xe_bo.h
+index ab8f24287..75c291895 100644
+--- a/drivers/gpu/drm/xe/xe_bo.h
++++ b/drivers/gpu/drm/xe/xe_bo.h
+@@ -106,9 +106,6 @@ struct xe_bo *xe_bo_create_pin_map_novm(struct xe_device *xe, struct xe_tile *ti
+ struct xe_bo *xe_bo_create_pin_range_novm(struct xe_device *xe, struct xe_tile *tile,
+ 					  size_t size, u64 start, u64 end,
+ 					  enum ttm_bo_type type, u32 flags);
+-struct xe_bo *xe_bo_create_from_data(struct xe_device *xe, struct xe_tile *tile,
+-				     const void *data, size_t size,
+-				     enum ttm_bo_type type, u32 flags);
+ struct xe_bo *
+ xe_bo_create_pin_map_at_novm(struct xe_device *xe, struct xe_tile *tile,
+ 			     size_t size, u64 offset, enum ttm_bo_type type,
+diff --git a/drivers/gpu/drm/xe/xe_gt_topology.c b/drivers/gpu/drm/xe/xe_gt_topology.c
+index f67bd8bf2..47f90b145 100644
+--- a/drivers/gpu/drm/xe/xe_gt_topology.c
++++ b/drivers/gpu/drm/xe/xe_gt_topology.c
+@@ -289,11 +289,6 @@ xe_dss_mask_group_ffs(const xe_dss_mask_t mask, int groupsize, int groupnum)
+ 	return find_next_bit(mask, XE_MAX_DSS_FUSE_BITS, groupnum * groupsize);
+ }
+ 
+-bool xe_dss_mask_empty(const xe_dss_mask_t mask)
+-{
+-	return bitmap_empty(mask, XE_MAX_DSS_FUSE_BITS);
+-}
+-
+ /**
+  * xe_gt_topology_has_dss_in_quadrant - check fusing of DSS in GT quadrant
+  * @gt: GT to check
+diff --git a/drivers/gpu/drm/xe/xe_gt_topology.h b/drivers/gpu/drm/xe/xe_gt_topology.h
+index 23c5e49e8..dae8c0cfa 100644
+--- a/drivers/gpu/drm/xe/xe_gt_topology.h
++++ b/drivers/gpu/drm/xe/xe_gt_topology.h
+@@ -28,8 +28,6 @@ void xe_gt_topology_dump(struct xe_gt *gt, struct drm_printer *p);
+ unsigned int
+ xe_dss_mask_group_ffs(const xe_dss_mask_t mask, int groupsize, int groupnum);
+ 
+-bool xe_dss_mask_empty(const xe_dss_mask_t mask);
+-
+ bool
+ xe_gt_topology_has_dss_in_quadrant(struct xe_gt *gt, int quad);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_rtp.c b/drivers/gpu/drm/xe/xe_rtp.c
+index bb3862c1a..aa81ed0d0 100644
+--- a/drivers/gpu/drm/xe/xe_rtp.c
++++ b/drivers/gpu/drm/xe/xe_rtp.c
+@@ -358,21 +358,6 @@ bool xe_rtp_match_first_render_or_compute(const struct xe_gt *gt,
+ 		hwe->engine_id == __ffs(render_compute_mask);
+ }
+ 
+-bool xe_rtp_match_first_gslice_fused_off(const struct xe_gt *gt,
+-					 const struct xe_hw_engine *hwe)
+-{
+-	unsigned int dss_per_gslice = 4;
+-	unsigned int dss;
+-
+-	if (drm_WARN(&gt_to_xe(gt)->drm, xe_dss_mask_empty(gt->fuse_topo.g_dss_mask),
+-		     "Checking gslice for platform without geometry pipeline\n"))
+-		return false;
+-
+-	dss = xe_dss_mask_group_ffs(gt->fuse_topo.g_dss_mask, 0, 0);
+-
+-	return dss >= dss_per_gslice;
+-}
+-
+ bool xe_rtp_match_not_sriov_vf(const struct xe_gt *gt,
+ 			       const struct xe_hw_engine *hwe)
+ {
+diff --git a/drivers/gpu/drm/xe/xe_rtp.h b/drivers/gpu/drm/xe/xe_rtp.h
+index f7a9271e9..1be2e9e7b 100644
+--- a/drivers/gpu/drm/xe/xe_rtp.h
++++ b/drivers/gpu/drm/xe/xe_rtp.h
+@@ -466,17 +466,6 @@ bool xe_rtp_match_even_instance(const struct xe_gt *gt,
+ bool xe_rtp_match_first_render_or_compute(const struct xe_gt *gt,
+ 					  const struct xe_hw_engine *hwe);
+ 
+-/*
+- * xe_rtp_match_first_gslice_fused_off - Match when first gslice is fused off
+- *
+- * @gt: GT structure
+- * @hwe: Engine instance
+- *
+- * Returns: true if first gslice is fused off, false otherwise.
+- */
+-bool xe_rtp_match_first_gslice_fused_off(const struct xe_gt *gt,
+-					 const struct xe_hw_engine *hwe);
+-
+ /*
+  * xe_rtp_match_not_sriov_vf - Match when not on SR-IOV VF device
+  *
+-- 
+2.34.1
+

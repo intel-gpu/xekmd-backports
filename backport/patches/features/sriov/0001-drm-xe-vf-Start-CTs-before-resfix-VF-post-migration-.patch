@@ -1,0 +1,160 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:22 -0700
+Subject: drm/xe/vf: Start CTs before resfix VF post migration
+ recovery
+
+Before RESFIX_DONE, all CTs stuck in the H2G queue need to be squashed,
+as they may contain actions which contain invalid GGTT references or are
+unnecessary after HW change.
+
+Starting the CTs clears all H2Gs in the queue. Any lost H2Gs are
+resubmitted by the GuC submission state machine.
+
+v3:
+ - Don't mess with head / tail values (Michal)
+v4:
+ - Don't mess with broke (Michal)
+ - Add CTB_H2G_BUFFER_OFFSET (Michal)
+v5:
+ - Adjust commit message (Tomasz)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-25-matthew.brost@intel.com
+(backported from commit 16b6dd1a906f01b98caaf90d3cef2b1cefc15740 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c |  7 ++++
+ drivers/gpu/drm/xe/xe_guc_ct.c      | 60 ++++++++++++++++++++++-------
+ drivers/gpu/drm/xe/xe_guc_ct.h      |  1 +
+ 3 files changed, 55 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index 34fb8699b..321178b60 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -1134,6 +1134,11 @@ static int vf_post_migration_fixups(struct xe_gt *gt)
+ 	return 0;
+ }
+ 
++static void vf_post_migration_rearm(struct xe_gt *gt)
++{
++	xe_guc_ct_restart(&gt->uc.guc.ct);
++}
++
+ static void vf_post_migration_kickstart(struct xe_gt *gt)
+ {
+ 	xe_guc_submit_unpause(&gt->uc.guc);
+@@ -1185,6 +1190,8 @@ static void vf_post_migration_recovery(struct xe_gt *gt)
+ 	if (err)
+ 		goto fail;
+ 
++	vf_post_migration_rearm(gt);
++
+ 	err = vf_post_migration_notify_resfix_done(gt);
+ 	if (err && err != -EAGAIN)
+ 		goto fail;
+diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
+index c529bc43a..ffd305280 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ct.c
++++ b/drivers/gpu/drm/xe/xe_guc_ct.c
+@@ -505,7 +505,7 @@ static void ct_exit_safe_mode(struct xe_guc_ct *ct)
+ 		xe_gt_dbg(ct_to_gt(ct), "GuC CT safe-mode disabled\n");
+ }
+ 
+-int xe_guc_ct_enable(struct xe_guc_ct *ct)
++static int __xe_guc_ct_start(struct xe_guc_ct *ct, bool needs_register)
+ {
+ 	struct xe_device *xe = ct_to_xe(ct);
+ 	struct xe_gt *gt = ct_to_gt(ct);
+@@ -513,21 +513,29 @@ int xe_guc_ct_enable(struct xe_guc_ct *ct)
+ 
+ 	xe_gt_assert(gt, !xe_guc_ct_enabled(ct));
+ 
+-	xe_map_memset(xe, &ct->bo->vmap, 0, 0, ct->bo->size);
+-	guc_ct_ctb_h2g_init(xe, &ct->ctbs.h2g, &ct->bo->vmap);
+-	guc_ct_ctb_g2h_init(xe, &ct->ctbs.g2h, &ct->bo->vmap);
++	if (needs_register) {
++		xe_map_memset(xe, &ct->bo->vmap, 0, 0, ct->bo->size);
++		guc_ct_ctb_h2g_init(xe, &ct->ctbs.h2g, &ct->bo->vmap);
++		guc_ct_ctb_g2h_init(xe, &ct->ctbs.g2h, &ct->bo->vmap);
+ 
+-	err = guc_ct_ctb_h2g_register(ct);
+-	if (err)
+-		goto err_out;
++		err = guc_ct_ctb_h2g_register(ct);
++		if (err)
++			goto err_out;
+ 
+-	err = guc_ct_ctb_g2h_register(ct);
+-	if (err)
+-		goto err_out;
++		err = guc_ct_ctb_g2h_register(ct);
++		if (err)
++			goto err_out;
+ 
+-	err = guc_ct_control_toggle(ct, true);
+-	if (err)
+-		goto err_out;
++		err = guc_ct_control_toggle(ct, true);
++		if (err)
++			goto err_out;
++	} else {
++		ct->ctbs.h2g.info.broken = false;
++		ct->ctbs.g2h.info.broken = false;
++		/* Skip everything in H2G buffer */
++		xe_map_memset(xe, &ct->bo->vmap, CTB_H2G_BUFFER_OFFSET, 0,
++			      CTB_H2G_BUFFER_SIZE);
++	}
+ 
+ 	guc_ct_change_state(ct, XE_GUC_CT_STATE_ENABLED);
+ 
+@@ -559,6 +567,32 @@ int xe_guc_ct_enable(struct xe_guc_ct *ct)
+ 	return err;
+ }
+ 
++/**
++ * xe_guc_ct_restart() - Restart GuC CT
++ * @ct: the &xe_guc_ct
++ *
++ * Restart GuC CT to an empty state without issuing a CT register MMIO command.
++ *
++ * Return: 0 on success, or a negative errno on failure.
++ */
++int xe_guc_ct_restart(struct xe_guc_ct *ct)
++{
++	return __xe_guc_ct_start(ct, false);
++}
++
++/**
++ * xe_guc_ct_enable() - Enable GuC CT
++ * @ct: the &xe_guc_ct
++ *
++ * Enable GuC CT to an empty state and issue a CT register MMIO command.
++ *
++ * Return: 0 on success, or a negative errno on failure.
++ */
++int xe_guc_ct_enable(struct xe_guc_ct *ct)
++{
++	return __xe_guc_ct_start(ct, true);
++}
++
+ static void stop_g2h_handler(struct xe_guc_ct *ct)
+ {
+ 	cancel_work_sync(&ct->g2h_worker);
+diff --git a/drivers/gpu/drm/xe/xe_guc_ct.h b/drivers/gpu/drm/xe/xe_guc_ct.h
+index 4f78c2484..4899737aa 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ct.h
++++ b/drivers/gpu/drm/xe/xe_guc_ct.h
+@@ -15,6 +15,7 @@ int xe_guc_ct_init_noalloc(struct xe_guc_ct *ct);
+ int xe_guc_ct_init(struct xe_guc_ct *ct);
+ int xe_guc_ct_enable(struct xe_guc_ct *ct);
+ int xe_guc_ct_init_post_hwconfig(struct xe_guc_ct *ct);
++int xe_guc_ct_restart(struct xe_guc_ct *ct);
+ void xe_guc_ct_disable(struct xe_guc_ct *ct);
+ void xe_guc_ct_stop(struct xe_guc_ct *ct);
+ void xe_guc_ct_flush_and_stop(struct xe_guc_ct *ct);
+-- 
+2.34.1
+

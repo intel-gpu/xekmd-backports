@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tvrtko Ursulin <tvrtko.ursulin@igalia.com>
+Date: Fri, 11 Jul 2025 17:01:50 +0100
+Subject: drm/xe: Allow specifying number of extra dwords at
+ the end of wa bb emission
+
+Indirect context setup will need more than one.
+
+Signed-off-by: Tvrtko Ursulin <tvrtko.ursulin@igalia.com>
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20250711160153.49833-6-tvrtko.ursulin@igalia.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit a3397b24ae0045113189424442bcaa14cbc696e2 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_lrc.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index 434c6ba73..9403d4cd7 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1028,6 +1028,7 @@ struct bo_setup_state {
+ 	struct xe_lrc		*lrc;
+ 	struct xe_hw_engine	*hwe;
+ 	size_t			max_size;
++	size_t                  reserve_dw;
+ 	unsigned int		offset;
+ 	const struct bo_setup	*funcs;
+ 	unsigned int		num_funcs;
+@@ -1061,10 +1062,10 @@ static int setup_bo(struct bo_setup_state *state)
+ 		remain -= len;
+ 
+ 		/*
+-		 * There should always be at least 1 additional dword for
+-		 * the end marker
++		 * Caller has asked for at least reserve_dw to remain unused.
+ 		 */
+-		if (len < 0 || xe_gt_WARN_ON(state->lrc->gt, remain < 1))
++		if (len < 0 ||
++		    xe_gt_WARN_ON(state->lrc->gt, remain < state->reserve_dw))
+ 			goto fail;
+ 
+ 		state->ptr += len;
+@@ -1098,6 +1099,7 @@ static int setup_wa_bb(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
+ 		.lrc = lrc,
+ 		.hwe = hwe,
+ 		.max_size = LRC_WA_BB_SIZE,
++		.reserve_dw = 1,
+ 		.offset = __xe_lrc_wa_bb_offset(lrc),
+ 		.funcs = funcs,
+ 		.num_funcs = ARRAY_SIZE(funcs),
+-- 
+2.34.1
+

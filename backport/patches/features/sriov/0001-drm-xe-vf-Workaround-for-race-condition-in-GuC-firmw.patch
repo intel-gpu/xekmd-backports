@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:27 -0700
+Subject: drm/xe/vf: Workaround for race condition in GuC
+ firmware during VF pause
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+A race condition exists where a paused VF's H2G request can be processed
+and subsequently rejected. This rejection results in a FAST_REQ failure
+being delivered to the KMD, which then terminates the CT via a dead
+worker and triggers a GT reset—an undesirable outcome.
+
+This workaround mitigates the issue by checking if a VF post-migration
+recovery is in progress and aborting these adverse actions accordingly.
+The GuC firmware will address this bug in an upcoming release. Once that
+version is available and VF migration depends on it, this workaround can
+be safely removed.
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Tomasz Lis <tomasz.lis@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-30-matthew.brost@intel.com
+(backported from commit 3b56911960b3c938d2eed70526ef4bc496520123 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_ct.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
+index ffd305280..00130018a 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ct.c
++++ b/drivers/gpu/drm/xe/xe_guc_ct.c
+@@ -1400,6 +1400,10 @@ static int parse_g2h_response(struct xe_guc_ct *ct, u32 *msg, u32 len)
+ 
+ 		fast_req_report(ct, fence);
+ 
++		/* FIXME: W/A race in the GuC, will get in firmware soon */
++		if (xe_gt_recovery_pending(gt))
++			return 0;
++
+ 		CT_DEAD(ct, NULL, PARSE_G2H_RESPONSE);
+ 
+ 		return -EPROTO;
+-- 
+2.34.1
+

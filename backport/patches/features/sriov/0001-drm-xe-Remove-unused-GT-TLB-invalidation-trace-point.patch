@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Thu, 24 Jul 2025 12:12:16 -0700
+Subject: drm/xe: Remove unused GT TLB invalidation trace
+ points
+
+Remove unused GT TLB invalidation trace points after converting to used
+GT TLB invalidation jobs. The trace points removed were used during
+early bring up of unstable driver, with a stable driver no need to
+replace with new tracepoints.
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Stuart Summers <stuart.summers@intel.com>
+Link: https://lore.kernel.org/r/20250724191216.4076566-8-matthew.brost@intel.com
+(backported from commit 51330ba66caa29c1a73408fada7f824b36b3238f linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_trace.h | 16 ----------------
+ 1 file changed, 16 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_trace.h b/drivers/gpu/drm/xe/xe_trace.h
+index d5281de04..4a2363417 100644
+--- a/drivers/gpu/drm/xe/xe_trace.h
++++ b/drivers/gpu/drm/xe/xe_trace.h
+@@ -45,22 +45,6 @@ DECLARE_EVENT_CLASS(xe_gt_tlb_invalidation_fence,
+ 			      __get_str(dev), __entry->fence, __entry->seqno)
+ );
+ 
+-DEFINE_EVENT(xe_gt_tlb_invalidation_fence, xe_gt_tlb_invalidation_fence_create,
+-	     TP_PROTO(struct xe_device *xe, struct xe_gt_tlb_invalidation_fence *fence),
+-	     TP_ARGS(xe, fence)
+-);
+-
+-DEFINE_EVENT(xe_gt_tlb_invalidation_fence,
+-	     xe_gt_tlb_invalidation_fence_work_func,
+-	     TP_PROTO(struct xe_device *xe, struct xe_gt_tlb_invalidation_fence *fence),
+-	     TP_ARGS(xe, fence)
+-);
+-
+-DEFINE_EVENT(xe_gt_tlb_invalidation_fence, xe_gt_tlb_invalidation_fence_cb,
+-	     TP_PROTO(struct xe_device *xe, struct xe_gt_tlb_invalidation_fence *fence),
+-	     TP_ARGS(xe, fence)
+-);
+-
+ DEFINE_EVENT(xe_gt_tlb_invalidation_fence, xe_gt_tlb_invalidation_fence_send,
+ 	     TP_PROTO(struct xe_device *xe, struct xe_gt_tlb_invalidation_fence *fence),
+ 	     TP_ARGS(xe, fence)
+-- 
+2.34.1
+

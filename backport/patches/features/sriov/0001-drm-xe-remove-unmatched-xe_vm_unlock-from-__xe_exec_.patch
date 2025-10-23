@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Date: Fri, 30 May 2025 15:56:27 +0200
+Subject: drm/xe: remove unmatched xe_vm_unlock() from
+ __xe_exec_queue_init()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+There is unmatched xe_vm_unlock() in the __xe_exec_queue_init().
+Leftover from commit fbeaad071a98 ("drm/xe: Create LRC BO without VM")
+
+Fixes: 2b0a0ce0c20b ("drm/xe: Create LRC BO without VM")
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Link: https://lore.kernel.org/r/20250530135627.2821612-1-maciej.patelczyk@intel.com
+(cherry picked from commit 28b996ce73982a44fa86736ca0e3684cb1ae8b24)
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+(backported from commit e332935a540eb76dd656663ca908eb0544d96757 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index cb7c34203..f2fa57a43 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -110,14 +110,13 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
+ 
+ static int __xe_exec_queue_init(struct xe_exec_queue *q)
+ {
+-	struct xe_vm *vm = q->vm;
+ 	int i, err;
+ 
+ 	for (i = 0; i < q->width; ++i) {
+ 		q->lrc[i] = xe_lrc_create(q->hwe, q->vm, SZ_16K, q->msix_vec);
+ 		if (IS_ERR(q->lrc[i])) {
+ 			err = PTR_ERR(q->lrc[i]);
+-			goto err_unlock;
++			goto err_lrc;
+ 		}
+ 	}
+ 
+@@ -127,9 +126,6 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q)
+ 
+ 	return 0;
+ 
+-err_unlock:
+-	if (vm)
+-		xe_vm_unlock(vm);
+ err_lrc:
+ 	for (i = i - 1; i >= 0; --i)
+ 		xe_lrc_put(q->lrc[i]);
+-- 
+2.34.1
+

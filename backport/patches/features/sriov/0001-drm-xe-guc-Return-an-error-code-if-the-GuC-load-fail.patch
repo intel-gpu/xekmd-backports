@@ -1,7 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: John Harrison <John.C.Harrison@Intel.com>
 Date: Tue, 9 Sep 2025 15:41:31 -0700
-Subject: drm/xe/guc: Return an error code if the GuC load fails
+Subject: drm/xe/guc: Return an error code if the GuC load
+ fails
 
 Due to multiple explosion issues in the early days of the Xe driver,
 the GuC load was hacked to never return a failure. That prevented
@@ -87,3 +88,6 @@ index bad5fd015..475607d74 100644
  }
  
  static int vf_guc_min_load_for_hwconfig(struct xe_guc *guc)
+-- 
+2.34.1
+

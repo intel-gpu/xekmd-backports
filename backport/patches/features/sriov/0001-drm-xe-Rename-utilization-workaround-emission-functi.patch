@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tvrtko Ursulin <tvrtko.ursulin@igalia.com>
+Date: Fri, 11 Jul 2025 17:01:48 +0100
+Subject: drm/xe: Rename utilization workaround emission
+ function
+
+Lucas suggested to consolidate to a slightly different naming scheme which
+will align with the upcoming additions better.
+
+Signed-off-by: Tvrtko Ursulin <tvrtko.ursulin@igalia.com>
+Suggested-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Cc: Matt Roper <matthew.d.roper@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20250711160153.49833-4-tvrtko.ursulin@igalia.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit 1ec31d355c2d225f50dfb70dcaab07bf3afee0ed linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_lrc.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index 286651a17..1e3047543 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -988,8 +988,10 @@ static void xe_lrc_finish(struct xe_lrc *lrc)
+  * store it in the PPHSWP.
+  */
+ #define CONTEXT_ACTIVE 1ULL
+-static ssize_t wa_bb_setup_utilization(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+-				       u32 *batch, size_t max_len)
++static ssize_t setup_utilization_wa(struct xe_lrc *lrc,
++				    struct xe_hw_engine *hwe,
++				    u32 *batch,
++				    size_t max_len)
+ {
+ 	u32 *cmd = batch;
+ 
+@@ -1088,7 +1090,7 @@ static void finish_bo(struct bo_setup_state *state)
+ static int setup_wa_bb(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
+ {
+ 	static const struct bo_setup funcs[] = {
+-		{ .setup = wa_bb_setup_utilization },
++		{ .setup = setup_utilization_wa },
+ 	};
+ 	struct bo_setup_state state = {
+ 		.lrc = lrc,
+-- 
+2.34.1
+

@@ -1,0 +1,104 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Tue, 26 Aug 2025 18:29:07 +0000
+Subject: drm/xe: Add xe_gt_tlb_invalidation_done_handler
+
+Decouple GT TLB seqno handling from G2H handler.
+
+v2:
+ - Add kernel doc
+
+Reviewed-by: Stuart Summers <stuart.summers@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250826182911.392550-6-stuart.summers@intel.com
+(backported from commit 6d1e452e0948fd69ec3aeea0e52807152dc93c2d linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_tlb_inval.c | 47 ++++++++++++++++++----------
+ 1 file changed, 30 insertions(+), 17 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_tlb_inval.c b/drivers/gpu/drm/xe/xe_gt_tlb_inval.c
+index 1571fd917..37b3b45ec 100644
+--- a/drivers/gpu/drm/xe/xe_gt_tlb_inval.c
++++ b/drivers/gpu/drm/xe/xe_gt_tlb_inval.c
+@@ -506,27 +506,18 @@ void xe_gt_tlb_inval_vm(struct xe_gt *gt, struct xe_vm *vm)
+ }
+ 
+ /**
+- * xe_guc_tlb_inval_done_handler - TLB invalidation done handler
+- * @guc: guc
+- * @msg: message indicating TLB invalidation done
+- * @len: length of message
+- *
+- * Parse seqno of TLB invalidation, wake any waiters for seqno, and signal any
+- * invalidation fences for seqno. Algorithm for this depends on seqno being
+- * received in-order and asserts this assumption.
++ * xe_gt_tlb_inval_done_handler - GT TLB invalidation done handler
++ * @gt: gt
++ * @seqno: seqno of invalidation that is done
+  *
+- * Return: 0 on success, -EPROTO for malformed messages.
++ * Update recv seqno, signal any GT TLB invalidation fences, and restart TDR
+  */
+-int xe_guc_tlb_inval_done_handler(struct xe_guc *guc, u32 *msg, u32 len)
++static void xe_gt_tlb_inval_done_handler(struct xe_gt *gt, int seqno)
+ {
+-	struct xe_gt *gt = guc_to_gt(guc);
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	struct xe_gt_tlb_inval_fence *fence, *next;
+ 	unsigned long flags;
+ 
+-	if (unlikely(len != 1))
+-		return -EPROTO;
+-
+ 	/*
+ 	 * This can also be run both directly from the IRQ handler and also in
+ 	 * process_g2h_msg(). Only one may process any individual CT message,
+@@ -543,12 +534,12 @@ int xe_guc_tlb_inval_done_handler(struct xe_guc *guc, u32 *msg, u32 len)
+ 	 * process_g2h_msg().
+ 	 */
+ 	spin_lock_irqsave(&gt->tlb_inval.pending_lock, flags);
+-	if (tlb_inval_seqno_past(gt, msg[0])) {
++	if (tlb_inval_seqno_past(gt, seqno)) {
+ 		spin_unlock_irqrestore(&gt->tlb_inval.pending_lock, flags);
+-		return 0;
++		return;
+ 	}
+ 
+-	WRITE_ONCE(gt->tlb_inval.seqno_recv, msg[0]);
++	WRITE_ONCE(gt->tlb_inval.seqno_recv, seqno);
+ 
+ 	list_for_each_entry_safe(fence, next,
+ 				 &gt->tlb_inval.pending_fences, link) {
+@@ -568,6 +559,28 @@ int xe_guc_tlb_inval_done_handler(struct xe_guc *guc, u32 *msg, u32 len)
+ 		cancel_delayed_work(&gt->tlb_inval.fence_tdr);
+ 
+ 	spin_unlock_irqrestore(&gt->tlb_inval.pending_lock, flags);
++}
++
++/**
++ * xe_guc_tlb_inval_done_handler - TLB invalidation done handler
++ * @guc: guc
++ * @msg: message indicating TLB invalidation done
++ * @len: length of message
++ *
++ * Parse seqno of TLB invalidation, wake any waiters for seqno, and signal any
++ * invalidation fences for seqno. Algorithm for this depends on seqno being
++ * received in-order and asserts this assumption.
++ *
++ * Return: 0 on success, -EPROTO for malformed messages.
++ */
++int xe_guc_tlb_inval_done_handler(struct xe_guc *guc, u32 *msg, u32 len)
++{
++	struct xe_gt *gt = guc_to_gt(guc);
++
++	if (unlikely(len != 1))
++		return -EPROTO;
++
++	xe_gt_tlb_inval_done_handler(gt, msg[0]);
+ 
+ 	return 0;
+ }
+-- 
+2.34.1
+

@@ -26,14 +26,14 @@ Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_vm.c | 23 +++++++++++++++++++++++
- drivers/gpu/drm/xe/xe_vm.h |  1 +
- 2 files changed, 24 insertions(+)
+ drivers/gpu/drm/xe/xe_vm.h |  2 +-
+ 2 files changed, 24 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index ccd8e74a7..3e7df090c 100644
+index b8a3d22b8..74b0d0f41 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -3653,3 +3653,26 @@ int xe_vm_userptr_access(struct xe_userptr_vma *uvma, u64 offset,
+@@ -3781,3 +3781,26 @@ int xe_vm_userptr_access(struct xe_userptr_vma *uvma, u64 offset,
  	up_read(&vm->userptr.notifier_lock);
  	return ret;
  }
@@ -61,17 +61,18 @@ index ccd8e74a7..3e7df090c 100644
 +	return vma;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index c1cd14201..50bf4ffee 100644
+index 5b3f47e97..ba85d2821 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
-@@ -344,6 +344,7 @@ static inline bool xe_vm_is_validating(struct xe_vm *vm)
+@@ -377,7 +377,7 @@ static inline struct drm_exec *xe_vm_validation_exec(struct xe_vm *vm)
  
  int xe_vm_userptr_access(struct xe_userptr_vma *uvma, u64 offset,
-                         void *buf, u64 len, bool write);
+ 			 void *buf, u64 len, bool write);
+-
 +struct xe_vma *xe_vm_create_null_vma(struct xe_vm *vm, u64 addr);
- 
  #if IS_ENABLED(CONFIG_DRM_XE_USERPTR_INVAL_INJECT)
  void xe_vma_userptr_force_invalidate(struct xe_userptr_vma *uvma);
+ #else
 -- 
 2.34.1
 

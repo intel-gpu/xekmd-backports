@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Ma=C3=ADra=20Canal?= <mcanal@igalia.com>
+Date: Mon, 14 Jul 2025 19:07:08 -0300
+Subject: drm/xe: Use DRM_GPU_SCHED_STAT_NO_HANG to skip the
+ reset
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Xe can skip the reset if TDR has fired before the free job worker and can
+also re-arm the timeout timer in some scenarios. Instead of manipulating
+scheduler's internals, inform the scheduler that the job did not actually
+timeout and no reset was performed through the new status code
+DRM_GPU_SCHED_STAT_NO_HANG.
+
+Note that, in the first case, there is no need to restart submission if it
+hasn't been stopped.
+
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250714-sched-skip-reset-v6-7-5c5ba4f55039@igalia.com
+Signed-off-by: Maíra Canal <mcanal@igalia.com>
+(backported from commit 53dcd0eaa271e870ca5d0b203be67b468214c1bc linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_submit.c | 11 +++--------
+ 1 file changed, 3 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index d79461a61..2de8410e1 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -1283,12 +1283,8 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+ 	 * list so job can be freed and kick scheduler ensuring free job is not
+ 	 * lost.
+ 	 */
+-	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &job->fence->flags)) {
+-		xe_sched_add_pending_job(sched, job);
+-		xe_sched_submission_start(sched);
+-
+-		return DRM_GPU_SCHED_STAT_NOMINAL;
+-	}
++	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &job->fence->flags))
++		return DRM_GPU_SCHED_STAT_NO_HANG;
+ 
+ 	/* Kill the run_job entry point */
+ 	xe_sched_submission_stop(sched);
+@@ -1465,10 +1461,9 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+ 	 * but there is not currently an easy way to do in DRM scheduler. With
+ 	 * some thought, do this in a follow up.
+ 	 */
+-	xe_sched_add_pending_job(sched, job);
+ 	xe_sched_submission_start(sched);
+ 
+-	return DRM_GPU_SCHED_STAT_NOMINAL;
++	return DRM_GPU_SCHED_STAT_NO_HANG;
+ }
+ 
+ static void __guc_exec_queue_fini_async(struct work_struct *w)
+-- 
+2.34.1
+

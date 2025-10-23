@@ -36,7 +36,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  8 files changed, 66 insertions(+), 36 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 1e93e7614..259516122 100644
+index 4ed60618a..41cff83b2 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -700,6 +700,21 @@ int xe_exec_queue_get_property_ioctl(struct drm_device *dev, void *data,
@@ -62,12 +62,12 @@ index 1e93e7614..259516122 100644
   * xe_exec_queue_is_lr() - Whether an exec_queue is long-running
   * @q: The exec_queue
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
-index a6b28c56e..c1a791cf1 100644
+index 9780a0104..00422ba73 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.h
 @@ -86,5 +86,6 @@ int xe_exec_queue_last_fence_test_dep(struct xe_exec_queue *q,
  void xe_exec_queue_update_run_ticks(struct xe_exec_queue *q);
- int xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch);
+ void xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch);
  void xe_exec_queue_jobs_ring_restore(struct xe_exec_queue *q);
 +struct xe_lrc *xe_exec_queue_lrc(struct xe_exec_queue *q);
  

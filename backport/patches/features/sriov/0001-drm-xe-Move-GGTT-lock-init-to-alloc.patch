@@ -1,0 +1,101 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:10 -0700
+Subject: drm/xe: Move GGTT lock init to alloc
+
+The GGTT lock is needed very early during GT initialization for a VF;
+move the GGTT lock initialization to the allocation phase.
+
+v8:
+ - Rework function structure (Michal)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-13-matthew.brost@intel.com
+(backported from commit cc9b24c6bb72d8da9309e2535840baa8450d4366 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ggtt.c | 39 +++++++++++++++++++++---------------
+ 1 file changed, 23 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
+index fa64581a4..8002aa915 100644
+--- a/drivers/gpu/drm/xe/xe_ggtt.c
++++ b/drivers/gpu/drm/xe/xe_ggtt.c
+@@ -158,6 +158,16 @@ static void xe_ggtt_clear(struct xe_ggtt *ggtt, u64 start, u64 size)
+ 	}
+ }
+ 
++static void primelockdep(struct xe_ggtt *ggtt)
++{
++	if (!IS_ENABLED(CONFIG_LOCKDEP))
++		return;
++
++	fs_reclaim_acquire(GFP_KERNEL);
++	might_lock(&ggtt->lock);
++	fs_reclaim_release(GFP_KERNEL);
++}
++
+ /**
+  * xe_ggtt_alloc - Allocate a GGTT for a given &xe_tile
+  * @tile: &xe_tile
+@@ -168,9 +178,19 @@ static void xe_ggtt_clear(struct xe_ggtt *ggtt, u64 start, u64 size)
+  */
+ struct xe_ggtt *xe_ggtt_alloc(struct xe_tile *tile)
+ {
+-	struct xe_ggtt *ggtt = drmm_kzalloc(&tile_to_xe(tile)->drm, sizeof(*ggtt), GFP_KERNEL);
+-	if (ggtt)
+-		ggtt->tile = tile;
++	struct xe_device *xe = tile_to_xe(tile);
++	struct xe_ggtt *ggtt;
++
++	ggtt = drmm_kzalloc(&xe->drm, sizeof(*ggtt), GFP_KERNEL);
++	if (!ggtt)
++		return NULL;
++
++	if (drmm_mutex_init(&xe->drm, &ggtt->lock))
++		return NULL;
++
++	primelockdep(ggtt);
++	ggtt->tile = tile;
++
+ 	return ggtt;
+ }
+ 
+@@ -179,7 +199,6 @@ static void ggtt_fini_early(struct drm_device *drm, void *arg)
+ 	struct xe_ggtt *ggtt = arg;
+ 
+ 	destroy_workqueue(ggtt->wq);
+-	mutex_destroy(&ggtt->lock);
+ 	drm_mm_takedown(&ggtt->mm);
+ }
+ 
+@@ -197,16 +216,6 @@ void xe_ggtt_might_lock(struct xe_ggtt *ggtt)
+ }
+ #endif
+ 
+-static void primelockdep(struct xe_ggtt *ggtt)
+-{
+-	if (!IS_ENABLED(CONFIG_LOCKDEP))
+-		return;
+-
+-	fs_reclaim_acquire(GFP_KERNEL);
+-	might_lock(&ggtt->lock);
+-	fs_reclaim_release(GFP_KERNEL);
+-}
+-
+ static const struct xe_ggtt_pt_ops xelp_pt_ops = {
+ 	.pte_encode_flags = xelp_ggtt_pte_flags,
+ 	.ggtt_set_pte = xe_ggtt_set_pte,
+@@ -233,8 +242,6 @@ static void __xe_ggtt_init_early(struct xe_ggtt *ggtt, u32 reserved)
+ {
+ 	drm_mm_init(&ggtt->mm, reserved,
+ 		    ggtt->size - reserved);
+-	mutex_init(&ggtt->lock);
+-	primelockdep(ggtt);
+ }
+ 
+ int xe_ggtt_init_kunit(struct xe_ggtt *ggtt, u32 reserved, u32 size)
+-- 
+2.34.1
+

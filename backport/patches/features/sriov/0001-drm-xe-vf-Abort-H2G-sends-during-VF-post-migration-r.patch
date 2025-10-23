@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:08 -0700
+Subject: drm/xe/vf: Abort H2G sends during VF post-migration
+ recovery
+
+While VF post-migration recovery is in progress, abort H2G sends with
+-ECANCEL. These messages are treated as lost, and TLB invalidation
+errors are suppressed. During this phase, the H2G channel is down, and
+VF recovery requires the CT lock to proceed.
+
+v3:
+ - Use xe_gt_recovery_inprogress (Michal)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-11-matthew.brost@intel.com
+(backported from commit 489d890a39131e86bcaf3f14ebc2570257c23356 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_ct.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
+index 9eac0df01..22785925f 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ct.c
++++ b/drivers/gpu/drm/xe/xe_guc_ct.c
+@@ -826,7 +826,7 @@ static int __guc_ct_send_locked(struct xe_guc_ct *ct, const u32 *action,
+ 				u32 len, u32 g2h_len, u32 num_g2h,
+ 				struct g2h_fence *g2h_fence)
+ {
+-	struct xe_gt *gt __maybe_unused = ct_to_gt(ct);
++	struct xe_gt *gt = ct_to_gt(ct);
+ 	u16 seqno;
+ 	int ret;
+ 
+@@ -847,7 +847,7 @@ static int __guc_ct_send_locked(struct xe_guc_ct *ct, const u32 *action,
+ 		goto out;
+ 	}
+ 
+-	if (ct->state == XE_GUC_CT_STATE_STOPPED) {
++	if (ct->state == XE_GUC_CT_STATE_STOPPED || xe_gt_recovery_pending(gt)) {
+ 		ret = -ECANCELED;
+ 		goto out;
+ 	}
+-- 
+2.34.1
+

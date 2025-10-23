@@ -1,7 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Sun, 28 Sep 2025 16:00:23 +0200
-Subject: drm/xe/pf: Promote PF debugfs function to its own file
+Subject: drm/xe/pf: Promote PF debugfs function to its own
+ file
 
 In upcoming patches, we will build on the PF separate debugfs
 tree for all SR-IOV related files and this new code will need
@@ -29,10 +30,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_sriov_pf_debugfs.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 7bced777f..1a9ef3989 100644
+index d15bf963d..db4389517 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -159,6 +159,7 @@ xe-$(CONFIG_PCI_IOV) += \
+@@ -160,6 +160,7 @@ xe-$(CONFIG_PCI_IOV) += \
  	xe_lmtt_ml.o \
  	xe_pci_sriov.o \
  	xe_sriov_pf.o \
@@ -210,3 +211,6 @@ index 000000000..93db13585
 +#endif
 +
 +#endif
+-- 
+2.34.1
+

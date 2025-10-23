@@ -1,0 +1,96 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:09 -0700
+Subject: drm/xe/vf: Remove memory allocations from VF post
+ migration recovery
+
+VF post migration recovery is the path of dma-fence signaling / reclaim,
+avoid memory allocations in this path.
+
+v3:
+ - s/lrc_wa_bb/scratch (Tomasz)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Tomasz Lis <tomasz.lis@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-12-matthew.brost@intel.com
+(backported from commit 98e78e0c8b1bbb388d5ee702d2eb0013c2f9060a linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c       | 23 +++++++++++++----------
+ drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h |  2 ++
+ 2 files changed, 15 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index 72e93ef86..f21eda2a5 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -1164,17 +1164,13 @@ static size_t post_migration_scratch_size(struct xe_device *xe)
+ 
+ static int vf_post_migration_fixups(struct xe_gt *gt)
+ {
++	void *buf = gt->sriov.vf.migration.scratch;
+ 	s64 shift;
+-	void *buf;
+ 	int err;
+ 
+-	buf = kmalloc(post_migration_scratch_size(gt_to_xe(gt)), GFP_ATOMIC);
+-	if (!buf)
+-		return -ENOMEM;
+-
+ 	err = xe_gt_sriov_vf_query_config(gt);
+ 	if (err)
+-		goto out;
++		return err;
+ 
+ 	shift = xe_gt_sriov_vf_ggtt_shift(gt);
+ 	if (shift) {
+@@ -1182,12 +1178,10 @@ static int vf_post_migration_fixups(struct xe_gt *gt)
+ 		xe_gt_sriov_vf_default_lrcs_hwsp_rebase(gt);
+ 		err = xe_guc_contexts_hwsp_rebase(&gt->uc.guc, buf);
+ 		if (err)
+-			goto out;
++			return err;
+ 	}
+ 
+-out:
+-	kfree(buf);
+-	return err;
++	return 0;
+ }
+ 
+ static void vf_post_migration_kickstart(struct xe_gt *gt)
+@@ -1272,9 +1266,18 @@ static void migration_worker_func(struct work_struct *w)
+  */
+ int xe_gt_sriov_vf_init_early(struct xe_gt *gt)
+ {
++	void *buf;
++
+ 	if (!xe_sriov_vf_migration_supported(gt_to_xe(gt)))
+ 		return 0;
+ 
++	buf = drmm_kmalloc(&gt_to_xe(gt)->drm,
++			   post_migration_scratch_size(gt_to_xe(gt)),
++			   GFP_KERNEL);
++	if (!buf)
++		return -ENOMEM;
++
++	gt->sriov.vf.migration.scratch = buf;
+ 	spin_lock_init(&gt->sriov.vf.migration.lock);
+ 	INIT_WORK(&gt->sriov.vf.migration.worker, migration_worker_func);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
+index df6fe1401..1e6ce7f4d 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
+@@ -54,6 +54,8 @@ struct xe_gt_sriov_vf_migration {
+ 	struct work_struct worker;
+ 	/** @lock: Protects recovery_queued */
+ 	spinlock_t lock;
++	/** @scratch: Scratch memory for VF recovery */
++	void *scratch;
+ 	/** @recovery_queued: VF post migration recovery in queued */
+ 	bool recovery_queued;
+ 	/** @recovery_inprogress: VF post migration recovery in progress */
+-- 
+2.34.1
+

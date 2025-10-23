@@ -20,7 +20,7 @@ Cc: Michal Winiarski <michal.winiarski@intel.com>
 Reviewed-by: Michał Winiarski <michal.winiarski@intel.com>
 Link: https://lore.kernel.org/r/20250802031045.1127138-9-tomasz.lis@intel.com
 Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
-(backported from commit ba180a362128cb71d16c3f0ce6645448011d2607 linux-next )
+(backported from commit 08c98f3f2bd7bf5dddd98b17c7caf94d07fad107 linux-next )
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/abi/guc_actions_abi.h |  8 ++++
@@ -28,10 +28,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  2 files changed, 62 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/abi/guc_actions_abi.h b/drivers/gpu/drm/xe/abi/guc_actions_abi.h
-index ff4f412c2..8ea5fca94 100644
+index 81eb046ae..d8cf68a05 100644
 --- a/drivers/gpu/drm/xe/abi/guc_actions_abi.h
 +++ b/drivers/gpu/drm/xe/abi/guc_actions_abi.h
-@@ -192,6 +192,14 @@ enum xe_guc_register_context_multi_lrc_param_offsets {
+@@ -193,6 +193,14 @@ enum xe_guc_register_context_multi_lrc_param_offsets {
  	XE_GUC_REGISTER_CONTEXT_MULTI_LRC_MSG_MIN_LEN = 11,
  };
  
@@ -47,10 +47,10 @@ index ff4f412c2..8ea5fca94 100644
  	XE_GUC_REPORT_STATUS_UNKNOWN = 0x0,
  	XE_GUC_REPORT_STATUS_ACKED = 0x1,
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index fb3c80d35..d62ad7a01 100644
+index 6ed3602b3..dacdbf0c3 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -658,12 +658,18 @@ static void wq_item_append(struct xe_exec_queue *q)
+@@ -669,12 +669,18 @@ static void wq_item_append(struct xe_exec_queue *q)
  	if (wq_wait_for_space(q, wqi_size))
  		return;
  
@@ -69,7 +69,7 @@ index fb3c80d35..d62ad7a01 100644
  	for (j = 1; j < q->width; ++j) {
  		struct xe_lrc *lrc = q->lrc[j];
  
-@@ -684,6 +690,50 @@ static void wq_item_append(struct xe_exec_queue *q)
+@@ -695,6 +701,50 @@ static void wq_item_append(struct xe_exec_queue *q)
  	parallel_write(xe, map, wq_desc.tail, q->guc->wqi_tail);
  }
  
@@ -120,7 +120,7 @@ index fb3c80d35..d62ad7a01 100644
  #define RESUME_PENDING	~0x0ull
  static void submit_exec_queue(struct xe_exec_queue *q)
  {
-@@ -2504,6 +2554,10 @@ int xe_guc_contexts_hwsp_rebase(struct xe_guc *guc, void *scratch)
+@@ -2536,6 +2586,10 @@ int xe_guc_contexts_hwsp_rebase(struct xe_guc *guc, void *scratch)
  		err = xe_exec_queue_contexts_hwsp_rebase(q, scratch);
  		if (err)
  			break;

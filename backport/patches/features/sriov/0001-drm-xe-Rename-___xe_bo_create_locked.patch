@@ -1,0 +1,129 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Thomas=20Hellstr=C3=B6m?= <thomas.hellstrom@linux.intel.com>
+Date: Mon, 8 Sep 2025 12:12:42 +0200
+Subject: drm/xe: Rename ___xe_bo_create_locked()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Don't start external function names with underscores.
+Rename to xe_bo_init_locked().
+
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250908101246.65025-10-thomas.hellstrom@linux.intel.com
+(cherry picked from commit 550a42a8daee1b056f9b3e6c858e57451a5b315a)
+(backported from commit 550a42a8daee1b056f9b3e6c858e57451a5b315a linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_bo.c      | 26 +++++++++++++-------------
+ drivers/gpu/drm/xe/xe_bo.h      | 10 +++++-----
+ drivers/gpu/drm/xe/xe_dma_buf.c |  6 +++---
+ 3 files changed, 21 insertions(+), 21 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
+index f89876306..e60f9f0e3 100644
+--- a/drivers/gpu/drm/xe/xe_bo.c
++++ b/drivers/gpu/drm/xe/xe_bo.c
+@@ -946,7 +946,7 @@ int xe_bo_notifier_prepare_pinned(struct xe_bo *bo)
+ 	if (bo->flags & XE_BO_FLAG_PINNED_NORESTORE)
+ 		goto out_unlock_bo;
+ 
+-	backup = ___xe_bo_create_locked(xe, NULL, NULL, bo->ttm.base.resv, NULL, bo->size,
++	backup = xe_bo_init_locked(xe, NULL, NULL, bo->ttm.base.resv, NULL, bo->size,
+ 			DRM_XE_GEM_CPU_CACHING_WB, ttm_bo_type_kernel,
+ 			XE_BO_FLAG_SYSTEM | XE_BO_FLAG_NEEDS_CPU_ACCESS |
+ 			XE_BO_FLAG_PINNED, exec);
+@@ -1025,7 +1025,7 @@ int xe_bo_evict_pinned(struct xe_bo *bo)
+ 		goto out_unlock_bo;
+ 
+ 	if (!backup) {
+-		backup = ___xe_bo_create_locked(xe, NULL, NULL, bo->ttm.base.resv, NULL, bo->size,
++		backup = xe_bo_init_locked(xe, NULL, NULL, bo->ttm.base.resv, NULL, bo->size,
+ 						DRM_XE_GEM_CPU_CACHING_WB, ttm_bo_type_kernel,
+ 						XE_BO_FLAG_SYSTEM | XE_BO_FLAG_NEEDS_CPU_ACCESS |
+ 						XE_BO_FLAG_PINNED, exec);
+@@ -1806,7 +1806,7 @@ void xe_bo_free(struct xe_bo *bo)
+ }
+ 
+ /**
+- * ___xe_bo_create_locked() - Initialize or create an xe_bo.
++ * xe_bo_init_locked() - Initialize or create an xe_bo.
+  * @xe: The xe device.
+  * @bo: An already allocated buffer object or NULL
+  * if the function should allocate a new one.
+@@ -1826,11 +1826,11 @@ void xe_bo_free(struct xe_bo *bo)
+  *
+  * Return: The buffer object on success. Negative error pointer on failure.
+  */
+-struct xe_bo *___xe_bo_create_locked(struct xe_device *xe, struct xe_bo *bo,
+-				     struct xe_tile *tile, struct dma_resv *resv,
+-				     struct ttm_lru_bulk_move *bulk, size_t size,
+-				     u16 cpu_caching, enum ttm_bo_type type,
+-				     u32 flags, struct drm_exec *exec)
++struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
++				struct xe_tile *tile, struct dma_resv *resv,
++				struct ttm_lru_bulk_move *bulk, size_t size,
++				u16 cpu_caching, enum ttm_bo_type type,
++				u32 flags, struct drm_exec *exec)
+ {
+ 	struct ttm_operation_ctx ctx = {
+ 		.interruptible = true,
+@@ -2023,11 +2023,11 @@ __xe_bo_create_locked(struct xe_device *xe,
+ 		}
+ 	}
+ 
+-	bo = ___xe_bo_create_locked(xe, bo, tile, vm ? xe_vm_resv(vm) : NULL,
+-				    vm && !xe_vm_in_fault_mode(vm) &&
+-				    flags & XE_BO_FLAG_USER ?
+-				    &vm->lru_bulk_move : NULL, size,
+-				    cpu_caching, type, flags, exec);
++	bo = xe_bo_init_locked(xe, bo, tile, vm ? xe_vm_resv(vm) : NULL,
++			       vm && !xe_vm_in_fault_mode(vm) &&
++			       flags & XE_BO_FLAG_USER ?
++			       &vm->lru_bulk_move : NULL, size,
++			       cpu_caching, type, flags, exec);
+ 	if (IS_ERR(bo))
+ 		return bo;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_bo.h b/drivers/gpu/drm/xe/xe_bo.h
+index 853e61a32..377304059 100644
+--- a/drivers/gpu/drm/xe/xe_bo.h
++++ b/drivers/gpu/drm/xe/xe_bo.h
+@@ -85,11 +85,11 @@ struct sg_table;
+ struct xe_bo *xe_bo_alloc(void);
+ void xe_bo_free(struct xe_bo *bo);
+ 
+-struct xe_bo *___xe_bo_create_locked(struct xe_device *xe, struct xe_bo *bo,
+-				     struct xe_tile *tile, struct dma_resv *resv,
+-				     struct ttm_lru_bulk_move *bulk, size_t size,
+-				     u16 cpu_caching, enum ttm_bo_type type,
+-				     u32 flags, struct drm_exec *exec);
++struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
++				struct xe_tile *tile, struct dma_resv *resv,
++				struct ttm_lru_bulk_move *bulk, size_t size,
++				u16 cpu_caching, enum ttm_bo_type type,
++				u32 flags, struct drm_exec *exec);
+ struct xe_bo *
+ xe_bo_create_locked_range(struct xe_device *xe,
+ 			  struct xe_tile *tile, struct xe_vm *vm,
+diff --git a/drivers/gpu/drm/xe/xe_dma_buf.c b/drivers/gpu/drm/xe/xe_dma_buf.c
+index 2e5b4b371..607c3f4ef 100644
+--- a/drivers/gpu/drm/xe/xe_dma_buf.c
++++ b/drivers/gpu/drm/xe/xe_dma_buf.c
+@@ -238,9 +238,9 @@ xe_dma_buf_init_obj(struct drm_device *dev, struct xe_bo *storage,
+ 		if (ret)
+ 			break;
+ 
+-		bo = ___xe_bo_create_locked(xe, storage, NULL, resv, NULL, dma_buf->size,
+-					    0, /* Will require 1way or 2way for vm_bind */
+-					    ttm_bo_type_sg, XE_BO_FLAG_SYSTEM, &exec);
++		bo = xe_bo_init_locked(xe, storage, NULL, resv, NULL, dma_buf->size,
++				       0, /* Will require 1way or 2way for vm_bind */
++				       ttm_bo_type_sg, XE_BO_FLAG_SYSTEM, &exec);
+ 		drm_exec_retry_on_contention(&exec);
+ 		if (IS_ERR(bo)) {
+ 			ret = PTR_ERR(bo);
+-- 
+2.34.1
+

@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:44:59 -0700
+Subject: drm/xe: Add NULL checks to scratch LRC allocation
+
+kmalloc can fail, the returned value must have a NULL check. This should
+be immediately after kmalloc for clarity.
+
+v5:
+ - Assert state->buffer in setup_bo if buffer is iomem (Tomasz)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Tomasz Lis <tomasz.lis@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-2-matthew.brost@intel.com
+(backported from commit b0607599b7d1a8372b6dcd790d52bd1aefe59845 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_lrc.c | 13 +++++++++----
+ 1 file changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index d1a091460..321ed0315 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1145,8 +1145,7 @@ static int setup_bo(struct bo_setup_state *state)
+ 	ssize_t remain;
+ 
+ 	if (state->lrc->bo->vmap.is_iomem) {
+-		if (!state->buffer)
+-			return -ENOMEM;
++		xe_gt_assert(state->hwe->gt, state->buffer);
+ 		state->ptr = state->buffer;
+ 	} else {
+ 		state->ptr = state->lrc->bo->vmap.vaddr + state->offset;
+@@ -1233,8 +1232,11 @@ static int setup_wa_bb(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
+ 	u32 *buf = NULL;
+ 	int ret;
+ 
+-	if (lrc->bo->vmap.is_iomem)
++	if (lrc->bo->vmap.is_iomem) {
+ 		buf = kmalloc(LRC_WA_BB_SIZE, GFP_KERNEL);
++		if (!buf)
++			return -ENOMEM;
++	}
+ 
+ 	ret = xe_lrc_setup_wa_bb_with_scratch(lrc, hwe, buf);
+ 
+@@ -1269,8 +1271,11 @@ setup_indirect_ctx(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
+ 	if (xe_gt_WARN_ON(lrc->gt, !state.funcs))
+ 		return 0;
+ 
+-	if (lrc->bo->vmap.is_iomem)
++	if (lrc->bo->vmap.is_iomem) {
+ 		state.buffer = kmalloc(state.max_size, GFP_KERNEL);
++		if (!state.buffer)
++			return -ENOMEM;
++	}
+ 
+ 	ret = setup_bo(&state);
+ 	if (ret) {
+-- 
+2.34.1
+

@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tvrtko Ursulin <tvrtko.ursulin@igalia.com>
+Date: Fri, 11 Jul 2025 17:01:49 +0100
+Subject: drm/xe: Track number of written dwords from
+ workaround batch buffer emission
+
+Indirect context setup will need to get to the number of written dwords.
+Lets add it as an output parameter so it can be accessed from the finish
+helper regardless of whether code is writing directly or via an shadow
+buffer.
+
+Signed-off-by: Tvrtko Ursulin <tvrtko.ursulin@igalia.com>
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20250711160153.49833-5-tvrtko.ursulin@igalia.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit 5ce511ad2b1e2c449e26dba11ac5027c1a142e19 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_lrc.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index 1e3047543..434c6ba73 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1035,6 +1035,7 @@ struct bo_setup_state {
+ 	/* State: */
+ 	u32			*buffer;
+ 	u32			*ptr;
++	unsigned int		written;
+ };
+ 
+ static int setup_bo(struct bo_setup_state *state)
+@@ -1067,6 +1068,7 @@ static int setup_bo(struct bo_setup_state *state)
+ 			goto fail;
+ 
+ 		state->ptr += len;
++		state->written += len;
+ 	}
+ 
+ 	return 0;
+@@ -1083,7 +1085,7 @@ static void finish_bo(struct bo_setup_state *state)
+ 
+ 	xe_map_memcpy_to(gt_to_xe(state->lrc->gt), &state->lrc->bo->vmap,
+ 			 state->offset, state->buffer,
+-			 (state->ptr - state->buffer) * sizeof(u32));
++			 state->written * sizeof(u32));
+ 	kfree(state->buffer);
+ }
+ 
+@@ -1107,6 +1109,7 @@ static int setup_wa_bb(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
+ 		return ret;
+ 
+ 	*state.ptr++ = MI_BATCH_BUFFER_END;
++	state.written++;
+ 
+ 	finish_bo(&state);
+ 
+-- 
+2.34.1
+

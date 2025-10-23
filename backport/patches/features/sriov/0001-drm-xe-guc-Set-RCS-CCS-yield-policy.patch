@@ -33,7 +33,7 @@ Reviewed-by: John Harrison <John.C.Harrison@Intel.com>
 Tested-by: Vinay Belgaumkar <vinay.belgaumkar@intel.com>
 Link: https://lore.kernel.org/r/20250905235632.3333247-2-daniele.ceraolospurio@intel.com
 (cherry picked from commit c37fc9c7c30c69ea26fbb28cf7d40e8a7db8b2eb)
-(backported from commit 88434448438e4302e272b2a2b810b42e05ea024b linux-next )
+(backported from commit 26caeae9fb482ec443753b4e3307e5122b60b850 linux-next )
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/abi/guc_actions_abi.h |  1 +
@@ -100,7 +100,7 @@ index 0366a9da5..d7719d0e3 100644
   * DOC: GuC VGT Policy KLVs
   *
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index c31e540b8..0691cefbc 100644
+index 2ca648d08..ebc3fcccb 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -97,7 +97,7 @@ void xe_gt_sanitize(struct xe_gt *gt)
@@ -233,3 +233,6 @@ index 9e6f19b03..78c3f07e3 100644
  
  int xe_guc_submit_reset_prepare(struct xe_guc *guc);
  void xe_guc_submit_reset_wait(struct xe_guc *guc);
+-- 
+2.34.1
+

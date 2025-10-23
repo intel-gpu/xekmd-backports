@@ -28,13 +28,11 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c          |  4 +--
- drivers/gpu/drm/xe/xe_exec_queue.c       | 46 ++++++++++++++++++++++--
+ drivers/gpu/drm/xe/xe_exec_queue.c       | 43 +++++++++++++++++++++++-
  drivers/gpu/drm/xe/xe_exec_queue.h       |  1 +
  drivers/gpu/drm/xe/xe_exec_queue_types.h |  7 ++++
- drivers/gpu/drm/xe/xe_execlist.c         |  2 +-
- drivers/gpu/drm/xe/xe_lrc.c              | 16 +++++++--
- drivers/gpu/drm/xe/xe_lrc.h              |  3 +-
- 7 files changed, 70 insertions(+), 9 deletions(-)
+ drivers/gpu/drm/xe/xe_lrc.c              | 13 +++++--
+ 5 files changed, 63 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
 index fecb7c8a9..4644d6846 100644
@@ -59,31 +57,20 @@ index fecb7c8a9..4644d6846 100644
  
  	h_c = find_handle(d->res, XE_EUDEBUG_RES_TYPE_CLIENT, xef);
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index fc8482a43..e0ab9b25f 100644
+index 01b372ea9..6be5bfb78 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -112,6 +112,7 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
- static int __xe_exec_queue_init(struct xe_exec_queue *q)
- {
- 	struct xe_vm *vm = q->vm;
-+	u32 flags = 0;
- 	int i, err;
- 
- 	if (vm) {
-@@ -120,8 +121,11 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q)
- 			return err;
- 	}
- 
+@@ -180,6 +180,9 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
+ 	 * (without a race) only if the function can detect migration instantly
+ 	 * from the moment vCPU resumes execution.
+ 	 */
 +	if (q->eudebug_flags & EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)
-+		flags |= LRC_CREATE_RUNALONE;
++		flags |= XE_LRC_CREATE_RUNALONE;
 +
  	for (i = 0; i < q->width; ++i) {
--		q->lrc[i] = xe_lrc_create(q->hwe, q->vm, SZ_16K, q->msix_vec);
-+		q->lrc[i] = xe_lrc_create(q->hwe, q->vm, SZ_16K, q->msix_vec, flags);
- 		if (IS_ERR(q->lrc[i])) {
- 			err = PTR_ERR(q->lrc[i]);
- 			goto err_unlock;
-@@ -406,6 +410,42 @@ static int exec_queue_set_timeslice(struct xe_device *xe, struct xe_exec_queue *
+ 		struct xe_lrc *lrc;
+ 
+@@ -463,6 +466,42 @@ static int exec_queue_set_timeslice(struct xe_device *xe, struct xe_exec_queue *
  	return 0;
  }
  
@@ -126,7 +113,7 @@ index fc8482a43..e0ab9b25f 100644
  typedef int (*xe_exec_queue_set_property_fn)(struct xe_device *xe,
  					     struct xe_exec_queue *q,
  					     u64 value);
-@@ -413,6 +453,7 @@ typedef int (*xe_exec_queue_set_property_fn)(struct xe_device *xe,
+@@ -470,6 +509,7 @@ typedef int (*xe_exec_queue_set_property_fn)(struct xe_device *xe,
  static const xe_exec_queue_set_property_fn exec_queue_set_property_funcs[] = {
  	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY] = exec_queue_set_priority,
  	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_TIMESLICE] = exec_queue_set_timeslice,
@@ -134,7 +121,7 @@ index fc8482a43..e0ab9b25f 100644
  };
  
  static int exec_queue_user_ext_set_property(struct xe_device *xe,
-@@ -432,7 +473,8 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
+@@ -489,7 +529,8 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
  			 ARRAY_SIZE(exec_queue_set_property_funcs)) ||
  	    XE_IOCTL_DBG(xe, ext.pad) ||
  	    XE_IOCTL_DBG(xe, ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY &&
@@ -145,10 +132,10 @@ index fc8482a43..e0ab9b25f 100644
  
  	idx = array_index_nospec(ext.property, ARRAY_SIZE(exec_queue_set_property_funcs));
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
-index c1a791cf1..f2fd82f27 100644
+index 411d7316c..544312a2e 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.h
-@@ -87,5 +87,6 @@ void xe_exec_queue_update_run_ticks(struct xe_exec_queue *q);
+@@ -85,5 +85,6 @@ void xe_exec_queue_update_run_ticks(struct xe_exec_queue *q);
  int xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch);
  void xe_exec_queue_jobs_ring_restore(struct xe_exec_queue *q);
  struct xe_lrc *xe_exec_queue_lrc(struct xe_exec_queue *q);
@@ -156,7 +143,7 @@ index c1a791cf1..f2fd82f27 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index 788f37b35..8881f5715 100644
+index 9093cc95f..a9fbffa8b 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
 @@ -96,6 +96,13 @@ struct xe_exec_queue {
@@ -173,37 +160,25 @@ index 788f37b35..8881f5715 100644
  	union {
  		/** @multi_gt_list: list head for VM bind engines if multi-GT */
  		struct list_head multi_gt_list;
-diff --git a/drivers/gpu/drm/xe/xe_execlist.c b/drivers/gpu/drm/xe/xe_execlist.c
-index 5ef96deaa..779a52daf 100644
---- a/drivers/gpu/drm/xe/xe_execlist.c
-+++ b/drivers/gpu/drm/xe/xe_execlist.c
-@@ -269,7 +269,7 @@ struct xe_execlist_port *xe_execlist_port_create(struct xe_device *xe,
- 
- 	port->hwe = hwe;
- 
--	port->lrc = xe_lrc_create(hwe, NULL, SZ_16K, XE_IRQ_DEFAULT_MSIX);
-+	port->lrc = xe_lrc_create(hwe, NULL, SZ_16K, XE_IRQ_DEFAULT_MSIX, 0);
- 	if (IS_ERR(port->lrc)) {
- 		err = PTR_ERR(port->lrc);
- 		goto err;
 diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
-index 6191556cb..73ef35e06 100644
+index 4c5eaba89..f9adc9c2d 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.c
 +++ b/drivers/gpu/drm/xe/xe_lrc.c
-@@ -1036,7 +1036,7 @@ static int xe_lrc_setup_utilization(struct xe_lrc *lrc)
- #define PVC_CTX_ACC_CTR_THOLD	(0x2a + 1)
+@@ -1308,8 +1308,7 @@ setup_indirect_ctx(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
+ }
  
  static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
--		       struct xe_vm *vm, u32 ring_size, u16 msix_vec)
+-		       struct xe_vm *vm, u32 ring_size, u16 msix_vec,
+-		       u32 init_flags)
 +		       struct xe_vm *vm, u32 ring_size, u16 msix_vec, u32 flags)
  {
  	struct xe_gt *gt = hwe->gt;
- 	struct xe_tile *tile = gt_to_tile(gt);
-@@ -1177,6 +1177,16 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+ 	const u32 lrc_size = xe_gt_lrc_size(gt, hwe->class);
+@@ -1442,6 +1441,16 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
  	map = __xe_lrc_start_seqno_map(lrc);
  	xe_map_write32(lrc_to_xe(lrc), &map, lrc->fence_ctx.next_seqno - 1);
  
-+	if (flags & LRC_CREATE_RUNALONE) {
++	if (flags & XE_LRC_CREATE_RUNALONE) {
 +		u32 ctx_control = xe_lrc_read_ctx_reg(lrc, CTX_CONTEXT_CONTROL);
 +
 +		drm_dbg(&xe->drm, "read CTX_CONTEXT_CONTROL: 0x%x\n", ctx_control);
@@ -213,43 +188,9 @@ index 6191556cb..73ef35e06 100644
 +		xe_lrc_write_ctx_reg(lrc, CTX_CONTEXT_CONTROL, ctx_control);
 +	}
 +
- 	err = xe_lrc_setup_utilization(lrc);
+ 	err = setup_wa_bb(lrc, hwe);
  	if (err)
  		goto err_lrc_finish;
-@@ -1201,7 +1211,7 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
-  * upon failure.
-  */
- struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
--			     u32 ring_size, u16 msix_vec)
-+			     u32 ring_size, u16 msix_vec, u32 flags)
- {
- 	struct xe_lrc *lrc;
- 	int err;
-@@ -1210,7 +1220,7 @@ struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
- 	if (!lrc)
- 		return ERR_PTR(-ENOMEM);
- 
--	err = xe_lrc_init(lrc, hwe, vm, ring_size, msix_vec);
-+	err = xe_lrc_init(lrc, hwe, vm, ring_size, msix_vec, flags);
- 	if (err) {
- 		kfree(lrc);
- 		return ERR_PTR(err);
-diff --git a/drivers/gpu/drm/xe/xe_lrc.h b/drivers/gpu/drm/xe/xe_lrc.h
-index a8cf49634..e3bb2c944 100644
---- a/drivers/gpu/drm/xe/xe_lrc.h
-+++ b/drivers/gpu/drm/xe/xe_lrc.h
-@@ -41,9 +41,10 @@ struct xe_lrc_snapshot {
- 
- #define LRC_PPHWSP_SCRATCH_ADDR (0x34 * 4)
- #define LRC_WA_BB_SIZE SZ_4K
-+#define LRC_CREATE_RUNALONE    BIT(0)
- 
- struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
--			     u32 ring_size, u16 msix_vec);
-+			     u32 ring_size, u16 msix_vec, u32 flags);
- void xe_lrc_destroy(struct kref *ref);
- 
- /**
 -- 
 2.34.1
 

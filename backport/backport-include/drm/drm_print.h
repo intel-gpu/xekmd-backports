@@ -39,7 +39,44 @@ static inline struct drm_printer drm_dbg_printer(struct drm_device *drm,
 #endif
 
 #ifdef BPM_DRM_LINE_PRINTER_NOT_PRESENT
-#define drm_line_printer(x,y,z) drm_debug_printer(z)
+struct __drm_line_printer_ctx {
+        struct drm_printer *parent;
+        const char *prefix;
+        unsigned int series;
+        unsigned int counter;
+};
+
+static inline void __drm_printfn_line(struct drm_printer *p, struct va_format *vaf)
+{
+        struct __drm_line_printer_ctx *ctx = p->arg;
+        unsigned int counter = ++ctx->counter;
+        const char *prefix = ctx->prefix ?: "";
+        const char *pad = ctx->prefix ? " " : "";
+
+	if (ctx->series)
+                drm_printf(ctx->parent, "%s%s%u.%u: %pV",
+                          prefix, pad, ctx->series, counter, vaf);
+        else
+                drm_printf(ctx->parent, "%s%s%u: %pV", prefix, pad, counter, vaf);
+}
+
+static inline struct drm_printer drm_line_printer(struct drm_printer *p,
+                                                  const char *prefix,
+                                                  unsigned int series)
+{
+        static struct __drm_line_printer_ctx ctx;
+        struct drm_printer lp;
+
+	ctx.parent = p;
+	ctx.prefix = prefix;
+	ctx.series = series;
+	ctx.counter = 0;
+
+	lp.printfn = __drm_printfn_line;
+	lp.arg = &ctx;
+
+	return lp;
+}
 #endif
 
 #ifdef BPM_DRM_DBG_RATELIMITED_NOT_PRESENT

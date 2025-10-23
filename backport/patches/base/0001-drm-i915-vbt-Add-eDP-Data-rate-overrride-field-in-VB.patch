@@ -1,0 +1,84 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Suraj Kandpal <suraj.kandpal@intel.com>
+Date: Thu, 21 Aug 2025 09:56:51 +0530
+Subject: [PATCH] drm/i915/vbt: Add eDP Data rate overrride field in VBT
+
+Add edp_data_rate_override field VBT which gives us a mask
+of rates which needs to be skipped in favour of
+subsequent higher rate.
+
+--v2
+-Rename vbt field [Jani]
+-Fix comment to 263+ [Jani]
+-Use BIT_U32 [Jani]
+-Fix the bits assignment in vbt [Jani]
+
+--v3
+-Add a mask which represents all link rates [Ankit]
+
+Bspec: 20124
+Signed-off-by: Suraj Kandpal <suraj.kandpal@intel.com>
+Reviewed-by: Ankit Nautiyal <ankit.k.nautiyal@intel.com>
+Link: https://lore.kernel.org/r/20250821042653.269227-2-suraj.kandpal@intel.com
+(cherry-picked from commit 4d33c77cf2c3e8842c2f722e1efb6010b021dbc0 linux-next)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+---
+ drivers/gpu/drm/i915/display/intel_bios.c     |  4 +++-
+ drivers/gpu/drm/i915/display/intel_vbt_defs.h | 18 ++++++++++++++++++
+ 2 files changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/i915/display/intel_bios.c b/drivers/gpu/drm/i915/display/intel_bios.c
+index 9c268bed091d..8337ebe0f2c8 100644
+--- a/drivers/gpu/drm/i915/display/intel_bios.c
++++ b/drivers/gpu/drm/i915/display/intel_bios.c
+@@ -2747,8 +2747,10 @@ static int child_device_expected_size(u16 version)
+ {
+ 	BUILD_BUG_ON(sizeof(struct child_device_config) < 40);
+ 
+-	if (version > 256)
++	if (version > 263)
+ 		return -ENOENT;
++	else if (version >= 263)
++		return 44;
+ 	else if (version >= 256)
+ 		return 40;
+ 	else if (version >= 216)
+diff --git a/drivers/gpu/drm/i915/display/intel_vbt_defs.h b/drivers/gpu/drm/i915/display/intel_vbt_defs.h
+index 92c04811aa28..32161848a5c1 100644
+--- a/drivers/gpu/drm/i915/display/intel_vbt_defs.h
++++ b/drivers/gpu/drm/i915/display/intel_vbt_defs.h
+@@ -437,6 +437,22 @@ enum vbt_gmbus_ddi {
+ #define BDB_230_VBT_DP_MAX_LINK_RATE_UHBR13P5	6
+ #define BDB_230_VBT_DP_MAX_LINK_RATE_UHBR20	7
+ 
++/* EDP link rate 263+ */
++#define BDB_263_VBT_EDP_LINK_RATE_1_62		BIT_U32(0)
++#define BDB_263_VBT_EDP_LINK_RATE_2_16		BIT_U32(1)
++#define BDB_263_VBT_EDP_LINK_RATE_2_43		BIT_U32(2)
++#define BDB_263_VBT_EDP_LINK_RATE_2_7		BIT_U32(3)
++#define BDB_263_VBT_EDP_LINK_RATE_3_24		BIT_U32(4)
++#define BDB_263_VBT_EDP_LINK_RATE_4_32		BIT_U32(5)
++#define BDB_263_VBT_EDP_LINK_RATE_5_4		BIT_U32(6)
++#define BDB_263_VBT_EDP_LINK_RATE_6_75		BIT_U32(7)
++#define BDB_263_VBT_EDP_LINK_RATE_8_1		BIT_U32(8)
++#define BDB_263_VBT_EDP_LINK_RATE_10		BIT_U32(9)
++#define BDB_263_VBT_EDP_LINK_RATE_13_5		BIT_U32(10)
++#define BDB_263_VBT_EDP_LINK_RATE_20		BIT_U32(11)
++#define BDB_263_VBT_EDP_NUM_RATES		12
++#define BDB_263_VBT_EDP_RATES_MASK		GENMASK(BDB_263_VBT_EDP_NUM_RATES - 1, 0)
++
+ /*
+  * The child device config, aka the display device data structure, provides a
+  * description of a port and its configuration on the platform.
+@@ -547,6 +563,8 @@ struct child_device_config {
+ 	u8 dp_max_link_rate:3;					/* 216+ */
+ 	u8 dp_max_link_rate_reserved:5;				/* 216+ */
+ 	u8 efp_index;						/* 256+ */
++	u32 edp_data_rate_override:12;				/* 263+ */
++	u32 edp_data_rate_override_reserved:20;			/* 263+ */
+ } __packed;
+ 
+ struct bdb_general_definitions {
+-- 
+2.34.1
+

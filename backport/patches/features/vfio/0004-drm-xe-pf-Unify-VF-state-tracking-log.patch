@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 1 Oct 2025 01:35:22 +0200
+Subject: [PATCH 04/59] drm/xe/pf: Unify VF state tracking log
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+By using single function that dumps VF state transition, final
+logs are easier to analyze as there is always the same call site
+in every debug message.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Michał Winiarski <michal.winiarski@intel.com>
+Link: https://lore.kernel.org/r/20250930233525.201263-5-michal.wajdeczko@intel.com
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c | 14 ++++++++++----
+ 1 file changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+index e582f4d60..90fb69b0e 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+@@ -271,12 +271,19 @@ static bool pf_expect_vf_not_state(struct xe_gt *gt, unsigned int vfid,
+ 	return result;
+ }
+ 
++static void pf_track_vf_state(struct xe_gt *gt, unsigned int vfid,
++			      enum xe_gt_sriov_control_bits bit,
++			      const char *what)
++{
++	xe_gt_sriov_dbg_verbose(gt, "VF%u state %s(%d) %s\n",
++				vfid, control_bit_to_string(bit), bit, what);
++}
++
+ static bool pf_enter_vf_state(struct xe_gt *gt, unsigned int vfid,
+ 			      enum xe_gt_sriov_control_bits bit)
+ {
+ 	if (!test_and_set_bit(bit, pf_peek_vf_state(gt, vfid))) {
+-		xe_gt_sriov_dbg_verbose(gt, "VF%u state %s(%d) enter\n",
+-					vfid, control_bit_to_string(bit), bit);
++		pf_track_vf_state(gt, vfid, bit, "enter");
+ 		return true;
+ 	}
+ 	return false;
+@@ -286,8 +293,7 @@ static bool pf_exit_vf_state(struct xe_gt *gt, unsigned int vfid,
+ 			     enum xe_gt_sriov_control_bits bit)
+ {
+ 	if (test_and_clear_bit(bit, pf_peek_vf_state(gt, vfid))) {
+-		xe_gt_sriov_dbg_verbose(gt, "VF%u state %s(%d) exit\n",
+-					vfid, control_bit_to_string(bit), bit);
++		pf_track_vf_state(gt, vfid, bit, "exit");
+ 		return true;
+ 	}
+ 	return false;
+-- 
+2.34.1
+

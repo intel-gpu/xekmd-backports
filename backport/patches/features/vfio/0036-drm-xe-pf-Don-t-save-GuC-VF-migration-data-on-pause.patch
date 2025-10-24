@@ -1,0 +1,125 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Thu, 30 Oct 2025 21:31:21 +0100
+Subject: [PATCH 36/59] drm/xe/pf: Don't save GuC VF migration data on pause
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In upcoming changes, the GuC VF migration data will be handled as part
+of separate SAVE/RESTORE states in VF control state machine.
+Remove it from PAUSE state.
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c   | 39 +------------------
+ .../gpu/drm/xe/xe_gt_sriov_pf_control_types.h |  2 -
+ 2 files changed, 2 insertions(+), 39 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+index b5783d20f..0b4dc6cdb 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+@@ -183,7 +183,6 @@ static const char *control_bit_to_string(enum xe_gt_sriov_control_bits bit)
+ 	CASE2STR(PAUSE_SEND_PAUSE);
+ 	CASE2STR(PAUSE_WAIT_GUC);
+ 	CASE2STR(PAUSE_GUC_DONE);
+-	CASE2STR(PAUSE_SAVE_GUC);
+ 	CASE2STR(PAUSE_FAILED);
+ 	CASE2STR(PAUSED);
+ 	CASE2STR(SAVE_WIP);
+@@ -453,8 +452,7 @@ static void pf_enter_vf_ready(struct xe_gt *gt, unsigned int vfid)
+  *	:       PAUSE_GUC_DONE                          o-----restart
+  *	:        |                                      :
+  *	:        |   o---<--busy                        :
+- *	:        v  /         /                         :
+- *	:       PAUSE_SAVE_GUC                          :
++ *	:       /                                       :
+  *	:      /                                        :
+  *	:     /                                         :
+  *	:....o..............o...............o...........:
+@@ -474,7 +472,6 @@ static void pf_exit_vf_pause_wip(struct xe_gt *gt, unsigned int vfid)
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_PAUSE_SEND_PAUSE);
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_PAUSE_WAIT_GUC);
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_PAUSE_GUC_DONE);
+-		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_PAUSE_SAVE_GUC);
+ 	}
+ }
+ 
+@@ -505,41 +502,12 @@ static void pf_enter_vf_pause_rejected(struct xe_gt *gt, unsigned int vfid)
+ 	pf_enter_vf_pause_failed(gt, vfid);
+ }
+ 
+-static void pf_enter_vf_pause_save_guc(struct xe_gt *gt, unsigned int vfid)
+-{
+-	if (!pf_enter_vf_state(gt, vfid, XE_GT_SRIOV_STATE_PAUSE_SAVE_GUC))
+-		pf_enter_vf_state_machine_bug(gt, vfid);
+-}
+-
+-static bool pf_exit_vf_pause_save_guc(struct xe_gt *gt, unsigned int vfid)
+-{
+-	int err;
+-
+-	if (!pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_PAUSE_SAVE_GUC))
+-		return false;
+-
+-	err = xe_gt_sriov_pf_migration_save_guc_state(gt, vfid);
+-	if (err) {
+-		/* retry if busy */
+-		if (err == -EBUSY) {
+-			pf_enter_vf_pause_save_guc(gt, vfid);
+-			return true;
+-		}
+-		/* give up on error */
+-		if (err == -EIO)
+-			pf_enter_vf_mismatch(gt, vfid);
+-	}
+-
+-	pf_enter_vf_pause_completed(gt, vfid);
+-	return true;
+-}
+-
+ static bool pf_exit_vf_pause_guc_done(struct xe_gt *gt, unsigned int vfid)
+ {
+ 	if (!pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_PAUSE_GUC_DONE))
+ 		return false;
+ 
+-	pf_enter_vf_pause_save_guc(gt, vfid);
++	pf_enter_vf_pause_completed(gt, vfid);
+ 	return true;
+ }
+ 
+@@ -1940,9 +1908,6 @@ static bool pf_process_vf_state_machine(struct xe_gt *gt, unsigned int vfid)
+ 	if (pf_exit_vf_pause_guc_done(gt, vfid))
+ 		return true;
+ 
+-	if (pf_exit_vf_pause_save_guc(gt, vfid))
+-		return true;
+-
+ 	if (pf_check_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_WAIT_DATA)) {
+ 		xe_gt_sriov_dbg_verbose(gt, "VF%u in %s\n", vfid,
+ 					control_bit_to_string(XE_GT_SRIOV_STATE_SAVE_WAIT_DATA));
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h
+index a14c73858..c2ec0403b 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h
+@@ -28,7 +28,6 @@
+  * @XE_GT_SRIOV_STATE_PAUSE_SEND_PAUSE: indicates that the PF is about to send a PAUSE command.
+  * @XE_GT_SRIOV_STATE_PAUSE_WAIT_GUC: indicates that the PF awaits for a response from the GuC.
+  * @XE_GT_SRIOV_STATE_PAUSE_GUC_DONE: indicates that the PF has received a response from the GuC.
+- * @XE_GT_SRIOV_STATE_PAUSE_SAVE_GUC: indicates that the PF needs to save the VF GuC state.
+  * @XE_GT_SRIOV_STATE_PAUSE_FAILED: indicates that a VF pause operation has failed.
+  * @XE_GT_SRIOV_STATE_PAUSED: indicates that the VF is paused.
+  * @XE_GT_SRIOV_STATE_SAVE_WIP: indicates that VF save operation is in progress.
+@@ -71,7 +70,6 @@ enum xe_gt_sriov_control_bits {
+ 	XE_GT_SRIOV_STATE_PAUSE_SEND_PAUSE,
+ 	XE_GT_SRIOV_STATE_PAUSE_WAIT_GUC,
+ 	XE_GT_SRIOV_STATE_PAUSE_GUC_DONE,
+-	XE_GT_SRIOV_STATE_PAUSE_SAVE_GUC,
+ 	XE_GT_SRIOV_STATE_PAUSE_FAILED,
+ 	XE_GT_SRIOV_STATE_PAUSED,
+ 
+-- 
+2.34.1
+

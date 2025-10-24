@@ -1,0 +1,178 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 15 Oct 2025 11:12:09 +0200
+Subject: [PATCH 22/59] drm/xe/pf: Allow to restore auto-provisioning mode
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+After doing tweaks to the VFs provisioning we may want to restore
+back the auto-provisioning mode. Allow that unless VFs are still
+enabled. This can be also used to release all VFs resources.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://lore.kernel.org/r/20251015091211.592-5-michal.wajdeczko@intel.com
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c   | 63 ++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_pf_helpers.h   | 11 ++++
+ drivers/gpu/drm/xe/xe_sriov_pf_provision.c | 18 +++++++
+ 3 files changed, 92 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
+index 97636ed86..a81aa05c5 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
+@@ -13,6 +13,7 @@
+ #include "xe_sriov_pf_control.h"
+ #include "xe_sriov_pf_debugfs.h"
+ #include "xe_sriov_pf_helpers.h"
++#include "xe_sriov_pf_provision.h"
+ #include "xe_sriov_pf_service.h"
+ #include "xe_sriov_printk.h"
+ #include "xe_tile_sriov_pf_debugfs.h"
+@@ -43,6 +44,66 @@ static unsigned int extract_vfid(struct dentry *d)
+ 	return p == extract_xe(d) ? PFID : (uintptr_t)p;
+ }
+ 
++/*
++ *      /sys/kernel/debug/dri/BDF/
++ *      ├── sriov
++ *      │   ├── restore_auto_provisioning
++ *      │   :
++ *      │   ├── pf/
++ *      │   ├── vf1
++ *      │   │   ├── ...
++ */
++
++static ssize_t from_file_write_to_xe_call(struct file *file, const char __user *userbuf,
++					  size_t count, loff_t *ppos,
++					  int (*call)(struct xe_device *))
++{
++	struct dentry *dent = file_dentry(file);
++	struct xe_device *xe = extract_xe(dent);
++	bool yes;
++	int ret;
++
++	if (*ppos)
++		return -EINVAL;
++	ret = kstrtobool_from_user(userbuf, count, &yes);
++	if (ret < 0)
++		return ret;
++	if (yes) {
++		xe_pm_runtime_get(xe);
++		ret = call(xe);
++		xe_pm_runtime_put(xe);
++	}
++	if (ret < 0)
++		return ret;
++	return count;
++}
++
++#define DEFINE_SRIOV_ATTRIBUTE(OP)						\
++static int OP##_show(struct seq_file *s, void *unused)				\
++{										\
++	return 0;								\
++}										\
++static ssize_t OP##_write(struct file *file, const char __user *userbuf,	\
++			  size_t count, loff_t *ppos)				\
++{										\
++	return from_file_write_to_xe_call(file, userbuf, count, ppos,		\
++					  xe_sriov_pf_##OP);			\
++}										\
++DEFINE_SHOW_STORE_ATTRIBUTE(OP)
++
++static inline int xe_sriov_pf_restore_auto_provisioning(struct xe_device *xe)
++{
++	return xe_sriov_pf_provision_set_mode(xe, XE_SRIOV_PROVISIONING_MODE_AUTO);
++}
++
++DEFINE_SRIOV_ATTRIBUTE(restore_auto_provisioning);
++
++static void pf_populate_root(struct xe_device *xe, struct dentry *dent)
++{
++	debugfs_create_file("restore_auto_provisioning", 0200, dent, xe,
++			    &restore_auto_provisioning_fops);
++}
++
+ static int simple_show(struct seq_file *m, void *data)
+ {
+ 	struct drm_printer p = drm_seq_file_printer(m);
+@@ -167,6 +228,8 @@ void xe_sriov_pf_debugfs_register(struct xe_device *xe, struct dentry *root)
+ 		return;
+ 	dent->d_inode->i_private = xe;
+ 
++	pf_populate_root(xe, dent);
++
+ 	/*
+ 	 *      /sys/kernel/debug/dri/BDF/
+ 	 *      ├── sriov		# d_inode->i_private = (xe_device*)
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_helpers.h b/drivers/gpu/drm/xe/xe_sriov_pf_helpers.h
+index dd1df950b..4a4340fb6 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_helpers.h
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_helpers.h
+@@ -37,6 +37,17 @@ static inline int xe_sriov_pf_get_totalvfs(struct xe_device *xe)
+ 	return xe->sriov.pf.driver_max_vfs;
+ }
+ 
++/**
++ * xe_sriov_pf_num_vfs() - Number of enabled VFs on the PF.
++ * @xe: the PF &xe_device
++ *
++ * Return: Number of enabled VFs on the PF.
++ */
++static inline unsigned int xe_sriov_pf_num_vfs(const struct xe_device *xe)
++{
++	return pci_num_vf(to_pci_dev(xe->drm.dev));
++}
++
+ static inline struct mutex *xe_sriov_pf_master_mutex(struct xe_device *xe)
+ {
+ 	xe_assert(xe, IS_SRIOV_PF(xe));
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+index 23b89c431..663fb0c04 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+@@ -70,6 +70,11 @@ static void pf_unprovision_vfs(struct xe_device *xe, unsigned int num_vfs)
+ 			xe_gt_sriov_pf_config_release(gt, n, true);
+ }
+ 
++static void pf_unprovision_all_vfs(struct xe_device *xe)
++{
++	pf_unprovision_vfs(xe, xe_sriov_pf_get_totalvfs(xe));
++}
++
+ /**
+  * xe_sriov_pf_provision_vfs() - Provision VFs in auto-mode.
+  * @xe: the PF &xe_device
+@@ -117,6 +122,10 @@ int xe_sriov_pf_unprovision_vfs(struct xe_device *xe, unsigned int num_vfs)
+  * When changing from AUTO to CUSTOM mode, any already allocated VFs resources
+  * will remain allocated and will not be released upon VFs disabling.
+  *
++ * When changing back to AUTO mode, if VFs are not enabled, already allocated
++ * VFs resources will be immediately released. If VFs are still enabled, such
++ * mode change is rejected.
++ *
+  * This function can only be called on PF.
+  *
+  * Return: 0 on success or a negative error code on failure.
+@@ -128,6 +137,15 @@ int xe_sriov_pf_provision_set_mode(struct xe_device *xe, enum xe_sriov_provision
+ 	if (mode == xe->sriov.pf.provision.mode)
+ 		return 0;
+ 
++	if (mode == XE_SRIOV_PROVISIONING_MODE_AUTO) {
++		if (xe_sriov_pf_num_vfs(xe)) {
++			xe_sriov_dbg(xe, "can't restore %s: VFs must be disabled!\n",
++				     mode_to_string(mode));
++			return -EBUSY;
++		}
++		pf_unprovision_all_vfs(xe);
++	}
++
+ 	xe_sriov_dbg(xe, "mode %s changed to %s by %ps\n",
+ 		     mode_to_string(xe->sriov.pf.provision.mode),
+ 		     mode_to_string(mode), __builtin_return_address(0));
+-- 
+2.34.1
+

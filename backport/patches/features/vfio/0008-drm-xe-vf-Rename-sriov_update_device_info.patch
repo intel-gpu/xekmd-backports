@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Sun, 28 Sep 2025 19:48:10 +0200
+Subject: [PATCH 08/59] drm/xe/vf: Rename sriov_update_device_info
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This is a VF only function and its name should reflect that to
+avoid any confusion. Move the VF check to the caller side.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://lore.kernel.org/r/20250928174811.198933-2-michal.wajdeczko@intel.com
+(cherry picked from commit b88bb1eefa88f0cefc00fe5e78b1186cd8f9db78)
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 9ca06035e..2cbb24f99 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -566,16 +566,15 @@ static int wait_for_lmem_ready(struct xe_device *xe)
+ }
+ ALLOW_ERROR_INJECTION(wait_for_lmem_ready, ERRNO); /* See xe_pci_probe() */
+ 
+-static void sriov_update_device_info(struct xe_device *xe)
++static void vf_update_device_info(struct xe_device *xe)
+ {
++	xe_assert(xe, IS_SRIOV_VF(xe));
+ 	/* disable features that are not available/applicable to VFs */
+-	if (IS_SRIOV_VF(xe)) {
+-		xe->info.probe_display = 0;
+-		xe->info.has_heci_cscfi = 0;
+-		xe->info.has_heci_gscfi = 0;
+-		xe->info.skip_guc_pc = 1;
+-		xe->info.skip_pcode = 1;
+-	}
++	xe->info.probe_display = 0;
++	xe->info.has_heci_cscfi = 0;
++	xe->info.has_heci_gscfi = 0;
++	xe->info.skip_guc_pc = 1;
++	xe->info.skip_pcode = 1;
+ }
+ 
+ static int xe_device_vram_alloc(struct xe_device *xe)
+@@ -616,7 +615,8 @@ int xe_device_probe_early(struct xe_device *xe)
+ 
+ 	xe_sriov_probe_early(xe);
+ 
+-	sriov_update_device_info(xe);
++	if (IS_SRIOV_VF(xe))
++		vf_update_device_info(xe);
+ 
+ 	err = xe_pcode_probe_early(xe);
+ 	if (err || xe_survivability_mode_is_requested(xe)) {
+-- 
+2.34.1
+

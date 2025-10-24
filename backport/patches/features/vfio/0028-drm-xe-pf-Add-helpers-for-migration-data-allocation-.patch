@@ -1,0 +1,319 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Thu, 30 Oct 2025 21:31:13 +0100
+Subject: [PATCH 28/59] drm/xe/pf: Add helpers for migration data allocation /
+ free
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Now that it's possible to free the packets - connect the restore
+handling logic with the ring.
+The helpers will also be used in upcoming changes that will start producing
+migration data packets.
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+---
+ drivers/gpu/drm/xe/Makefile                   |   1 +
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c   |   7 +
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c |  29 +++-
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h |   1 +
+ drivers/gpu/drm/xe/xe_sriov_migration_data.c  | 126 ++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_migration_data.h  |  30 +++++
+ 6 files changed, 193 insertions(+), 1 deletion(-)
+ create mode 100644 drivers/gpu/drm/xe/xe_sriov_migration_data.c
+ create mode 100644 drivers/gpu/drm/xe/xe_sriov_migration_data.h
+
+diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
+index 788f8d4bb..ff629c746 100644
+--- a/drivers/gpu/drm/xe/Makefile
++++ b/drivers/gpu/drm/xe/Makefile
+@@ -162,6 +162,7 @@ xe-$(CONFIG_PCI_IOV) += \
+ 	xe_lmtt_2l.o \
+ 	xe_lmtt_ml.o \
+ 	xe_pci_sriov.o \
++	xe_sriov_migration_data.o \
+ 	xe_sriov_pf.o \
+ 	xe_sriov_pf_control.o \
+ 	xe_sriov_pf_debugfs.o \
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+index 61165924b..b5783d20f 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+@@ -18,6 +18,7 @@
+ #include "xe_gt_sriov_printk.h"
+ #include "xe_guc_ct.h"
+ #include "xe_sriov.h"
++#include "xe_sriov_migration_data.h"
+ #include "xe_sriov_pf_control.h"
+ #include "xe_sriov_pf_migration.h"
+ #include "xe_sriov_pf_service.h"
+@@ -851,6 +852,8 @@ int xe_gt_sriov_pf_control_resume_vf(struct xe_gt *gt, unsigned int vfid)
+ static void pf_exit_vf_save_wip(struct xe_gt *gt, unsigned int vfid)
+ {
+ 	if (pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_WIP)) {
++		xe_gt_sriov_pf_migration_ring_free(gt, vfid);
++
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_PROCESS_DATA);
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_WAIT_DATA);
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_DONE);
+@@ -1048,6 +1051,8 @@ int xe_gt_sriov_pf_control_finish_save_vf(struct xe_gt *gt, unsigned int vfid)
+ static void pf_exit_vf_restore_wip(struct xe_gt *gt, unsigned int vfid)
+ {
+ 	if (pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_RESTORE_WIP)) {
++		xe_gt_sriov_pf_migration_ring_free(gt, vfid);
++
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_RESTORE_PROCESS_DATA);
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_RESTORE_WAIT_DATA);
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_RESTORE_DATA_DONE);
+@@ -1080,6 +1085,8 @@ static int pf_handle_vf_restore_data(struct xe_gt *gt, unsigned int vfid)
+ 
+ 	xe_gt_sriov_notice(gt, "Skipping VF%u unknown data type: %d\n", vfid, data->type);
+ 
++	xe_sriov_migration_data_free(data);
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+index e61e6f421..40b75b5fe 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+@@ -14,6 +14,7 @@
+ #include "xe_guc.h"
+ #include "xe_guc_ct.h"
+ #include "xe_sriov.h"
++#include "xe_sriov_migration_data.h"
+ #include "xe_sriov_pf_migration.h"
+ 
+ #define XE_GT_SRIOV_PF_MIGRATION_RING_SIZE 5
+@@ -418,6 +419,25 @@ bool xe_gt_sriov_pf_migration_ring_full(struct xe_gt *gt, unsigned int vfid)
+ 	return ptr_ring_full(&pf_pick_gt_migration(gt, vfid)->ring);
+ }
+ 
++/**
++ * xe_gt_sriov_pf_migration_ring_free() - Consume and free all data in migration ring
++ * @gt: the &xe_gt
++ * @vfid: the VF identifier
++ */
++void xe_gt_sriov_pf_migration_ring_free(struct xe_gt *gt, unsigned int vfid)
++{
++	struct xe_gt_sriov_migration_data *migration = pf_pick_gt_migration(gt, vfid);
++	struct xe_sriov_migration_data *data;
++
++	if (ptr_ring_empty(&migration->ring))
++		return;
++
++	xe_gt_sriov_notice(gt, "VF%u unprocessed migration data left in the ring!\n", vfid);
++
++	while ((data = ptr_ring_consume(&migration->ring)))
++		xe_sriov_migration_data_free(data);
++}
++
+ /**
+  * xe_gt_sriov_pf_migration_save_produce() - Add VF save data packet to migration ring.
+  * @gt: the &xe_gt
+@@ -543,11 +563,18 @@ xe_gt_sriov_pf_migration_save_consume(struct xe_gt *gt, unsigned int vfid)
+ 	return ERR_PTR(-EAGAIN);
+ }
+ 
++static void pf_mig_data_destroy(void *ptr)
++{
++	struct xe_sriov_migration_data *data = ptr;
++
++	xe_sriov_migration_data_free(data);
++}
++
+ static void action_ring_cleanup(void *arg)
+ {
+ 	struct ptr_ring *r = arg;
+ 
+-	ptr_ring_cleanup(r, NULL);
++	ptr_ring_cleanup(r, pf_mig_data_destroy);
+ }
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h
+index 9e67f18de..1ed2248f0 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h
+@@ -17,6 +17,7 @@ int xe_gt_sriov_pf_migration_restore_guc_state(struct xe_gt *gt, unsigned int vf
+ 
+ bool xe_gt_sriov_pf_migration_ring_empty(struct xe_gt *gt, unsigned int vfid);
+ bool xe_gt_sriov_pf_migration_ring_full(struct xe_gt *gt, unsigned int vfid);
++void xe_gt_sriov_pf_migration_ring_free(struct xe_gt *gt, unsigned int vfid);
+ 
+ int xe_gt_sriov_pf_migration_save_produce(struct xe_gt *gt, unsigned int vfid,
+ 					  struct xe_sriov_migration_data *data);
+diff --git a/drivers/gpu/drm/xe/xe_sriov_migration_data.c b/drivers/gpu/drm/xe/xe_sriov_migration_data.c
+new file mode 100644
+index 000000000..2371ca3e6
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_sriov_migration_data.c
+@@ -0,0 +1,126 @@
++// SPDX-License-Identifier: MIT
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#include "xe_bo.h"
++#include "xe_device.h"
++#include "xe_sriov_migration_data.h"
++
++static bool data_needs_bo(struct xe_sriov_migration_data *data)
++{
++	return data->type == XE_SRIOV_MIGRATION_DATA_TYPE_VRAM;
++}
++
++/**
++ * xe_sriov_migration_data() - Allocate migration data packet
++ * @xe: the &xe_device
++ *
++ * Only allocates the "outer" structure, without initializing the migration
++ * data backing storage.
++ *
++ * Return: Pointer to &xe_sriov_migration_data on success,
++ *         NULL in case of error.
++ */
++struct xe_sriov_migration_data *xe_sriov_migration_data_alloc(struct xe_device *xe)
++{
++	struct xe_sriov_migration_data *data;
++
++	data = kzalloc(sizeof(*data), GFP_KERNEL);
++	if (!data)
++		return NULL;
++
++	data->xe = xe;
++	data->hdr_remaining = sizeof(data->hdr);
++
++	return data;
++}
++
++/**
++ * xe_sriov_migration_data_free() - Free migration data packet.
++ * @data: the &xe_sriov_migration_data packet
++ */
++void xe_sriov_migration_data_free(struct xe_sriov_migration_data *data)
++{
++	if (data_needs_bo(data))
++		xe_bo_unpin_map_no_vm(data->bo);
++	else
++		kvfree(data->buff);
++
++	kfree(data);
++}
++
++static int mig_data_init(struct xe_sriov_migration_data *data)
++{
++	struct xe_gt *gt = xe_device_get_gt(data->xe, data->gt);
++
++	if (data->size == 0)
++		return 0;
++
++	if (data_needs_bo(data)) {
++		struct xe_bo *bo;
++
++		bo = xe_bo_create_pin_map_novm(data->xe, gt->tile, PAGE_ALIGN(data->size),
++					       ttm_bo_type_kernel,
++					       XE_BO_FLAG_SYSTEM | XE_BO_FLAG_PINNED, false);
++		if (IS_ERR(bo))
++			return PTR_ERR(bo);
++
++		data->bo = bo;
++		data->vaddr = bo->vmap.vaddr;
++	} else {
++		void *buff = kvzalloc(data->size, GFP_KERNEL);
++
++		if (!buff)
++			return -ENOMEM;
++
++		data->buff = buff;
++		data->vaddr = buff;
++	}
++
++	return 0;
++}
++
++#define XE_SRIOV_MIGRATION_DATA_SUPPORTED_VERSION 1
++/**
++ * xe_sriov_migration_data_init() - Initialize the migration data header and backing storage.
++ * @data: the &xe_sriov_migration_data packet
++ * @tile_id: tile identifier
++ * @gt_id: GT identifier
++ * @type: &xe_sriov_migration_data_type
++ * @offset: offset of data packet payload (within wider resource)
++ * @size: size of data packet payload
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_sriov_migration_data_init(struct xe_sriov_migration_data *data, u8 tile_id, u8 gt_id,
++				 enum xe_sriov_migration_data_type type, loff_t offset, size_t size)
++{
++	data->version = XE_SRIOV_MIGRATION_DATA_SUPPORTED_VERSION;
++	data->type = type;
++	data->tile = tile_id;
++	data->gt = gt_id;
++	data->offset = offset;
++	data->size = size;
++	data->remaining = size;
++
++	return mig_data_init(data);
++}
++
++/**
++ * xe_sriov_migration_data_init() - Initialize the migration data backing storage based on header.
++ * @data: the &xe_sriov_migration_data packet
++ *
++ * Header data is expected to be filled prior to calling this function.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_sriov_migration_data_init_from_hdr(struct xe_sriov_migration_data *data)
++{
++	if (data->version != XE_SRIOV_MIGRATION_DATA_SUPPORTED_VERSION)
++		return -EINVAL;
++
++	data->remaining = data->size;
++
++	return mig_data_init(data);
++}
+diff --git a/drivers/gpu/drm/xe/xe_sriov_migration_data.h b/drivers/gpu/drm/xe/xe_sriov_migration_data.h
+new file mode 100644
+index 000000000..3958f58a1
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_sriov_migration_data.h
+@@ -0,0 +1,30 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#ifndef _XE_SRIOV_MIGRATION_DATA_H_
++#define _XE_SRIOV_MIGRATION_DATA_H_
++
++#include <linux/types.h>
++
++struct xe_device;
++
++enum xe_sriov_migration_data_type {
++	/* Skipping 0 to catch uninitialized data */
++	XE_SRIOV_MIGRATION_DATA_TYPE_DESCRIPTOR = 1,
++	XE_SRIOV_MIGRATION_DATA_TYPE_TRAILER,
++	XE_SRIOV_MIGRATION_DATA_TYPE_GGTT,
++	XE_SRIOV_MIGRATION_DATA_TYPE_MMIO,
++	XE_SRIOV_MIGRATION_DATA_TYPE_GUC,
++	XE_SRIOV_MIGRATION_DATA_TYPE_VRAM,
++};
++
++struct xe_sriov_migration_data *xe_sriov_migration_data_alloc(struct xe_device *xe);
++void xe_sriov_migration_data_free(struct xe_sriov_migration_data *snapshot);
++
++int xe_sriov_migration_data_init(struct xe_sriov_migration_data *data, u8 tile_id, u8 gt_id,
++				 enum xe_sriov_migration_data_type, loff_t offset, size_t size);
++int xe_sriov_migration_data_init_from_hdr(struct xe_sriov_migration_data *snapshot);
++
++#endif
+-- 
+2.34.1
+

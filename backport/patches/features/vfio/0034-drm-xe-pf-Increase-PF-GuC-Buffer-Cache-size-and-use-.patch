@@ -1,0 +1,182 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Thu, 30 Oct 2025 21:31:19 +0100
+Subject: [PATCH 34/59] drm/xe/pf: Increase PF GuC Buffer Cache size and use it
+ for VF migration
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Contiguous PF GGTT VMAs can be scarce after creating VFs.
+Increase the GuC buffer cache size to 8M for PF so that we can fit GuC
+migration data (which currently maxes out at just under 4M) and use the
+cache instead of allocating fresh BOs.
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c | 46 ++++++-------------
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h |  3 ++
+ drivers/gpu/drm/xe/xe_guc.c                   | 12 ++++-
+ 3 files changed, 28 insertions(+), 33 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+index 30f0e51da..a2db12798 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+@@ -11,7 +11,7 @@
+ #include "xe_gt_sriov_pf_helpers.h"
+ #include "xe_gt_sriov_pf_migration.h"
+ #include "xe_gt_sriov_printk.h"
+-#include "xe_guc.h"
++#include "xe_guc_buf.h"
+ #include "xe_guc_ct.h"
+ #include "xe_sriov.h"
+ #include "xe_sriov_migration_data.h"
+@@ -57,73 +57,55 @@ static int pf_send_guc_query_vf_state_size(struct xe_gt *gt, unsigned int vfid)
+ 
+ /* Return: number of state dwords saved or a negative error code on failure */
+ static int pf_send_guc_save_vf_state(struct xe_gt *gt, unsigned int vfid,
+-				     void *buff, size_t size)
++				     void *dst, size_t size)
+ {
+ 	const int ndwords = size / sizeof(u32);
+-	struct xe_tile *tile = gt_to_tile(gt);
+-	struct xe_device *xe = tile_to_xe(tile);
+ 	struct xe_guc *guc = &gt->uc.guc;
+-	struct xe_bo *bo;
++	CLASS(xe_guc_buf, buf)(&guc->buf, ndwords);
+ 	int ret;
+ 
+ 	xe_gt_assert(gt, size % sizeof(u32) == 0);
+ 	xe_gt_assert(gt, size == ndwords * sizeof(u32));
+ 
+-	bo = xe_bo_create_pin_map_novm(xe, tile,
+-				       ALIGN(size, PAGE_SIZE),
+-				       ttm_bo_type_kernel,
+-				       XE_BO_FLAG_SYSTEM |
+-				       XE_BO_FLAG_GGTT |
+-				       XE_BO_FLAG_GGTT_INVALIDATE, false);
+-	if (IS_ERR(bo))
+-		return PTR_ERR(bo);
++	if (!xe_guc_buf_is_valid(buf))
++		return -ENOBUFS;
++
++	memset(xe_guc_buf_cpu_ptr(buf), 0, size);
+ 
+ 	ret = guc_action_vf_save_restore(guc, vfid, GUC_PF_OPCODE_VF_SAVE,
+-					 xe_bo_ggtt_addr(bo), ndwords);
++					 xe_guc_buf_flush(buf), ndwords);
+ 	if (!ret)
+ 		ret = -ENODATA;
+ 	else if (ret > ndwords)
+ 		ret = -EPROTO;
+ 	else if (ret > 0)
+-		xe_map_memcpy_from(xe, buff, &bo->vmap, 0, ret * sizeof(u32));
++		memcpy(dst, xe_guc_buf_sync_read(buf), ret * sizeof(u32));
+ 
+-	xe_bo_unpin_map_no_vm(bo);
+ 	return ret;
+ }
+ 
+ /* Return: number of state dwords restored or a negative error code on failure */
+ static int pf_send_guc_restore_vf_state(struct xe_gt *gt, unsigned int vfid,
+-					const void *buff, size_t size)
++					const void *src, size_t size)
+ {
+ 	const int ndwords = size / sizeof(u32);
+-	struct xe_tile *tile = gt_to_tile(gt);
+-	struct xe_device *xe = tile_to_xe(tile);
+ 	struct xe_guc *guc = &gt->uc.guc;
+-	struct xe_bo *bo;
++	CLASS(xe_guc_buf_from_data, buf)(&guc->buf, src, size);
+ 	int ret;
+ 
+ 	xe_gt_assert(gt, size % sizeof(u32) == 0);
+ 	xe_gt_assert(gt, size == ndwords * sizeof(u32));
+ 
+-	bo = xe_bo_create_pin_map_novm(xe, tile,
+-				       ALIGN(size, PAGE_SIZE),
+-				       ttm_bo_type_kernel,
+-				       XE_BO_FLAG_SYSTEM |
+-				       XE_BO_FLAG_GGTT |
+-				       XE_BO_FLAG_GGTT_INVALIDATE, false);
+-	if (IS_ERR(bo))
+-		return PTR_ERR(bo);
+-
+-	xe_map_memcpy_to(xe, &bo->vmap, 0, buff, size);
++	if (!xe_guc_buf_is_valid(buf))
++		return -ENOBUFS;
+ 
+ 	ret = guc_action_vf_save_restore(guc, vfid, GUC_PF_OPCODE_VF_RESTORE,
+-					 xe_bo_ggtt_addr(bo), ndwords);
++					 xe_guc_buf_flush(buf), ndwords);
+ 	if (!ret)
+ 		ret = -ENODATA;
+ 	else if (ret > ndwords)
+ 		ret = -EPROTO;
+ 
+-	xe_bo_unpin_map_no_vm(bo);
+ 	return ret;
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h
+index e2d41750f..4f2f27833 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h
+@@ -11,6 +11,9 @@
+ struct xe_gt;
+ struct xe_sriov_migration_data;
+ 
++/* TODO: get this information by querying GuC in the future */
++#define XE_GT_SRIOV_PF_MIGRATION_GUC_DATA_MAX_SIZE SZ_8M
++
+ int xe_gt_sriov_pf_migration_init(struct xe_gt *gt);
+ int xe_gt_sriov_pf_migration_save_guc_state(struct xe_gt *gt, unsigned int vfid);
+ int xe_gt_sriov_pf_migration_restore_guc_state(struct xe_gt *gt, unsigned int vfid);
+diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
+index c9708dde1..8b083f40a 100644
+--- a/drivers/gpu/drm/xe/xe_guc.c
++++ b/drivers/gpu/drm/xe/xe_guc.c
+@@ -22,6 +22,7 @@
+ #include "xe_gt_printk.h"
+ #include "xe_gt_sriov_vf.h"
+ #include "xe_gt_throttle.h"
++#include "xe_gt_sriov_pf_migration.h"
+ #include "xe_guc_ads.h"
+ #include "xe_guc_buf.h"
+ #include "xe_guc_capture.h"
+@@ -38,6 +39,7 @@
+ #include "xe_mmio.h"
+ #include "xe_platform_types.h"
+ #include "xe_sriov.h"
++#include "xe_sriov_pf_migration.h"
+ #include "xe_uc.h"
+ #include "xe_uc_fw.h"
+ #include "xe_wa.h"
+@@ -818,6 +820,14 @@ static int vf_guc_init_post_hwconfig(struct xe_guc *guc)
+ 	return 0;
+ }
+ 
++static u32 guc_additional_cache_size(struct xe_device *xe)
++{
++	if (IS_SRIOV_PF(xe) && xe_sriov_pf_migration_supported(xe))
++		return XE_GT_SRIOV_PF_MIGRATION_GUC_DATA_MAX_SIZE;
++	else
++		return 0; /* Fallback to default size */
++}
++
+ /**
+  * xe_guc_init_post_hwconfig - initialize GuC post hwconfig load
+  * @guc: The GuC object
+@@ -857,7 +867,7 @@ int xe_guc_init_post_hwconfig(struct xe_guc *guc)
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = xe_guc_buf_cache_init(&guc->buf);
++	ret = xe_guc_buf_cache_init_with_size(&guc->buf, guc_additional_cache_size(guc_to_xe(guc)));
+ 	if (ret)
+ 		return ret;
+ 
+-- 
+2.34.1
+

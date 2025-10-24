@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Lukasz Laguna <lukasz.laguna@intel.com>
+Date: Thu, 16 Oct 2025 14:22:33 +0200
+Subject: [PATCH 18/59] drm/xe/pf: Always expose VRAM provisioning data on
+ discrete GPUs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Currently, VRAM provisioning data is only exposed if the device supports
+LMTT. While it should not be possible to modify VRAM provisioning on
+platforms without LMTT, it is still useful to be able to read the VRAM
+provisioning data on all discrete GPU platforms.
+
+Expose the VRAM debugfs attributes whenever running on dGFX, adjusting
+file permissions to read only when LMTT is not available.
+
+Signed-off-by: Lukasz Laguna <lukasz.laguna@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20251016122233.3789-1-lukasz.laguna@intel.com
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c    | 3 ++-
+ drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c | 9 ++++++---
+ 2 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index d3d62fea5..ba406d7c0 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -1548,7 +1548,8 @@ int xe_gt_sriov_pf_config_set_lmem(struct xe_gt *gt, unsigned int vfid, u64 size
+ {
+ 	int err;
+ 
+-	xe_gt_assert(gt, xe_device_has_lmtt(gt_to_xe(gt)));
++	if (!xe_device_has_lmtt(gt_to_xe(gt)))
++		return -EPERM;
+ 
+ 	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
+ 	if (vfid)
+diff --git a/drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c b/drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c
+index c8df18af4..6ba2332c7 100644
+--- a/drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c
+@@ -165,14 +165,17 @@ DEFINE_SRIOV_TILE_CONFIG_DEBUGFS_ATTRIBUTE(vram, lmem, u64, "%llu\n");
+ 
+ static void pf_add_config_attrs(struct xe_tile *tile, struct dentry *dent, unsigned int vfid)
+ {
++	struct xe_device *xe = tile->xe;
++
+ 	xe_tile_assert(tile, tile == extract_tile(dent));
+ 	xe_tile_assert(tile, vfid == extract_vfid(dent));
+ 
+ 	debugfs_create_file_unsafe(vfid ? "ggtt_quota" : "ggtt_spare",
+ 				   0644, dent, dent, &ggtt_fops);
+-	if (xe_device_has_lmtt(tile->xe))
++	if (IS_DGFX(xe))
+ 		debugfs_create_file_unsafe(vfid ? "vram_quota" : "vram_spare",
+-					   0644, dent, dent, &vram_fops);
++					   xe_device_has_lmtt(xe) ? 0644 : 0444,
++					   dent, dent, &vram_fops);
+ }
+ 
+ static void pf_populate_tile(struct xe_tile *tile, struct dentry *dent, unsigned int vfid)
+@@ -188,7 +191,7 @@ static void pf_populate_tile(struct xe_tile *tile, struct dentry *dent, unsigned
+ 		drm_debugfs_create_files(pf_ggtt_info,
+ 					 ARRAY_SIZE(pf_ggtt_info),
+ 					 dent, minor);
+-		if (xe_device_has_lmtt(xe))
++		if (IS_DGFX(xe))
+ 			drm_debugfs_create_files(pf_vram_info,
+ 						 ARRAY_SIZE(pf_vram_info),
+ 						 dent, minor);
+-- 
+2.34.1
+

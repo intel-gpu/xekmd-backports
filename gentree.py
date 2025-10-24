@@ -962,7 +962,17 @@ def process(kerneldir, copy_list_file, git_revision=None,
         bpcfg.disable_symbols(disable_list)
     git_debug_snapshot(args, 'Add automatic backports')
 
-    failure = apply_patches(args, "backport", source_dir, 'patches', bpid.target_dir, logwrite)
+    # Apply all common patches
+    failure = apply_patches(args, "backport", source_dir, 'patches/common', bpid.target_dir, logwrite)
+    if failure:
+        return failure
+
+    # Apply patches according to kernel version
+    if "xe-v6.17" in kernel_tag:
+        failure = apply_patches(args, "backport", source_dir, 'patches/v6.17', bpid.target_dir, logwrite)
+    elif "xe-v6.14" in kernel_tag:
+        failure = apply_patches(args, "backport", source_dir, 'patches/v6.14', bpid.target_dir, logwrite)
+
     if failure:
         return failure
 

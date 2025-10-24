@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Tue, 11 Nov 2025 02:04:12 +0100
+Subject: drm/xe/pf: Remove GuC version check for migration
+ support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Since commit 4eb0aab6e4434 ("drm/xe/guc: Bump minimum required GuC
+version to v70.29.2"), the minimum GuC version required by the driver
+is v70.29.2, which should already include everything that we need for
+migration.
+Remove the version check.
+
+Suggested-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+index 44cc612b0..a5bf327ef 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+@@ -384,9 +384,6 @@ ssize_t xe_gt_sriov_pf_migration_write_guc_state(struct xe_gt *gt, unsigned int
+ 
+ static bool pf_check_migration_support(struct xe_gt *gt)
+ {
+-	/* GuC 70.25 with save/restore v2 is required */
+-	xe_gt_assert(gt, GUC_FIRMWARE_VER(&gt->uc.guc) >= MAKE_GUC_VER(70, 25, 0));
+-
+ 	/* XXX: for now this is for feature enabling only */
+ 	return IS_ENABLED(CONFIG_DRM_XE_DEBUG);
+ }
+-- 
+2.34.1
+

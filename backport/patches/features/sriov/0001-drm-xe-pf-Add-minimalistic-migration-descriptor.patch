@@ -1,0 +1,181 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Tue, 11 Nov 2025 02:04:19 +0100
+Subject: drm/xe/pf: Add minimalistic migration descriptor
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The descriptor reuses the KLV format used by GuC and contains metadata
+that can be used to quickly fail migration when source is incompatible
+with destination.
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_packet.c       | 92 +++++++++++++++++++++-
+ drivers/gpu/drm/xe/xe_sriov_packet.h       |  2 +
+ drivers/gpu/drm/xe/xe_sriov_pf_migration.c |  6 ++
+ 3 files changed, 99 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_packet.c b/drivers/gpu/drm/xe/xe_sriov_packet.c
+index c612f37e9..bab994696 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_packet.c
++++ b/drivers/gpu/drm/xe/xe_sriov_packet.c
+@@ -5,6 +5,7 @@
+ 
+ #include "xe_bo.h"
+ #include "xe_device.h"
++#include "xe_guc_klv_helpers.h"
+ #include "xe_printk.h"
+ #include "xe_sriov_packet.h"
+ #include "xe_sriov_packet_types.h"
+@@ -350,11 +351,19 @@ ssize_t xe_sriov_packet_write_single(struct xe_device *xe, unsigned int vfid,
+ 	return copied;
+ }
+ 
+-#define MIGRATION_DESCRIPTOR_DWORDS 0
++#define MIGRATION_KLV_DEVICE_DEVID_KEY	0xf001u
++#define MIGRATION_KLV_DEVICE_DEVID_LEN	1u
++#define MIGRATION_KLV_DEVICE_REVID_KEY	0xf002u
++#define MIGRATION_KLV_DEVICE_REVID_LEN	1u
++
++#define MIGRATION_DESCRIPTOR_DWORDS	(GUC_KLV_LEN_MIN + MIGRATION_KLV_DEVICE_DEVID_LEN + \
++					 GUC_KLV_LEN_MIN + MIGRATION_KLV_DEVICE_REVID_LEN)
+ static size_t pf_descriptor_init(struct xe_device *xe, unsigned int vfid)
+ {
+ 	struct xe_sriov_packet **desc = pf_pick_descriptor(xe, vfid);
+ 	struct xe_sriov_packet *data;
++	unsigned int len = 0;
++	u32 *klvs;
+ 	int ret;
+ 
+ 	data = xe_sriov_packet_alloc(xe);
+@@ -368,11 +377,92 @@ static size_t pf_descriptor_init(struct xe_device *xe, unsigned int vfid)
+ 		return ret;
+ 	}
+ 
++	klvs = data->vaddr;
++	klvs[len++] = PREP_GUC_KLV_CONST(MIGRATION_KLV_DEVICE_DEVID_KEY,
++					 MIGRATION_KLV_DEVICE_DEVID_LEN);
++	klvs[len++] = xe->info.devid;
++	klvs[len++] = PREP_GUC_KLV_CONST(MIGRATION_KLV_DEVICE_REVID_KEY,
++					 MIGRATION_KLV_DEVICE_REVID_LEN);
++	klvs[len++] = xe->info.revid;
++
++	xe_assert(xe, len == MIGRATION_DESCRIPTOR_DWORDS);
++
+ 	*desc = data;
+ 
+ 	return 0;
+ }
+ 
++/**
++ * xe_sriov_packet_process_descriptor() - Process migration data descriptor packet.
++ * @xe: the &xe_device
++ * @vfid: the VF identifier
++ * @data: the &xe_sriov_packet containing the descriptor
++ *
++ * The descriptor uses the same KLV format as GuC, and contains metadata used for
++ * checking migration data compatibility.
++ *
++ * Return: 0 on success, -errno on failure.
++ */
++int xe_sriov_packet_process_descriptor(struct xe_device *xe, unsigned int vfid,
++				       struct xe_sriov_packet *data)
++{
++	u32 num_dwords = data->hdr.size / sizeof(u32);
++	u32 *klvs = data->vaddr;
++
++	xe_assert(xe, data->hdr.type == XE_SRIOV_PACKET_TYPE_DESCRIPTOR);
++
++	if (data->hdr.size % sizeof(u32)) {
++		xe_sriov_warn(xe, "Aborting migration, descriptor not in KLV format (size=%llu)\n",
++			      data->hdr.size);
++		return -EINVAL;
++	}
++
++	while (num_dwords >= GUC_KLV_LEN_MIN) {
++		u32 key = FIELD_GET(GUC_KLV_0_KEY, klvs[0]);
++		u32 len = FIELD_GET(GUC_KLV_0_LEN, klvs[0]);
++
++		klvs += GUC_KLV_LEN_MIN;
++		num_dwords -= GUC_KLV_LEN_MIN;
++
++		if (len > num_dwords) {
++			xe_sriov_warn(xe, "Aborting migration, truncated KLV %#x, len %u\n",
++				      key, len);
++			return -EINVAL;
++		}
++
++		switch (key) {
++		case MIGRATION_KLV_DEVICE_DEVID_KEY:
++			if (*klvs != xe->info.devid) {
++				xe_sriov_warn(xe,
++					      "Aborting migration, devid mismatch %#06x!=%#06x\n",
++					      *klvs, xe->info.devid);
++				return -ENODEV;
++			}
++			break;
++		case MIGRATION_KLV_DEVICE_REVID_KEY:
++			if (*klvs != xe->info.revid) {
++				xe_sriov_warn(xe,
++					      "Aborting migration, revid mismatch %#06x!=%#06x\n",
++					      *klvs, xe->info.revid);
++				return -ENODEV;
++			}
++			break;
++		default:
++			xe_sriov_dbg(xe,
++				     "Skipping unknown migration KLV %#x, len=%u\n",
++				     key, len);
++			print_hex_dump_bytes("desc: ", DUMP_PREFIX_OFFSET, klvs,
++					     min(SZ_64, len * sizeof(u32)));
++			break;
++		}
++
++		klvs += len;
++		num_dwords -= len;
++	}
++
++	return 0;
++}
++
+ static void pf_pending_init(struct xe_device *xe, unsigned int vfid)
+ {
+ 	struct xe_sriov_packet **data = pf_pick_pending(xe, vfid);
+diff --git a/drivers/gpu/drm/xe/xe_sriov_packet.h b/drivers/gpu/drm/xe/xe_sriov_packet.h
+index fd8da5069..2731e52cf 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_packet.h
++++ b/drivers/gpu/drm/xe/xe_sriov_packet.h
+@@ -24,5 +24,7 @@ ssize_t xe_sriov_packet_read_single(struct xe_device *xe, unsigned int vfid,
+ ssize_t xe_sriov_packet_write_single(struct xe_device *xe, unsigned int vfid,
+ 				     const char __user *buf, size_t len);
+ int xe_sriov_packet_save_init(struct xe_device *xe, unsigned int vfid);
++int xe_sriov_packet_process_descriptor(struct xe_device *xe, unsigned int vfid,
++				       struct xe_sriov_packet *data);
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+index ad5a45ddb..dfcc50203 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+@@ -177,9 +177,15 @@ xe_sriov_pf_migration_save_consume(struct xe_device *xe, unsigned int vfid)
+ static int pf_handle_descriptor(struct xe_device *xe, unsigned int vfid,
+ 				struct xe_sriov_packet *data)
+ {
++	int ret;
++
+ 	if (data->hdr.tile_id != 0 || data->hdr.gt_id != 0)
+ 		return -EINVAL;
+ 
++	ret = xe_sriov_packet_process_descriptor(xe, vfid, data);
++	if (ret)
++		return ret;
++
+ 	xe_sriov_packet_free(data);
+ 
+ 	return 0;
+-- 
+2.34.1
+

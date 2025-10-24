@@ -1,0 +1,656 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Tue, 11 Nov 2025 02:04:18 +0100
+Subject: drm/xe/pf: Add support for encap/decap of bitstream
+ to/from packet
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add debugfs handlers for migration state and handle bitstream
+.read()/.write() to convert from bitstream to/from migration data
+packets.
+As descriptor/trailer are handled at this layer - add handling for both
+save and restore side.
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_packet.c          | 293 ++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_packet.h          |   6 +
+ drivers/gpu/drm/xe/xe_sriov_pf_control.c      |   5 +
+ drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c      |  35 +++
+ drivers/gpu/drm/xe/xe_sriov_pf_migration.c    | 121 ++++++++
+ drivers/gpu/drm/xe/xe_sriov_pf_migration.h    |   5 +
+ .../gpu/drm/xe/xe_sriov_pf_migration_types.h  |   9 +
+ 7 files changed, 474 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_packet.c b/drivers/gpu/drm/xe/xe_sriov_packet.c
+index 1ac7e025e..c612f37e9 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_packet.c
++++ b/drivers/gpu/drm/xe/xe_sriov_packet.c
+@@ -8,6 +8,67 @@
+ #include "xe_printk.h"
+ #include "xe_sriov_packet.h"
+ #include "xe_sriov_packet_types.h"
++#include "xe_sriov_pf_helpers.h"
++#include "xe_sriov_pf_migration.h"
++#include "xe_sriov_printk.h"
++
++static struct mutex *pf_migration_mutex(struct xe_device *xe, unsigned int vfid)
++{
++	xe_assert(xe, IS_SRIOV_PF(xe));
++	xe_assert(xe, vfid <= xe_sriov_pf_get_totalvfs(xe));
++
++	return &xe->sriov.pf.vfs[vfid].migration.lock;
++}
++
++static struct xe_sriov_packet **pf_pick_pending(struct xe_device *xe, unsigned int vfid)
++{
++	xe_assert(xe, IS_SRIOV_PF(xe));
++	xe_assert(xe, vfid <= xe_sriov_pf_get_totalvfs(xe));
++	lockdep_assert_held(pf_migration_mutex(xe, vfid));
++
++	return &xe->sriov.pf.vfs[vfid].migration.pending;
++}
++
++static struct xe_sriov_packet **
++pf_pick_descriptor(struct xe_device *xe, unsigned int vfid)
++{
++	xe_assert(xe, IS_SRIOV_PF(xe));
++	xe_assert(xe, vfid <= xe_sriov_pf_get_totalvfs(xe));
++	lockdep_assert_held(pf_migration_mutex(xe, vfid));
++
++	return &xe->sriov.pf.vfs[vfid].migration.descriptor;
++}
++
++static struct xe_sriov_packet **pf_pick_trailer(struct xe_device *xe, unsigned int vfid)
++{
++	xe_assert(xe, IS_SRIOV_PF(xe));
++	xe_assert(xe, vfid <= xe_sriov_pf_get_totalvfs(xe));
++	lockdep_assert_held(pf_migration_mutex(xe, vfid));
++
++	return &xe->sriov.pf.vfs[vfid].migration.trailer;
++}
++
++static struct xe_sriov_packet **pf_pick_read_packet(struct xe_device *xe,
++						    unsigned int vfid)
++{
++	struct xe_sriov_packet **data;
++
++	data = pf_pick_descriptor(xe, vfid);
++	if (*data)
++		return data;
++
++	data = pf_pick_pending(xe, vfid);
++	if (!*data)
++		*data = xe_sriov_pf_migration_save_consume(xe, vfid);
++	if (*data)
++		return data;
++
++	data = pf_pick_trailer(xe, vfid);
++	if (*data)
++		return data;
++
++	return NULL;
++}
+ 
+ static bool pkt_needs_bo(struct xe_sriov_packet *data)
+ {
+@@ -135,3 +196,235 @@ int xe_sriov_packet_init_from_hdr(struct xe_sriov_packet *data)
+ 
+ 	return pkt_init(data);
+ }
++
++static ssize_t pkt_hdr_read(struct xe_sriov_packet *data,
++			    char __user *buf, size_t len)
++{
++	loff_t offset = sizeof(data->hdr) - data->hdr_remaining;
++
++	if (!data->hdr_remaining)
++		return -EINVAL;
++
++	if (len > data->hdr_remaining)
++		len = data->hdr_remaining;
++
++	if (copy_to_user(buf, (void *)&data->hdr + offset, len))
++		return -EFAULT;
++
++	data->hdr_remaining -= len;
++
++	return len;
++}
++
++static ssize_t pkt_data_read(struct xe_sriov_packet *data,
++			     char __user *buf, size_t len)
++{
++	if (len > data->remaining)
++		len = data->remaining;
++
++	if (copy_to_user(buf, data->vaddr + (data->hdr.size - data->remaining), len))
++		return -EFAULT;
++
++	data->remaining -= len;
++
++	return len;
++}
++
++static ssize_t pkt_read_single(struct xe_sriov_packet **data,
++			       unsigned int vfid, char __user *buf, size_t len)
++{
++	ssize_t copied = 0;
++
++	if ((*data)->hdr_remaining)
++		copied = pkt_hdr_read(*data, buf, len);
++	else
++		copied = pkt_data_read(*data, buf, len);
++
++	if ((*data)->remaining == 0 && (*data)->hdr_remaining == 0) {
++		xe_sriov_packet_free(*data);
++		*data = NULL;
++	}
++
++	return copied;
++}
++
++/**
++ * xe_sriov_packet_read_single() - Read migration data from a single packet.
++ * @xe: the &xe_device
++ * @vfid: the VF identifier
++ * @buf: start address of userspace buffer
++ * @len: requested read size from userspace
++ *
++ * Return: number of bytes that has been successfully read,
++ *	   0 if no more migration data is available,
++ *	   -errno on failure.
++ */
++ssize_t xe_sriov_packet_read_single(struct xe_device *xe, unsigned int vfid,
++				    char __user *buf, size_t len)
++{
++	struct xe_sriov_packet **data = pf_pick_read_packet(xe, vfid);
++
++	if (!data)
++		return -ENODATA;
++	if (IS_ERR(*data))
++		return PTR_ERR(*data);
++
++	return pkt_read_single(data, vfid, buf, len);
++}
++
++static ssize_t pkt_hdr_write(struct xe_sriov_packet *data,
++			     const char __user *buf, size_t len)
++{
++	loff_t offset = sizeof(data->hdr) - data->hdr_remaining;
++	int ret;
++
++	if (len > data->hdr_remaining)
++		len = data->hdr_remaining;
++
++	if (copy_from_user((void *)&data->hdr + offset, buf, len))
++		return -EFAULT;
++
++	data->hdr_remaining -= len;
++
++	if (!data->hdr_remaining) {
++		ret = xe_sriov_packet_init_from_hdr(data);
++		if (ret)
++			return ret;
++	}
++
++	return len;
++}
++
++static ssize_t pkt_data_write(struct xe_sriov_packet *data,
++			      const char __user *buf, size_t len)
++{
++	if (len > data->remaining)
++		len = data->remaining;
++
++	if (copy_from_user(data->vaddr + (data->hdr.size - data->remaining), buf, len))
++		return -EFAULT;
++
++	data->remaining -= len;
++
++	return len;
++}
++
++/**
++ * xe_sriov_packet_write_single() - Write migration data to a single packet.
++ * @xe: the &xe_device
++ * @vfid: the VF identifier
++ * @buf: start address of userspace buffer
++ * @len: requested write size from userspace
++ *
++ * Return: number of bytes that has been successfully written,
++ *	   -errno on failure.
++ */
++ssize_t xe_sriov_packet_write_single(struct xe_device *xe, unsigned int vfid,
++				     const char __user *buf, size_t len)
++{
++	struct xe_sriov_packet **data = pf_pick_pending(xe, vfid);
++	int ret;
++	ssize_t copied;
++
++	if (IS_ERR_OR_NULL(*data)) {
++		*data = xe_sriov_packet_alloc(xe);
++		if (!*data)
++			return -ENOMEM;
++	}
++
++	if ((*data)->hdr_remaining)
++		copied = pkt_hdr_write(*data, buf, len);
++	else
++		copied = pkt_data_write(*data, buf, len);
++
++	if ((*data)->hdr_remaining == 0 && (*data)->remaining == 0) {
++		ret = xe_sriov_pf_migration_restore_produce(xe, vfid, *data);
++		if (ret) {
++			xe_sriov_packet_free(*data);
++			return ret;
++		}
++
++		*data = NULL;
++	}
++
++	return copied;
++}
++
++#define MIGRATION_DESCRIPTOR_DWORDS 0
++static size_t pf_descriptor_init(struct xe_device *xe, unsigned int vfid)
++{
++	struct xe_sriov_packet **desc = pf_pick_descriptor(xe, vfid);
++	struct xe_sriov_packet *data;
++	int ret;
++
++	data = xe_sriov_packet_alloc(xe);
++	if (!data)
++		return -ENOMEM;
++
++	ret = xe_sriov_packet_init(data, 0, 0, XE_SRIOV_PACKET_TYPE_DESCRIPTOR,
++				   0, MIGRATION_DESCRIPTOR_DWORDS * sizeof(u32));
++	if (ret) {
++		xe_sriov_packet_free(data);
++		return ret;
++	}
++
++	*desc = data;
++
++	return 0;
++}
++
++static void pf_pending_init(struct xe_device *xe, unsigned int vfid)
++{
++	struct xe_sriov_packet **data = pf_pick_pending(xe, vfid);
++
++	*data = NULL;
++}
++
++#define MIGRATION_TRAILER_SIZE 0
++static int pf_trailer_init(struct xe_device *xe, unsigned int vfid)
++{
++	struct xe_sriov_packet **trailer = pf_pick_trailer(xe, vfid);
++	struct xe_sriov_packet *data;
++	int ret;
++
++	data = xe_sriov_packet_alloc(xe);
++	if (!data)
++		return -ENOMEM;
++
++	ret = xe_sriov_packet_init(data, 0, 0, XE_SRIOV_PACKET_TYPE_TRAILER,
++				   0, MIGRATION_TRAILER_SIZE);
++	if (ret) {
++		xe_sriov_packet_free(data);
++		return ret;
++	}
++
++	*trailer = data;
++
++	return 0;
++}
++
++/**
++ * xe_sriov_packet_save_init() - Initialize the pending save migration packets.
++ * @xe: the &xe_device
++ * @vfid: the VF identifier
++ *
++ * Return: 0 on success, -errno on failure.
++ */
++int xe_sriov_packet_save_init(struct xe_device *xe, unsigned int vfid)
++{
++	int ret;
++
++	scoped_cond_guard(mutex_intr, return -EINTR, pf_migration_mutex(xe, vfid)) {
++		ret = pf_descriptor_init(xe, vfid);
++		if (ret)
++			return ret;
++
++		ret = pf_trailer_init(xe, vfid);
++		if (ret)
++			return ret;
++
++		pf_pending_init(xe, vfid);
++	}
++
++	return 0;
++}
+diff --git a/drivers/gpu/drm/xe/xe_sriov_packet.h b/drivers/gpu/drm/xe/xe_sriov_packet.h
+index 282a35e77..fd8da5069 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_packet.h
++++ b/drivers/gpu/drm/xe/xe_sriov_packet.h
+@@ -19,4 +19,10 @@ int xe_sriov_packet_init(struct xe_sriov_packet *data, u8 tile_id, u8 gt_id,
+ 			 enum xe_sriov_packet_type, loff_t offset, size_t size);
+ int xe_sriov_packet_init_from_hdr(struct xe_sriov_packet *data);
+ 
++ssize_t xe_sriov_packet_read_single(struct xe_device *xe, unsigned int vfid,
++				    char __user *buf, size_t len);
++ssize_t xe_sriov_packet_write_single(struct xe_device *xe, unsigned int vfid,
++				     const char __user *buf, size_t len);
++int xe_sriov_packet_save_init(struct xe_device *xe, unsigned int vfid);
++
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_sriov_pf_control.c
+index e7b904e57..7789d9e14 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_control.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_control.c
+@@ -5,6 +5,7 @@
+ 
+ #include "xe_device.h"
+ #include "xe_gt_sriov_pf_control.h"
++#include "xe_sriov_packet.h"
+ #include "xe_sriov_pf_control.h"
+ #include "xe_sriov_printk.h"
+ 
+@@ -165,6 +166,10 @@ int xe_sriov_pf_control_trigger_save_vf(struct xe_device *xe, unsigned int vfid)
+ 	unsigned int id;
+ 	int ret;
+ 
++	ret = xe_sriov_packet_save_init(xe, vfid);
++	if (ret)
++		return ret;
++
+ 	for_each_gt(gt, xe, id) {
+ 		ret = xe_gt_sriov_pf_control_trigger_save_vf(gt, vfid);
+ 		if (ret)
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
+index e0e6340c4..4ca86ff4b 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
+@@ -13,6 +13,7 @@
+ #include "xe_sriov_pf_control.h"
+ #include "xe_sriov_pf_debugfs.h"
+ #include "xe_sriov_pf_helpers.h"
++#include "xe_sriov_pf_migration.h"
+ #include "xe_sriov_pf_provision.h"
+ #include "xe_sriov_pf_service.h"
+ #include "xe_sriov_printk.h"
+@@ -132,6 +133,7 @@ static void pf_populate_pf(struct xe_device *xe, struct dentry *pfdent)
+  *      /sys/kernel/debug/dri/BDF/
+  *      ├── sriov
+  *      │   ├── vf1
++ *      │   │   ├── migration_data
+  *      │   │   ├── pause
+  *      │   │   ├── reset
+  *      │   │   ├── resume
+@@ -220,6 +222,38 @@ DEFINE_VF_CONTROL_ATTRIBUTE(reset_vf);
+ DEFINE_VF_CONTROL_ATTRIBUTE_RW(save_vf);
+ DEFINE_VF_CONTROL_ATTRIBUTE_RW(restore_vf);
+ 
++static ssize_t data_write(struct file *file, const char __user *buf, size_t count, loff_t *pos)
++{
++	struct dentry *dent = file_dentry(file)->d_parent;
++	struct xe_device *xe = extract_xe(dent);
++	unsigned int vfid = extract_vfid(dent);
++
++	if (*pos)
++		return -ESPIPE;
++
++	return xe_sriov_pf_migration_write(xe, vfid, buf, count);
++}
++
++static ssize_t data_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
++{
++	struct dentry *dent = file_dentry(file)->d_parent;
++	struct xe_device *xe = extract_xe(dent);
++	unsigned int vfid = extract_vfid(dent);
++
++	if (*ppos)
++		return -ESPIPE;
++
++	return xe_sriov_pf_migration_read(xe, vfid, buf, count);
++}
++
++static const struct file_operations data_vf_fops = {
++	.owner		= THIS_MODULE,
++	.open		= simple_open,
++	.write		= data_write,
++	.read		= data_read,
++	.llseek		= default_llseek,
++};
++
+ static void pf_populate_vf(struct xe_device *xe, struct dentry *vfdent)
+ {
+ 	debugfs_create_file("pause", 0200, vfdent, xe, &pause_vf_fops);
+@@ -228,6 +262,7 @@ static void pf_populate_vf(struct xe_device *xe, struct dentry *vfdent)
+ 	debugfs_create_file("reset", 0200, vfdent, xe, &reset_vf_fops);
+ 	debugfs_create_file("save", 0600, vfdent, xe, &save_vf_fops);
+ 	debugfs_create_file("restore", 0600, vfdent, xe, &restore_vf_fops);
++	debugfs_create_file("migration_data", 0600, vfdent, xe, &data_vf_fops);
+ }
+ 
+ static void pf_populate_with_tiles(struct xe_device *xe, struct dentry *dent, unsigned int vfid)
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+index 11bc2e333..ad5a45ddb 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+@@ -10,6 +10,7 @@
+ #include "xe_gt_sriov_pf_migration.h"
+ #include "xe_pm.h"
+ #include "xe_sriov.h"
++#include "xe_sriov_packet.h"
+ #include "xe_sriov_packet_types.h"
+ #include "xe_sriov_pf_helpers.h"
+ #include "xe_sriov_pf_migration.h"
+@@ -54,6 +55,15 @@ static bool pf_check_migration_support(struct xe_device *xe)
+ 	return IS_ENABLED(CONFIG_DRM_XE_DEBUG);
+ }
+ 
++static void pf_migration_cleanup(void *arg)
++{
++	struct xe_sriov_migration_state *migration = arg;
++
++	xe_sriov_packet_free(migration->pending);
++	xe_sriov_packet_free(migration->trailer);
++	xe_sriov_packet_free(migration->descriptor);
++}
++
+ /**
+  * xe_sriov_pf_migration_init() - Initialize support for SR-IOV VF migration.
+  * @xe: the &xe_device
+@@ -63,6 +73,7 @@ static bool pf_check_migration_support(struct xe_device *xe)
+ int xe_sriov_pf_migration_init(struct xe_device *xe)
+ {
+ 	unsigned int n, totalvfs;
++	int err;
+ 
+ 	xe_assert(xe, IS_SRIOV_PF(xe));
+ 
+@@ -74,7 +85,15 @@ int xe_sriov_pf_migration_init(struct xe_device *xe)
+ 	for (n = 1; n <= totalvfs; n++) {
+ 		struct xe_sriov_migration_state *migration = pf_pick_migration(xe, n);
+ 
++		err = drmm_mutex_init(&xe->drm, &migration->lock);
++		if (err)
++			return err;
++
+ 		init_waitqueue_head(&migration->wq);
++
++		err = devm_add_action_or_reset(xe->drm.dev, pf_migration_cleanup, migration);
++		if (err)
++			return err;
+ 	}
+ 
+ 	return 0;
+@@ -155,6 +174,36 @@ xe_sriov_pf_migration_save_consume(struct xe_device *xe, unsigned int vfid)
+ 	return data;
+ }
+ 
++static int pf_handle_descriptor(struct xe_device *xe, unsigned int vfid,
++				struct xe_sriov_packet *data)
++{
++	if (data->hdr.tile_id != 0 || data->hdr.gt_id != 0)
++		return -EINVAL;
++
++	xe_sriov_packet_free(data);
++
++	return 0;
++}
++
++static int pf_handle_trailer(struct xe_device *xe, unsigned int vfid,
++			     struct xe_sriov_packet *data)
++{
++	struct xe_gt *gt;
++	u8 gt_id;
++
++	if (data->hdr.tile_id != 0 || data->hdr.gt_id != 0)
++		return -EINVAL;
++	if (data->hdr.offset != 0 || data->hdr.size != 0 || data->buff || data->bo)
++		return -EINVAL;
++
++	xe_sriov_packet_free(data);
++
++	for_each_gt(gt, xe, gt_id)
++		xe_gt_sriov_pf_control_restore_data_done(gt, vfid);
++
++	return 0;
++}
++
+ /**
+  * xe_sriov_pf_migration_restore_produce() - Produce a VF migration data packet to the device.
+  * @xe: the &xe_device
+@@ -174,6 +223,11 @@ int xe_sriov_pf_migration_restore_produce(struct xe_device *xe, unsigned int vfi
+ 
+ 	xe_assert(xe, IS_SRIOV_PF(xe));
+ 
++	if (data->hdr.type == XE_SRIOV_PACKET_TYPE_DESCRIPTOR)
++		return pf_handle_descriptor(xe, vfid, data);
++	if (data->hdr.type == XE_SRIOV_PACKET_TYPE_TRAILER)
++		return pf_handle_trailer(xe, vfid, data);
++
+ 	gt = xe_device_get_gt(xe, data->hdr.gt_id);
+ 	if (!gt || data->hdr.tile_id != gt->tile->id) {
+ 		xe_sriov_err_ratelimited(xe, "VF%d Invalid GT - tile:%u, GT:%u\n",
+@@ -183,3 +237,70 @@ int xe_sriov_pf_migration_restore_produce(struct xe_device *xe, unsigned int vfi
+ 
+ 	return xe_gt_sriov_pf_migration_restore_produce(gt, vfid, data);
+ }
++
++/**
++ * xe_sriov_pf_migration_read() - Read migration data from the device.
++ * @xe: the &xe_device
++ * @vfid: the VF identifier
++ * @buf: start address of userspace buffer
++ * @len: requested read size from userspace
++ *
++ * Return: number of bytes that has been successfully read,
++ *	   0 if no more migration data is available,
++ *	   -errno on failure.
++ */
++ssize_t xe_sriov_pf_migration_read(struct xe_device *xe, unsigned int vfid,
++				   char __user *buf, size_t len)
++{
++	struct xe_sriov_migration_state *migration = pf_pick_migration(xe, vfid);
++	ssize_t ret, consumed = 0;
++
++	xe_assert(xe, IS_SRIOV_PF(xe));
++
++	scoped_cond_guard(mutex_intr, return -EINTR, &migration->lock) {
++		while (consumed < len) {
++			ret = xe_sriov_packet_read_single(xe, vfid, buf, len - consumed);
++			if (ret == -ENODATA)
++				break;
++			if (ret < 0)
++				return ret;
++
++			consumed += ret;
++			buf += ret;
++		}
++	}
++
++	return consumed;
++}
++
++/**
++ * xe_sriov_pf_migration_write() - Write migration data to the device.
++ * @xe: the &xe_device
++ * @vfid: the VF identifier
++ * @buf: start address of userspace buffer
++ * @len: requested write size from userspace
++ *
++ * Return: number of bytes that has been successfully written,
++ *	   -errno on failure.
++ */
++ssize_t xe_sriov_pf_migration_write(struct xe_device *xe, unsigned int vfid,
++				    const char __user *buf, size_t len)
++{
++	struct xe_sriov_migration_state *migration = pf_pick_migration(xe, vfid);
++	ssize_t ret, produced = 0;
++
++	xe_assert(xe, IS_SRIOV_PF(xe));
++
++	scoped_cond_guard(mutex_intr, return -EINTR, &migration->lock) {
++		while (produced < len) {
++			ret = xe_sriov_packet_write_single(xe, vfid, buf, len - produced);
++			if (ret < 0)
++				return ret;
++
++			produced += ret;
++			buf += ret;
++		}
++	}
++
++	return produced;
++}
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration.h b/drivers/gpu/drm/xe/xe_sriov_pf_migration.h
+index d48ff2ecc..dbf809490 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_migration.h
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration.h
+@@ -20,4 +20,9 @@ struct xe_sriov_packet *
+ xe_sriov_pf_migration_save_consume(struct xe_device *xe, unsigned int vfid);
+ wait_queue_head_t *xe_sriov_pf_migration_waitqueue(struct xe_device *xe, unsigned int vfid);
+ 
++ssize_t xe_sriov_pf_migration_read(struct xe_device *xe, unsigned int vfid,
++				   char __user *buf, size_t len);
++ssize_t xe_sriov_pf_migration_write(struct xe_device *xe, unsigned int vfid,
++				    const char __user *buf, size_t len);
++
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration_types.h b/drivers/gpu/drm/xe/xe_sriov_pf_migration_types.h
+index 5f2062c8c..363d673ee 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_migration_types.h
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration_types.h
+@@ -7,6 +7,7 @@
+ #define _XE_SRIOV_PF_MIGRATION_TYPES_H_
+ 
+ #include <linux/types.h>
++#include <linux/mutex_types.h>
+ #include <linux/wait.h>
+ 
+ /**
+@@ -23,6 +24,14 @@ struct xe_sriov_pf_migration {
+ struct xe_sriov_migration_state {
+ 	/** @wq: waitqueue used to avoid busy-waiting for snapshot production/consumption */
+ 	wait_queue_head_t wq;
++	/** @lock: Mutex protecting the migration data */
++	struct mutex lock;
++	/** @pending: currently processed data packet of VF resource */
++	struct xe_sriov_packet *pending;
++	/** @trailer: data packet used to indicate the end of stream */
++	struct xe_sriov_packet *trailer;
++	/** @descriptor: data packet containing the metadata describing the device */
++	struct xe_sriov_packet *descriptor;
+ };
+ 
+ #endif
+-- 
+2.34.1
+

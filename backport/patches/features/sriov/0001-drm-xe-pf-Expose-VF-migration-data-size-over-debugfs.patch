@@ -1,0 +1,165 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Tue, 11 Nov 2025 02:04:20 +0100
+Subject: drm/xe/pf: Expose VF migration data size over debugfs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The size is normally used to make a decision on when to stop the device
+(mainly when it's in a pre_copy state).
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c | 21 +++++++++++++
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h |  2 ++
+ drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c      | 28 +++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_pf_migration.c    | 30 +++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_pf_migration.h    |  1 +
+ 5 files changed, 82 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+index 4e4902281..0ffe64ee4 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+@@ -396,6 +396,27 @@ ssize_t xe_gt_sriov_pf_migration_write_guc_state(struct xe_gt *gt, unsigned int
+ }
+ #endif /* CONFIG_DEBUG_FS */
+ 
++/**
++ * xe_gt_sriov_pf_migration_size() - Total size of migration data from all components within a GT.
++ * @gt: the &xe_gt
++ * @vfid: the VF identifier (can't be 0)
++ *
++ * This function is for PF only.
++ *
++ * Return: total migration data size in bytes or a negative error code on failure.
++ */
++ssize_t xe_gt_sriov_pf_migration_size(struct xe_gt *gt, unsigned int vfid)
++{
++	ssize_t total = 0;
++
++	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
++	xe_gt_assert(gt, vfid != PFID);
++	xe_gt_assert(gt, vfid <= xe_sriov_pf_get_totalvfs(gt_to_xe(gt)));
++
++	/* Nothing to query yet - will be updated once per-GT migration data types are added */
++	return total;
++}
++
+ /**
+  * xe_gt_sriov_pf_migration_ring_empty() - Check if a migration ring is empty.
+  * @gt: the &xe_gt
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h
+index b4c7b5dc9..3ad3c3609 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h
+@@ -15,6 +15,8 @@ int xe_gt_sriov_pf_migration_init(struct xe_gt *gt);
+ int xe_gt_sriov_pf_migration_save_guc_state(struct xe_gt *gt, unsigned int vfid);
+ int xe_gt_sriov_pf_migration_restore_guc_state(struct xe_gt *gt, unsigned int vfid);
+ 
++ssize_t xe_gt_sriov_pf_migration_size(struct xe_gt *gt, unsigned int vfid);
++
+ bool xe_gt_sriov_pf_migration_ring_empty(struct xe_gt *gt, unsigned int vfid);
+ bool xe_gt_sriov_pf_migration_ring_full(struct xe_gt *gt, unsigned int vfid);
+ void xe_gt_sriov_pf_migration_ring_free(struct xe_gt *gt, unsigned int vfid);
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
+index 4ca86ff4b..00fe73bd8 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
+@@ -254,6 +254,33 @@ static const struct file_operations data_vf_fops = {
+ 	.llseek		= default_llseek,
+ };
+ 
++static ssize_t size_read(struct file *file, char __user *ubuf, size_t count, loff_t *ppos)
++{
++	struct dentry *dent = file_dentry(file)->d_parent;
++	struct xe_device *xe = extract_xe(dent);
++	unsigned int vfid = extract_vfid(dent);
++	char buf[21];
++	ssize_t ret;
++	int len;
++
++	xe_pm_runtime_get(xe);
++	ret = xe_sriov_pf_migration_size(xe, vfid);
++	xe_pm_runtime_put(xe);
++	if (ret < 0)
++		return ret;
++
++	len = scnprintf(buf, sizeof(buf), "%zd\n", ret);
++
++	return simple_read_from_buffer(ubuf, count, ppos, buf, len);
++}
++
++static const struct file_operations size_vf_fops = {
++	.owner		= THIS_MODULE,
++	.open		= simple_open,
++	.read		= size_read,
++	.llseek		= default_llseek,
++};
++
+ static void pf_populate_vf(struct xe_device *xe, struct dentry *vfdent)
+ {
+ 	debugfs_create_file("pause", 0200, vfdent, xe, &pause_vf_fops);
+@@ -263,6 +290,7 @@ static void pf_populate_vf(struct xe_device *xe, struct dentry *vfdent)
+ 	debugfs_create_file("save", 0600, vfdent, xe, &save_vf_fops);
+ 	debugfs_create_file("restore", 0600, vfdent, xe, &restore_vf_fops);
+ 	debugfs_create_file("migration_data", 0600, vfdent, xe, &data_vf_fops);
++	debugfs_create_file("migration_size", 0400, vfdent, xe, &size_vf_fops);
+ }
+ 
+ static void pf_populate_with_tiles(struct xe_device *xe, struct dentry *dent, unsigned int vfid)
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+index dfcc50203..d6c24bea7 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+@@ -310,3 +310,33 @@ ssize_t xe_sriov_pf_migration_write(struct xe_device *xe, unsigned int vfid,
+ 
+ 	return produced;
+ }
++
++/**
++ * xe_sriov_pf_migration_size() - Total size of migration data from all components within a device
++ * @xe: the &xe_device
++ * @vfid: the VF identifier (can't be 0)
++ *
++ * This function is for PF only.
++ *
++ * Return: total migration data size in bytes or a negative error code on failure.
++ */
++ssize_t xe_sriov_pf_migration_size(struct xe_device *xe, unsigned int vfid)
++{
++	size_t size = 0;
++	struct xe_gt *gt;
++	ssize_t ret;
++	u8 gt_id;
++
++	xe_assert(xe, IS_SRIOV_PF(xe));
++	xe_assert(xe, vfid);
++
++	for_each_gt(gt, xe, gt_id) {
++		ret = xe_gt_sriov_pf_migration_size(gt, vfid);
++		if (ret < 0)
++			return ret;
++
++		size += ret;
++	}
++
++	return size;
++}
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration.h b/drivers/gpu/drm/xe/xe_sriov_pf_migration.h
+index dbf809490..b806298a0 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_migration.h
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration.h
+@@ -18,6 +18,7 @@ int xe_sriov_pf_migration_restore_produce(struct xe_device *xe, unsigned int vfi
+ 					  struct xe_sriov_packet *data);
+ struct xe_sriov_packet *
+ xe_sriov_pf_migration_save_consume(struct xe_device *xe, unsigned int vfid);
++ssize_t xe_sriov_pf_migration_size(struct xe_device *xe, unsigned int vfid);
+ wait_queue_head_t *xe_sriov_pf_migration_waitqueue(struct xe_device *xe, unsigned int vfid);
+ 
+ ssize_t xe_sriov_pf_migration_read(struct xe_device *xe, unsigned int vfid,
+-- 
+2.34.1
+

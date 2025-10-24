@@ -1,0 +1,65 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Tue, 11 Nov 2025 02:04:14 +0100
+Subject: drm/xe/pf: Convert control state to bitmap
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In upcoming changes, the number of states will increase as a result of
+introducing SAVE and RESTORE states.
+This means that using unsigned long as underlying storage won't work on
+32-bit architectures, as we'll run out of bits.
+Use bitmap instead.
+
+Reported-by: kernel test robot <lkp@intel.com>
+Closes: https://lore.kernel.org/oe-kbuild-all/202510231918.XlOqymLC-lkp@intel.com/
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c       | 2 +-
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h | 6 ++++--
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+index 9de05db1f..8a2577fda 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+@@ -225,7 +225,7 @@ static unsigned long *pf_peek_vf_state(struct xe_gt *gt, unsigned int vfid)
+ {
+ 	struct xe_gt_sriov_control_state *cs = pf_pick_vf_control(gt, vfid);
+ 
+-	return &cs->state;
++	return cs->state;
+ }
+ 
+ static bool pf_check_vf_state(struct xe_gt *gt, unsigned int vfid,
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h
+index c80b7e77f..d9282eb25 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h
+@@ -73,9 +73,11 @@ enum xe_gt_sriov_control_bits {
+ 	XE_GT_SRIOV_STATE_STOP_FAILED,
+ 	XE_GT_SRIOV_STATE_STOPPED,
+ 
+-	XE_GT_SRIOV_STATE_MISMATCH = BITS_PER_LONG - 1,
++	XE_GT_SRIOV_STATE_MISMATCH, /* always keep as last */
+ };
+ 
++#define XE_GT_SRIOV_NUM_STATES (XE_GT_SRIOV_STATE_MISMATCH + 1)
++
+ /**
+  * struct xe_gt_sriov_control_state - GT-level per-VF control state.
+  *
+@@ -83,7 +85,7 @@ enum xe_gt_sriov_control_bits {
+  */
+ struct xe_gt_sriov_control_state {
+ 	/** @state: VF state bits */
+-	unsigned long state;
++	DECLARE_BITMAP(state, XE_GT_SRIOV_NUM_STATES);
+ 
+ 	/** @done: completion of async operations */
+ 	struct completion done;
+-- 
+2.34.1
+

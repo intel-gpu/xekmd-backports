@@ -1,0 +1,249 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Wed, 22 Oct 2025 00:41:24 +0200
+Subject: [PATCH 39/48] drm/xe/pf: Handle GGTT migration data as part of PF
+ control
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Connect the helpers to allow save and restore of GGTT migration data in
+stop_copy / resume device state.
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c   |  16 +++
+ .../gpu/drm/xe/xe_gt_sriov_pf_control_types.h |   2 +
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c | 118 ++++++++++++++++++
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h |   4 +
+ 4 files changed, 140 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+index 18f6e3028..f5c215fb9 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+@@ -189,6 +189,7 @@ static const char *control_bit_to_string(enum xe_gt_sriov_control_bits bit)
+ 	CASE2STR(SAVE_PROCESS_DATA);
+ 	CASE2STR(SAVE_WAIT_DATA);
+ 	CASE2STR(SAVE_DATA_GUC);
++	CASE2STR(SAVE_DATA_GGTT);
+ 	CASE2STR(SAVE_DATA_DONE);
+ 	CASE2STR(SAVE_FAILED);
+ 	CASE2STR(SAVED);
+@@ -827,6 +828,7 @@ static void pf_exit_vf_save_wip(struct xe_gt *gt, unsigned int vfid)
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_PROCESS_DATA);
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_WAIT_DATA);
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_GUC);
++		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_GGTT);
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_DONE);
+ 	}
+ }
+@@ -859,6 +861,17 @@ static int pf_handle_vf_save_data(struct xe_gt *gt, unsigned int vfid)
+ 		ret = xe_gt_sriov_pf_migration_guc_save(gt, vfid);
+ 		if (ret)
+ 			return ret;
++
++		pf_enter_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_GGTT);
++		return -EAGAIN;
++	}
++
++	if (pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_GGTT)) {
++		if (xe_gt_sriov_pf_migration_ggtt_size(gt, vfid) > 0) {
++			ret = xe_gt_sriov_pf_migration_ggtt_save(gt, vfid);
++			if (ret)
++				return ret;
++		}
+ 	}
+ 
+ 	return 0;
+@@ -1065,6 +1078,9 @@ pf_handle_vf_restore_data(struct xe_gt *gt, unsigned int vfid)
+ 	xe_gt_assert(gt, data);
+ 
+ 	switch (data->type) {
++	case XE_SRIOV_MIGRATION_DATA_TYPE_GGTT:
++		ret = xe_gt_sriov_pf_migration_ggtt_restore(gt, vfid, data);
++		break;
+ 	case XE_SRIOV_MIGRATION_DATA_TYPE_GUC:
+ 		ret = xe_gt_sriov_pf_migration_guc_restore(gt, vfid, data);
+ 		break;
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h
+index 8b951ee8a..1e8fa3f8f 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h
+@@ -34,6 +34,7 @@
+  * @XE_GT_SRIOV_STATE_SAVE_PROCESS_DATA: indicates that VF migration data is being produced.
+  * @XE_GT_SRIOV_STATE_SAVE_WAIT_DATA: indicates that PF awaits for space in migration data ring.
+  * @XE_GT_SRIOV_STATE_SAVE_DATA_GUC: indicates PF needs to save VF GuC migration data.
++ * @XE_GT_SRIOV_STATE_SAVE_DATA_GGTT: indicates PF needs to save VF GGTT migration data.
+  * @XE_GT_SRIOV_STATE_SAVE_DATA_DONE: indicates that all migration data was produced by Xe.
+  * @XE_GT_SRIOV_STATE_SAVE_FAILED: indicates that VF save operation has failed.
+  * @XE_GT_SRIOV_STATE_SAVED: indicates that VF data is saved.
+@@ -78,6 +79,7 @@ enum xe_gt_sriov_control_bits {
+ 	XE_GT_SRIOV_STATE_SAVE_PROCESS_DATA,
+ 	XE_GT_SRIOV_STATE_SAVE_WAIT_DATA,
+ 	XE_GT_SRIOV_STATE_SAVE_DATA_GUC,
++	XE_GT_SRIOV_STATE_SAVE_DATA_GGTT,
+ 	XE_GT_SRIOV_STATE_SAVE_DATA_DONE,
+ 	XE_GT_SRIOV_STATE_SAVE_FAILED,
+ 	XE_GT_SRIOV_STATE_SAVED,
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+index 594178fbe..75e965f75 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+@@ -7,6 +7,9 @@
+ 
+ #include "abi/guc_actions_sriov_abi.h"
+ #include "xe_bo.h"
++#include "xe_ggtt.h"
++#include "xe_gt.h"
++#include "xe_gt_sriov_pf_config.h"
+ #include "xe_gt_sriov_pf_control.h"
+ #include "xe_gt_sriov_pf_helpers.h"
+ #include "xe_gt_sriov_pf_migration.h"
+@@ -37,6 +40,114 @@ static void pf_dump_mig_data(struct xe_gt *gt, unsigned int vfid,
+ 	}
+ }
+ 
++/**
++ * xe_gt_sriov_pf_migration_ggtt_size() - Get the size of VF GGTT migration data.
++ * @gt: the &xe_gt
++ * @vfid: the VF identifier
++ *
++ * This function is for PF only.
++ *
++ * Return: size in bytes or a negative error code on failure.
++ */
++ssize_t xe_gt_sriov_pf_migration_ggtt_size(struct xe_gt *gt, unsigned int vfid)
++{
++	if (!xe_gt_is_main_type(gt))
++		return 0;
++
++	return xe_ggtt_pte_size(gt->tile->mem.ggtt, xe_gt_sriov_pf_config_get_ggtt(gt, vfid));
++}
++
++static int pf_save_vf_ggtt_mig_data(struct xe_gt *gt, unsigned int vfid)
++{
++	struct xe_sriov_migration_data *data;
++	size_t size;
++	int ret;
++
++	size = xe_gt_sriov_pf_migration_ggtt_size(gt, vfid);
++	if (size == 0)
++		return 0;
++
++	data = xe_sriov_migration_data_alloc(gt_to_xe(gt));
++	if (!data)
++		return -ENOMEM;
++
++	ret = xe_sriov_migration_data_init(data, gt->tile->id, gt->info.id,
++					   XE_SRIOV_MIGRATION_DATA_TYPE_GGTT, 0, size);
++	if (ret)
++		goto fail;
++
++	ret = xe_gt_sriov_pf_config_ggtt_save(gt, vfid, data->vaddr, size);
++	if (ret)
++		goto fail;
++
++	pf_dump_mig_data(gt, vfid, data);
++
++	ret = xe_gt_sriov_pf_migration_save_produce(gt, vfid, data);
++	if (ret)
++		goto fail;
++
++	return 0;
++
++fail:
++	xe_sriov_migration_data_free(data);
++	xe_gt_sriov_err(gt, "Failed to save VF%u GGTT data (%pe)\n", vfid, ERR_PTR(ret));
++	return ret;
++}
++
++static int pf_restore_vf_ggtt_mig_data(struct xe_gt *gt, unsigned int vfid,
++				       struct xe_sriov_migration_data *data)
++{
++	int ret;
++
++	pf_dump_mig_data(gt, vfid, data);
++
++	ret = xe_gt_sriov_pf_config_ggtt_restore(gt, vfid, data->vaddr, data->size);
++	if (ret) {
++		xe_gt_sriov_err(gt, "Failed to restore VF%u GGTT data (%pe)\n",
++				vfid, ERR_PTR(ret));
++		return ret;
++	}
++
++	return 0;
++}
++
++/**
++ * xe_gt_sriov_pf_migration_ggtt_save() - Save VF GGTT migration data.
++ * @gt: the &xe_gt
++ * @vfid: the VF identifier (can't be 0)
++ *
++ * This function is for PF only.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_gt_sriov_pf_migration_ggtt_save(struct xe_gt *gt, unsigned int vfid)
++{
++	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
++	xe_gt_assert(gt, vfid != PFID);
++	xe_gt_assert(gt, vfid <= xe_sriov_pf_get_totalvfs(gt_to_xe(gt)));
++
++	return pf_save_vf_ggtt_mig_data(gt, vfid);
++}
++
++/**
++ * xe_gt_sriov_pf_migration_ggtt_restore() - Restore VF GGTT migration data.
++ * @gt: the &xe_gt
++ * @vfid: the VF identifier (can't be 0)
++ *
++ * This function is for PF only.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_gt_sriov_pf_migration_ggtt_restore(struct xe_gt *gt, unsigned int vfid,
++					  struct xe_sriov_migration_data *data)
++{
++	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
++	xe_gt_assert(gt, vfid != PFID);
++	xe_gt_assert(gt, vfid <= xe_sriov_pf_get_totalvfs(gt_to_xe(gt)));
++
++	return pf_restore_vf_ggtt_mig_data(gt, vfid, data);
++}
++
+ /* Return: number of dwords saved/restored/required or a negative error code on failure */
+ static int guc_action_vf_save_restore(struct xe_guc *guc, u32 vfid, u32 opcode,
+ 				      u64 addr, u32 ndwords)
+@@ -290,6 +401,13 @@ ssize_t xe_gt_sriov_pf_migration_size(struct xe_gt *gt, unsigned int vfid)
+ 		size += sizeof(struct xe_sriov_pf_migration_hdr);
+ 	total += size;
+ 
++	size = xe_gt_sriov_pf_migration_ggtt_size(gt, vfid);
++	if (size < 0)
++		return size;
++	else if (size > 0)
++		size += sizeof(struct xe_sriov_pf_migration_hdr);
++	total += size;
++
+ 	return total;
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h
+index b3c18e369..09abdd9e8 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h
+@@ -19,6 +19,10 @@ ssize_t xe_gt_sriov_pf_migration_guc_size(struct xe_gt *gt, unsigned int vfid);
+ int xe_gt_sriov_pf_migration_guc_save(struct xe_gt *gt, unsigned int vfid);
+ int xe_gt_sriov_pf_migration_guc_restore(struct xe_gt *gt, unsigned int vfid,
+ 					 struct xe_sriov_migration_data *data);
++ssize_t xe_gt_sriov_pf_migration_ggtt_size(struct xe_gt *gt, unsigned int vfid);
++int xe_gt_sriov_pf_migration_ggtt_save(struct xe_gt *gt, unsigned int vfid);
++int xe_gt_sriov_pf_migration_ggtt_restore(struct xe_gt *gt, unsigned int vfid,
++					  struct xe_sriov_migration_data *data);
+ 
+ ssize_t xe_gt_sriov_pf_migration_size(struct xe_gt *gt, unsigned int vfid);
+ 
+-- 
+2.34.1
+

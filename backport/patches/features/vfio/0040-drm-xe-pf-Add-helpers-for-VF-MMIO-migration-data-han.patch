@@ -1,0 +1,145 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Wed, 22 Oct 2025 00:41:25 +0200
+Subject: [PATCH 40/48] drm/xe/pf: Add helpers for VF MMIO migration data
+ handling
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In an upcoming change, the VF MMIO migration data will be handled as
+part of VF control state machine. Add the necessary helpers to allow the
+migration data transfer to/from the VF MMIO registers.
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf.c | 88 +++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_gt_sriov_pf.h |  6 ++
+ 2 files changed, 94 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf.c
+index c4dda87b4..31ee86166 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf.c
+@@ -194,6 +194,94 @@ static void pf_clear_vf_scratch_regs(struct xe_gt *gt, unsigned int vfid)
+ 	}
+ }
+ 
++/**
++ * xe_gt_sriov_pf_mmio_vf_size - Get the size of VF MMIO register data.
++ * @gt: the &xe_gt
++ * @vfid: VF identifier
++ *
++ * Return: size in bytes.
++ */
++size_t xe_gt_sriov_pf_mmio_vf_size(struct xe_gt *gt, unsigned int vfid)
++{
++	if (xe_gt_is_media_type(gt))
++		return MED_VF_SW_FLAG_COUNT * sizeof(u32);
++	else
++		return VF_SW_FLAG_COUNT * sizeof(u32);
++}
++
++/**
++ * xe_gt_sriov_pf_mmio_vf_save - Save VF MMIO register values to a buffer.
++ * @gt: the &xe_gt
++ * @vfid: VF identifier
++ * @buf: destination buffer
++ * @size: destination buffer size in bytes
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_gt_sriov_pf_mmio_vf_save(struct xe_gt *gt, unsigned int vfid, void *buf, size_t size)
++{
++	u32 stride = pf_get_vf_regs_stride(gt_to_xe(gt));
++	struct xe_reg scratch;
++	u32 *regs = buf;
++	int n, count;
++
++	if (size != xe_gt_sriov_pf_mmio_vf_size(gt, vfid))
++		return -EINVAL;
++
++	if (xe_gt_is_media_type(gt)) {
++		count = MED_VF_SW_FLAG_COUNT;
++		for (n = 0; n < count; n++) {
++			scratch = xe_reg_vf_to_pf(MED_VF_SW_FLAG(n), vfid, stride);
++			regs[n] = xe_mmio_read32(&gt->mmio, scratch);
++		}
++	} else {
++		count = VF_SW_FLAG_COUNT;
++		for (n = 0; n < count; n++) {
++			scratch = xe_reg_vf_to_pf(VF_SW_FLAG(n), vfid, stride);
++			regs[n] = xe_mmio_read32(&gt->mmio, scratch);
++		}
++	}
++
++	return 0;
++}
++
++/**
++ * xe_gt_sriov_pf_mmio_vf_restore - Restore VF MMIO register values from a buffer.
++ * @gt: the &xe_gt
++ * @vfid: VF identifier
++ * @buf: source buffer
++ * @size: source buffer size in bytes
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_gt_sriov_pf_mmio_vf_restore(struct xe_gt *gt, unsigned int vfid,
++				   const void *buf, size_t size)
++{
++	u32 stride = pf_get_vf_regs_stride(gt_to_xe(gt));
++	const u32 *regs = buf;
++	struct xe_reg scratch;
++	int n, count;
++
++	if (size != xe_gt_sriov_pf_mmio_vf_size(gt, vfid))
++		return -EINVAL;
++
++	if (xe_gt_is_media_type(gt)) {
++		count = MED_VF_SW_FLAG_COUNT;
++		for (n = 0; n < count; n++) {
++			scratch = xe_reg_vf_to_pf(MED_VF_SW_FLAG(n), vfid, stride);
++			xe_mmio_write32(&gt->mmio, scratch, regs[n]);
++		}
++	} else {
++		count = VF_SW_FLAG_COUNT;
++		for (n = 0; n < count; n++) {
++			scratch = xe_reg_vf_to_pf(VF_SW_FLAG(n), vfid, stride);
++			xe_mmio_write32(&gt->mmio, scratch, regs[n]);
++		}
++	}
++
++	return 0;
++}
++
+ /**
+  * xe_gt_sriov_pf_sanitize_hw() - Reset hardware state related to a VF.
+  * @gt: the &xe_gt
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf.h
+index e7fde3f99..7f4f1fda5 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf.h
+@@ -6,6 +6,8 @@
+ #ifndef _XE_GT_SRIOV_PF_H_
+ #define _XE_GT_SRIOV_PF_H_
+ 
++#include <linux/types.h>
++
+ struct xe_gt;
+ 
+ #ifdef CONFIG_PCI_IOV
+@@ -16,6 +18,10 @@ void xe_gt_sriov_pf_init_hw(struct xe_gt *gt);
+ void xe_gt_sriov_pf_sanitize_hw(struct xe_gt *gt, unsigned int vfid);
+ void xe_gt_sriov_pf_stop_prepare(struct xe_gt *gt);
+ void xe_gt_sriov_pf_restart(struct xe_gt *gt);
++size_t xe_gt_sriov_pf_mmio_vf_size(struct xe_gt *gt, unsigned int vfid);
++int xe_gt_sriov_pf_mmio_vf_save(struct xe_gt *gt, unsigned int vfid, void *buf, size_t size);
++int xe_gt_sriov_pf_mmio_vf_restore(struct xe_gt *gt, unsigned int vfid,
++				   const void *buf, size_t size);
+ #else
+ static inline int xe_gt_sriov_pf_init_early(struct xe_gt *gt)
+ {
+-- 
+2.34.1
+

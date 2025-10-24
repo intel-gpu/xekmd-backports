@@ -1,0 +1,143 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Wed, 22 Oct 2025 00:41:22 +0200
+Subject: [PATCH 37/48] drm/xe/pf: Handle GuC migration data as part of PF
+ control
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Connect the helpers to allow save and restore of GuC migration data in
+stop_copy / resume device state.
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c   | 26 +++++++++++++++++--
+ .../gpu/drm/xe/xe_gt_sriov_pf_control_types.h |  2 ++
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c |  9 ++++++-
+ 3 files changed, 34 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+index c159f35ad..18f6e3028 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+@@ -188,6 +188,7 @@ static const char *control_bit_to_string(enum xe_gt_sriov_control_bits bit)
+ 	CASE2STR(SAVE_WIP);
+ 	CASE2STR(SAVE_PROCESS_DATA);
+ 	CASE2STR(SAVE_WAIT_DATA);
++	CASE2STR(SAVE_DATA_GUC);
+ 	CASE2STR(SAVE_DATA_DONE);
+ 	CASE2STR(SAVE_FAILED);
+ 	CASE2STR(SAVED);
+@@ -343,6 +344,7 @@ static void pf_exit_vf_mismatch(struct xe_gt *gt, unsigned int vfid)
+ 	pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_STOP_FAILED);
+ 	pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_PAUSE_FAILED);
+ 	pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_RESUME_FAILED);
++	pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_FAILED);
+ 	pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_FLR_FAILED);
+ 	pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_FAILED);
+ 	pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_RESTORE_FAILED);
+@@ -824,6 +826,7 @@ static void pf_exit_vf_save_wip(struct xe_gt *gt, unsigned int vfid)
+ 
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_PROCESS_DATA);
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_WAIT_DATA);
++		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_GUC);
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_DONE);
+ 	}
+ }
+@@ -848,6 +851,16 @@ static void pf_enter_vf_save_failed(struct xe_gt *gt, unsigned int vfid)
+ 
+ static int pf_handle_vf_save_data(struct xe_gt *gt, unsigned int vfid)
+ {
++	int ret;
++
++	if (pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_GUC)) {
++		xe_gt_assert(gt, xe_gt_sriov_pf_migration_guc_size(gt, vfid) > 0);
++
++		ret = xe_gt_sriov_pf_migration_guc_save(gt, vfid);
++		if (ret)
++			return ret;
++	}
++
+ 	return 0;
+ }
+ 
+@@ -881,6 +894,7 @@ static bool pf_enter_vf_save_wip(struct xe_gt *gt, unsigned int vfid)
+ {
+ 	if (pf_enter_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_WIP)) {
+ 		pf_enter_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_PROCESS_DATA);
++		pf_enter_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_GUC);
+ 		pf_enter_vf_wip(gt, vfid);
+ 		pf_queue_vf(gt, vfid);
+ 		return true;
+@@ -1046,14 +1060,22 @@ static int
+ pf_handle_vf_restore_data(struct xe_gt *gt, unsigned int vfid)
+ {
+ 	struct xe_sriov_migration_data *data = xe_gt_sriov_pf_migration_restore_consume(gt, vfid);
++	int ret = 0;
+ 
+ 	xe_gt_assert(gt, data);
+ 
+-	xe_gt_sriov_notice(gt, "Skipping VF%u unknown data type: %d\n", vfid, data->type);
++	switch (data->type) {
++	case XE_SRIOV_MIGRATION_DATA_TYPE_GUC:
++		ret = xe_gt_sriov_pf_migration_guc_restore(gt, vfid, data);
++		break;
++	default:
++		xe_gt_sriov_notice(gt, "Skipping VF%u unknown data type: %d\n", vfid, data->type);
++		break;
++	}
+ 
+ 	xe_sriov_migration_data_free(data);
+ 
+-	return 0;
++	return ret;
+ }
+ 
+ static bool pf_handle_vf_restore(struct xe_gt *gt, unsigned int vfid)
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h
+index 35ceb2ff6..8b951ee8a 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control_types.h
+@@ -33,6 +33,7 @@
+  * @XE_GT_SRIOV_STATE_SAVE_WIP: indicates that VF save operation is in progress.
+  * @XE_GT_SRIOV_STATE_SAVE_PROCESS_DATA: indicates that VF migration data is being produced.
+  * @XE_GT_SRIOV_STATE_SAVE_WAIT_DATA: indicates that PF awaits for space in migration data ring.
++ * @XE_GT_SRIOV_STATE_SAVE_DATA_GUC: indicates PF needs to save VF GuC migration data.
+  * @XE_GT_SRIOV_STATE_SAVE_DATA_DONE: indicates that all migration data was produced by Xe.
+  * @XE_GT_SRIOV_STATE_SAVE_FAILED: indicates that VF save operation has failed.
+  * @XE_GT_SRIOV_STATE_SAVED: indicates that VF data is saved.
+@@ -76,6 +77,7 @@ enum xe_gt_sriov_control_bits {
+ 	XE_GT_SRIOV_STATE_SAVE_WIP,
+ 	XE_GT_SRIOV_STATE_SAVE_PROCESS_DATA,
+ 	XE_GT_SRIOV_STATE_SAVE_WAIT_DATA,
++	XE_GT_SRIOV_STATE_SAVE_DATA_GUC,
+ 	XE_GT_SRIOV_STATE_SAVE_DATA_DONE,
+ 	XE_GT_SRIOV_STATE_SAVE_FAILED,
+ 	XE_GT_SRIOV_STATE_SAVED,
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+index 127162e8c..594178fbe 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+@@ -279,10 +279,17 @@ int xe_gt_sriov_pf_migration_guc_restore(struct xe_gt *gt, unsigned int vfid,
+ ssize_t xe_gt_sriov_pf_migration_size(struct xe_gt *gt, unsigned int vfid)
+ {
+ 	ssize_t total = 0;
++	ssize_t size;
+ 
+ 	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
+ 
+-	/* Nothing to query yet - will be updated once per-GT migration data types are added */
++	size = xe_gt_sriov_pf_migration_guc_size(gt, vfid);
++	if (size < 0)
++		return size;
++	else if (size > 0)
++		size += sizeof(struct xe_sriov_pf_migration_hdr);
++	total += size;
++
+ 	return total;
+ }
+ 
+-- 
+2.34.1
+

@@ -1,0 +1,99 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Wed, 22 Oct 2025 00:41:17 +0200
+Subject: [PATCH 32/48] drm/xe: Allow the caller to pass guc_buf_cache size
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+An upcoming change will use GuC buffer cache as a place where GuC
+migration data will be stored, and the memory requirement for that is
+larger than indirect data.
+Allow the caller to pass the size based on the intended usecase.
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+---
+ drivers/gpu/drm/xe/tests/xe_guc_buf_kunit.c | 2 +-
+ drivers/gpu/drm/xe/xe_guc.c                 | 4 ++--
+ drivers/gpu/drm/xe/xe_guc_buf.c             | 6 +++---
+ drivers/gpu/drm/xe/xe_guc_buf.h             | 4 +++-
+ 4 files changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/tests/xe_guc_buf_kunit.c b/drivers/gpu/drm/xe/tests/xe_guc_buf_kunit.c
+index 537766cdd..cbc46b8fa 100644
+--- a/drivers/gpu/drm/xe/tests/xe_guc_buf_kunit.c
++++ b/drivers/gpu/drm/xe/tests/xe_guc_buf_kunit.c
+@@ -72,7 +72,7 @@ static int guc_buf_test_init(struct kunit *test)
+ 	kunit_activate_static_stub(test, xe_managed_bo_create_pin_map,
+ 				   replacement_xe_managed_bo_create_pin_map);
+ 
+-	KUNIT_ASSERT_EQ(test, 0, xe_guc_buf_cache_init(&guc->buf));
++	KUNIT_ASSERT_EQ(test, 0, xe_guc_buf_cache_init(&guc->buf, XE_GUC_BUF_CACHE_DEFAULT_SIZE));
+ 
+ 	test->priv = &guc->buf;
+ 	return 0;
+diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
+index c9708dde1..bf4e875a2 100644
+--- a/drivers/gpu/drm/xe/xe_guc.c
++++ b/drivers/gpu/drm/xe/xe_guc.c
+@@ -809,7 +809,7 @@ static int vf_guc_init_post_hwconfig(struct xe_guc *guc)
+ 	if (err)
+ 		return err;
+ 
+-	err = xe_guc_buf_cache_init(&guc->buf);
++	err = xe_guc_buf_cache_init(&guc->buf, XE_GUC_BUF_CACHE_DEFAULT_SIZE);
+ 	if (err)
+ 		return err;
+ 
+@@ -857,7 +857,7 @@ int xe_guc_init_post_hwconfig(struct xe_guc *guc)
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = xe_guc_buf_cache_init(&guc->buf);
++	ret = xe_guc_buf_cache_init(&guc->buf, XE_GUC_BUF_CACHE_DEFAULT_SIZE);
+ 	if (ret)
+ 		return ret;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_guc_buf.c b/drivers/gpu/drm/xe/xe_guc_buf.c
+index 4d8a47123..ed096a033 100644
+--- a/drivers/gpu/drm/xe/xe_guc_buf.c
++++ b/drivers/gpu/drm/xe/xe_guc_buf.c
+@@ -28,16 +28,16 @@ static struct xe_gt *cache_to_gt(struct xe_guc_buf_cache *cache)
+  * @cache: the &xe_guc_buf_cache to initialize
+  *
+  * The Buffer Cache allows to obtain a reusable buffer that can be used to pass
+- * indirect H2G data to GuC without a need to create a ad-hoc allocation.
++ * data to GuC or read data from GuC without a need to create a ad-hoc allocation.
+  *
+  * Return: 0 on success or a negative error code on failure.
+  */
+-int xe_guc_buf_cache_init(struct xe_guc_buf_cache *cache)
++int xe_guc_buf_cache_init(struct xe_guc_buf_cache *cache, u32 size)
+ {
+ 	struct xe_gt *gt = cache_to_gt(cache);
+ 	struct xe_sa_manager *sam;
+ 
+-	sam = __xe_sa_bo_manager_init(gt_to_tile(gt), SZ_8K, 0, sizeof(u32));
++	sam = __xe_sa_bo_manager_init(gt_to_tile(gt), size, 0, sizeof(u32));
+ 	if (IS_ERR(sam))
+ 		return PTR_ERR(sam);
+ 	cache->sam = sam;
+diff --git a/drivers/gpu/drm/xe/xe_guc_buf.h b/drivers/gpu/drm/xe/xe_guc_buf.h
+index c5e0f1fd2..521070330 100644
+--- a/drivers/gpu/drm/xe/xe_guc_buf.h
++++ b/drivers/gpu/drm/xe/xe_guc_buf.h
+@@ -11,7 +11,9 @@
+ 
+ #include "xe_guc_buf_types.h"
+ 
+-int xe_guc_buf_cache_init(struct xe_guc_buf_cache *cache);
++#define XE_GUC_BUF_CACHE_DEFAULT_SIZE SZ_8K
++
++int xe_guc_buf_cache_init(struct xe_guc_buf_cache *cache, u32 size);
+ u32 xe_guc_buf_cache_dwords(struct xe_guc_buf_cache *cache);
+ struct xe_guc_buf xe_guc_buf_reserve(struct xe_guc_buf_cache *cache, u32 dwords);
+ struct xe_guc_buf xe_guc_buf_from_data(struct xe_guc_buf_cache *cache,
+-- 
+2.34.1
+

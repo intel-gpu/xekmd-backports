@@ -1,0 +1,117 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Wed, 22 Oct 2025 00:41:31 +0200
+Subject: [PATCH 46/48] drm/xe/pf: Enable SR-IOV VF migration for PTL and BMG
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+All of the necessary building blocks are now in place for PTL and BMG to
+support SR-IOV VF migration.
+Enable the feature without the need to pass feature enabling debug flags
+for those platforms.
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.h             | 5 +++++
+ drivers/gpu/drm/xe/xe_device_types.h       | 2 ++
+ drivers/gpu/drm/xe/xe_pci.c                | 9 +++++++--
+ drivers/gpu/drm/xe/xe_sriov_pf_migration.c | 4 +++-
+ 4 files changed, 17 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
+index 803941fa1..d76a33d95 100644
+--- a/drivers/gpu/drm/xe/xe_device.h
++++ b/drivers/gpu/drm/xe/xe_device.h
+@@ -161,6 +161,11 @@ static inline bool xe_device_has_sriov(struct xe_device *xe)
+ 	return xe->info.has_sriov;
+ }
+ 
++static inline bool xe_device_has_sriov_vf_migration(struct xe_device *xe)
++{
++	return xe->info.has_sriov_vf_migration;
++}
++
+ static inline bool xe_device_has_msix(struct xe_device *xe)
+ {
+ 	return xe->irq.msix.nvec > 0;
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index 5b5286c5b..09e189335 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -309,6 +309,8 @@ struct xe_device {
+ 		u8 has_range_tlb_inval:1;
+ 		/** @info.has_sriov: Supports SR-IOV */
+ 		u8 has_sriov:1;
++		/** @info.has_sriov_vf_migration: Supports SR-IOV VF migration */
++		u8 has_sriov_vf_migration:1;
+ 		/** @info.has_usm: Device has unified shared memory support */
+ 		u8 has_usm:1;
+ 		/** @info.has_64bit_timestamp: Device supports 64-bit timestamps */
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index a7ca7af8f..1f88b42bf 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -67,6 +67,7 @@ struct xe_device_desc {
+ 	u8 has_mmio_ext:1;
+ 	u8 has_mbx_power_limits:1;
+ 	u8 has_sriov:1;
++	u8 has_sriov_vf_migration:1;
+ 	u8 skip_guc_pc:1;
+ 	u8 skip_mtcfg:1;
+ 	u8 skip_pcode:1;
+@@ -348,6 +349,7 @@ static const struct xe_device_desc bmg_desc = {
+ 	.has_gsc_nvm = 1,
+ 	.has_heci_cscfi = 1,
+ 	.has_sriov = true,
++	.has_sriov_vf_migration = true,
+ };
+ 
+ static const struct xe_device_desc ptl_desc = {
+@@ -355,6 +357,7 @@ static const struct xe_device_desc ptl_desc = {
+ 	.has_display = true,
+ 	.require_force_probe = true,
+ 	.needs_shared_vf_gt_wq = true,
++	.has_sriov_vf_migration = true,
+ };
+ 
+ #undef PLATFORM
+@@ -631,6 +634,7 @@ static int xe_info_init_early(struct xe_device *xe,
+ 	xe->info.has_llc = desc->has_llc;
+ 	xe->info.has_mmio_ext = desc->has_mmio_ext;
+ 	xe->info.has_sriov = desc->has_sriov;
++	xe->info.has_sriov_vf_migration = desc->has_sriov_vf_migration;
+ 	xe->info.skip_guc_pc = desc->skip_guc_pc;
+ 	xe->info.skip_mtcfg = desc->skip_mtcfg;
+ 	xe->info.skip_pcode = desc->skip_pcode;
+@@ -893,9 +897,10 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 		xe_step_name(xe->info.step.media),
+ 		xe_step_name(xe->info.step.basedie));
+ 
+-	drm_dbg(&xe->drm, "SR-IOV support: %s (mode: %s)\n",
++	drm_dbg(&xe->drm, "SR-IOV support: %s (mode: %s) (VF migration: %s)\n",
+ 		str_yes_no(xe_device_has_sriov(xe)),
+-		xe_sriov_mode_to_string(xe_device_sriov_mode(xe)));
++		xe_sriov_mode_to_string(xe_device_sriov_mode(xe)),
++		str_yes_no(xe_device_has_sriov_vf_migration(xe)));
+ 
+ 	err = xe_pm_init_early(xe);
+ 	if (err)
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+index 88babec9c..a6cf3b57e 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+@@ -50,7 +50,9 @@ bool xe_sriov_pf_migration_supported(struct xe_device *xe)
+ 
+ static bool pf_check_migration_support(struct xe_device *xe)
+ {
+-	/* XXX: for now this is for feature enabling only */
++	if (xe_device_has_sriov_vf_migration(xe))
++		return true;
++
+ 	return IS_ENABLED(CONFIG_DRM_XE_DEBUG);
+ }
+ 
+-- 
+2.34.1
+

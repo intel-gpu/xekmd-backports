@@ -42,7 +42,7 @@ index 7ade41e2b7b3..f2d29595a3f2 100644
  #define RING_BBADDR_UDW(base)			XE_REG((base) + 0x168)
  
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 5cd5ab8529c5..497e2f9a57f6 100644
+index cec9c5ec8d6b..a305ff96cf22 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 @@ -474,6 +474,14 @@
@@ -197,10 +197,10 @@ index 796ba8c34a16..d19e529e5c90 100644
  	xe_reg_sr_init(&hwe->reg_whitelist, hwe->name, gt_to_xe(gt));
  	xe_reg_whitelist_process_engine(hwe);
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
-index e990f20eccfe..a88c79c327d6 100644
+index 710f4423726c..d25407990bea 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
-@@ -66,6 +66,8 @@ no_media_l3	MEDIA_VERSION(3000)
+@@ -67,6 +67,8 @@ no_media_l3	MEDIA_VERSION(3000)
  		MEDIA_VERSION_RANGE(1300, 3000)
  		MEDIA_VERSION(3002)
  		GRAPHICS_VERSION(3003)

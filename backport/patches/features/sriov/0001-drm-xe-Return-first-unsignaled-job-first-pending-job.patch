@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:03 -0700
+Subject: [PATCH] drm/xe: Return first unsignaled job first pending job helper
+
+In all cases where the first pending job helper is called, we only want
+to retrieve the first unsignaled pending job, as this helper is used
+exclusively in recovery flows. It is possible for signaled jobs to
+remain in the pending list as the scheduler is stopped, so those should
+be skipped.
+
+Also, add kernel documentation to clarify this behavior.
+
+v8:
+ - Split out into own patch (Auld)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-6-matthew.brost@intel.com
+(cherry-picked from commit b00d1e3fc8b7693c89ddae2ce34dc804eeb2ce37 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gpu_scheduler.h | 21 +++++++++++++++++----
+ 1 file changed, 17 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gpu_scheduler.h b/drivers/gpu/drm/xe/xe_gpu_scheduler.h
+index e548b2aed95a..3a9ff78d9346 100644
+--- a/drivers/gpu/drm/xe/xe_gpu_scheduler.h
++++ b/drivers/gpu/drm/xe/xe_gpu_scheduler.h
+@@ -77,17 +77,30 @@ static inline void xe_sched_add_pending_job(struct xe_gpu_scheduler *sched,
+ 	spin_unlock(&sched->base.job_list_lock);
+ }
+ 
++/**
++ * xe_sched_first_pending_job() - Find first pending job which is unsignaled
++ * @sched: Xe GPU scheduler
++ *
++ * Return first unsignaled job in pending list or NULL
++ */
+ static inline
+ struct xe_sched_job *xe_sched_first_pending_job(struct xe_gpu_scheduler *sched)
+ {
+-	struct xe_sched_job *job;
++	struct xe_sched_job *job, *r_job = NULL;
+ 
+ 	spin_lock(&sched->base.job_list_lock);
+-	job = list_first_entry_or_null(&sched->base.pending_list,
+-				       struct xe_sched_job, drm.list);
++	list_for_each_entry(job, &sched->base.pending_list, drm.list) {
++		struct drm_sched_fence *s_fence = job->drm.s_fence;
++		struct dma_fence *hw_fence = s_fence->parent;
++
++		if (hw_fence && !dma_fence_is_signaled(hw_fence)) {
++			r_job = job;
++			break;
++		}
++	}
+ 	spin_unlock(&sched->base.job_list_lock);
+ 
+-	return job;
++	return r_job;
+ }
+ 
+ static inline int
+-- 
+2.43.0
+

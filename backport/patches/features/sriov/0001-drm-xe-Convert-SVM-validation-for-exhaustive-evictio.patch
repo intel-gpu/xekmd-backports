@@ -1,0 +1,178 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Thomas=20Hellstr=C3=B6m?= <thomas.hellstrom@linux.intel.com>
+Date: Mon, 8 Sep 2025 12:12:37 +0200
+Subject: [PATCH 04/16] drm/xe: Convert SVM validation for exhaustive eviction
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Convert SVM validation to support exhaustive eviction,
+using xe_validation_guard().
+
+v2:
+- Wrap also xe_vm_range_rebind (Matt Brost)
+- Adapt to argument changes of xe_validation_guard().
+v5:
+- Rebase on SVM stats.
+
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250908101246.65025-5-thomas.hellstrom@linux.intel.com
+(backported from commit 1710cd5c8c1bac8e48eb02cf1123f27a8b90efee linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_svm.c | 101 +++++++++++++++++++-----------------
+ 1 file changed, 52 insertions(+), 49 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_svm.c b/drivers/gpu/drm/xe/xe_svm.c
+index 4fc921671003..f59fcadeba1b 100644
+--- a/drivers/gpu/drm/xe/xe_svm.c
++++ b/drivers/gpu/drm/xe/xe_svm.c
+@@ -686,51 +686,48 @@ static int xe_drm_pagemap_populate_mm(struct drm_pagemap *dpagemap,
+ 	struct xe_device *xe = vr->xe;
+ 	struct device *dev = xe->drm.dev;
+ 	struct drm_buddy_block *block;
++	struct xe_validation_ctx vctx;
+ 	struct list_head *blocks;
+-	struct drm_exec *exec;
++	struct drm_exec exec;
+ 	struct xe_bo *bo;
+-	ktime_t time_end = 0;
+-	int err, idx;
++	int err = 0, idx;
+ 
+ 	if (!drm_dev_enter(&xe->drm, &idx))
+ 		return -ENODEV;
+ 
+ 	xe_pm_runtime_get(xe);
+-	exec = XE_VALIDATION_UNIMPLEMENTED;
+-
+- retry:
+-	bo = xe_bo_create_locked(vr->xe, NULL, NULL, end - start,
+-				 ttm_bo_type_device,
+-				 (IS_DGFX(xe) ? XE_BO_FLAG_VRAM(vr) : XE_BO_FLAG_SYSTEM) |
+-				 XE_BO_FLAG_CPU_ADDR_MIRROR, exec);
+-	if (IS_ERR(bo)) {
+-		err = PTR_ERR(bo);
+-		if (xe_vm_validate_should_retry(NULL, err, &time_end))
+-			goto retry;
+-		goto out_pm_put;
+-	}
+ 
+-	drm_pagemap_devmem_init(&bo->devmem_allocation, dev, mm,
+-				&dpagemap_devmem_ops, dpagemap, end - start);
++	xe_validation_guard(&vctx, &xe->val, &exec, (struct xe_val_flags) {}, err) {
++		bo = xe_bo_create_locked(xe, NULL, NULL, end - start,
++					 ttm_bo_type_device,
++					 (IS_DGFX(xe) ? XE_BO_FLAG_VRAM(vr) : XE_BO_FLAG_SYSTEM) |
++					 XE_BO_FLAG_CPU_ADDR_MIRROR, &exec);
++		drm_exec_retry_on_contention(&exec);
++		if (IS_ERR(bo)) {
++			err = PTR_ERR(bo);
++			xe_validation_retry_on_oom(&vctx, &err);
++			break;
++		}
+ 
+-	blocks = &to_xe_ttm_vram_mgr_resource(bo->ttm.resource)->blocks;
+-	list_for_each_entry(block, blocks, link)
+-		block->private = vr;
++		drm_pagemap_devmem_init(&bo->devmem_allocation, dev, mm,
++					&dpagemap_devmem_ops, dpagemap, end - start);
+ 
+-	xe_bo_get(bo);
++		blocks = &to_xe_ttm_vram_mgr_resource(bo->ttm.resource)->blocks;
++		list_for_each_entry(block, blocks, link)
++			block->private = vr;
+ 
+-	/* Ensure the device has a pm ref while there are device pages active. */
+-	xe_pm_runtime_get_noresume(xe);
+-	err = drm_pagemap_migrate_to_devmem(&bo->devmem_allocation, mm,
+-					    start, end, timeslice_ms,
+-					    xe_svm_devm_owner(xe));
+-	if (err)
+-		xe_svm_devmem_release(&bo->devmem_allocation);
++		xe_bo_get(bo);
+ 
+-	xe_bo_unlock(bo);
+-	xe_bo_put(bo);
+-
+-out_pm_put:
++		/* Ensure the device has a pm ref while there are device pages active. */
++		xe_pm_runtime_get_noresume(xe);
++		err = drm_pagemap_migrate_to_devmem(&bo->devmem_allocation, mm,
++						    start, end, timeslice_ms,
++						    xe_svm_devm_owner(xe));
++		if (err)
++			xe_svm_devmem_release(&bo->devmem_allocation);
++		xe_bo_unlock(bo);
++		xe_bo_put(bo);
++	}
+ 	xe_pm_runtime_put(xe);
+ 	drm_dev_exit(idx);
+ 
+@@ -807,12 +804,13 @@ int xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
+ 			IS_ENABLED(CONFIG_DRM_XE_PAGEMAP) ?
+ 			vm->xe->atomic_svm_timeslice_ms : 0,
+ 	};
++	struct xe_validation_ctx vctx;
++	struct drm_exec exec;
+ 	struct xe_svm_range *range;
+ 	struct dma_fence *fence;
+ 	struct xe_tile *tile = gt_to_tile(gt);
+ 	int migrate_try_count = ctx.devmem_only ? 3 : 1;
+-	ktime_t end = 0;
+-	int err;
++	int err = 0;
+ 
+ 	lockdep_assert_held_write(&vm->lock);
+ 	xe_assert(vm->xe, xe_vma_is_cpu_addr_mirror(vma));
+@@ -881,27 +879,32 @@ int xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
+ 
+ 	range_debug(range, "PAGE FAULT - BIND");
+ 
+-retry_bind:
+-	xe_vm_lock(vm, false);
+-	fence = xe_vm_range_rebind(vm, vma, range, BIT(tile->id));
+-	if (IS_ERR(fence)) {
+-		xe_vm_unlock(vm);
+-		err = PTR_ERR(fence);
+-		if (err == -EAGAIN) {
+-			ctx.timeslice_ms <<= 1;	/* Double timeslice if we have to retry */
+-			range_debug(range, "PAGE FAULT - RETRY BIND");
+-			goto retry;
++	xe_validation_guard(&vctx, &vm->xe->val, &exec, (struct xe_val_flags) {}, err) {
++		err = xe_vm_drm_exec_lock(vm, &exec);
++		drm_exec_retry_on_contention(&exec);
++
++		xe_vm_set_validation_exec(vm, &exec);
++		fence = xe_vm_range_rebind(vm, vma, range, BIT(tile->id));
++		xe_vm_set_validation_exec(vm, NULL);
++		if (IS_ERR(fence)) {
++			drm_exec_retry_on_contention(&exec);
++			err = PTR_ERR(fence);
++			xe_validation_retry_on_oom(&vctx, &err);
++			break;
+ 		}
+-		if (xe_vm_validate_should_retry(NULL, err, &end))
+-			goto retry_bind;
+-		goto err_out;
+ 	}
+-	xe_vm_unlock(vm);
++	if (err)
++		goto err_out;
+ 
+ 	dma_fence_wait(fence, false);
+ 	dma_fence_put(fence);
+ 
+ err_out:
++	if (err == -EAGAIN) {
++		ctx.timeslice_ms <<= 1; /* Double timeslice if we have to retry */
++		range_debug(range, "PAGE FAULT - RETRY BIND");
++		goto retry;
++	}
+ 
+ 	return err;
+ }
+-- 
+2.43.0
+

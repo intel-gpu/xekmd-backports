@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Thomas=20Hellstr=C3=B6m?= <thomas.hellstrom@linux.intel.com>
+Date: Mon, 8 Sep 2025 12:12:40 +0200
+Subject: [PATCH 07/16] drm/xe/display: Convert __xe_pin_fb_vma()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Convert __xe_pin_fb_vma() for exhaustive eviction
+using xe_validation_guard().
+
+v2:
+- Avoid gotos from within xe_validation_guard(). (Matt Brost)
+- Adapt to signature change of xe_validation_guard(). (Matt Brost)
+- Use interruptible waiting, since xe_bo_migrate() already does that.
+
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250908101246.65025-8-thomas.hellstrom@linux.intel.com
+(cherry-picked from commit 7bcb6e38c14d7d2654555a1b05b2a9a5411c693c linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/display/xe_fb_pin.c | 30 +++++++++++++++-----------
+ 1 file changed, 18 insertions(+), 12 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/display/xe_fb_pin.c b/drivers/gpu/drm/xe/display/xe_fb_pin.c
+index 3406dca285bd..a5c35e9ff2ef 100644
+--- a/drivers/gpu/drm/xe/display/xe_fb_pin.c
++++ b/drivers/gpu/drm/xe/display/xe_fb_pin.c
+@@ -281,7 +281,8 @@ static struct i915_vma *__xe_pin_fb_vma(const struct intel_framebuffer *fb,
+ 	struct i915_vma *vma = kzalloc(sizeof(*vma), GFP_KERNEL);
+ 	struct drm_gem_object *obj = intel_fb_bo(&fb->base);
+ 	struct xe_bo *bo = gem_to_xe_bo(obj);
+-	struct drm_exec *exec = XE_VALIDATION_UNIMPLEMENTED;
++	struct xe_validation_ctx ctx;
++	struct drm_exec exec;
+ 	int ret;
+ 
+ 	if (!vma)
+@@ -309,17 +310,22 @@ static struct i915_vma *__xe_pin_fb_vma(const struct intel_framebuffer *fb,
+ 	 * Pin the framebuffer, we can't use xe_bo_(un)pin functions as the
+ 	 * assumptions are incorrect for framebuffers
+ 	 */
+-	ret = ttm_bo_reserve(&bo->ttm, false, false, NULL);
+-	if (ret)
+-		goto err;
+-
+-	if (IS_DGFX(xe))
+-		ret = xe_bo_migrate(bo, XE_PL_VRAM0, NULL, exec);
+-	else
+-		ret = xe_bo_validate(bo, NULL, true, exec);
+-	if (!ret)
+-		ttm_bo_pin(&bo->ttm);
+-	ttm_bo_unreserve(&bo->ttm);
++	xe_validation_guard(&ctx, &xe->val, &exec, (struct xe_val_flags) {.interruptible = true},
++			    ret) {
++		ret = drm_exec_lock_obj(&exec, &bo->ttm.base);
++		drm_exec_retry_on_contention(&exec);
++		if (ret)
++			break;
++
++		if (IS_DGFX(xe))
++			ret = xe_bo_migrate(bo, XE_PL_VRAM0, NULL, &exec);
++		else
++			ret = xe_bo_validate(bo, NULL, true, &exec);
++		drm_exec_retry_on_contention(&exec);
++		xe_validation_retry_on_oom(&ctx, &ret);
++		if (!ret)
++			ttm_bo_pin(&bo->ttm);
++	}
+ 	if (ret)
+ 		goto err;
+ 
+-- 
+2.43.0
+

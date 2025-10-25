@@ -1,0 +1,107 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Piotr=20Pi=C3=B3rkowski?= <piotr.piorkowski@intel.com>
+Date: Fri, 3 Oct 2025 18:26:17 +0200
+Subject: [PATCH 10/12] drm/xe: Force user context allocations in user VRAM
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In general, kernel structures should be allocated in the kernel-dedicated
+VRAM region. However, userspace context data - while used by the kernel -
+does not need to reside there.
+Let's force the allocation of such data in the general-purpose VRAM region
+accessible to userspace.
+
+Signed-off-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Cc: Matthew Auld <matthew.auld@intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20251003162619.1984236-4-piotr.piorkowski@intel.com
+(cherry-picked from commit 3f6cd669d50b67c2a33642c811a3a6645f0334e8 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c | 7 +++++--
+ drivers/gpu/drm/xe/xe_lrc.c        | 3 +++
+ drivers/gpu/drm/xe/xe_lrc.h        | 6 ++++--
+ drivers/gpu/drm/xe/xe_pt.c         | 2 +-
+ 4 files changed, 13 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index f7291c111204..065622cea66d 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -160,7 +160,7 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
+ 	return q;
+ }
+ 
+-static int __xe_exec_queue_init(struct xe_exec_queue *q)
++static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
+ {
+ 	int i, err;
+ 	u32 flags = 0;
+@@ -179,6 +179,9 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q)
+ 			flags |= XE_LRC_CREATE_RUNALONE;
+ 	}
+ 
++	if (!(exec_queue_flags & EXEC_QUEUE_FLAG_KERNEL))
++		flags |= XE_LRC_CREATE_USER_CTX;
++
+ 	for (i = 0; i < q->width; ++i) {
+ 		q->lrc[i] = xe_lrc_create(q->hwe, q->vm, SZ_16K, q->msix_vec, flags);
+ 		if (IS_ERR(q->lrc[i])) {
+@@ -225,7 +228,7 @@ struct xe_exec_queue *xe_exec_queue_create(struct xe_device *xe, struct xe_vm *v
+ 	if (IS_ERR(q))
+ 		return q;
+ 
+-	err = __xe_exec_queue_init(q);
++	err = __xe_exec_queue_init(q, flags);
+ 	if (err)
+ 		goto err_post_alloc;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index 7770eb42d40a..8af4365a9864 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1275,6 +1275,9 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+ 	if (vm && vm->xef) /* userspace */
+ 		bo_flags |= XE_BO_FLAG_PINNED_LATE_RESTORE;
+ 
++	if (init_flags & XE_LRC_CREATE_USER_CTX)
++		bo_flags |= XE_BO_FLAG_FORCE_USER_VRAM;
++
+ 	lrc->bo = xe_bo_create_pin_map_novm(xe, tile,
+ 					    bo_size,
+ 					    ttm_bo_type_kernel,
+diff --git a/drivers/gpu/drm/xe/xe_lrc.h b/drivers/gpu/drm/xe/xe_lrc.h
+index 188565465779..21a3daab0154 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.h
++++ b/drivers/gpu/drm/xe/xe_lrc.h
+@@ -44,8 +44,10 @@ struct xe_lrc_snapshot {
+ 
+ #define LRC_WA_BB_SIZE SZ_4K
+ 
+-#define XE_LRC_CREATE_RUNALONE 0x1
+-#define XE_LRC_CREATE_PXP 0x2
++#define XE_LRC_CREATE_RUNALONE		BIT(0)
++#define XE_LRC_CREATE_PXP		BIT(1)
++#define XE_LRC_CREATE_USER_CTX		BIT(2)
++
+ struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
+ 			     u32 ring_size, u16 msix_vec, u32 flags);
+ void xe_lrc_destroy(struct kref *ref);
+diff --git a/drivers/gpu/drm/xe/xe_pt.c b/drivers/gpu/drm/xe/xe_pt.c
+index 9ce61ed501d8..5f832c433916 100644
+--- a/drivers/gpu/drm/xe/xe_pt.c
++++ b/drivers/gpu/drm/xe/xe_pt.c
+@@ -121,7 +121,7 @@ struct xe_pt *xe_pt_create(struct xe_vm *vm, struct xe_tile *tile,
+ 		   XE_BO_FLAG_IGNORE_MIN_PAGE_SIZE |
+ 		   XE_BO_FLAG_NO_RESV_EVICT | XE_BO_FLAG_PAGETABLE;
+ 	if (vm->xef) /* userspace */
+-		bo_flags |= XE_BO_FLAG_PINNED_LATE_RESTORE;
++		bo_flags |= XE_BO_FLAG_PINNED_LATE_RESTORE | XE_BO_FLAG_FORCE_USER_VRAM;
+ 
+ 	pt->level = level;
+ 
+-- 
+2.43.0
+

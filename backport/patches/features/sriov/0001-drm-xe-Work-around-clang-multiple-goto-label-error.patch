@@ -1,0 +1,99 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Thomas=20Hellstr=C3=B6m?= <thomas.hellstrom@linux.intel.com>
+Date: Thu, 11 Sep 2025 10:03:24 +0200
+Subject: [PATCH 15/16] drm/xe: Work around clang multiple goto-label error
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When using drm_exec_retry_on_contention(), clang may consider
+all labels for which we take addresses in a function as
+potential retry goto targets, although strictly only one
+is possible. It will then in some situations generate false
+positive errors.
+
+In this case, the compiler, for some architectures, consider the
+
+might_lock(&m->job_mutex);
+
+as a potential goto target from drm_exec_retry_on_contention(),
+and errors.
+
+Work around that by moving the xe_validate / drm_exec
+transaction to a separate function.
+
+v2:
+- New commit message based on analysis of Nathan Chancellor
+
+Fixes: 59eabff2a352 ("drm/xe: Convert xe_bo_create_pin_map() for exhaustive eviction")
+Cc: Matthew Brost <matthew.brost@intel.com>
+Reported-by: kernel test robot <lkp@intel.com>
+Closes: https://lore.kernel.org/oe-kbuild-all/202509101853.nDmyxTEM-lkp@intel.com/
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Reviewed-by: Nathan Chancellor <nathan@kernel.org>
+Tested-by: Nathan Chancellor <nathan@kernel.org> # build
+Link: https://lore.kernel.org/r/20250911080324.180307-1-thomas.hellstrom@linux.intel.com
+(cherry-picked from commit 187e16f69de2ba30779b97ba8852b583fd7f5fad linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_migrate.c | 29 +++++++++++++++++++----------
+ 1 file changed, 19 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index f03c00672714..b4029c312081 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -395,6 +395,24 @@ struct xe_migrate *xe_migrate_alloc(struct xe_tile *tile)
+ 	return m;
+ }
+ 
++static int xe_migrate_lock_prepare_vm(struct xe_tile *tile, struct xe_migrate *m, struct xe_vm *vm)
++{
++	struct xe_device *xe = tile_to_xe(tile);
++	struct xe_validation_ctx ctx;
++	struct drm_exec exec;
++	int err = 0;
++
++	xe_validation_guard(&ctx, &xe->val, &exec, (struct xe_val_flags) {}, err) {
++		err = xe_vm_drm_exec_lock(vm, &exec);
++		drm_exec_retry_on_contention(&exec);
++		err = xe_migrate_prepare_vm(tile, m, vm, &exec);
++		drm_exec_retry_on_contention(&exec);
++		xe_validation_retry_on_oom(&ctx, &err);
++	}
++
++	return err;
++}
++
+ /**
+  * xe_migrate_init() - Initialize a migrate context
+  * @m: The migration context
+@@ -406,8 +424,6 @@ int xe_migrate_init(struct xe_migrate *m)
+ 	struct xe_tile *tile = m->tile;
+ 	struct xe_gt *primary_gt = tile->primary_gt;
+ 	struct xe_device *xe = tile_to_xe(tile);
+-	struct xe_validation_ctx ctx;
+-	struct drm_exec exec;
+ 	struct xe_vm *vm;
+ 	int err;
+ 
+@@ -417,14 +433,7 @@ int xe_migrate_init(struct xe_migrate *m)
+ 	if (IS_ERR(vm))
+ 		return PTR_ERR(vm);
+ 
+-	err = 0;
+-	xe_validation_guard(&ctx, &xe->val, &exec, (struct xe_val_flags) {}, err) {
+-		err = xe_vm_drm_exec_lock(vm, &exec);
+-		drm_exec_retry_on_contention(&exec);
+-		err = xe_migrate_prepare_vm(tile, m, vm, &exec);
+-		drm_exec_retry_on_contention(&exec);
+-		xe_validation_retry_on_oom(&ctx, &err);
+-	}
++	err = xe_migrate_lock_prepare_vm(tile, m, vm);
+ 	if (err)
+ 		return err;
+ 
+-- 
+2.43.0
+

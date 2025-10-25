@@ -1,0 +1,274 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Date: Tue, 2 Sep 2025 16:02:57 +0530
+Subject: [PATCH 39/62] drm/xe/vf: Enable CCS save/restore only on supported
+ GUC versions
+
+CCS save/restore is supported starting with GuC 70.48.0 (compatibility
+version 1.23.0). Gate the feature on the GuC firmware version and keep it
+disabled on older or unsupported versions.
+
+Fixes: f3009272ff2e ("drm/xe/vf: Create contexts for CCS read write")
+Signed-off-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Cc: Andi Shyti <andi.shyti@kernel.org>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20250902103256.21658-2-satyanarayana.k.v.p@intel.com
+(cherry-picked from commit be5590c384f3e57b1b556be0b88ec62246948315 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c         |  2 +-
+ drivers/gpu/drm/xe/xe_sriov.c          | 14 ++---
+ drivers/gpu/drm/xe/xe_sriov.h          |  2 +-
+ drivers/gpu/drm/xe/xe_sriov_vf.c       | 87 +++++++++++++++++++++++---
+ drivers/gpu/drm/xe/xe_sriov_vf.h       |  4 ++
+ drivers/gpu/drm/xe/xe_sriov_vf_ccs.c   |  5 +-
+ drivers/gpu/drm/xe/xe_sriov_vf_types.h |  5 ++
+ 7 files changed, 95 insertions(+), 24 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 57edbc63da6f..07eac8113153 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -941,7 +941,7 @@ int xe_device_probe(struct xe_device *xe)
+ 
+ 	xe_vsec_init(xe);
+ 
+-	err = xe_sriov_late_init(xe);
++	err = xe_sriov_init_late(xe);
+ 	if (err)
+ 		goto err_unregister_display;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_sriov.c b/drivers/gpu/drm/xe/xe_sriov.c
+index 87911fb4eea7..7d2d6de2aabf 100644
+--- a/drivers/gpu/drm/xe/xe_sriov.c
++++ b/drivers/gpu/drm/xe/xe_sriov.c
+@@ -160,19 +160,15 @@ const char *xe_sriov_function_name(unsigned int n, char *buf, size_t size)
+ }
+ 
+ /**
+- * xe_sriov_late_init() - SR-IOV late initialization functions.
++ * xe_sriov_init_late() - SR-IOV late initialization functions.
+  * @xe: the &xe_device to initialize
+  *
+- * On VF this function will initialize code for CCS migration.
+- *
+  * Return: 0 on success or a negative error code on failure.
+  */
+-int xe_sriov_late_init(struct xe_device *xe)
++int xe_sriov_init_late(struct xe_device *xe)
+ {
+-	int err = 0;
+-
+-	if (IS_VF_CCS_INIT_NEEDED(xe))
+-		err = xe_sriov_vf_ccs_init(xe);
++	if (IS_SRIOV_VF(xe))
++		return xe_sriov_vf_init_late(xe);
+ 
+-	return err;
++	return 0;
+ }
+diff --git a/drivers/gpu/drm/xe/xe_sriov.h b/drivers/gpu/drm/xe/xe_sriov.h
+index 0e0c1abf2d14..6db45df55615 100644
+--- a/drivers/gpu/drm/xe/xe_sriov.h
++++ b/drivers/gpu/drm/xe/xe_sriov.h
+@@ -18,7 +18,7 @@ const char *xe_sriov_function_name(unsigned int n, char *buf, size_t len);
+ void xe_sriov_probe_early(struct xe_device *xe);
+ void xe_sriov_print_info(struct xe_device *xe, struct drm_printer *p);
+ int xe_sriov_init(struct xe_device *xe);
+-int xe_sriov_late_init(struct xe_device *xe);
++int xe_sriov_init_late(struct xe_device *xe);
+ 
+ static inline enum xe_sriov_mode xe_device_sriov_mode(const struct xe_device *xe)
+ {
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf.c b/drivers/gpu/drm/xe/xe_sriov_vf.c
+index 5de81f213d83..cb062328551a 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_sriov_vf.c
+@@ -10,6 +10,7 @@
+ #include "xe_gt.h"
+ #include "xe_gt_sriov_printk.h"
+ #include "xe_gt_sriov_vf.h"
++#include "xe_guc.h"
+ #include "xe_guc_ct.h"
+ #include "xe_guc_submit.h"
+ #include "xe_irq.h"
+@@ -18,6 +19,7 @@
+ #include "xe_sriov.h"
+ #include "xe_sriov_printk.h"
+ #include "xe_sriov_vf.h"
++#include "xe_sriov_vf_ccs.h"
+ #include "xe_tile_sriov_vf.h"
+ 
+ /**
+@@ -127,16 +129,66 @@
+  *      |                               |                               |
+  */
+ 
+-static bool vf_migration_supported(struct xe_device *xe)
++/**
++ * xe_sriov_vf_migration_supported - Report whether SR-IOV VF migration is
++ * supported or not.
++ * @xe: the &xe_device to check
++ *
++ * Returns: true if VF migration is supported, false otherwise.
++ */
++bool xe_sriov_vf_migration_supported(struct xe_device *xe)
++{
++	xe_assert(xe, IS_SRIOV_VF(xe));
++	return xe->sriov.vf.migration.enabled;
++}
++
++static void vf_disable_migration(struct xe_device *xe, const char *fmt, ...)
++{
++	struct va_format vaf;
++	va_list va_args;
++
++	xe_assert(xe, IS_SRIOV_VF(xe));
++
++	va_start(va_args, fmt);
++	vaf.fmt = fmt;
++	vaf.va  = &va_args;
++	xe_sriov_notice(xe, "migration disabled: %pV\n", &vaf);
++	va_end(va_args);
++
++	xe->sriov.vf.migration.enabled = false;
++}
++
++static void migration_worker_func(struct work_struct *w);
++
++static void vf_migration_init_early(struct xe_device *xe)
+ {
+ 	/*
+ 	 * TODO: Add conditions to allow specific platforms, when they're
+ 	 * supported at production quality.
+ 	 */
+-	return IS_ENABLED(CONFIG_DRM_XE_DEBUG);
+-}
++	if (!IS_ENABLED(CONFIG_DRM_XE_DEBUG))
++		return vf_disable_migration(xe,
++					    "experimental feature not available on production builds");
++
++	if (GRAPHICS_VER(xe) < 20)
++		return vf_disable_migration(xe, "requires gfx version >= 20, but only %u found",
++					    GRAPHICS_VER(xe));
++
++	if (!IS_DGFX(xe)) {
++		struct xe_uc_fw_version guc_version;
++
++		xe_gt_sriov_vf_guc_versions(xe_device_get_gt(xe, 0), NULL, &guc_version);
++		if (MAKE_GUC_VER_STRUCT(guc_version) < MAKE_GUC_VER(1, 23, 0))
++			return vf_disable_migration(xe,
++						    "CCS migration requires GuC ABI >= 1.23 but only %u.%u found",
++						    guc_version.major, guc_version.minor);
++	}
+ 
+-static void migration_worker_func(struct work_struct *w);
++	INIT_WORK(&xe->sriov.vf.migration.worker, migration_worker_func);
++
++	xe->sriov.vf.migration.enabled = true;
++	xe_sriov_dbg(xe, "migration support enabled\n");
++}
+ 
+ /**
+  * xe_sriov_vf_init_early - Initialize SR-IOV VF specific data.
+@@ -144,10 +196,7 @@ static void migration_worker_func(struct work_struct *w);
+  */
+ void xe_sriov_vf_init_early(struct xe_device *xe)
+ {
+-	INIT_WORK(&xe->sriov.vf.migration.worker, migration_worker_func);
+-
+-	if (!vf_migration_supported(xe))
+-		xe_sriov_info(xe, "migration not supported by this module version\n");
++	vf_migration_init_early(xe);
+ }
+ 
+ /**
+@@ -302,8 +351,8 @@ static void vf_post_migration_recovery(struct xe_device *xe)
+ 	xe_pm_runtime_get(xe);
+ 	vf_post_migration_shutdown(xe);
+ 
+-	if (!vf_migration_supported(xe)) {
+-		xe_sriov_err(xe, "migration not supported by this module version\n");
++	if (!xe_sriov_vf_migration_supported(xe)) {
++		xe_sriov_err(xe, "migration is not supported\n");
+ 		err = -ENOTRECOVERABLE;
+ 		goto fail;
+ 	}
+@@ -378,3 +427,21 @@ void xe_sriov_vf_start_migration_recovery(struct xe_device *xe)
+ 	drm_info(&xe->drm, "VF migration recovery %s\n", started ?
+ 		 "scheduled" : "already in progress");
+ }
++
++/**
++ * xe_sriov_vf_init_late() - SR-IOV VF late initialization functions.
++ * @xe: the &xe_device to initialize
++ *
++ * This function initializes code for CCS migration.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_sriov_vf_init_late(struct xe_device *xe)
++{
++	int err = 0;
++
++	if (xe_sriov_vf_migration_supported(xe))
++		err = xe_sriov_vf_ccs_init(xe);
++
++	return err;
++}
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf.h b/drivers/gpu/drm/xe/xe_sriov_vf.h
+index 7b8622cff2b7..3bf3364799ad 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf.h
++++ b/drivers/gpu/drm/xe/xe_sriov_vf.h
+@@ -6,9 +6,13 @@
+ #ifndef _XE_SRIOV_VF_H_
+ #define _XE_SRIOV_VF_H_
+ 
++#include <linux/types.h>
++
+ struct xe_device;
+ 
+ void xe_sriov_vf_init_early(struct xe_device *xe);
++int xe_sriov_vf_init_late(struct xe_device *xe);
+ void xe_sriov_vf_start_migration_recovery(struct xe_device *xe);
++bool xe_sriov_vf_migration_supported(struct xe_device *xe);
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
+index 4872e43eb440..908590fa79d4 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
++++ b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
+@@ -264,9 +264,8 @@ int xe_sriov_vf_ccs_init(struct xe_device *xe)
+ 	u32 flags;
+ 	int err;
+ 
+-	xe_assert(xe, IS_SRIOV_VF(xe));
+-	xe_assert(xe, !IS_DGFX(xe));
+-	xe_assert(xe, xe_device_has_flat_ccs(xe));
++	if (!IS_VF_CCS_INIT_NEEDED(xe))
++		return 0;
+ 
+ 	for_each_ccs_rw_ctx(ctx_id) {
+ 		ctx = &tile->sriov.vf.ccs[ctx_id];
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_types.h b/drivers/gpu/drm/xe/xe_sriov_vf_types.h
+index 24a873c50c49..2c94d1f92187 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf_types.h
++++ b/drivers/gpu/drm/xe/xe_sriov_vf_types.h
+@@ -35,6 +35,11 @@ struct xe_device_vf {
+ 		struct work_struct worker;
+ 		/** @migration.gt_flags: Per-GT request flags for VF migration recovery */
+ 		unsigned long gt_flags;
++		/**
++		 * @migration.enabled: flag indicating if migration support
++		 * was enabled or not due to missing prerequisites
++		 */
++		bool enabled;
+ 	} migration;
+ 
+ 	/** @ccs: VF CCS state data */
+-- 
+2.43.0
+

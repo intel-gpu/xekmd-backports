@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:04 -0700
+Subject: [PATCH] drm/xe: Don't change LRC ring head on job resubmission
+
+Now that we save the job's head during submission, it's no longer
+necessary to adjust the LRC ring head during resubmission. Instead, a
+software-based adjustment of the tail will overwrite the old jobs in
+place. For some odd reason, adjusting the LRC ring head didn't work on
+parallel queues, which was causing issues in our CI.
+
+v5:
+ - Add comment in guc_exec_queue_start explaning why the function works
+   (Auld)
+v7:
+ - Only adjust first state on first unsignaled job (Auld)
+v8:
+ - Break unsignaled job handling to separate patch (Auld)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Tomasz Lis <tomasz.lis@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-7-matthew.brost@intel.com
+(cherry-picked from commit 807c42dd8028d71222dfce035c2e87aaecbf623f linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_submit.c | 18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index 61a85f395b6d..4ae858ff23ef 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -2082,11 +2082,25 @@ static void guc_exec_queue_start(struct xe_exec_queue *q)
+ 	struct xe_gpu_scheduler *sched = &q->guc->sched;
+ 
+ 	if (!exec_queue_killed_or_banned_or_wedged(q)) {
++		struct xe_sched_job *job = xe_sched_first_pending_job(sched);
+ 		int i;
+ 
+ 		trace_xe_exec_queue_resubmit(q);
+-		for (i = 0; i < q->width; ++i)
+-			xe_lrc_set_ring_head(q->lrc[i], q->lrc[i]->ring.tail);
++		if (job) {
++			for (i = 0; i < q->width; ++i) {
++				/*
++				 * The GuC context is unregistered at this point
++				 * time, adjusting software ring tail ensures
++				 * jobs are rewritten in original placement,
++				 * adjusting LRC tail ensures the newly loaded
++				 * GuC / contexts only view the LRC tail
++				 * increasing as jobs are written out.
++				 */
++				q->lrc[i]->ring.tail = job->ptrs[i].head;
++				xe_lrc_set_ring_tail(q->lrc[i],
++						     xe_lrc_ring_head(q->lrc[i]));
++			}
++		}
+ 		xe_sched_resubmit_jobs(sched);
+ 	}
+ 
+-- 
+2.43.0
+

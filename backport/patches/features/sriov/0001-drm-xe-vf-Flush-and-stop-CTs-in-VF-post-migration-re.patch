@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:18 -0700
+Subject: [PATCH] drm/xe/vf: Flush and stop CTs in VF post migration recovery
+
+Flushing CTs (i.e., progressing all pending G2H messages) gives VF
+post-migration recovery an accurate view of which H2G messages the GuC
+has processed, enabling the GuC submission state machine to correctly
+rebuild all state.
+
+Also, stop all CT traffic, as the CT is not live during VF
+post-migration recovery.
+
+v3:
+ - xe_guc_ct_flush_and_stop rename (Michal)
+ - Drop extra GuC CT WQ wake up (Michal)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-21-matthew.brost@intel.com
+(cherry-picked from commit 3061e8e0dd6dcabca9c1440abdf1f6ac3fe6bc74 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c |  1 +
+ drivers/gpu/drm/xe/xe_guc_ct.c      | 10 ++++++++++
+ drivers/gpu/drm/xe/xe_guc_ct.h      |  1 +
+ 3 files changed, 12 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index b851285b8756..e6f6a5c8ef1b 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -1105,6 +1105,7 @@ static void vf_post_migration_shutdown(struct xe_gt *gt)
+ 	gt->sriov.vf.migration.recovery_queued = false;
+ 	spin_unlock_irq(&gt->sriov.vf.migration.lock);
+ 
++	xe_guc_ct_flush_and_stop(&gt->uc.guc.ct);
+ 	xe_guc_submit_pause(&gt->uc.guc);
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
+index 7a155c65535e..92abf23c4b30 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ct.c
++++ b/drivers/gpu/drm/xe/xe_guc_ct.c
+@@ -577,6 +577,16 @@ void xe_guc_ct_disable(struct xe_guc_ct *ct)
+ 	stop_g2h_handler(ct);
+ }
+ 
++/**
++ * xe_guc_ct_flush_and_stop - Flush and stop all processing of G2H / H2G
++ * @ct: the &xe_guc_ct
++ */
++void xe_guc_ct_flush_and_stop(struct xe_guc_ct *ct)
++{
++	receive_g2h(ct);
++	xe_guc_ct_stop(ct);
++}
++
+ /**
+  * xe_guc_ct_stop - Set GuC to stopped state
+  * @ct: the &xe_guc_ct
+diff --git a/drivers/gpu/drm/xe/xe_guc_ct.h b/drivers/gpu/drm/xe/xe_guc_ct.h
+index 63feec1ba487..59af5cd27715 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ct.h
++++ b/drivers/gpu/drm/xe/xe_guc_ct.h
+@@ -17,6 +17,7 @@ int xe_guc_ct_init_post_hwconfig(struct xe_guc_ct *ct);
+ int xe_guc_ct_enable(struct xe_guc_ct *ct);
+ void xe_guc_ct_disable(struct xe_guc_ct *ct);
+ void xe_guc_ct_stop(struct xe_guc_ct *ct);
++void xe_guc_ct_flush_and_stop(struct xe_guc_ct *ct);
+ void xe_guc_ct_fast_path(struct xe_guc_ct *ct);
+ 
+ struct xe_guc_ct_snapshot *xe_guc_ct_snapshot_capture(struct xe_guc_ct *ct);
+-- 
+2.43.0
+

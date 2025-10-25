@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tvrtko Ursulin <tvrtko.ursulin@igalia.com>
+Date: Fri, 11 Jul 2025 17:01:53 +0100
+Subject: [PATCH] drm/xe/xelp: Add Wa_18022495364
+
+Add Wa_18022495364 as a context workaround batch buffer workaround.
+
+Signed-off-by: Tvrtko Ursulin <tvrtko.ursulin@igalia.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Cc: Matt Roper <matthew.d.roper@intel.com>
+Link: https://lore.kernel.org/r/20250711160153.49833-9-tvrtko.ursulin@igalia.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(cherry-picked from commit ca33cd271ef9b27acddf96742eef136d0f4caaa5 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_engine_regs.h |  3 +++
+ drivers/gpu/drm/xe/xe_lrc.c              | 21 +++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_wa_oob.rules       |  1 +
+ 3 files changed, 25 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_engine_regs.h b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
+index 7ade41e2b7b3..f4c3e1187a00 100644
+--- a/drivers/gpu/drm/xe/regs/xe_engine_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
+@@ -111,6 +111,9 @@
+ #define   PPHWSP_CSB_AND_TIMESTAMP_REPORT_DIS	REG_BIT(14)
+ #define   CS_PRIORITY_MEM_READ			REG_BIT(7)
+ 
++#define CS_DEBUG_MODE2(base)			XE_REG((base) + 0xd8, XE_REG_OPTION_MASKED)
++#define   INSTRUCTION_STATE_CACHE_INVALIDATE	REG_BIT(6)
++
+ #define FF_SLICE_CS_CHICKEN1(base)		XE_REG((base) + 0xe0, XE_REG_OPTION_MASKED)
+ #define   FFSC_PERCTX_PREEMPT_CTRL		REG_BIT(14)
+ 
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index 0c35d6349340..b7a6be5b47ea 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1102,6 +1102,26 @@ static ssize_t setup_timestamp_wa(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+ 	return cmd - batch;
+ }
+ 
++static ssize_t setup_invalidate_state_cache_wa(struct xe_lrc *lrc,
++					       struct xe_hw_engine *hwe,
++					       u32 *batch, size_t max_len)
++{
++	u32 *cmd = batch;
++
++	if (!XE_WA(lrc->gt, 18022495364) ||
++	    hwe->class != XE_ENGINE_CLASS_RENDER)
++		return 0;
++
++	if (xe_gt_WARN_ON(lrc->gt, max_len < 3))
++		return -ENOSPC;
++
++	*cmd++ = MI_LOAD_REGISTER_IMM | MI_LRI_NUM_REGS(1);
++	*cmd++ = CS_DEBUG_MODE1(0).addr;
++	*cmd++ = _MASKED_BIT_ENABLE(INSTRUCTION_STATE_CACHE_INVALIDATE);
++
++	return cmd - batch;
++}
++
+ struct bo_setup {
+ 	ssize_t (*setup)(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+ 			 u32 *batch, size_t max_size);
+@@ -1180,6 +1200,7 @@ int xe_lrc_setup_wa_bb_with_scratch(struct xe_lrc *lrc, struct xe_hw_engine *hwe
+ {
+ 	static const struct bo_setup funcs[] = {
+ 		{ .setup = setup_timestamp_wa },
++		{ .setup = setup_invalidate_state_cache_wa },
+ 		{ .setup = setup_utilization_wa },
+ 	};
+ 	struct bo_setup_state state = {
+diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
+index 86f68d853ac8..34ccb7fdeea0 100644
+--- a/drivers/gpu/drm/xe/xe_wa_oob.rules
++++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
+@@ -1,5 +1,6 @@
+ 1607983814	GRAPHICS_VERSION_RANGE(1200, 1210)
+ 16010904313	GRAPHICS_VERSION_RANGE(1200, 1210)
++18022495364	GRAPHICS_VERSION_RANGE(1200, 1210)
+ 22012773006	GRAPHICS_VERSION_RANGE(1200, 1250)
+ 14014475959	GRAPHICS_VERSION_RANGE(1270, 1271), GRAPHICS_STEP(A0, B0)
+ 		PLATFORM(DG2)
+-- 
+2.43.0
+

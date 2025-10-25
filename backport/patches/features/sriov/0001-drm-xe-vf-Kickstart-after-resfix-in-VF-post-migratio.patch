@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 8 Oct 2025 14:45:20 -0700
+Subject: [PATCH] drm/xe/vf: Kickstart after resfix in VF post migration
+ recovery
+
+GuC needs to be live for the GuC submission state machine to resubmit
+anything lost during VF post-migration recovery.  Therefore, move the
+kickstart step after `resfix` to ensure proper resubmission.
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Tomasz Lis <tomasz.lis@intel.com>
+Link: https://lore.kernel.org/r/20251008214532.3442967-23-matthew.brost@intel.com
+(cherry-picked from commit fe3a615dadd398f73cde00a5ba32389958242dec linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c | 17 +++++++++--------
+ 1 file changed, 9 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index 75a20de71d8b..34fb8699b7a2 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -1136,13 +1136,6 @@ static int vf_post_migration_fixups(struct xe_gt *gt)
+ 
+ static void vf_post_migration_kickstart(struct xe_gt *gt)
+ {
+-	/*
+-	 * Make sure interrupts on the new HW are properly set. The GuC IRQ
+-	 * must be working at this point, since the recovery did started,
+-	 * but the rest was not enabled using the procedure from spec.
+-	 */
+-	xe_irq_resume(gt_to_xe(gt));
+-
+ 	xe_guc_submit_unpause(&gt->uc.guc);
+ }
+ 
+@@ -1162,6 +1155,13 @@ static int vf_post_migration_notify_resfix_done(struct xe_gt *gt)
+ 	if (skip_resfix)
+ 		return -EAGAIN;
+ 
++	/*
++	 * Make sure interrupts on the new HW are properly set. The GuC IRQ
++	 * must be working at this point, since the recovery did started,
++	 * but the rest was not enabled using the procedure from spec.
++	 */
++	xe_irq_resume(gt_to_xe(gt));
++
+ 	return vf_notify_resfix_done(gt);
+ }
+ 
+@@ -1185,11 +1185,12 @@ static void vf_post_migration_recovery(struct xe_gt *gt)
+ 	if (err)
+ 		goto fail;
+ 
+-	vf_post_migration_kickstart(gt);
+ 	err = vf_post_migration_notify_resfix_done(gt);
+ 	if (err && err != -EAGAIN)
+ 		goto fail;
+ 
++	vf_post_migration_kickstart(gt);
++
+ 	xe_pm_runtime_put(xe);
+ 	xe_gt_sriov_notice(gt, "migration recovery ended\n");
+ 	return;
+-- 
+2.43.0
+

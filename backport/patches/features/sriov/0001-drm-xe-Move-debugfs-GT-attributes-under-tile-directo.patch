@@ -1,0 +1,140 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Mon, 14 Jul 2025 21:36:45 +0200
+Subject: [PATCH 12/62] drm/xe: Move debugfs GT attributes under tile directory
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+While in sysfs we are correctly trying to reflect the hardware
+architecture and we expose GT attributes in per tile hierarchy,
+in debugfs we expose GT attributes at flat level, without tiles.
+
+Create debugfs directories to represent each tile and move GT
+attributes under matching parent tile directory. To not break
+existing debugfs tools, create symlink under old location:
+
+ /sys/kernel/debug/dri/0000:00:02.0/
+ ├── ...
+ ├── gt0 -> tile0/gt0
+ ├── gt1 -> tile0/gt1
+ ├── tile0
+ │   ├── gt0
+ │   │   ├── ...
+ │   ├── gt1
+ │   │   ├── ...
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250714193645.763-1-michal.wajdeczko@intel.com
+(cherry-picked from commit bf81505f7dba467c17097315864790f9f7dca08a linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_debugfs.c      | 22 ++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_device_types.h |  3 +++
+ drivers/gpu/drm/xe/xe_gt_debugfs.c   | 14 +++++++++++++-
+ 3 files changed, 38 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
+index db3efdf05777..3335b740d3e9 100644
+--- a/drivers/gpu/drm/xe/xe_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_debugfs.c
+@@ -327,14 +327,33 @@ static const struct file_operations atomic_svm_timeslice_ms_fops = {
+ 	.write = atomic_svm_timeslice_ms_set,
+ };
+ 
++static void create_tile_debugfs(struct xe_tile *tile, struct dentry *root)
++{
++	char name[8];
++
++	snprintf(name, sizeof(name), "tile%u", tile->id);
++	tile->debugfs = debugfs_create_dir(name, root);
++	if (IS_ERR(tile->debugfs))
++		return;
++
++	/*
++	 * Store the xe_tile pointer as private data of the tile/ directory
++	 * node so other tile specific attributes under that directory may
++	 * refer to it by looking at its parent node private data.
++	 */
++	tile->debugfs->d_inode->i_private = tile;
++}
++
+ void xe_debugfs_register(struct xe_device *xe)
+ {
+ 	struct ttm_device *bdev = &xe->ttm;
+ 	struct drm_minor *minor = xe->drm.primary;
+ 	struct dentry *root = minor->debugfs_root;
+ 	struct ttm_resource_manager *man;
++	struct xe_tile *tile;
+ 	struct xe_gt *gt;
+ 	u32 mem_type;
++	u8 tile_id;
+ 	u8 id;
+ 
+ 	drm_debugfs_create_files(debugfs_list,
+@@ -373,6 +392,9 @@ void xe_debugfs_register(struct xe_device *xe)
+ 	if (man)
+ 		ttm_resource_manager_create_debugfs(man, root, "stolen_mm");
+ 
++	for_each_tile(tile, xe, tile_id)
++		create_tile_debugfs(tile, root);
++
+ 	for_each_gt(gt, xe, id)
+ 		xe_gt_debugfs_register(gt);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index 7ceb0c90f391..3b1a3dca5596 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -255,6 +255,9 @@ struct xe_tile {
+ 
+ 	/** @sysfs: sysfs' kobj used by xe_tile_sysfs */
+ 	struct kobject *sysfs;
++
++	/** @debugfs: debugfs directory associated with this tile */
++	struct dentry *debugfs;
+ };
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_gt_debugfs.c b/drivers/gpu/drm/xe/xe_gt_debugfs.c
+index 848618acdca8..061a81f82e76 100644
+--- a/drivers/gpu/drm/xe/xe_gt_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_gt_debugfs.c
+@@ -388,13 +388,18 @@ void xe_gt_debugfs_register(struct xe_gt *gt)
+ {
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	struct drm_minor *minor = gt_to_xe(gt)->drm.primary;
++	struct dentry *parent = gt->tile->debugfs;
+ 	struct dentry *root;
++	char symlink[16];
+ 	char name[8];
+ 
+ 	xe_gt_assert(gt, minor->debugfs_root);
+ 
++	if (IS_ERR(parent))
++		return;
++
+ 	snprintf(name, sizeof(name), "gt%d", gt->info.id);
+-	root = debugfs_create_dir(name, minor->debugfs_root);
++	root = debugfs_create_dir(name, parent);
+ 	if (IS_ERR(root)) {
+ 		drm_warn(&xe->drm, "Create GT directory failed");
+ 		return;
+@@ -426,4 +431,11 @@ void xe_gt_debugfs_register(struct xe_gt *gt)
+ 		xe_gt_sriov_pf_debugfs_register(gt, root);
+ 	else if (IS_SRIOV_VF(xe))
+ 		xe_gt_sriov_vf_debugfs_register(gt, root);
++
++	/*
++	 * Backwards compatibility only: create a link for the legacy clients
++	 * who may expect gt/ directory at the root level, not the tile level.
++	 */
++	snprintf(symlink, sizeof(symlink), "tile%u/%s", gt->tile->id, name);
++	debugfs_create_symlink(name, minor->debugfs_root, symlink);
+ }
+-- 
+2.43.0
+

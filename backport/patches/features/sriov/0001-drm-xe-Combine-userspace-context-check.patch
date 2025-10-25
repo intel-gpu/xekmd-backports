@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Piotr=20Pi=C3=B3rkowski?= <piotr.piorkowski@intel.com>
+Date: Fri, 3 Oct 2025 18:26:19 +0200
+Subject: [PATCH 12/12] drm/xe: Combine userspace context check
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Both vm->xef and XE_LRC_CREATE_USER_CTX indicate in xe_lrc_init that
+the context originates from userspace. However, XE_LRC_CREATE_USER_CTX
+has a broader scope as it may be set even when no vm->xef is present.
+The XE_BO_FLAG_PINNED_LATE_RESTORE flag can be extended to both cases,
+so there is no point in handling the two cases separately.
+Let's combine vm->xef and XE_LRC_CREATE_USER_CTX checks to detect
+userspace context.
+
+Signed-off-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Suggested-by: Matthew Auld <matthew.auld@intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20251003162619.1984236-6-piotr.piorkowski@intel.com
+(cherry-picked from commit 8462d16d1b75325cb7220cd2731a47033baff863 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_lrc.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index 8af4365a9864..7e5d87e7a85b 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1272,11 +1272,9 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+ 
+ 	bo_flags = XE_BO_FLAG_VRAM_IF_DGFX(tile) | XE_BO_FLAG_GGTT |
+ 		   XE_BO_FLAG_GGTT_INVALIDATE;
+-	if (vm && vm->xef) /* userspace */
+-		bo_flags |= XE_BO_FLAG_PINNED_LATE_RESTORE;
+ 
+-	if (init_flags & XE_LRC_CREATE_USER_CTX)
+-		bo_flags |= XE_BO_FLAG_FORCE_USER_VRAM;
++	if ((vm && vm->xef) || init_flags & XE_LRC_CREATE_USER_CTX) /* userspace */
++		bo_flags |= XE_BO_FLAG_PINNED_LATE_RESTORE | XE_BO_FLAG_FORCE_USER_VRAM;
+ 
+ 	lrc->bo = xe_bo_create_pin_map_novm(xe, tile,
+ 					    bo_size,
+-- 
+2.43.0
+

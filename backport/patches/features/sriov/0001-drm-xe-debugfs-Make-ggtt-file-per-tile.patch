@@ -1,0 +1,93 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 19 Sep 2025 18:04:29 +0200
+Subject: [PATCH 01/12] drm/xe/debugfs: Make ggtt file per-tile
+
+Due to initial lack of per-tile debugfs directories, the ggtt file
+attribute was created as per-GT file. Fix that since now we have
+proper per-tile directories.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250919160430.573-2-michal.wajdeczko@intel.com
+(backported from commit 126d33f6711a4e8dc9613a146932e81a988b3dc2 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_debugfs.c   | 13 -------------
+ drivers/gpu/drm/xe/xe_tile_debugfs.c |  7 +++++++
+ 2 files changed, 7 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_debugfs.c b/drivers/gpu/drm/xe/xe_gt_debugfs.c
+index 5ee25b2906b9..ddca876a7553 100644
+--- a/drivers/gpu/drm/xe/xe_gt_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_gt_debugfs.c
+@@ -12,7 +12,6 @@
+ 
+ #include "xe_device.h"
+ #include "xe_force_wake.h"
+-#include "xe_ggtt.h"
+ #include "xe_gt.h"
+ #include "xe_gt_mcr.h"
+ #include "xe_gt_idle.h"
+@@ -142,17 +141,6 @@ static int steering(struct xe_gt *gt, struct drm_printer *p)
+ 	return 0;
+ }
+ 
+-static int ggtt(struct xe_gt *gt, struct drm_printer *p)
+-{
+-	int ret;
+-
+-	xe_pm_runtime_get(gt_to_xe(gt));
+-	ret = xe_ggtt_dump(gt_to_tile(gt)->mem.ggtt, p);
+-	xe_pm_runtime_put(gt_to_xe(gt));
+-
+-	return ret;
+-}
+-
+ static int register_save_restore(struct xe_gt *gt, struct drm_printer *p)
+ {
+ 	struct xe_hw_engine *hwe;
+@@ -279,7 +267,6 @@ static int hwconfig(struct xe_gt *gt, struct drm_printer *p)
+  */
+ static const struct drm_info_list vf_safe_debugfs_list[] = {
+ 	{"topology", .show = xe_gt_debugfs_simple_show, .data = topology},
+-	{"ggtt", .show = xe_gt_debugfs_simple_show, .data = ggtt},
+ 	{"register-save-restore", .show = xe_gt_debugfs_simple_show, .data = register_save_restore},
+ 	{"workarounds", .show = xe_gt_debugfs_simple_show, .data = workarounds},
+ 	{"tunings", .show = xe_gt_debugfs_simple_show, .data = tunings},
+diff --git a/drivers/gpu/drm/xe/xe_tile_debugfs.c b/drivers/gpu/drm/xe/xe_tile_debugfs.c
+index c6a813ecb653..fff242a5ae56 100644
+--- a/drivers/gpu/drm/xe/xe_tile_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_tile_debugfs.c
+@@ -6,6 +6,7 @@
+ #include <linux/debugfs.h>
+ #include <drm/drm_debugfs.h>
+ 
++#include "xe_ggtt.h"
+ #include "xe_pm.h"
+ #include "xe_sa.h"
+ #include "xe_tile_debugfs.h"
+@@ -90,6 +91,11 @@ int xe_tile_debugfs_show_with_rpm(struct seq_file *m, void *data)
+ 	return ret;
+ }
+ 
++static int ggtt(struct xe_tile *tile, struct drm_printer *p)
++{
++	return xe_ggtt_dump(tile->mem.ggtt, p);
++}
++
+ static int sa_info(struct xe_tile *tile, struct drm_printer *p)
+ {
+ 	drm_suballoc_dump_debug_info(&tile->mem.kernel_bb_pool->base, p,
+@@ -100,6 +106,7 @@ static int sa_info(struct xe_tile *tile, struct drm_printer *p)
+ 
+ /* only for debugfs files which can be safely used on the VF */
+ static const struct drm_info_list vf_safe_debugfs_list[] = {
++	{ "ggtt", .show = xe_tile_debugfs_show_with_rpm, .data = ggtt },
+ 	{ "sa_info", .show = xe_tile_debugfs_show_with_rpm, .data = sa_info },
+ };
+ 
+-- 
+2.43.0
+

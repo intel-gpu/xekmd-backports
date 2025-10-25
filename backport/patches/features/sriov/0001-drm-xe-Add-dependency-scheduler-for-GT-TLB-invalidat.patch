@@ -1,0 +1,136 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Thu, 24 Jul 2025 12:12:13 -0700
+Subject: [PATCH 34/62] drm/xe: Add dependency scheduler for GT TLB
+ invalidations to bind queues
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add a generic dependency scheduler for GT TLB invalidations, used to
+schedule jobs that issue GT TLB invalidations to bind queues.
+
+v2:
+ - Use shared GT TLB invalidation queue for dep scheduler
+ - Break allocation of dep scheduler into its own function
+ - Add define for max number tlb invalidations
+ - Skip media if not present
+
+Suggested-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Stuart Summers <stuart.summers@intel.com>
+Link: https://lore.kernel.org/r/20250724191216.4076566-5-matthew.brost@intel.com
+(cherry-picked from commit 535c445eb94c9abce3350aa61424fc34b8138ee8 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c       | 48 ++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_exec_queue_types.h | 13 +++++++
+ 2 files changed, 61 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index a85125109698..828cd48df26a 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -12,6 +12,7 @@
+ #include <drm/drm_file.h>
+ #include <uapi/drm/xe_drm.h>
+ 
++#include "xe_dep_scheduler.h"
+ #include "xe_device.h"
+ #include "xe_gt.h"
+ #include "xe_hw_engine_class_sysfs.h"
+@@ -39,6 +40,12 @@ static int exec_queue_user_extensions(struct xe_device *xe, struct xe_exec_queue
+ 
+ static void __xe_exec_queue_free(struct xe_exec_queue *q)
+ {
++	int i;
++
++	for (i = 0; i < XE_EXEC_QUEUE_TLB_INVAL_COUNT; ++i)
++		if (q->tlb_inval[i].dep_scheduler)
++			xe_dep_scheduler_fini(q->tlb_inval[i].dep_scheduler);
++
+ 	if (xe_exec_queue_uses_pxp(q))
+ 		xe_pxp_exec_queue_remove(gt_to_xe(q->gt)->pxp, q);
+ 	if (q->vm)
+@@ -50,6 +57,39 @@ static void __xe_exec_queue_free(struct xe_exec_queue *q)
+ 	kfree(q);
+ }
+ 
++static int alloc_dep_schedulers(struct xe_device *xe, struct xe_exec_queue *q)
++{
++	struct xe_tile *tile = gt_to_tile(q->gt);
++	int i;
++
++	for (i = 0; i < XE_EXEC_QUEUE_TLB_INVAL_COUNT; ++i) {
++		struct xe_dep_scheduler *dep_scheduler;
++		struct xe_gt *gt;
++		struct workqueue_struct *wq;
++
++		if (i == XE_EXEC_QUEUE_TLB_INVAL_PRIMARY_GT)
++			gt = tile->primary_gt;
++		else
++			gt = tile->media_gt;
++
++		if (!gt)
++			continue;
++
++		wq = gt->tlb_invalidation.job_wq;
++
++#define MAX_TLB_INVAL_JOBS	16	/* Picking a reasonable value */
++		dep_scheduler = xe_dep_scheduler_create(xe, wq, q->name,
++							MAX_TLB_INVAL_JOBS);
++		if (IS_ERR(dep_scheduler))
++			return PTR_ERR(dep_scheduler);
++
++		q->tlb_inval[i].dep_scheduler = dep_scheduler;
++	}
++#undef MAX_TLB_INVAL_JOBS
++
++	return 0;
++}
++
+ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
+ 						   struct xe_vm *vm,
+ 						   u32 logical_mask,
+@@ -94,6 +134,14 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
+ 	else
+ 		q->sched_props.priority = XE_EXEC_QUEUE_PRIORITY_NORMAL;
+ 
++	if (q->flags & (EXEC_QUEUE_FLAG_MIGRATE | EXEC_QUEUE_FLAG_VM)) {
++		err = alloc_dep_schedulers(xe, q);
++		if (err) {
++			__xe_exec_queue_free(q);
++			return ERR_PTR(err);
++		}
++	}
++
+ 	if (vm)
+ 		q->vm = xe_vm_get(vm);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
+index 95ea179189d2..27b76cf9da89 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
+@@ -134,6 +134,19 @@ struct xe_exec_queue {
+ 		struct list_head link;
+ 	} lr;
+ 
++#define XE_EXEC_QUEUE_TLB_INVAL_PRIMARY_GT	0
++#define XE_EXEC_QUEUE_TLB_INVAL_MEDIA_GT	1
++#define XE_EXEC_QUEUE_TLB_INVAL_COUNT		(XE_EXEC_QUEUE_TLB_INVAL_MEDIA_GT  + 1)
++
++	/** @tlb_inval: TLB invalidations exec queue state */
++	struct {
++		/**
++		 * @tlb_inval.dep_scheduler: The TLB invalidation
++		 * dependency scheduler
++		 */
++		struct xe_dep_scheduler *dep_scheduler;
++	} tlb_inval[XE_EXEC_QUEUE_TLB_INVAL_COUNT];
++
+ 	/** @pxp: PXP info tracking */
+ 	struct {
+ 		/** @pxp.type: PXP session type used by this queue */
+-- 
+2.43.0
+

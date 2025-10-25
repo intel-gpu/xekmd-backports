@@ -1,0 +1,65 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Thu, 24 Jul 2025 12:12:12 -0700
+Subject: [PATCH 33/62] drm/xe: Create ordered workqueue for GT TLB
+ invalidation jobs
+
+No sense to schedule GT TLB invalidation jobs in parallel which target
+the same GT given these all contend on the same lock, create ordered
+workqueue for GT TLB invalidation jobs.
+
+v3:
+ - Fix type in commmit message (Stuart)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Stuart Summers <stuart.summers@intel.com>
+Link: https://lore.kernel.org/r/20250724191216.4076566-4-matthew.brost@intel.com
+(cherry-picked from commit ada51219489f53f9f35833c3d0d8a4fe3f4c5705 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c | 8 ++++++++
+ drivers/gpu/drm/xe/xe_gt_types.h            | 2 ++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c b/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c
+index 086c12ee3d9d..02f0bb92d6e0 100644
+--- a/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c
++++ b/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c
+@@ -3,6 +3,8 @@
+  * Copyright © 2023 Intel Corporation
+  */
+ 
++#include <drm/drm_managed.h>
++
+ #include "xe_gt_tlb_invalidation.h"
+ 
+ #include "abi/guc_actions_abi.h"
+@@ -123,6 +125,12 @@ int xe_gt_tlb_invalidation_init_early(struct xe_gt *gt)
+ 	INIT_DELAYED_WORK(&gt->tlb_invalidation.fence_tdr,
+ 			  xe_gt_tlb_fence_timeout);
+ 
++	gt->tlb_invalidation.job_wq =
++		drmm_alloc_ordered_workqueue(&gt_to_xe(gt)->drm, "gt-tbl-inval-job-wq",
++					     WQ_MEM_RECLAIM);
++	if (IS_ERR(gt->tlb_invalidation.job_wq))
++		return PTR_ERR(gt->tlb_invalidation.job_wq);
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_gt_types.h b/drivers/gpu/drm/xe/xe_gt_types.h
+index 96344c604726..dfd4a16da5f0 100644
+--- a/drivers/gpu/drm/xe/xe_gt_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_types.h
+@@ -210,6 +210,8 @@ struct xe_gt {
+ 		 * xe_gt_tlb_fence_timeout after the timeut interval is over.
+ 		 */
+ 		struct delayed_work fence_tdr;
++		/** @wtlb_invalidation.wq: schedules GT TLB invalidation jobs */
++		struct workqueue_struct *job_wq;
+ 		/** @tlb_invalidation.lock: protects TLB invalidation fences */
+ 		spinlock_t lock;
+ 	} tlb_invalidation;
+-- 
+2.43.0
+

@@ -1,0 +1,149 @@
+From b881909e2ec6b686f2f03a0798af023db190ebd3 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Date: Sat, 4 Oct 2025 12:20:56 +0530
+Subject: [PATCH] autotools/m4: manage shrinker API changes from old to new
+registration
+
+From KV 6.7 onwards, shrinker registration API changed from
+register_shrinker() to shrinker_alloc()/shrinker_register()/shrinker_free()
+in newer kernels.
+Use m4 macro to detect API availability and provide compatibility.
+
+v2:
+Fix error: ‘MAX_PAGE_ORDER’ undeclared
+Fix Hunk failure
+
+Reference:
+    d35b5c98c1f1 drm/ttm: dynamically allocate the drm-ttm_pool shrinker
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+---
+ drivers/gpu/drm/ttm/tests/ttm_pool_test.c |  8 ++---
+ drivers/gpu/drm/ttm/ttm_pool.c            | 29 ++++++++++++++++++-
+ 2 files changed, 32 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/ttm/tests/ttm_pool_test.c b/drivers/gpu/drm/ttm/tests/ttm_pool_test.c
+index 8ade533..5d9bb20 100644
+--- a/drivers/gpu/drm/ttm/tests/ttm_pool_test.c
++++ b/drivers/gpu/drm/ttm/tests/ttm_pool_test.c
+@@ -108,7 +108,7 @@ static const struct ttm_pool_test_case ttm_pool_basic_cases[] = {
+ 	},
+ 	{
+ 		.description = "Above the allocation limit",
+-		.order = MAX_PAGE_ORDER + 1,
++		.order = MAX_ORDER + 1,
+ 	},
+ 	{
+ 		.description = "One page, with coherent DMA mappings enabled",
+@@ -117,7 +117,7 @@ static const struct ttm_pool_test_case ttm_pool_basic_cases[] = {
+ 	},
+ 	{
+ 		.description = "Above the allocation limit, with coherent DMA mappings enabled",
+-		.order = MAX_PAGE_ORDER + 1,
++		.order = MAX_ORDER + 1,
+ 		.use_dma_alloc = true,
+ 	},
+ };
+@@ -164,7 +164,7 @@ static void ttm_pool_alloc_basic(struct kunit *test)
+ 	fst_page = tt->pages[0];
+ 	last_page = tt->pages[tt->num_pages - 1];
+ 
+-	if (params->order <= MAX_PAGE_ORDER) {
++	if (params->order <= MAX_ORDER) {
+ 		if (params->use_dma_alloc) {
+ 			KUNIT_ASSERT_NOT_NULL(test, (void *)fst_page->private);
+ 			KUNIT_ASSERT_NOT_NULL(test, (void *)last_page->private);
+@@ -181,7 +181,7 @@ static void ttm_pool_alloc_basic(struct kunit *test)
+ 			 * order 0 blocks
+ 			 */
+ 			KUNIT_ASSERT_EQ(test, fst_page->private,
+-					min_t(unsigned int, MAX_PAGE_ORDER,
++					min_t(unsigned int, MAX_ORDER,
+ 					      params->order));
+ 			KUNIT_ASSERT_EQ(test, last_page->private, 0);
+ 		}
+diff --git a/drivers/gpu/drm/ttm/ttm_pool.c b/drivers/gpu/drm/ttm/ttm_pool.c
+index baf27c7..50645d4 100644
+--- a/drivers/gpu/drm/ttm/ttm_pool.c
++++ b/drivers/gpu/drm/ttm/ttm_pool.c
+@@ -37,6 +37,7 @@
+ #include <linux/debugfs.h>
+ #include <linux/highmem.h>
+ #include <linux/sched/mm.h>
++#include <linux/version.h>
+ 
+ #ifdef CONFIG_X86
+ #include <asm/set_memory.h>
+@@ -126,9 +127,22 @@ static struct ttm_pool_type global_uncached[NR_PAGE_ORDERS];
+ static struct ttm_pool_type global_dma32_write_combined[NR_PAGE_ORDERS];
+ static struct ttm_pool_type global_dma32_uncached[NR_PAGE_ORDERS];
+ 
++static unsigned long ttm_pool_shrinker_count(struct shrinker *shrink,
++						  struct shrink_control *sc);
++static unsigned long ttm_pool_shrinker_scan(struct shrinker *shrink,
++						 struct shrink_control *sc);
++
+ static spinlock_t shrinker_lock;
+ static struct list_head shrinker_list;
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,7,0)
+ static struct shrinker *mm_shrinker;
++#else
++static struct shrinker mm_shrinker = {
++	.count_objects = ttm_pool_shrinker_count,
++	.scan_objects = ttm_pool_shrinker_scan,
++	.seeks = 1,
++};
++#endif
+ static DECLARE_RWSEM(pool_shrink_rwsem);
+ 
+ /* Allocate pages of size 1 << order with the given gfp_flags */
+@@ -1284,9 +1298,15 @@ static int ttm_pool_debugfs_shrink_show(struct seq_file *m, void *data)
+ 	unsigned long count;
+ 
+ 	fs_reclaim_acquire(GFP_KERNEL);
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,7,0)
+ 	count = ttm_pool_shrinker_count(mm_shrinker, &sc);
+ 	seq_printf(m, "%lu/%lu\n", count,
+ 		   ttm_pool_shrinker_scan(mm_shrinker, &sc));
++#else
++	count = ttm_pool_shrinker_count(&mm_shrinker, &sc);
++	seq_printf(m, "%lu/%lu\n", count,
++		   ttm_pool_shrinker_scan(&mm_shrinker, &sc));
++#endif
+ 	fs_reclaim_release(GFP_KERNEL);
+ 
+ 	return 0;
+@@ -1334,6 +1354,7 @@ int ttm_pool_mgr_init(unsigned long num_pages)
+ #endif
+ #endif
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,7,0)
+ 	mm_shrinker = shrinker_alloc(0, "drm-ttm_pool");
+ 	if (!mm_shrinker)
+ 		return -ENOMEM;
+@@ -1344,6 +1365,9 @@ int ttm_pool_mgr_init(unsigned long num_pages)
+ 	mm_shrinker->seeks = 1;
+ 
+ 	shrinker_register(mm_shrinker);
++#else
++	register_shrinker(&mm_shrinker, "drm-ttm_pool");
++#endif
+ 
+ 	return 0;
+ }
+@@ -1364,7 +1388,10 @@ void ttm_pool_mgr_fini(void)
+ 		ttm_pool_type_fini(&global_dma32_write_combined[i]);
+ 		ttm_pool_type_fini(&global_dma32_uncached[i]);
+ 	}
+-
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,7,0)
+ 	shrinker_free(mm_shrinker);
++#else
++	unregister_shrinker(&mm_shrinker);
++#endif
+ 	WARN_ON(!list_empty(&shrinker_list));
+ }
+-- 
+2.43.0
+

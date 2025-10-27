@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 1 Oct 2025 01:35:23 +0200
+Subject: drm/xe/pf: Split VF FLR processing function
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+On multi-GT platforms (like PTL) we may want to run VF FLR on each
+GuC (render and media) in parallel. Split our FLR function to allow
+to wait for GT VF FLR completion separately.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Michał Winiarski <michal.winiarski@intel.com>
+Link: https://lore.kernel.org/r/20250930233525.201263-6-michal.wajdeczko@intel.com
+(cherry-picked from commit 03dc00c78221f221bec9d8eef1534ce8675bed9d linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c | 22 ++++++++++++++++++++-
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_control.h |  1 +
+ drivers/gpu/drm/xe/xe_sriov_pf_control.c    |  5 +++++
+ 3 files changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+index 90fb69b0e041..491918d6b93b 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+@@ -1172,11 +1172,31 @@ static void pf_enter_vf_flr_guc_done(struct xe_gt *gt, unsigned int vfid)
+  * Return: 0 on success or a negative error code on failure.
+  */
+ int xe_gt_sriov_pf_control_trigger_flr(struct xe_gt *gt, unsigned int vfid)
++{
++	pf_enter_vf_flr_wip(gt, vfid);
++
++	return 0;
++}
++
++/**
++ * xe_gt_sriov_pf_control_wait_flr() - Wait for a VF FLR to complete.
++ * @gt: the &xe_gt
++ * @vfid: the VF identifier
++ *
++ * This function is for PF only.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_gt_sriov_pf_control_wait_flr(struct xe_gt *gt, unsigned int vfid)
+ {
+ 	unsigned long timeout = pf_get_default_timeout(XE_GT_SRIOV_STATE_FLR_WIP);
+ 	int err;
+ 
+-	pf_enter_vf_flr_wip(gt, vfid);
++	if (pf_check_vf_state(gt, vfid, XE_GT_SRIOV_STATE_FLR_FAILED))
++		return -EIO;
++
++	if (!pf_check_vf_state(gt, vfid, XE_GT_SRIOV_STATE_FLR_WIP))
++		return 0;
+ 
+ 	err = pf_wait_vf_wip_done(gt, vfid, timeout);
+ 	if (err) {
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.h
+index c85e64f099cc..fd256866f628 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.h
+@@ -18,6 +18,7 @@ int xe_gt_sriov_pf_control_pause_vf(struct xe_gt *gt, unsigned int vfid);
+ int xe_gt_sriov_pf_control_resume_vf(struct xe_gt *gt, unsigned int vfid);
+ int xe_gt_sriov_pf_control_stop_vf(struct xe_gt *gt, unsigned int vfid);
+ int xe_gt_sriov_pf_control_trigger_flr(struct xe_gt *gt, unsigned int vfid);
++int xe_gt_sriov_pf_control_wait_flr(struct xe_gt *gt, unsigned int vfid);
+ 
+ #ifdef CONFIG_PCI_IOV
+ int xe_gt_sriov_pf_control_process_guc2pf(struct xe_gt *gt, const u32 *msg, u32 len);
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_sriov_pf_control.c
+index fdadd4fbe985..e1c54a8feb07 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_control.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_control.c
+@@ -113,5 +113,10 @@ int xe_sriov_pf_control_reset_vf(struct xe_device *xe, unsigned int vfid)
+ 		result = result ? -EUCLEAN : err;
+ 	}
+ 
++	for_each_gt(gt, xe, id) {
++		err = xe_gt_sriov_pf_control_wait_flr(gt, vfid);
++		result = result ? -EUCLEAN : err;
++	}
++
+ 	return result;
+ }
+-- 
+2.43.0
+

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Thu, 5 Dec 2024 00:46:18 +0530
-Subject: [PATCH] drm/xe/eudebug: Prelim rework for Xe EU debug
+Subject: drm/xe/eudebug: Prelim rework for Xe EU debug
 
 Moved all xe_eudebug declarations and definitions to xe_drm_prelim.h
 Removed xe_drm_eudebug.h Moved eudebug related files into prelim/ directory
@@ -68,7 +68,7 @@ index fba32c51e..63c7b4db5 100644
  	depends on DRM_XE
  	default y
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 144173c5a..611c672a4 100644
+index c44d53800..a35feb697 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -57,7 +57,7 @@ xe-y += xe_bb.o \
@@ -1989,7 +1989,7 @@ index 663ef0e9d..67804b13e 100644
  kunit_test_suite(xe_eudebug_test_suite);
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 7e6e6f0f8..d4d4fa08c 100644
+index c3b3c5b88..1951d6b7f 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -27,11 +27,11 @@
@@ -2048,8 +2048,8 @@ index 7e6e6f0f8..d4d4fa08c 100644
  	xe_bo_dev_fini(&xe->bo_device);
  
 @@ -758,7 +758,7 @@ int xe_device_probe_early(struct xe_device *xe)
- 
- 	sriov_update_device_info(xe);
+ 	if (IS_SRIOV_VF(xe))
+ 		vf_update_device_info(xe);
  
 -	xe_eudebug_init(xe);
 +	prelim_xe_eudebug_init(xe);
@@ -2057,10 +2057,10 @@ index 7e6e6f0f8..d4d4fa08c 100644
  	err = xe_pcode_probe_early(xe);
  	if (err || xe_survivability_mode_is_requested(xe)) {
 diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
-index 15443fb70..1d02cf6d0 100644
+index 48ba9375e..c62cdc631 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
-@@ -209,7 +209,7 @@ int xe_is_injection_active(void);
+@@ -214,7 +214,7 @@ int xe_is_injection_active(void);
  #define LNL_FLUSH_WORK(wrk__) \
  	flush_work(wrk__)
  
@@ -2069,7 +2069,7 @@ index 15443fb70..1d02cf6d0 100644
  static inline int xe_eudebug_needs_lock(const unsigned int cmd)
  {
  	const unsigned int xe_cmd = DRM_IOCTL_NR(cmd) - DRM_COMMAND_BASE;
-@@ -220,9 +220,9 @@ static inline int xe_eudebug_needs_lock(const unsigned int cmd)
+@@ -225,9 +225,9 @@ static inline int xe_eudebug_needs_lock(const unsigned int cmd)
  	case DRM_XE_VM_BIND:
  	case DRM_XE_EXEC_QUEUE_CREATE:
  	case DRM_XE_EXEC_QUEUE_DESTROY:
@@ -2082,7 +2082,7 @@ index 15443fb70..1d02cf6d0 100644
  		return 1;
  	}
  
-@@ -242,6 +242,6 @@ static inline void xe_eudebug_discovery_unlock(struct xe_device *xe, unsigned in
+@@ -247,6 +247,6 @@ static inline void xe_eudebug_discovery_unlock(struct xe_device *xe, unsigned in
  #else
  static inline void xe_eudebug_discovery_lock(struct xe_device *xe, unsigned int cmd) { }
  static inline void xe_eudebug_discovery_unlock(struct xe_device *xe, unsigned int cmd) { }
@@ -2091,7 +2091,7 @@ index 15443fb70..1d02cf6d0 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 03cf00777..87f747b01 100644
+index fffc37d81..4d819b04a 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -13,7 +13,7 @@
@@ -2103,7 +2103,7 @@ index 03cf00777..87f747b01 100644
  #include "xe_heci_gsc.h"
  #include "xe_lmtt_types.h"
  #include "xe_memirq_types.h"
-@@ -398,7 +398,7 @@ struct xe_device {
+@@ -400,7 +400,7 @@ struct xe_device {
  		struct workqueue_struct *wq;
  	} sriov;
  
@@ -2112,7 +2112,7 @@ index 03cf00777..87f747b01 100644
  	/** @clients: eudebug clients info */
  	struct {
  		/** @clients.lock: Protects client list */
-@@ -605,7 +605,7 @@ struct xe_device {
+@@ -607,7 +607,7 @@ struct xe_device {
  	atomic64_t global_total_pages;
  #endif
  
@@ -2121,7 +2121,7 @@ index 03cf00777..87f747b01 100644
  	/** @debugger connection list and globals for device */
  	struct {
  		/** @lock: protects the list of connections */
-@@ -732,7 +732,7 @@ struct xe_file {
+@@ -734,7 +734,7 @@ struct xe_file {
  	/** @refcount: ref count of this xe file */
  	struct kref refcount;
  
@@ -2354,7 +2354,7 @@ index 4651d6f5e..7af7bfa78 100644
  	xe_exec_queue_kill(q);
  
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index ccfed1d7f..3bba06556 100644
+index 0e3ecafcc..8079d69ef 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -22,7 +22,7 @@
@@ -2366,7 +2366,7 @@ index ccfed1d7f..3bba06556 100644
  #include "xe_eu_stall.h"
  #include "xe_exec_queue.h"
  #include "xe_execlist.h"
-@@ -764,7 +764,7 @@ static int do_gt_reset(struct xe_gt *gt)
+@@ -762,7 +762,7 @@ static int do_gt_reset(struct xe_gt *gt)
  
  	xe_gsc_wa_14015076503(gt, true);
  
@@ -2436,7 +2436,7 @@ index cb400c051..123a7000e 100644
  #include "xe_force_wake.h"
  #include "xe_gsc.h"
 diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov.c
-index 47f916fae..4d6a43831 100644
+index a558ae0c0..a8a66c48f 100644
 --- a/drivers/gpu/drm/xe/xe_pci_sriov.c
 +++ b/drivers/gpu/drm/xe/xe_pci_sriov.c
 @@ -9,7 +9,7 @@
@@ -2448,7 +2448,7 @@ index 47f916fae..4d6a43831 100644
  #include "xe_gt_sriov_pf_config.h"
  #include "xe_gt_sriov_pf_control.h"
  #include "xe_gt_sriov_printk.h"
-@@ -160,7 +160,7 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
+@@ -121,7 +121,7 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
  	if (err)
  		goto out;
  
@@ -2457,16 +2457,16 @@ index 47f916fae..4d6a43831 100644
  	if (err < 0)
  		goto out;
  
-@@ -201,7 +201,7 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
+@@ -162,7 +162,7 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
  failed:
- 	pf_unprovision_vfs(xe, num_vfs);
+ 	xe_sriov_pf_unprovision_vfs(xe, num_vfs);
  	xe_pm_runtime_put(xe);
 -	xe_eudebug_support_enable(xe);
 +	prelim_xe_eudebug_support_enable(xe);
  out:
  	xe_sriov_notice(xe, "Failed to enable %u VF%s (%pe)\n",
  			num_vfs, str_plural(num_vfs), ERR_PTR(err));
-@@ -231,7 +231,7 @@ static int pf_disable_vfs(struct xe_device *xe)
+@@ -192,7 +192,7 @@ static int pf_disable_vfs(struct xe_device *xe)
  	/* not needed anymore - see pf_enable_vfs() */
  	xe_pm_runtime_put(xe);
  

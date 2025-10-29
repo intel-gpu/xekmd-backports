@@ -52,3 +52,6 @@ drm_gpuvm-y := drivers/gpu/drm/drm_gpuvm.o
 endif
 obj-$(CPTCFG_INTEL_VSEC) += drivers/platform/x86/intel/
 obj-$(CPTCFG_MFD_INTEL_PMT) += drivers/platform/x86/intel/
+#mtd
+mtd_intel_dg-y := drivers/mtd/devices/mtd_intel_dg.o
+obj-$(CPTCFG_MTD_INTEL_DG)      += mtd_intel_dg.o

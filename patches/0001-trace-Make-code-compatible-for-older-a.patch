@@ -7,16 +7,13 @@ After changing assign_str to one argument in KV6.10, backporting to
 older version need to change parameters with in trace definition.
 Go back to old handling.
 
-Error:
---------------------------------------------------------------------------
-error: macro "__assign_str" requires 2 arguments, but only 1 given
---------------------------------------------------------------------------
-
-Reference-id: 2c92ca849fcc tracing/treewide: Remove second parameter of
-__assign_str()
+Reference-id:
+	2c92ca849fcc
+	tracing/treewide: Remove second parameter of __assign_str()
 
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
 ---
  drivers/gpu/drm/scheduler/gpu_scheduler_trace.h   | 10 ++++++-
  drivers/gpu/drm/xe/xe_trace.h             | 28 +++++++++++++++++++
@@ -26,34 +23,30 @@ Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
  5 files changed, 76 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/scheduler/gpu_scheduler_trace.h b/drivers/gpu/drm/scheduler/gpu_scheduler_trace.h
-index f56e77e..2134f84 100644
+index 261713d..b93d3e4 100644
 --- a/drivers/gpu/drm/scheduler/gpu_scheduler_trace.h
 +++ b/drivers/gpu/drm/scheduler/gpu_scheduler_trace.h
-@@ -48,7 +48,11 @@ DECLARE_EVENT_CLASS(drm_sched_job,
- 			   __entry->entity = entity;
- 			   __entry->id = sched_job->id;
- 			   __entry->fence = &sched_job->s_fence->finished;
-+#ifdef BPM_ASSIGN_STR_SECOND_ARG_PRESENT
-+			   __assign_str(name, sched_job->sched->name);
-+#else			   
- 			   __assign_str(name);
-+#endif			   
- 			   __entry->job_count = spsc_queue_count(&entity->job_queue);
- 			   __entry->hw_job_count = atomic_read(
- 				   &sched_job->sched->credit_count);
-@@ -94,7 +98,11 @@ TRACE_EVENT(drm_sched_job_wait_dep,
+@@ -68,11 +68,19 @@ DECLARE_EVENT_CLASS(drm_sched_job,
  			     ),
  
  	    TP_fast_assign(
 +#ifdef BPM_ASSIGN_STR_SECOND_ARG_PRESENT
-+   			   __assign_str(name, sched_job->sched->name);
-+#else	    
++			   __assign_str(name, sched_job->sched->name);
++#else
  			   __assign_str(name);
-+#endif			  
- 			   __entry->id = sched_job->id;
- 			   __entry->fence = fence;
- 			   __entry->ctx = fence->context;
-@@ -110,5 +118,5 @@ TRACE_EVENT(drm_sched_job_wait_dep,
++#endif
+ 			   __entry->job_count = spsc_queue_count(&entity->job_queue);
+ 			   __entry->hw_job_count = atomic_read(
+ 				   &sched_job->sched->credit_count);
++#ifdef BPM_ASSIGN_STR_SECOND_ARG_PRESENT
++			   __assign_str(dev, sched_job->sched->name);
++#else
+ 			   __assign_str(dev);
++#endif
+ 			   __entry->fence_context = sched_job->s_fence->finished.context;
+ 			   __entry->fence_seqno = sched_job->s_fence->finished.seqno;
+ 			   __entry->client_id = sched_job->s_fence->drm_client_id;
+@@ -155,5 +163,5 @@ TRACE_EVENT(drm_sched_job_unschedulable,
  
  /* This part must be outside protection */
  #undef TRACE_INCLUDE_PATH
@@ -61,7 +54,7 @@ index f56e77e..2134f84 100644
 +#define TRACE_INCLUDE_PATH ../drivers/gpu/drm/scheduler
  #include <trace/define_trace.h>
 diff --git a/drivers/gpu/drm/xe/xe_trace.h b/drivers/gpu/drm/xe/xe_trace.h
-index d5281de..7a3a721 100644
+index b4a3577..3e2603b 100644
 --- a/drivers/gpu/drm/xe/xe_trace.h
 +++ b/drivers/gpu/drm/xe/xe_trace.h
 @@ -36,7 +36,11 @@ DECLARE_EVENT_CLASS(xe_gt_tlb_invalidation_fence,
@@ -149,7 +142,7 @@ index d5281de..7a3a721 100644
  			   ),
  
 diff --git a/drivers/gpu/drm/xe/xe_trace_bo.h b/drivers/gpu/drm/xe/xe_trace_bo.h
-index ea50fee..f8e25d9 100644
+index 86323cf..634f5da 100644
 --- a/drivers/gpu/drm/xe/xe_trace_bo.h
 +++ b/drivers/gpu/drm/xe/xe_trace_bo.h
 @@ -32,7 +32,11 @@ DECLARE_EVENT_CLASS(xe_bo,
@@ -161,13 +154,13 @@ index ea50fee..f8e25d9 100644
 +#else
  			   __assign_str(dev);
 +#endif
- 			   __entry->size = bo->size;
+ 			   __entry->size = xe_bo_size(bo);
  			   __entry->flags = bo->flags;
  			   __entry->vm = bo->vm;
-@@ -69,9 +73,18 @@ TRACE_EVENT(xe_bo_move,
+@@ -74,9 +78,18 @@ TRACE_EVENT(xe_bo_move,
  	    TP_fast_assign(
  		   __entry->bo      = bo;
- 		   __entry->size = bo->size;
+ 		   __entry->size = xe_bo_size(bo);
 +#ifdef BPM_ASSIGN_STR_SECOND_ARG_PRESENT
 +		   __assign_str(new_placement_name, xe_mem_type_to_name[new_placement]);
 +		   __assign_str(old_placement_name, xe_mem_type_to_name[old_placement]);
@@ -183,7 +176,7 @@ index ea50fee..f8e25d9 100644
  		   __entry->move_lacks_source = move_lacks_source;
  		   ),
  	    TP_printk("move_lacks_source:%s, migrate object %p [size %zu] from %s to %s device_id:%s",
-@@ -94,7 +107,11 @@ DECLARE_EVENT_CLASS(xe_vma,
+@@ -100,7 +113,11 @@ DECLARE_EVENT_CLASS(xe_vma,
  			     ),
  
  		    TP_fast_assign(
@@ -193,9 +186,9 @@ index ea50fee..f8e25d9 100644
  			   __assign_str(dev);
 +#endif
  			   __entry->vma = vma;
+ 			   __entry->vm = xe_vma_vm(vma);
  			   __entry->asid = xe_vma_vm(vma)->usm.asid;
- 			   __entry->start = xe_vma_start(vma);
-@@ -188,7 +205,11 @@ DECLARE_EVENT_CLASS(xe_vm,
+@@ -197,7 +214,11 @@ DECLARE_EVENT_CLASS(xe_vm,
  			     ),
  
  		    TP_fast_assign(
@@ -206,7 +199,7 @@ index ea50fee..f8e25d9 100644
 +#endif
  			   __entry->vm = vm;
  			   __entry->asid = vm->usm.asid;
- 			   ),
+ 			   __entry->flags = vm->flags;
 diff --git a/drivers/gpu/drm/xe/xe_trace_guc.h b/drivers/gpu/drm/xe/xe_trace_guc.h
 index 78949db..2a97c31 100644
 --- a/drivers/gpu/drm/xe/xe_trace_guc.h

@@ -48,6 +48,7 @@
 #include "xe_memirq.h"
 #include "xe_mmio.h"
 #include "xe_module.h"
+#include "xe_nvm.h"
 #include "xe_oa.h"
 #include "xe_observation.h"
 #include "xe_pat.h"
@@ -56,6 +57,7 @@
 #include "xe_pmu.h"
 #include "xe_query.h"
 #include "xe_sriov.h"
+#include "xe_survivability_mode.h"
 #include "xe_tile.h"
 #include "xe_ttm_stolen_mgr.h"
 #include "xe_ttm_sys_mgr.h"
@@ -631,8 +633,20 @@ int xe_device_probe_early(struct xe_device *xe)
 	update_device_info(xe);
 
 	err = xe_pcode_probe_early(xe);
-	if (err)
-		return err;
+	if (err || xe_survivability_mode_is_requested(xe)) {
+		int save_err = err;
+
+		/*
+		 * Try to leave device in survivability mode if device is
+		 * possible, but still return the previous error for error
+		 * propagation
+		 */
+		err = xe_survivability_mode_enable(xe);
+		if (err)
+			return err;
+
+		return save_err;
+	}
 
 	err = wait_for_lmem_ready(xe);
 	if (err)
@@ -794,7 +808,11 @@ int xe_device_probe(struct xe_device *xe)
 			goto err_fini_gt;
 	}
 
-	xe_heci_gsc_init(xe);
+	xe_nvm_init(xe);
+
+	err = xe_heci_gsc_init(xe);
+	if (err)
+		return err;
 
 	err = xe_oa_init(xe);
 	if (err)
@@ -852,6 +870,8 @@ static void xe_device_remove_display(struct xe_device *xe)
 {
 	xe_display_unregister(xe);
 
+	xe_nvm_fini(xe);
+
 	drm_dev_unplug(&xe->drm);
 	xe_display_driver_remove(xe);
 }
@@ -868,8 +888,6 @@ void xe_device_remove(struct xe_device *xe)
 	xe_display_fini(xe);
 
 	xe_oa_fini(xe);
-
-	xe_heci_gsc_fini(xe);
 
 	for_each_gt(gt, xe, id)
 		xe_gt_remove(gt);

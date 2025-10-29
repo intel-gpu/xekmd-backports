@@ -50,6 +50,21 @@
 #define	READ_PL_FROM_FW				0x1
 #define	READ_PL_FROM_PCODE			0x0
 
+#define   PCODE_LATE_BINDING			0x5C
+#define     GET_CAPABILITY_STATUS		0x0
+#define       V1_FAN_SUPPORTED			REG_BIT(0)
+#define       VR_PARAMS_SUPPORTED		REG_BIT(3)
+#define       V1_FAN_PROVISIONED		REG_BIT(16)
+#define       VR_PARAMS_PROVISIONED		REG_BIT(19)
+#define     GET_VERSION_LOW			0x1
+#define     GET_VERSION_HIGH			0x2
+#define       MAJOR_VERSION_MASK		REG_GENMASK(31, 16)
+#define       MINOR_VERSION_MASK		REG_GENMASK(15, 0)
+#define       HOTFIX_VERSION_MASK		REG_GENMASK(31, 16)
+#define       BUILD_VERSION_MASK		REG_GENMASK(15, 0)
+#define       FAN_TABLE				1
+#define       VR_CONFIG				2
+
 #define   PCODE_FREQUENCY_CONFIG		0x6e
 /* Frequency Config Sub Commands (param1) */
 #define     PCODE_MBOX_FC_SC_READ_FUSED_P0	0x0
@@ -63,6 +78,20 @@
 
 #define   FAN_SPEED_CONTROL			0x7D
 #define     FSC_READ_NUM_FANS			0x4
+
+#define	PCODE_SCRATCH(x)	XE_REG(0x138320 + ((x) * 4))
+/* PCODE_SCRATCH0 */
+#define	AUXINFO_REG_OFFSET	REG_GENMASK(17, 15)
+#define OVERFLOW_REG_OFFSET	REG_GENMASK(14, 12)
+#define HISTORY_TRACKING	REG_BIT(11)
+#define OVERFLOW_SUPPORT	REG_BIT(10)
+#define AUXINFO_SUPPORT	REG_BIT(9)
+#define	BOOT_STATUS		REG_GENMASK(3, 1)
+#define	CRITICAL_FAILURE	4
+#define	NON_CRITICAL_FAILURE	7
+
+/* Auxiliary info bits */
+#define	AUXINFO_HISTORY_OFFSET	REG_GENMASK(31, 29)
 
 struct pcode_err_decode {
 	int errno;

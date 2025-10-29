@@ -22,6 +22,7 @@
 #include "xe_pt_types.h"
 #include "xe_sriov_types.h"
 #include "xe_step_types.h"
+#include "xe_survivability_mode_types.h"
 
 #if IS_ENABLED(CPTCFG_DRM_XE_DEBUG)
 #define TEST_VM_OPS_ERROR
@@ -33,6 +34,7 @@
 #include "intel_display_device.h"
 #endif
 
+struct intel_dg_nvm_dev;
 struct xe_ggtt;
 struct xe_pat_ops;
 
@@ -311,6 +313,8 @@ struct xe_device {
 		u8 has_fan_control:1;
 		/** @info.has_flat_ccs: Whether flat CCS metadata is used */
 		u8 has_flat_ccs:1;
+		/** @info.has_gsc_nvm: Device has gsc non-volatile memory */
+		u8 has_gsc_nvm:1;
 		/** @info.has_heci_cscfi: device has heci cscfi */
 		u8 has_heci_cscfi:1;
 		/** @info.has_heci_gscfi: device has heci gscfi */
@@ -349,6 +353,9 @@ struct xe_device {
 		/** @info.skip_pcode: skip access to PCODE uC */
 		u8 skip_pcode:1;
 	} info;
+
+	/** @survivability: survivability information for device */
+	struct xe_survivability survivability;
 
 	/** @irq: device interrupt state */
 	struct {
@@ -540,6 +547,9 @@ struct xe_device {
 
 	/** @heci_gsc: graphics security controller */
 	struct xe_heci_gsc heci_gsc;
+
+	/** @nvm: discrete graphics non-volatile memory */
+	struct intel_dg_nvm_dev *nvm;
 
 	/** @oa: oa observation subsystem */
 	struct xe_oa oa;

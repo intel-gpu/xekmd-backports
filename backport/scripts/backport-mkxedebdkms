@@ -59,6 +59,22 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
 	BUILT_MODULE_LOCATION[4]="src/drivers/gpu/drm/scheduler"
 	DEST_MODULE_LOCATION[4]="/updates"
 
+	BUILT_MODULE_NAME[5]="intel-vsec"
+	BUILT_MODULE_LOCATION[5]="src/drivers/platform/x86/intel"
+	DEST_MODULE_LOCATION[5]="/updates"
+
+	BUILT_MODULE_NAME[6]="pmt_class"
+	BUILT_MODULE_LOCATION[6]="src/drivers/platform/x86/intel/pmt"
+	DEST_MODULE_LOCATION[6]="/updates"
+
+	BUILT_MODULE_NAME[7]="pmt_telemetry"
+	BUILT_MODULE_LOCATION[7]="src/drivers/platform/x86/intel/pmt"
+	DEST_MODULE_LOCATION[7]="/updates"
+
+	BUILT_MODULE_NAME[8]="pmt_crashlog"
+	BUILT_MODULE_LOCATION[8]="src/drivers/platform/x86/intel/pmt"
+	DEST_MODULE_LOCATION[8]="/updates"
+
 	select_drm_gpuvm() {
 		if [ -z "\$kernelver" ]; then
 			echo "false"
@@ -72,9 +88,9 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
 	}
 
 	if [ "\$(select_drm_gpuvm)" = "true" ]; then
-		BUILT_MODULE_NAME[5]="drm_gpuvm"
-		BUILT_MODULE_LOCATION[5]="src"
-		DEST_MODULE_LOCATION[5]="/updates"
+		BUILT_MODULE_NAME[9]="drm_gpuvm"
+		BUILT_MODULE_LOCATION[9]="src"
+		DEST_MODULE_LOCATION[9]="/updates"
 	fi
 
 	# Find out how many CPU cores can be use if we pass appropriate -j option to make.

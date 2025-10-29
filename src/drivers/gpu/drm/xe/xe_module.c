@@ -11,6 +11,7 @@
 #include <drm/drm_module.h>
 
 #include "xe_drv.h"
+#include "xe_configfs.h"
 #include "xe_hw_fence.h"
 #include "xe_pci.h"
 #include "xe_pm.h"
@@ -92,6 +93,10 @@ static void xe_dummy_exit(void)
 static const struct init_funcs init_funcs[] = {
 	{
 		.init = xe_check_nomodeset,
+	},
+	{
+		.init = xe_configfs_init,
+		.exit = xe_configfs_exit,
 	},
 	{
 		.init = xe_hw_fence_module_init,

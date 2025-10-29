@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Date: Wed, 29 Oct 2025 09:03:30 +0530
+Subject: [PATCH] Add debug print and BACKPORT_MOD_VERSIONS for oot modules
+
+Add debug prints in vsec and pmt files to identify
+the backport driver.
+
+Add BACKPORT_MOD_VERSIONS to display information
+about oot module version.
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/platform/x86/intel/pmt/class.c     | 2 ++
+ drivers/platform/x86/intel/pmt/crashlog.c  | 2 ++
+ drivers/platform/x86/intel/pmt/telemetry.c | 2 ++
+ drivers/platform/x86/intel/vsec.c          | 2 ++
+ 4 files changed, 8 insertions(+)
+
+diff --git a/drivers/platform/x86/intel/pmt/class.c b/drivers/platform/x86/intel/pmt/class.c
+index a1749b8..b192940 100644
+--- a/drivers/platform/x86/intel/pmt/class.c
++++ b/drivers/platform/x86/intel/pmt/class.c
+@@ -396,6 +396,7 @@ EXPORT_SYMBOL_NS_GPL(intel_pmt_dev_destroy, "INTEL_PMT");
+ 
+ static int __init pmt_class_init(void)
+ {
++	printk(KERN_INFO "VSEC CLASS Backport init, Module is backported from " CPTCFG_BASE_KERNEL_TAG "\n");
+ 	return class_register(&intel_pmt_class);
+ }
+ 
+@@ -407,6 +408,7 @@ static void __exit pmt_class_exit(void)
+ module_init(pmt_class_init);
+ module_exit(pmt_class_exit);
+ 
++BACKPORT_MOD_VERSIONS
+ MODULE_AUTHOR("Alexander Duyck <alexander.h.duyck@linux.intel.com>");
+ MODULE_DESCRIPTION("Intel PMT Class driver");
+ MODULE_LICENSE("GPL v2");
+diff --git a/drivers/platform/x86/intel/pmt/crashlog.c b/drivers/platform/x86/intel/pmt/crashlog.c
+index 6a9eb3c..06bb971 100644
+--- a/drivers/platform/x86/intel/pmt/crashlog.c
++++ b/drivers/platform/x86/intel/pmt/crashlog.c
+@@ -313,6 +313,7 @@ static struct auxiliary_driver pmt_crashlog_aux_driver = {
+ 
+ static int __init pmt_crashlog_init(void)
+ {
++	printk(KERN_INFO "VSEC CRASHLOG Backport init, Module is backported from " CPTCFG_BASE_KERNEL_TAG "\n");
+ 	return auxiliary_driver_register(&pmt_crashlog_aux_driver);
+ }
+ 
+@@ -325,6 +326,7 @@ static void __exit pmt_crashlog_exit(void)
+ module_init(pmt_crashlog_init);
+ module_exit(pmt_crashlog_exit);
+ 
++BACKPORT_MOD_VERSIONS
+ MODULE_AUTHOR("Alexander Duyck <alexander.h.duyck@linux.intel.com>");
+ MODULE_DESCRIPTION("Intel PMT Crashlog driver");
+ MODULE_LICENSE("GPL v2");
+diff --git a/drivers/platform/x86/intel/pmt/telemetry.c b/drivers/platform/x86/intel/pmt/telemetry.c
+index ac3a9bd..71a2214 100644
+--- a/drivers/platform/x86/intel/pmt/telemetry.c
++++ b/drivers/platform/x86/intel/pmt/telemetry.c
+@@ -333,6 +333,7 @@ static struct auxiliary_driver pmt_telem_aux_driver = {
+ 
+ static int __init pmt_telem_init(void)
+ {
++	printk(KERN_INFO "VSEC TELEMETRY Backport init, Module is backported from " CPTCFG_BASE_KERNEL_TAG "\n");
+ 	return auxiliary_driver_register(&pmt_telem_aux_driver);
+ }
+ module_init(pmt_telem_init);
+@@ -344,6 +345,7 @@ static void __exit pmt_telem_exit(void)
+ }
+ module_exit(pmt_telem_exit);
+ 
++BACKPORT_MOD_VERSIONS
+ MODULE_AUTHOR("David E. Box <david.e.box@linux.intel.com>");
+ MODULE_DESCRIPTION("Intel PMT Telemetry driver");
+ MODULE_LICENSE("GPL v2");
+diff --git a/drivers/platform/x86/intel/vsec.c b/drivers/platform/x86/intel/vsec.c
+index db3c031..5d47287 100644
+--- a/drivers/platform/x86/intel/vsec.c
++++ b/drivers/platform/x86/intel/vsec.c
+@@ -335,6 +335,7 @@ static bool intel_vsec_walk_vsec(struct pci_dev *pdev,
+ void intel_vsec_register(struct pci_dev *pdev,
+ 			 struct intel_vsec_platform_info *info)
+ {
++	printk(KERN_INFO "VSEC Backport init, Module is backported from " CPTCFG_BASE_KERNEL_TAG "\n");
+ 	if (!pdev || !info || !info->headers)
+ 		return;
+ 
+@@ -513,6 +514,7 @@ static struct pci_driver intel_vsec_pci_driver = {
+ };
+ module_pci_driver(intel_vsec_pci_driver);
+ 
++BACKPORT_MOD_VERSIONS
+ MODULE_AUTHOR("David E. Box <david.e.box@linux.intel.com>");
+ MODULE_DESCRIPTION("Intel Extended Capabilities auxiliary bus driver");
+ MODULE_LICENSE("GPL v2");
+-- 
+2.43.0
+

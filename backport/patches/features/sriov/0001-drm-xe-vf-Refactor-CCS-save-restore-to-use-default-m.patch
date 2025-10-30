@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
 Date: Fri, 8 Aug 2025 13:06:28 +0530
-Subject: [PATCH 38/62] drm/xe/vf: Refactor CCS save/restore to use default
- migration context
+Subject: [PATCH] drm/xe/vf: Refactor CCS save/restore to use default migration
+ context
 
 Previously, CCS save/restore operations created separate migration
 contexts with new VM memory allocations, resulting in significant
@@ -20,7 +20,7 @@ Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Stuart Summers <stuart.summers@intel.com>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://lore.kernel.org/r/20250808073628.32745-2-satyanarayana.k.v.p@intel.com
-(cherry-picked from commit 9f8aa0bcd1f35baefe083adfa26bc6f9f68f652b linux-next)
+(backported from commit 9f8aa0bcd1f35baefe083adfa26bc6f9f68f652b linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_exec_queue.c         | 15 +++++++
@@ -69,7 +69,7 @@ index 4d416f23001c..15ec852e7f7e 100644
 +struct xe_lrc *xe_exec_queue_lrc(struct xe_exec_queue *q);
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
-index 1d179c047a8c..69cd878cdb25 100644
+index 613c2e47287f..0dc322106824 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.c
 +++ b/drivers/gpu/drm/xe/xe_migrate.c
 @@ -950,7 +950,7 @@ struct dma_fence *xe_migrate_copy(struct xe_migrate *m,
@@ -157,12 +157,12 @@ index e81ea6b27fb5..9e20da6d58c2 100644
  			   enum xe_sriov_vf_ccs_rw_ctxs read_write);
  
 diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
-index c25773d7f2e8..fb92458263f6 100644
+index e42bcd5658d3..a5f14b587e7b 100644
 --- a/drivers/gpu/drm/xe/xe_pm.c
 +++ b/drivers/gpu/drm/xe/xe_pm.c
-@@ -210,6 +210,9 @@ int xe_pm_resume(struct xe_device *xe)
+@@ -215,6 +215,9 @@ int xe_pm_resume(struct xe_device *xe)
  
- 	xe_pxp_pm_resume(xe->pxp);
+ 	xe_late_bind_fw_load(&xe->late_bind);
  
 +	if (IS_SRIOV_VF(xe))
 +		xe_sriov_vf_ccs_register_context(xe);

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Mon, 14 Jul 2025 21:36:45 +0200
-Subject: [PATCH 12/62] drm/xe: Move debugfs GT attributes under tile directory
+Subject: [PATCH] drm/xe: Move debugfs GT attributes under tile directory
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -29,7 +29,7 @@ Cc: Lucas De Marchi <lucas.demarchi@intel.com>
 Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Link: https://lore.kernel.org/r/20250714193645.763-1-michal.wajdeczko@intel.com
-(cherry-picked from commit bf81505f7dba467c17097315864790f9f7dca08a linux-next)
+(backported from commit bf81505f7dba467c17097315864790f9f7dca08a linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_debugfs.c      | 22 ++++++++++++++++++++++
@@ -38,11 +38,11 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  3 files changed, 38 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index db3efdf05777..3335b740d3e9 100644
+index 68b7e6aa990b..dbd01e1d79d1 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
-@@ -327,14 +327,33 @@ static const struct file_operations atomic_svm_timeslice_ms_fops = {
- 	.write = atomic_svm_timeslice_ms_set,
+@@ -365,14 +365,33 @@ static const struct file_operations disable_late_binding_fops = {
+ 	.write = disable_late_binding_set,
  };
  
 +static void create_tile_debugfs(struct xe_tile *tile, struct dentry *root)
@@ -75,7 +75,7 @@ index db3efdf05777..3335b740d3e9 100644
  	u8 id;
  
  	drm_debugfs_create_files(debugfs_list,
-@@ -373,6 +392,9 @@ void xe_debugfs_register(struct xe_device *xe)
+@@ -414,6 +433,9 @@ void xe_debugfs_register(struct xe_device *xe)
  	if (man)
  		ttm_resource_manager_create_debugfs(man, root, "stolen_mm");
  
@@ -86,10 +86,10 @@ index db3efdf05777..3335b740d3e9 100644
  		xe_gt_debugfs_register(gt);
  
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 7ceb0c90f391..3b1a3dca5596 100644
+index c1e67af69b3b..2e44f529e7a2 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -255,6 +255,9 @@ struct xe_tile {
+@@ -256,6 +256,9 @@ struct xe_tile {
  
  	/** @sysfs: sysfs' kobj used by xe_tile_sysfs */
  	struct kobject *sysfs;

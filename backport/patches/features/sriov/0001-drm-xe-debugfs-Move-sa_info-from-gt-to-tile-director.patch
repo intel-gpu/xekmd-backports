@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 29 Aug 2025 22:11:03 +0200
-Subject: [PATCH 48/62] drm/xe/debugfs: Move sa_info from gt to tile directory
+Subject: [PATCH] drm/xe/debugfs: Move sa_info from gt to tile directory
 
 Our drm-based suballocator is implemented per-tile so it is better
 to show its debug information also per-tile debugfs directory, not
@@ -28,10 +28,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_tile_debugfs.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 76f980475b2c..5d46c85f2a54 100644
+index 990e3a54ed5b..ce023bef72ee 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -320,6 +320,7 @@ ifeq ($(CONFIG_DEBUG_FS),y)
+@@ -321,6 +321,7 @@ ifeq ($(CONFIG_DEBUG_FS),y)
  		xe_gt_stats.o \
  		xe_guc_debugfs.o \
  		xe_huc_debugfs.o \
@@ -40,7 +40,7 @@ index 76f980475b2c..5d46c85f2a54 100644
  
  	xe-$(CONFIG_PCI_IOV) += xe_gt_sriov_pf_debugfs.o
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index 1258f1ca017d..ceda36affcf6 100644
+index 871fdd4dd432..86414d5b5ebd 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
 @@ -25,6 +25,7 @@
@@ -51,8 +51,8 @@ index 1258f1ca017d..ceda36affcf6 100644
  #include "xe_wa.h"
  #include "xe_vsec.h"
  
-@@ -328,23 +329,6 @@ static const struct file_operations atomic_svm_timeslice_ms_fops = {
- 	.write = atomic_svm_timeslice_ms_set,
+@@ -366,23 +367,6 @@ static const struct file_operations disable_late_binding_fops = {
+ 	.write = disable_late_binding_set,
  };
  
 -static void create_tile_debugfs(struct xe_tile *tile, struct dentry *root)
@@ -75,7 +75,7 @@ index 1258f1ca017d..ceda36affcf6 100644
  void xe_debugfs_register(struct xe_device *xe)
  {
  	struct ttm_device *bdev = &xe->ttm;
-@@ -394,7 +378,7 @@ void xe_debugfs_register(struct xe_device *xe)
+@@ -435,7 +419,7 @@ void xe_debugfs_register(struct xe_device *xe)
  		ttm_resource_manager_create_debugfs(man, root, "stolen_mm");
  
  	for_each_tile(tile, xe, tile_id)

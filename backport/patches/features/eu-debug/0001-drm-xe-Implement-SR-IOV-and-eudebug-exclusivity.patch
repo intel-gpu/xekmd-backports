@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Christoph Manszewski <christoph.manszewski@intel.com>
 Date: Wed, 29 Jan 2025 18:12:04 +0100
-Subject: [PATCH] drm/xe: Implement SR-IOV and eudebug exclusivity
+Subject: drm/xe: Implement SR-IOV and eudebug exclusivity
 
 v2: use xe_eudebug_is_enabled in exec_queue (Maciej)
 v3: xe_eudebug_is_enabled simplifications (Maciej)
@@ -43,10 +43,10 @@ index d47e4ff259cb..dbc0cc9dafc0 100644
  	kunit_printk(KERN_DEBUG, test, "Test eudebug WAs for graphics version: %u\n",
  		     GRAPHICS_VERx100(xe));
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index b2bfbcc63dd6..473fa59a4394 100644
+index 29c31145a25f..c5933f79af8f 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -496,8 +496,6 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
+@@ -497,8 +497,6 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
  	if (err)
  		goto err;
  
@@ -55,7 +55,7 @@ index b2bfbcc63dd6..473fa59a4394 100644
  	xe->preempt_fence_wq = alloc_ordered_workqueue("xe-preempt-fence-wq",
  						       WQ_MEM_RECLAIM);
  	xe->ordered_wq = alloc_ordered_workqueue("xe-ordered-wq", 0);
-@@ -752,6 +750,8 @@ int xe_device_probe_early(struct xe_device *xe)
+@@ -753,6 +751,8 @@ int xe_device_probe_early(struct xe_device *xe)
  
  	sriov_update_device_info(xe);
  
@@ -65,7 +65,7 @@ index b2bfbcc63dd6..473fa59a4394 100644
  	if (err || xe_survivability_mode_is_requested(xe)) {
  		int save_err = err;
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index f74c30191cbe..ac3ad99cc6ad 100644
+index 69d1125939de..90d149468203 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -13,6 +13,7 @@
@@ -74,9 +74,9 @@ index f74c30191cbe..ac3ad99cc6ad 100644
  #include "xe_devcoredump_types.h"
 +#include "xe_eudebug_types.h"
  #include "xe_heci_gsc.h"
+ #include "xe_late_bind_fw_types.h"
  #include "xe_lmtt_types.h"
- #include "xe_memirq_types.h"
-@@ -617,8 +618,8 @@ struct xe_device {
+@@ -628,8 +629,8 @@ struct xe_device {
  		/** discovery_lock: used for discovery to block xe ioctls */
  		struct rw_semaphore discovery_lock;
  
@@ -263,10 +263,10 @@ index bf250735c37e..2c1b9e287e69 100644
   * struct xe_eudebug_event - Internal base event struct for eudebug
   */
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index a35212d95cfb..828c259265af 100644
+index ba9cd1397412..4651d6f5eb71 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -535,10 +535,8 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+@@ -553,10 +553,8 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
  			 !(value & DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)))
  		return -EINVAL;
  
@@ -279,7 +279,7 @@ index a35212d95cfb..828c259265af 100644
  	q->eudebug_flags = EXEC_QUEUE_EUDEBUG_FLAG_ENABLE;
  	q->sched_props.preempt_timeout_us = 0;
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index a5c806e6459a..7b9589c7cc4c 100644
+index 641b7b506c31..0e3ecafcc20d 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -22,6 +22,7 @@
@@ -290,7 +290,7 @@ index a5c806e6459a..7b9589c7cc4c 100644
  #include "xe_eu_stall.h"
  #include "xe_exec_queue.h"
  #include "xe_execlist.h"
-@@ -741,7 +742,7 @@ static int do_gt_reset(struct xe_gt *gt)
+@@ -761,7 +762,7 @@ static int do_gt_reset(struct xe_gt *gt)
  
  	xe_gsc_wa_14015076503(gt, true);
  

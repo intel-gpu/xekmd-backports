@@ -1,4 +1,6 @@
 
+***Deprecated***: This branch is no longer maintained, will soon get archived and is no longer recommended for use. Please use alternate branch [kernel-backport/main](https://github.com/intel-gpu/xekmd-backports/tree/kernel-backport/main). 
+
 # Introduction
 
 This repo is intended to provide a preview of Intel® Graphics Driver (xe) for the next generation of GPUs, which are yet to be fully available on the mainline kernel.

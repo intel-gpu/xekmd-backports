@@ -1,0 +1,122 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Fri, 5 Sep 2025 21:19:52 +0530
+Subject: drm/xe/xe_late_bind_fw: Introduce debug fs node to
+ disable late binding
+
+Introduce a debug filesystem node to disable late binding fw reload
+during the system or runtime resume. This is intended for situations
+where the late binding fw needs to be loaded from user mode,
+perticularly for validation purpose.
+Note that xe kmd doesn't participate in late binding flow from user
+space. Binary loaded from the userspace will be lost upon entering to
+D3 cold hence user space app need to handle this situation.
+
+v2:
+  - s/(uval == 1) ? true : false/!!uval/ (Daniele)
+v3:
+  - Refine the commit message (Daniele)
+
+Acked-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250905154953.3974335-9-badal.nilawar@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(cherry-picked from commit 67de7982d5053f5a277f86e4560fea98dd95dcdf linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_debugfs.c            | 41 ++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_late_bind_fw.c       |  3 ++
+ drivers/gpu/drm/xe/xe_late_bind_fw_types.h |  2 ++
+ 3 files changed, 46 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
+index db3efdf05777..68b7e6aa990b 100644
+--- a/drivers/gpu/drm/xe/xe_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_debugfs.c
+@@ -327,6 +327,44 @@ static const struct file_operations atomic_svm_timeslice_ms_fops = {
+ 	.write = atomic_svm_timeslice_ms_set,
+ };
+ 
++static ssize_t disable_late_binding_show(struct file *f, char __user *ubuf,
++					 size_t size, loff_t *pos)
++{
++	struct xe_device *xe = file_inode(f)->i_private;
++	struct xe_late_bind *late_bind = &xe->late_bind;
++	char buf[32];
++	int len;
++
++	len = scnprintf(buf, sizeof(buf), "%d\n", late_bind->disable);
++
++	return simple_read_from_buffer(ubuf, size, pos, buf, len);
++}
++
++static ssize_t disable_late_binding_set(struct file *f, const char __user *ubuf,
++					size_t size, loff_t *pos)
++{
++	struct xe_device *xe = file_inode(f)->i_private;
++	struct xe_late_bind *late_bind = &xe->late_bind;
++	u32 uval;
++	ssize_t ret;
++
++	ret = kstrtouint_from_user(ubuf, size, sizeof(uval), &uval);
++	if (ret)
++		return ret;
++
++	if (uval > 1)
++		return -EINVAL;
++
++	late_bind->disable = !!uval;
++	return size;
++}
++
++static const struct file_operations disable_late_binding_fops = {
++	.owner = THIS_MODULE,
++	.read = disable_late_binding_show,
++	.write = disable_late_binding_set,
++};
++
+ void xe_debugfs_register(struct xe_device *xe)
+ {
+ 	struct ttm_device *bdev = &xe->ttm;
+@@ -355,6 +393,9 @@ void xe_debugfs_register(struct xe_device *xe)
+ 	debugfs_create_file("atomic_svm_timeslice_ms", 0600, root, xe,
+ 			    &atomic_svm_timeslice_ms_fops);
+ 
++	debugfs_create_file("disable_late_binding", 0600, root, xe,
++			    &disable_late_binding_fops);
++
+ 	for (mem_type = XE_PL_VRAM0; mem_type <= XE_PL_VRAM1; ++mem_type) {
+ 		man = ttm_manager_type(bdev, mem_type);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+index d4d64677bf48..0f062008ca83 100644
+--- a/drivers/gpu/drm/xe/xe_late_bind_fw.c
++++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+@@ -167,6 +167,9 @@ int xe_late_bind_fw_load(struct xe_late_bind *late_bind)
+ 	if (!late_bind->component_added)
+ 		return -ENODEV;
+ 
++	if (late_bind->disable)
++		return 0;
++
+ 	for (fw_id = 0; fw_id < XE_LB_FW_MAX_ID; fw_id++) {
+ 		lbfw = &late_bind->late_bind_fw[fw_id];
+ 		if (lbfw->payload) {
+diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw_types.h b/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
+index 5c0574aff7b9..158dc1abe072 100644
+--- a/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
++++ b/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
+@@ -65,6 +65,8 @@ struct xe_late_bind {
+ 	struct workqueue_struct *wq;
+ 	/** @component_added: whether the component has been added */
+ 	bool component_added;
++	/** @disable: to block late binding reload during pm resume flow*/
++	bool disable;
+ };
+ 
+ #endif
+-- 
+2.43.0
+

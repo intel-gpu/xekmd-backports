@@ -1,0 +1,299 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Fri, 5 Sep 2025 21:19:47 +0530
+Subject: drm/xe/xe_late_bind_fw: Introduce xe_late_bind_fw
+
+Introduce xe_late_bind_fw to enable firmware loading for the devices,
+such as the fan controller, during the driver probe. Typically,
+firmware for such devices are part of IFWI flash image but can be
+replaced at probe after OEM tuning.
+This patch binds mei late binding component to enable firmware loading.
+
+v2:
+ - Add devm_add_action_or_reset to remove the component (Daniele)
+ - Add INTEL_MEI_GSC check in xe_late_bind_init() (Daniele)
+v3:
+ - Fail driver probe if late bind initialization fails,
+   add has_late_bind flag (Daniele)
+v4:
+ - %s/I915_COMPONENT_LATE_BIND/INTEL_COMPONENT_LATE_BIND/
+v6:
+ - rebased
+v7:
+ - rebased
+ - In xe_late_bind_init, use drm_err when returning an error to
+   stop the probe (Lucas)
+ - Use imperative mode in commit message (Lucas)
+
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250905154953.3974335-4-badal.nilawar@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(cherry-picked from commit 918bd789d62e6ecbcbc37b2c631ee9127f17bfa9 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/Makefile                |  1 +
+ drivers/gpu/drm/xe/xe_device.c             |  5 ++
+ drivers/gpu/drm/xe/xe_device_types.h       |  6 ++
+ drivers/gpu/drm/xe/xe_late_bind_fw.c       | 84 ++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_late_bind_fw.h       | 15 ++++
+ drivers/gpu/drm/xe/xe_late_bind_fw_types.h | 33 +++++++++
+ drivers/gpu/drm/xe/xe_pci.c                |  2 +
+ drivers/gpu/drm/xe/xe_pci_types.h          |  1 +
+ 8 files changed, 147 insertions(+)
+ create mode 100644 drivers/gpu/drm/xe/xe_late_bind_fw.c
+ create mode 100644 drivers/gpu/drm/xe/xe_late_bind_fw.h
+ create mode 100644 drivers/gpu/drm/xe/xe_late_bind_fw_types.h
+
+diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
+index 07c71a29963d..9e07677df36d 100644
+--- a/drivers/gpu/drm/xe/Makefile
++++ b/drivers/gpu/drm/xe/Makefile
+@@ -82,6 +82,7 @@ xe-y += xe_bb.o \
+ 	xe_hw_engine_group.o \
+ 	xe_hw_fence.o \
+ 	xe_irq.o \
++	xe_late_bind_fw.o \
+ 	xe_lrc.o \
+ 	xe_migrate.o \
+ 	xe_mmio.o \
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 6ece4defa9df..5db283fb5b15 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -45,6 +45,7 @@
+ #include "xe_hwmon.h"
+ #include "xe_i2c.h"
+ #include "xe_irq.h"
++#include "xe_late_bind_fw.h"
+ #include "xe_mmio.h"
+ #include "xe_module.h"
+ #include "xe_nvm.h"
+@@ -876,6 +877,10 @@ int xe_device_probe(struct xe_device *xe)
+ 	if (err)
+ 		return err;
+ 
++	err = xe_late_bind_init(&xe->late_bind);
++	if (err)
++		return err;
++
+ 	err = xe_oa_init(xe);
+ 	if (err)
+ 		return err;
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index 7ceb0c90f391..c1e67af69b3b 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -15,6 +15,7 @@
+ 
+ #include "xe_devcoredump_types.h"
+ #include "xe_heci_gsc.h"
++#include "xe_late_bind_fw_types.h"
+ #include "xe_lmtt_types.h"
+ #include "xe_memirq_types.h"
+ #include "xe_oa_types.h"
+@@ -328,6 +329,8 @@ struct xe_device {
+ 		u8 has_heci_cscfi:1;
+ 		/** @info.has_heci_gscfi: device has heci gscfi */
+ 		u8 has_heci_gscfi:1;
++		/** @info.has_late_bind: Device has firmware late binding support */
++		u8 has_late_bind:1;
+ 		/** @info.has_llc: Device has a shared CPU+GPU last level cache */
+ 		u8 has_llc:1;
+ 		/** @info.has_mbx_power_limits: Device has support to manage power limits using
+@@ -581,6 +584,9 @@ struct xe_device {
+ 	/** @nvm: discrete graphics non-volatile memory */
+ 	struct intel_dg_nvm_dev *nvm;
+ 
++	/** @late_bind: xe mei late bind interface */
++	struct xe_late_bind late_bind;
++
+ 	/** @oa: oa observation subsystem */
+ 	struct xe_oa oa;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+new file mode 100644
+index 000000000000..5f386f860728
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+@@ -0,0 +1,84 @@
++// SPDX-License-Identifier: MIT
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#include <linux/component.h>
++#include <linux/delay.h>
++
++#include <drm/drm_managed.h>
++#include <drm/intel/i915_component.h>
++#include <drm/intel/intel_lb_mei_interface.h>
++#include <drm/drm_print.h>
++
++#include "xe_device.h"
++#include "xe_late_bind_fw.h"
++
++static struct xe_device *
++late_bind_to_xe(struct xe_late_bind *late_bind)
++{
++	return container_of(late_bind, struct xe_device, late_bind);
++}
++
++static int xe_late_bind_component_bind(struct device *xe_kdev,
++				       struct device *mei_kdev, void *data)
++{
++	struct xe_device *xe = kdev_to_xe_device(xe_kdev);
++	struct xe_late_bind *late_bind = &xe->late_bind;
++
++	late_bind->component.ops = data;
++	late_bind->component.mei_dev = mei_kdev;
++
++	return 0;
++}
++
++static void xe_late_bind_component_unbind(struct device *xe_kdev,
++					  struct device *mei_kdev, void *data)
++{
++	struct xe_device *xe = kdev_to_xe_device(xe_kdev);
++	struct xe_late_bind *late_bind = &xe->late_bind;
++
++	late_bind->component.ops = NULL;
++}
++
++static const struct component_ops xe_late_bind_component_ops = {
++	.bind   = xe_late_bind_component_bind,
++	.unbind = xe_late_bind_component_unbind,
++};
++
++static void xe_late_bind_remove(void *arg)
++{
++	struct xe_late_bind *late_bind = arg;
++	struct xe_device *xe = late_bind_to_xe(late_bind);
++
++	component_del(xe->drm.dev, &xe_late_bind_component_ops);
++}
++
++/**
++ * xe_late_bind_init() - add xe mei late binding component
++ * @late_bind: pointer to late bind structure.
++ *
++ * Return: 0 if the initialization was successful, a negative errno otherwise.
++ */
++int xe_late_bind_init(struct xe_late_bind *late_bind)
++{
++	struct xe_device *xe = late_bind_to_xe(late_bind);
++	int err;
++
++	if (!xe->info.has_late_bind)
++		return 0;
++
++	if (!IS_ENABLED(CONFIG_INTEL_MEI_LB) || !IS_ENABLED(CONFIG_INTEL_MEI_GSC)) {
++		drm_info(&xe->drm, "Can't init xe mei late bind missing mei component\n");
++		return 0;
++	}
++
++	err = component_add_typed(xe->drm.dev, &xe_late_bind_component_ops,
++				  INTEL_COMPONENT_LB);
++	if (err < 0) {
++		drm_err(&xe->drm, "Failed to add mei late bind component (%pe)\n", ERR_PTR(err));
++		return err;
++	}
++
++	return devm_add_action_or_reset(xe->drm.dev, xe_late_bind_remove, late_bind);
++}
+diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.h b/drivers/gpu/drm/xe/xe_late_bind_fw.h
+new file mode 100644
+index 000000000000..4c73571c3e62
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_late_bind_fw.h
+@@ -0,0 +1,15 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#ifndef _XE_LATE_BIND_FW_H_
++#define _XE_LATE_BIND_FW_H_
++
++#include <linux/types.h>
++
++struct xe_late_bind;
++
++int xe_late_bind_init(struct xe_late_bind *late_bind);
++
++#endif
+diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw_types.h b/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
+new file mode 100644
+index 000000000000..f79e5aefed94
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
+@@ -0,0 +1,33 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#ifndef _XE_LATE_BIND_TYPES_H_
++#define _XE_LATE_BIND_TYPES_H_
++
++#include <linux/iosys-map.h>
++#include <linux/mutex.h>
++#include <linux/types.h>
++
++/**
++ * struct xe_late_bind_component - Late Binding services component
++ * @mei_dev: device that provide Late Binding service.
++ * @ops: Ops implemented by Late Binding driver, used by Xe driver.
++ *
++ * Communication between Xe and MEI drivers for Late Binding services
++ */
++struct xe_late_bind_component {
++	struct device *mei_dev;
++	const struct late_bind_component_ops *ops;
++};
++
++/**
++ * struct xe_late_bind
++ */
++struct xe_late_bind {
++	/** @component: struct for communication with mei component */
++	struct xe_late_bind_component component;
++};
++
++#endif
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 3c40ef426f0c..e3d70deda470 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -327,6 +327,7 @@ static const struct xe_device_desc bmg_desc = {
+ 	.has_mbx_power_limits = true,
+ 	.has_gsc_nvm = 1,
+ 	.has_heci_cscfi = 1,
++	.has_late_bind = true,
+ 	.has_sriov = true,
+ 	.max_gt_per_tile = 2,
+ 	.needs_scratch = true,
+@@ -574,6 +575,7 @@ static int xe_info_init_early(struct xe_device *xe,
+ 	xe->info.has_gsc_nvm = desc->has_gsc_nvm;
+ 	xe->info.has_heci_gscfi = desc->has_heci_gscfi;
+ 	xe->info.has_heci_cscfi = desc->has_heci_cscfi;
++	xe->info.has_late_bind = desc->has_late_bind;
+ 	xe->info.has_llc = desc->has_llc;
+ 	xe->info.has_pxp = desc->has_pxp;
+ 	xe->info.has_sriov = desc->has_sriov;
+diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
+index 4de6f69ed975..51a607d323fb 100644
+--- a/drivers/gpu/drm/xe/xe_pci_types.h
++++ b/drivers/gpu/drm/xe/xe_pci_types.h
+@@ -39,6 +39,7 @@ struct xe_device_desc {
+ 	u8 has_gsc_nvm:1;
+ 	u8 has_heci_gscfi:1;
+ 	u8 has_heci_cscfi:1;
++	u8 has_late_bind:1;
+ 	u8 has_llc:1;
+ 	u8 has_mbx_power_limits:1;
+ 	u8 has_pxp:1;
+-- 
+2.43.0
+

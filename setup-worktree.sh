@@ -29,6 +29,18 @@ case "$1" in
 
 		echo "Worktree created:"
 		git worktree list || { echo "Error: Failed to list worktree."; exit 2; }
+
+		# Generate the base kernel by invoking the backport script from the kernel-backport worktree
+		if [ -x "$WORKTREE_KERNEL_SOURCES/backport.sh" ]; then
+			(cd "$WORKTREE_KERNEL_SOURCES" && ./backport.sh -c base) || { echo "Error: backport.sh failed"; exit 3; }
+			if [ -d "$WORKTREE_KERNEL_SOURCES/kernel" ]; then
+				echo "Generated kernel is available at: $WORKTREE_KERNEL_SOURCES/kernel"
+			else
+				echo "Warning: expected kernel directory not found in $WORKTREE_KERNEL_SOURCES"
+			fi
+		else
+			echo "Error: $WORKTREE_KERNEL_SOURCES/backport.sh not found or not executable"
+		fi
 		;;
 	clean-worktree)
 		set -e

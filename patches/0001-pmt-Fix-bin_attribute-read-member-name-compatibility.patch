@@ -10,20 +10,22 @@ both member names across kernel versions.
 Fixes compilation errors when accessing bin_attribute read
 callback member on different kernel versions.
 
+V1: Rebase to 6.17
+
 Reference:
     7ff2fecc8bc2
     platform/x86/intel/pmt: Constify 'struct bin_attribute'
 
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/platform/x86/intel/pmt/class.c | 11 +++++++++++
- 1 file changed, 11 insertions(+)
+ drivers/platform/x86/intel/pmt/class.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
 
 diff --git a/drivers/platform/x86/intel/pmt/class.c b/drivers/platform/x86/intel/pmt/class.c
-index c78f151..a1749b8 100644
+index f7618fd..efa8d75 100644
 --- a/drivers/platform/x86/intel/pmt/class.c
 +++ b/drivers/platform/x86/intel/pmt/class.c
-@@ -79,10 +79,17 @@ EXPORT_SYMBOL_NS_GPL(pmt_telem_read_mmio, "INTEL_PMT");
+@@ -81,10 +81,17 @@ EXPORT_SYMBOL_NS_GPL(pmt_telem_read_mmio, "INTEL_PMT");
  /*
   * sysfs
   */
@@ -41,18 +43,6 @@ index c78f151..a1749b8 100644
  {
  	struct intel_pmt_entry *entry = container_of(attr,
  						     struct intel_pmt_entry,
-@@ -314,7 +321,11 @@ static int intel_pmt_dev_register(struct intel_pmt_entry *entry,
- 	entry->pmt_bin_attr.attr.name = ns->name;
- 	entry->pmt_bin_attr.attr.mode = 0440;
- 	entry->pmt_bin_attr.mmap = intel_pmt_mmap;
-+#ifdef BPM_STRUCT_BIN_ATTRIBUTE_READ_NEW_NOT_PRESENT
-+	entry->pmt_bin_attr.read = intel_pmt_read;
-+#else
- 	entry->pmt_bin_attr.read_new = intel_pmt_read;
-+#endif
- 	entry->pmt_bin_attr.size = entry->size;
- 
- 	ret = sysfs_create_bin_file(&dev->kobj, &entry->pmt_bin_attr);
 -- 
 2.43.0
 

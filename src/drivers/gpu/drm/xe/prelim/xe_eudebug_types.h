@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: MIT */
 /*
- * Copyright © 2023 Intel Corporation
+ * Copyright © 2023-2025 Intel Corporation
  */
 
-#ifndef __XE_EUDEBUG_TYPES_H_
-#define __XE_EUDEBUG_TYPES_H_
+#ifndef _XE_EUDEBUG_TYPES_H_
+#define _XE_EUDEBUG_TYPES_H_
 
 #include <linux/completion.h>
 #include <linux/kfifo.h>
@@ -177,6 +177,21 @@ struct xe_eudebug {
 };
 
 /**
+ * enum xe_eudebug_state - eudebug capability state
+ *
+ * @XE_EUDEBUG_NOT_AVAILABLE: eudebug feature not available
+ * @XE_EUDEBUG_NOT_SUPPORTED: eudebug feature support off
+ * @XE_EUDEBUG_SUPPORTED: eudebug feature supported but disabled
+ * @XE_EUDEBUG_ENABLED: eudebug enabled
+ */
+enum xe_eudebug_state {
+	XE_EUDEBUG_NOT_AVAILABLE = 1,
+	XE_EUDEBUG_NOT_SUPPORTED,
+	XE_EUDEBUG_SUPPORTED,
+	XE_EUDEBUG_ENABLED,
+};
+
+/**
  * struct xe_eudebug_event - Internal base event struct for eudebug
  */
 struct xe_eudebug_event {
@@ -254,32 +269,6 @@ struct xe_eudebug_event_exec_queue {
 
 	/** @lrc_handles: handles for each logical ring context created with this exec queue */
 	u64 lrc_handle[] __counted_by(width);
-};
-
-struct xe_eudebug_event_exec_queue_placements {
-	/** @base: base event */
-	struct xe_eudebug_event base;
-
-	/** @client_handle: client for the engine create/destroy */
-	u64 client_handle;
-
-	/** @vm_handle: vm handle for the engine create/destroy */
-	u64 vm_handle;
-
-	/** @exec_queue_handle: engine handle */
-	u64 exec_queue_handle;
-
-	/** @engine_handle: engine class */
-	u64 lrc_handle;
-
-	/** @num_placements: all possible placements for given lrc */
-	u32 num_placements;
-
-	/** @pad: padding */
-	u32 pad;
-
-	/** @instances: num_placements sized array containing drm_xe_engine_class_instance*/
-	u64 instances[]; __counted_by(num_placements);
 };
 
 /**
@@ -446,4 +435,30 @@ struct xe_eudebug_pagefault {
 	bool deferred_resolved;
 };
 
-#endif
+struct xe_eudebug_event_exec_queue_placements {
+	/** @base: base event */
+	struct xe_eudebug_event base;
+
+	/** @client_handle: client for the engine create/destroy */
+	u64 client_handle;
+
+	/** @vm_handle: vm handle for the engine create/destroy */
+	u64 vm_handle;
+
+	/** @exec_queue_handle: engine handle */
+	u64 exec_queue_handle;
+
+	/** @engine_handle: engine class */
+	u64 lrc_handle;
+
+	/** @num_placements: all possible placements for given lrc */
+	u32 num_placements;
+
+	/** @pad: padding */
+	u32 pad;
+
+	/** @instances: num_placements sized array containing drm_xe_engine_class_instance*/
+	u64 instances[]; __counted_by(num_placements);
+};
+
+#endif /* _XE_EUDEBUG_TYPES_H_ */

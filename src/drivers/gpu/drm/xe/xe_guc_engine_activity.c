@@ -124,7 +124,7 @@ static void free_engine_activity_buffers(struct engine_activity_buffer *buffer)
 static bool is_engine_activity_supported(struct xe_guc *guc)
 {
 	struct xe_uc_fw_version *version = &guc->fw.versions.found[XE_UC_FW_VER_COMPATIBILITY];
-	struct xe_uc_fw_version required = { 1, 14, 1 };
+	struct xe_uc_fw_version required = { .major = 1, .minor = 14, .patch = 1 };
 	struct xe_gt *gt = guc_to_gt(guc);
 
 	if (IS_SRIOV_VF(gt_to_xe(gt))) {
@@ -304,6 +304,8 @@ static void engine_activity_set_cpu_ts(struct xe_guc *guc, unsigned int index)
 	struct engine_activity_group *eag = &engine_activity->eag[index];
 	int i, j;
 
+	xe_gt_assert(guc_to_gt(guc), index < engine_activity->num_activity_group);
+
 	for (i = 0; i < GUC_MAX_ENGINE_CLASSES; i++)
 		for (j = 0; j < GUC_MAX_INSTANCES_PER_CLASS; j++)
 			eag->engine[i][j].last_cpu_ts = ktime_get();
@@ -374,8 +376,9 @@ static int engine_activity_enable_function_stats(struct xe_guc *guc, int num_vfs
 		return ret;
 	}
 
-	for (i = 0; i < engine_activity->num_functions; i++)
-		engine_activity_set_cpu_ts(guc, i + 1);
+	/* skip PF as it was already setup */
+	for (i = 1; i < engine_activity->num_functions; i++)
+		engine_activity_set_cpu_ts(guc, i);
 
 	return 0;
 }

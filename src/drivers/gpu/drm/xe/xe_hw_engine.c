@@ -8,13 +8,16 @@
 #include <linux/nospec.h>
 
 #include <drm/drm_managed.h>
+#include <drm/drm_print.h>
 #include <uapi/drm/xe_drm.h>
+#include <generated/xe_wa_oob.h>
 
 #include "regs/xe_engine_regs.h"
 #include "regs/xe_gt_regs.h"
 #include "regs/xe_irq_regs.h"
 #include "xe_assert.h"
 #include "xe_bo.h"
+#include "xe_configfs.h"
 #include "xe_device.h"
 #include "prelim/xe_eudebug.h"
 #include "xe_execlist.h"
@@ -22,6 +25,7 @@
 #include "xe_gsc.h"
 #include "xe_gt.h"
 #include "xe_gt_ccs_mode.h"
+#include "xe_gt_clock.h"
 #include "xe_gt_printk.h"
 #include "xe_gt_mcr.h"
 #include "xe_gt_topology.h"
@@ -565,6 +569,33 @@ static void hw_engine_init_early(struct xe_gt *gt, struct xe_hw_engine *hwe,
 	xe_reg_whitelist_process_engine(hwe);
 }
 
+static void adjust_idledly(struct xe_hw_engine *hwe)
+{
+	struct xe_gt *gt = hwe->gt;
+	u32 idledly, maxcnt;
+	u32 idledly_units_ps = 8 * gt->info.timestamp_base;
+	u32 maxcnt_units_ns = 640;
+	bool inhibit_switch = 0;
+
+	if (!IS_SRIOV_VF(gt_to_xe(hwe->gt)) && XE_WA(gt, 16023105232)) {
+		idledly = xe_mmio_read32(&gt->mmio, RING_IDLEDLY(hwe->mmio_base));
+		maxcnt = xe_mmio_read32(&gt->mmio, RING_PWRCTX_MAXCNT(hwe->mmio_base));
+
+		inhibit_switch = idledly & INHIBIT_SWITCH_UNTIL_PREEMPTED;
+		idledly = REG_FIELD_GET(IDLE_DELAY, idledly);
+		idledly = DIV_ROUND_CLOSEST(idledly * idledly_units_ps, 1000);
+		maxcnt = REG_FIELD_GET(IDLE_WAIT_TIME, maxcnt);
+		maxcnt *= maxcnt_units_ns;
+
+		if (xe_gt_WARN_ON(gt, idledly >= maxcnt || inhibit_switch)) {
+			idledly = DIV_ROUND_CLOSEST(((maxcnt - 1) * maxcnt_units_ns),
+						    idledly_units_ps);
+			idledly = DIV_ROUND_CLOSEST(idledly, 1000);
+			xe_mmio_write32(&gt->mmio, RING_IDLEDLY(hwe->mmio_base), idledly);
+		}
+	}
+}
+
 static int hw_engine_init(struct xe_gt *gt, struct xe_hw_engine *hwe,
 			  enum xe_hw_engine_id id)
 {
@@ -604,6 +635,9 @@ static int hw_engine_init(struct xe_gt *gt, struct xe_hw_engine *hwe,
 	/* We reserve the highest BCS instance for USM */
 	if (xe->info.has_usm && hwe->class == XE_ENGINE_CLASS_COPY)
 		gt->usm.reserved_bcs_instance = hwe->instance;
+
+	/* Ensure IDLEDLY is lower than MAXCNT */
+	adjust_idledly(hwe);
 
 	return devm_add_action_or_reset(xe->drm.dev, hw_engine_fini, hwe);
 
@@ -661,7 +695,7 @@ static void read_media_fuses(struct xe_gt *gt)
 
 		if (!(BIT(j) & vdbox_mask)) {
 			gt->info.engine_mask &= ~BIT(i);
-			drm_info(&xe->drm, "vcs%u fused off\n", j);
+			xe_gt_info(gt, "vcs%u fused off\n", j);
 		}
 	}
 
@@ -671,7 +705,7 @@ static void read_media_fuses(struct xe_gt *gt)
 
 		if (!(BIT(j) & vebox_mask)) {
 			gt->info.engine_mask &= ~BIT(i);
-			drm_info(&xe->drm, "vecs%u fused off\n", j);
+			xe_gt_info(gt, "vecs%u fused off\n", j);
 		}
 	}
 }
@@ -696,15 +730,13 @@ static void read_copy_fuses(struct xe_gt *gt)
 
 		if (!(BIT(j / 2) & bcs_mask)) {
 			gt->info.engine_mask &= ~BIT(i);
-			drm_info(&xe->drm, "bcs%u fused off\n", j);
+			xe_gt_info(gt, "bcs%u fused off\n", j);
 		}
 	}
 }
 
 static void read_compute_fuses_from_dss(struct xe_gt *gt)
 {
-	struct xe_device *xe = gt_to_xe(gt);
-
 	/*
 	 * CCS fusing based on DSS masks only applies to platforms that can
 	 * have more than one CCS.
@@ -723,14 +755,13 @@ static void read_compute_fuses_from_dss(struct xe_gt *gt)
 
 		if (!xe_gt_topology_has_dss_in_quadrant(gt, j)) {
 			gt->info.engine_mask &= ~BIT(i);
-			drm_info(&xe->drm, "ccs%u fused off\n", j);
+			xe_gt_info(gt, "ccs%u fused off\n", j);
 		}
 	}
 }
 
 static void read_compute_fuses_from_reg(struct xe_gt *gt)
 {
-	struct xe_device *xe = gt_to_xe(gt);
 	u32 ccs_mask;
 
 	ccs_mask = xe_mmio_read32(&gt->mmio, XEHP_FUSE4);
@@ -742,7 +773,7 @@ static void read_compute_fuses_from_reg(struct xe_gt *gt)
 
 		if ((ccs_mask & BIT(j)) == 0) {
 			gt->info.engine_mask &= ~BIT(i);
-			drm_info(&xe->drm, "ccs%u fused off\n", j);
+			xe_gt_info(gt, "ccs%u fused off\n", j);
 		}
 	}
 }
@@ -757,8 +788,6 @@ static void read_compute_fuses(struct xe_gt *gt)
 
 static void check_gsc_availability(struct xe_gt *gt)
 {
-	struct xe_device *xe = gt_to_xe(gt);
-
 	if (!(gt->info.engine_mask & BIT(XE_HW_ENGINE_GSCCS0)))
 		return;
 
@@ -774,7 +803,25 @@ static void check_gsc_availability(struct xe_gt *gt)
 		xe_mmio_write32(&gt->mmio, GUNIT_GSC_INTR_ENABLE, 0);
 		xe_mmio_write32(&gt->mmio, GUNIT_GSC_INTR_MASK, ~0);
 
-		drm_dbg(&xe->drm, "GSC FW not used, disabling gsccs\n");
+		xe_gt_dbg(gt, "GSC FW not used, disabling gsccs\n");
+	}
+}
+
+static void check_sw_disable(struct xe_gt *gt)
+{
+	struct xe_device *xe = gt_to_xe(gt);
+	u64 sw_allowed = xe_configfs_get_engines_allowed(to_pci_dev(xe->drm.dev));
+	enum xe_hw_engine_id id;
+
+	for (id = 0; id < XE_NUM_HW_ENGINES; ++id) {
+		if (!(gt->info.engine_mask & BIT(id)))
+			continue;
+
+		if (!(sw_allowed & BIT(id))) {
+			gt->info.engine_mask &= ~BIT(id);
+			xe_gt_info(gt, "%s disabled via configfs\n",
+				   engine_infos[id].name);
+		}
 	}
 }
 
@@ -786,6 +833,7 @@ int xe_hw_engines_init_early(struct xe_gt *gt)
 	read_copy_fuses(gt);
 	read_compute_fuses(gt);
 	check_gsc_availability(gt);
+	check_sw_disable(gt);
 
 	BUILD_BUG_ON(XE_HW_ENGINE_PREEMPT_TIMEOUT < XE_HW_ENGINE_PREEMPT_TIMEOUT_MIN);
 	BUILD_BUG_ON(XE_HW_ENGINE_PREEMPT_TIMEOUT > XE_HW_ENGINE_PREEMPT_TIMEOUT_MAX);
@@ -1012,12 +1060,13 @@ struct xe_hw_engine *
 xe_hw_engine_lookup(struct xe_device *xe,
 		    struct drm_xe_engine_class_instance eci)
 {
+	struct xe_gt *gt = xe_device_get_gt(xe, eci.gt_id);
 	unsigned int idx;
 
 	if (eci.engine_class >= ARRAY_SIZE(user_to_xe_engine_class))
 		return NULL;
 
-	if (eci.gt_id >= xe->info.gt_count)
+	if (!gt)
 		return NULL;
 
 	idx = array_index_nospec(eci.engine_class,

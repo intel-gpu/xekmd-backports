@@ -100,6 +100,9 @@ void xe_hw_fence_irq_finish(struct xe_hw_fence_irq *irq)
 		spin_unlock_irqrestore(&irq->lock, flags);
 		dma_fence_end_signalling(tmp);
 	}
+
+	/* Safe release of the irq->lock used in dma_fence_init. */
+	synchronize_rcu();
 }
 
 void xe_hw_fence_irq_run(struct xe_hw_fence_irq *irq)
@@ -164,8 +167,13 @@ static bool xe_hw_fence_signaled(struct dma_fence *dma_fence)
 	struct xe_device *xe = fence->xe;
 	u32 seqno = xe_map_rd(xe, &fence->seqno_map, 0, u32);
 
+#ifdef BPM_DRM_FENCE_IS_LATER_ARG_DMA_FENCE_OPS_NOT_PRESENT
 	return dma_fence->error ||
-		!__dma_fence_is_later(dma_fence->seqno, seqno, dma_fence->ops);
+                !__dma_fence_is_later(dma_fence->seqno, seqno, dma_fence->ops);
+#else
+	return dma_fence->error ||
+		!__dma_fence_is_later(dma_fence, dma_fence->seqno, seqno);
+#endif
 }
 
 static bool xe_hw_fence_enable_signaling(struct dma_fence *dma_fence)

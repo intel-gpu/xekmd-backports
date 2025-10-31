@@ -13,6 +13,7 @@
 #include "xe_guc.h"
 #include "xe_guc_ct.h"
 #include "xe_guc_log.h"
+#include "xe_guc_pc.h"
 #include "xe_macros.h"
 #include "xe_pm.h"
 
@@ -84,9 +85,21 @@ static int guc_log(struct xe_guc *guc, struct drm_printer *p)
 	return 0;
 }
 
+static int guc_log_dmesg(struct xe_guc *guc, struct drm_printer *p)
+{
+	xe_guc_log_print_dmesg(&guc->log);
+	return 0;
+}
+
 static int guc_ctb(struct xe_guc *guc, struct drm_printer *p)
 {
 	xe_guc_ct_print(&guc->ct, p, true);
+	return 0;
+}
+
+static int guc_pc(struct xe_guc *guc, struct drm_printer *p)
+{
+	xe_guc_pc_print(&guc->pc, p);
 	return 0;
 }
 
@@ -100,21 +113,34 @@ static const struct drm_info_list vf_safe_debugfs_list[] = {
 	{ "guc_ctb", .show = guc_debugfs_show, .data = guc_ctb },
 };
 
+/* For GuC debugfs files that require the SLPC support */
+static const struct drm_info_list slpc_debugfs_list[] = {
+	{ "guc_pc", .show = guc_debugfs_show, .data = guc_pc },
+};
+
 /* everything else should be added here */
 static const struct drm_info_list pf_only_debugfs_list[] = {
 	{ "guc_log", .show = guc_debugfs_show, .data = guc_log },
+	{ "guc_log_dmesg", .show = guc_debugfs_show, .data = guc_log_dmesg },
 };
 
 void xe_guc_debugfs_register(struct xe_guc *guc, struct dentry *parent)
 {
-	struct drm_minor *minor = guc_to_xe(guc)->drm.primary;
+	struct xe_device *xe =  guc_to_xe(guc);
+	struct drm_minor *minor = xe->drm.primary;
 
 	drm_debugfs_create_files(vf_safe_debugfs_list,
 				 ARRAY_SIZE(vf_safe_debugfs_list),
 				 parent, minor);
 
-	if (!IS_SRIOV_VF(guc_to_xe(guc)))
+	if (!IS_SRIOV_VF(xe)) {
 		drm_debugfs_create_files(pf_only_debugfs_list,
 					 ARRAY_SIZE(pf_only_debugfs_list),
 					 parent, minor);
+
+		if (!xe->info.skip_guc_pc)
+			drm_debugfs_create_files(slpc_debugfs_list,
+						 ARRAY_SIZE(slpc_debugfs_list),
+						 parent, minor);
+	}
 }

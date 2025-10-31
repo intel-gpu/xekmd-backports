@@ -25,4 +25,9 @@ static inline struct dmem_cgroup_region *drmm_cgroup_register_region(
 }
 #endif /* BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT */
 
+#ifdef BPM_DRM_DEV_WEDGED_EVENT_NOT_PRESENT
+int drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
+			struct drm_wedge_task_info *info);
+#endif
+
 #endif /* __BACKPORT_DRM_DRV_H__ */

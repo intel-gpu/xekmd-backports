@@ -22,6 +22,9 @@
 #include "xe_macros.h"
 #include "xe_sriov.h"
 #include "xe_trace.h"
+#include "xe_wa.h"
+
+#include "generated/xe_device_wa_oob.h"
 
 static void tiles_fini(void *arg)
 {
@@ -55,12 +58,12 @@ static void tiles_fini(void *arg)
 static void mmio_multi_tile_setup(struct xe_device *xe, size_t tile_mmio_size)
 {
 	struct xe_tile *tile;
-	void __iomem *regs;
+	struct xe_gt *gt;
 	u8 id;
 
 	/*
 	 * Nothing to be done as tile 0 has already been setup earlier with the
-	 * entire BAR mapped - see xe_mmio_init()
+	 * entire BAR mapped - see xe_mmio_probe_early()
 	 */
 	if (xe->info.tile_count == 1)
 		return;
@@ -68,13 +71,13 @@ static void mmio_multi_tile_setup(struct xe_device *xe, size_t tile_mmio_size)
 	/* Possibly override number of tile based on configuration register */
 	if (!xe->info.skip_mtcfg) {
 		struct xe_mmio *mmio = xe_root_tile_mmio(xe);
-		u8 tile_count;
+		u8 tile_count, gt_count;
 		u32 mtcfg;
 
 		/*
 		 * Although the per-tile mmio regs are not yet initialized, this
 		 * is fine as it's going to the root tile's mmio, that's
-		 * guaranteed to be initialized earlier in xe_mmio_init()
+		 * guaranteed to be initialized earlier in xe_mmio_probe_early()
 		 */
 		mtcfg = xe_mmio_read32(mmio, XEHP_MTCFG_ADDR);
 		tile_count = REG_FIELD_GET(TILE_COUNT, mtcfg) + 1;
@@ -85,68 +88,27 @@ static void mmio_multi_tile_setup(struct xe_device *xe, size_t tile_mmio_size)
 			xe->info.tile_count = tile_count;
 
 			/*
-			 * FIXME: Needs some work for standalone media, but
-			 * should be impossible with multi-tile for now:
-			 * multi-tile platform with standalone media doesn't
-			 * exist
+			 * We've already setup gt_count according to the full
+			 * tile count.  Re-calculate it to only include the GTs
+			 * that belong to the remaining tile(s).
 			 */
-			xe->info.gt_count = xe->info.tile_count;
+			gt_count = 0;
+			for_each_gt(gt, xe, id)
+				if (gt->info.id < tile_count * xe->info.max_gt_per_tile)
+					gt_count++;
+			xe->info.gt_count = gt_count;
 		}
 	}
 
-	regs = xe->mmio.regs;
-	for_each_tile(tile, xe, id) {
-		tile->mmio.regs_size = SZ_4M;
-		tile->mmio.regs = regs;
-		tile->mmio.tile = tile;
-		regs += tile_mmio_size;
-	}
-}
-
-/*
- * On top of all the multi-tile MMIO space there can be a platform-dependent
- * extension for each tile, resulting in a layout like below:
- *
- * .----------------------. <- ext_base + tile_count * tile_mmio_ext_size
- * |         ....         |
- * |----------------------| <- ext_base + 2 * tile_mmio_ext_size
- * | tile1->mmio_ext.regs |
- * |----------------------| <- ext_base + 1 * tile_mmio_ext_size
- * | tile0->mmio_ext.regs |
- * |======================| <- ext_base = tile_count * tile_mmio_size
- * |                      |
- * |       mmio.regs      |
- * |                      |
- * '----------------------' <- 0MB
- *
- * Set up the tile[]->mmio_ext pointers/sizes.
- */
-static void mmio_extension_setup(struct xe_device *xe, size_t tile_mmio_size,
-				 size_t tile_mmio_ext_size)
-{
-	struct xe_tile *tile;
-	void __iomem *regs;
-	u8 id;
-
-	if (!xe->info.has_mmio_ext)
-		return;
-
-	regs = xe->mmio.regs + tile_mmio_size * xe->info.tile_count;
-	for_each_tile(tile, xe, id) {
-		tile->mmio_ext.regs_size = tile_mmio_ext_size;
-		tile->mmio_ext.regs = regs;
-		tile->mmio_ext.tile = tile;
-		regs += tile_mmio_ext_size;
-	}
+	for_each_remote_tile(tile, xe, id)
+		xe_mmio_init(&tile->mmio, tile, xe->mmio.regs + id * tile_mmio_size, SZ_4M);
 }
 
 int xe_mmio_probe_tiles(struct xe_device *xe)
 {
 	size_t tile_mmio_size = SZ_16M;
-	size_t tile_mmio_ext_size = xe->info.tile_mmio_ext_size;
 
 	mmio_multi_tile_setup(xe, tile_mmio_size);
-	mmio_extension_setup(xe, tile_mmio_size, tile_mmio_ext_size);
 
 	return devm_add_action_or_reset(xe->drm.dev, tiles_fini, xe);
 }
@@ -161,7 +123,7 @@ static void mmio_fini(void *arg)
 	root_tile->mmio.regs = NULL;
 }
 
-int xe_mmio_init(struct xe_device *xe)
+int xe_mmio_probe_early(struct xe_device *xe)
 {
 	struct xe_tile *root_tile = xe_device_get_root_tile(xe);
 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
@@ -179,11 +141,28 @@ int xe_mmio_init(struct xe_device *xe)
 	}
 
 	/* Setup first tile; other tiles (if present) will be setup later. */
-	root_tile->mmio.regs_size = SZ_4M;
-	root_tile->mmio.regs = xe->mmio.regs;
-	root_tile->mmio.tile = root_tile;
+	xe_mmio_init(&root_tile->mmio, root_tile, xe->mmio.regs, SZ_4M);
 
 	return devm_add_action_or_reset(xe->drm.dev, mmio_fini, xe);
+}
+ALLOW_ERROR_INJECTION(xe_mmio_probe_early, ERRNO); /* See xe_pci_probe() */
+
+/**
+ * xe_mmio_init() - Initialize an MMIO instance
+ * @mmio: Pointer to the MMIO instance to initialize
+ * @tile: The tile to which the MMIO region belongs
+ * @ptr: Pointer to the start of the MMIO region
+ * @size: The size of the MMIO region in bytes
+ *
+ * This is a convenience function for minimal initialization of struct xe_mmio.
+ */
+void xe_mmio_init(struct xe_mmio *mmio, struct xe_tile *tile, void __iomem *ptr, u32 size)
+{
+	xe_tile_assert(tile, size <= XE_REG_ADDR_MAX);
+
+	mmio->regs = ptr;
+	mmio->regs_size = size;
+	mmio->tile = tile;
 }
 
 static void mmio_flush_pending_writes(struct xe_mmio *mmio)
@@ -191,7 +170,7 @@ static void mmio_flush_pending_writes(struct xe_mmio *mmio)
 #define DUMMY_REG_OFFSET	0x130030
 	int i;
 
-	if (mmio->tile->xe->info.platform != XE_LUNARLAKE)
+	if (!XE_DEVICE_WA(mmio->tile->xe, 15015404425))
 		return;
 
 	/* 4 dummy writes */
@@ -204,7 +183,6 @@ u8 xe_mmio_read8(struct xe_mmio *mmio, struct xe_reg reg)
 	u32 addr = xe_mmio_adjusted_addr(mmio, reg.addr);
 	u8 val;
 
-	/* Wa_15015404425 */
 	mmio_flush_pending_writes(mmio);
 
 	val = readb(mmio->regs + addr);
@@ -218,7 +196,6 @@ u16 xe_mmio_read16(struct xe_mmio *mmio, struct xe_reg reg)
 	u32 addr = xe_mmio_adjusted_addr(mmio, reg.addr);
 	u16 val;
 
-	/* Wa_15015404425 */
 	mmio_flush_pending_writes(mmio);
 
 	val = readw(mmio->regs + addr);
@@ -245,7 +222,6 @@ u32 xe_mmio_read32(struct xe_mmio *mmio, struct xe_reg reg)
 	u32 addr = xe_mmio_adjusted_addr(mmio, reg.addr);
 	u32 val;
 
-	/* Wa_15015404425 */
 	mmio_flush_pending_writes(mmio);
 
 	if (!reg.vf && IS_SRIOV_VF(mmio->tile->xe))

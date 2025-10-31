@@ -23,6 +23,7 @@
 #include "xe_map.h"
 #include "xe_mmio.h"
 #include "xe_pm.h"
+#include "xe_tile.h"
 
 /*
  * GSC proxy:
@@ -434,56 +435,9 @@ static int proxy_channel_alloc(struct xe_gsc *gsc)
 	return 0;
 }
 
-/**
- * xe_gsc_proxy_init() - init objects and MEI component required by GSC proxy
- * @gsc: the GSC uC
- *
- * Return: 0 if the initialization was successful, a negative errno otherwise.
- */
-int xe_gsc_proxy_init(struct xe_gsc *gsc)
+static void xe_gsc_proxy_remove(void *arg)
 {
-	int err;
-	struct xe_gt *gt = gsc_to_gt(gsc);
-	struct xe_tile *tile = gt_to_tile(gt);
-	struct xe_device *xe = tile_to_xe(tile);
-
-	mutex_init(&gsc->proxy.mutex);
-
-	if (!IS_ENABLED(CONFIG_INTEL_MEI_GSC_PROXY)) {
-		xe_gt_info(gt, "can't init GSC proxy due to missing mei component\n");
-		return -ENODEV;
-	}
-
-	/* no multi-tile devices with this feature yet */
-	if (tile->id > 0) {
-		xe_gt_err(gt, "unexpected GSC proxy init on tile %u\n", tile->id);
-		return -EINVAL;
-	}
-
-	err = proxy_channel_alloc(gsc);
-	if (err)
-		return err;
-
-	err = component_add_typed(xe->drm.dev, &xe_gsc_proxy_component_ops,
-				  I915_COMPONENT_GSC_PROXY);
-	if (err < 0) {
-		xe_gt_err(gt, "Failed to add GSC_PROXY component (%pe)\n", ERR_PTR(err));
-		return err;
-	}
-
-	gsc->proxy.component_added = true;
-
-	/* the component must be removed before unload, so can't use drmm for cleanup */
-
-	return 0;
-}
-
-/**
- * xe_gsc_proxy_remove() - remove the GSC proxy MEI component
- * @gsc: the GSC uC
- */
-void xe_gsc_proxy_remove(struct xe_gsc *gsc)
-{
+	struct xe_gsc *gsc = arg;
 	struct xe_gt *gt = gsc_to_gt(gsc);
 	struct xe_device *xe = gt_to_xe(gt);
 	unsigned int fw_ref = 0;
@@ -507,6 +461,48 @@ void xe_gsc_proxy_remove(struct xe_gsc *gsc)
 
 	component_del(xe->drm.dev, &xe_gsc_proxy_component_ops);
 	gsc->proxy.component_added = false;
+}
+
+/**
+ * xe_gsc_proxy_init() - init objects and MEI component required by GSC proxy
+ * @gsc: the GSC uC
+ *
+ * Return: 0 if the initialization was successful, a negative errno otherwise.
+ */
+int xe_gsc_proxy_init(struct xe_gsc *gsc)
+{
+	int err;
+	struct xe_gt *gt = gsc_to_gt(gsc);
+	struct xe_tile *tile = gt_to_tile(gt);
+	struct xe_device *xe = tile_to_xe(tile);
+
+	mutex_init(&gsc->proxy.mutex);
+
+	if (!IS_ENABLED(CONFIG_INTEL_MEI_GSC_PROXY)) {
+		xe_gt_info(gt, "can't init GSC proxy due to missing mei component\n");
+		return -ENODEV;
+	}
+
+	/* no multi-tile devices with this feature yet */
+	if (!xe_tile_is_root(tile)) {
+		xe_gt_err(gt, "unexpected GSC proxy init on tile %u\n", tile->id);
+		return -EINVAL;
+	}
+
+	err = proxy_channel_alloc(gsc);
+	if (err)
+		return err;
+
+	err = component_add_typed(xe->drm.dev, &xe_gsc_proxy_component_ops,
+				  I915_COMPONENT_GSC_PROXY);
+	if (err < 0) {
+		xe_gt_err(gt, "Failed to add GSC_PROXY component (%pe)\n", ERR_PTR(err));
+		return err;
+	}
+
+	gsc->proxy.component_added = true;
+
+	return devm_add_action_or_reset(xe->drm.dev, xe_gsc_proxy_remove, gsc);
 }
 
 /**

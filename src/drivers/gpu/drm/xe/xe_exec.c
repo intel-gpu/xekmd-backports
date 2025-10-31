@@ -176,8 +176,8 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 	}
 
 	if (xe_exec_queue_is_parallel(q)) {
-		err = __copy_from_user(addresses, addresses_user, sizeof(u64) *
-				       q->width);
+		err = copy_from_user(addresses, addresses_user, sizeof(u64) *
+				     q->width);
 		if (err) {
 			err = -EFAULT;
 			goto err_syncs;
@@ -237,6 +237,15 @@ retry:
 		goto err_unlock_list;
 	}
 
+	/*
+	 * It's OK to block interruptible here with the vm lock held, since
+	 * on task freezing during suspend / hibernate, the call will
+	 * return -ERESTARTSYS and the IOCTL will be rerun.
+	 */
+	err = wait_for_completion_interruptible(&xe->pm_block);
+	if (err)
+		goto err_unlock_list;
+
 	vm_exec.vm = &vm->gpuvm;
 	vm_exec.flags = DRM_EXEC_INTERRUPTIBLE_WAIT;
 	if (xe_vm_in_lr_mode(vm)) {
@@ -260,6 +269,12 @@ retry:
 		err = -EWOULDBLOCK;	/* Aliased to -EAGAIN */
 		skip_retry = true;
 		goto err_exec;
+	}
+
+	if (xe_exec_queue_uses_pxp(q)) {
+		err = xe_vm_validate_protected(q->vm);
+		if (err)
+			goto err_exec;
 	}
 
 	job = xe_sched_job_create(q, xe_exec_queue_is_parallel(q) ?

@@ -9,9 +9,13 @@ config DRM_GPUVM
 	  GPU-VM representation providing helpers to manage a GPUs virtual
           address space (Xe-specific backport version)
 config DRM_XE
-	tristate "Intel Xe Graphics"
+	tristate "Intel Xe2 Graphics"
 	depends on m
-	depends on DRM && PCI && MMU && (m || (y && KUNIT=y))
+	depends on DRM && PCI
+	depends on KUNIT || !KUNIT
+	depends on INTEL_VSEC || !INTEL_VSEC
+	depends on X86_PLATFORM_DEVICES || !(X86 && ACPI)
+	#depends on PAGE_SIZE_4KB || COMPILE_TEST || BROKEN
 	depends on INTERVAL_TREE
 	# we need shmfs for the swappable backing store, and in particular
 	# the shmem_readpage() which depends upon tmpfs
@@ -37,10 +41,8 @@ config DRM_XE
 	select BACKLIGHT_CLASS_DEVICE if ACPI
 	select INPUT if ACPI
 	select ACPI_VIDEO if X86 && ACPI
-	select X86_PLATFORM_DEVICES if X86 && ACPI
 	select ACPI_WMI if X86 && ACPI
 	depends on SYNC_FILE
-	depends on IOSF_MBI
 	depends on CRC32
 	select SND_HDA_I915 if SND_HDA_CORE
 	select CEC_CORE if CEC_NOTIFIER
@@ -54,8 +56,10 @@ config DRM_XE
 	depends on WANT_DEV_COREDUMP
 	depends on AUXILIARY_BUS
 	depends on HMM_MIRROR
+	select REGMAP if I2C
 	help
-	  Experimental driver for Intel Xe series GPUs
+	  Driver for Intel Xe2 series GPUs and later. Experimental support
+	  for Xe series is also available.
 
 	  If "M" is selected, the module will be called xe.
 
@@ -69,6 +73,44 @@ config DRM_XE_DISPLAY
 	default y
 	help
 	  Disable this option only if you want to compile out display support.
+
+config DRM_XE_DP_TUNNEL
+	bool "Enable DP tunnel support"
+	depends on DRM_XE_DISPLAY
+	depends on USB4
+	depends on DRM_DISPLAY_DP_TUNNEL
+	default y
+	help
+	  Choose this option to detect DP tunnels and enable the Bandwidth
+	  Allocation mode for such tunnels. This allows using the maximum
+	  resolution allowed by the link BW on all displays sharing the
+	  link BW, for instance on a Thunderbolt link.
+
+	  If in doubt say "Y".
+
+config DRM_XE_GPUSVM
+	bool "Enable CPU to GPU address mirroring"
+	depends on DRM_XE
+	depends on !UML
+	depends on DEVICE_PRIVATE
+	default y
+	depends on DRM_GPUSVM
+	help
+	  Enable this option if you want support for CPU to GPU address
+	  mirroring.
+
+	  If in doubt say "Y".
+
+config DRM_XE_PAGEMAP
+	bool "Enable device memory pool for SVM"
+	depends on DRM_XE_GPUSVM
+	depends on GET_FREE_REGION
+	default y
+	help
+	  Disable this option only if you don't want to expose local device
+	  memory for SVM. Will reduce KMD memory footprint when disabled.
+
+	  If in doubt say "Y".
 
 config DRM_XE_FORCE_PROBE
 	string "Force probe xe for selected Intel hardware IDs"

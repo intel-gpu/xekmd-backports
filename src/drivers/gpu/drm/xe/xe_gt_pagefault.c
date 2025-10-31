@@ -15,10 +15,13 @@
 #include "xe_bo.h"
 #include "prelim/xe_eudebug.h"
 #include "xe_gt.h"
+#include "xe_gt_printk.h"
+#include "xe_gt_stats.h"
 #include "xe_gt_tlb_invalidation.h"
 #include "xe_guc.h"
 #include "xe_guc_ct.h"
 #include "xe_migrate.h"
+#include "xe_svm.h"
 #include "xe_trace_bo.h"
 #include "xe_vm.h"
 
@@ -67,31 +70,8 @@ static bool access_is_atomic(enum access_type access_type)
 
 static bool vma_is_valid(struct xe_tile *tile, struct xe_vma *vma)
 {
-	return BIT(tile->id) & vma->tile_present &&
-		!(BIT(tile->id) & vma->tile_invalidated);
-}
-
-static bool vma_matches(struct xe_vma *vma, u64 page_addr)
-{
-	if (page_addr > xe_vma_end(vma) - 1 ||
-	    page_addr + SZ_4K - 1 < xe_vma_start(vma))
-		return false;
-
-	return true;
-}
-
-struct xe_vma *xe_gt_pagefault_lookup_vma(struct xe_vm *vm, u64 page_addr)
-{
-	struct xe_vma *vma = NULL;
-
-	if (vm->usm.last_fault_vma) {   /* Fast lookup */
-		if (vma_matches(vm->usm.last_fault_vma, page_addr))
-			vma = vm->usm.last_fault_vma;
-	}
-	if (!vma)
-		vma = xe_vm_find_overlapping_vma(vm, page_addr, SZ_4K);
-
-	return vma;
+	return xe_vm_has_valid_gpu_mapping(tile, vma->tile_present,
+					   vma->tile_invalidated);
 }
 
 static int xe_pf_begin(struct drm_exec *exec, struct xe_vma *vma,
@@ -125,20 +105,24 @@ static int xe_pf_begin(struct drm_exec *exec, struct xe_vma *vma,
 	return 0;
 }
 
-static int handle_vma_pagefault(struct xe_tile *tile, struct pagefault *pf,
-				struct xe_vma *vma)
+static int handle_vma_pagefault(struct xe_gt *gt, struct xe_vma *vma,
+				bool atomic)
 {
 	struct xe_vm *vm = xe_vma_vm(vma);
+	struct xe_tile *tile = gt_to_tile(gt);
 	struct drm_exec exec;
 	struct dma_fence *fence;
 	ktime_t end = 0;
 	int err;
-	bool atomic;
+
+	lockdep_assert_held_write(&vm->lock);
+
+	xe_gt_stats_incr(gt, XE_GT_STATS_ID_VMA_PAGEFAULT_COUNT, 1);
+	xe_gt_stats_incr(gt, XE_GT_STATS_ID_VMA_PAGEFAULT_KB, xe_vma_size(vma) / 1024);
 
 	trace_xe_vma_pagefault(vma);
-	atomic = access_is_atomic(pf->access_type);
 
-	/* Check if VMA is valid */
+	/* Check if VMA is valid, opportunistic check only */
 	if (vma_is_valid(tile, vma) && !atomic)
 		return 0;
 
@@ -175,7 +159,6 @@ retry_userptr:
 
 	dma_fence_wait(fence, false);
 	dma_fence_put(fence);
-	vma->tile_invalidated &= ~BIT(tile->id);
 
 unlock_dma_resv:
 	drm_exec_fini(&exec);
@@ -201,16 +184,16 @@ static struct xe_vm *asid_to_vm(struct xe_device *xe, u32 asid)
 }
 
 static int handle_pagefault_start(struct xe_gt *gt, struct pagefault *pf,
-		struct xe_vm **pf_vm,
-		struct xe_eudebug_pagefault **eudebug_pf_out)
+				  struct xe_vm **pf_vm,
+				  struct xe_eudebug_pagefault **eudebug_pf_out)
 {
-	struct xe_eudebug_pagefault *eudebug_pf;
-	struct xe_tile *tile = gt_to_tile(gt);
 	struct xe_device *xe = gt_to_xe(gt);
+	struct xe_vm *vm;
+	struct xe_eudebug_pagefault *eudebug_pf;
 	bool  destroy_eudebug_pf = false;
 	struct xe_vma *vma = NULL;
-	struct xe_vm *vm;
 	int err;
+	bool atomic;
 
 	/* SW isn't expected to handle TRTT faults */
 	if (pf->trva_fault)
@@ -221,8 +204,8 @@ static int handle_pagefault_start(struct xe_gt *gt, struct pagefault *pf,
 		return PTR_ERR(vm);
 
 	eudebug_pf = prelim_xe_eudebug_pagefault_create(gt, vm, pf->page_addr,
-			pf->fault_type, pf->fault_level,
-			pf->access_type);
+						 pf->fault_type, pf->fault_level,
+						 pf->access_type);
 
 	/*
 	 * TODO: Change to read lock? Using write lock for simplicity.
@@ -234,7 +217,7 @@ static int handle_pagefault_start(struct xe_gt *gt, struct pagefault *pf,
 		goto unlock_vm;
 	}
 
-	vma = xe_gt_pagefault_lookup_vma(vm, pf->page_addr);
+	vma = xe_vm_find_vma_by_addr(vm, pf->page_addr);
 	if (!vma) {
 		if (eudebug_pf)
 			vma = xe_vm_create_null_vma(vm, pf->page_addr);
@@ -253,12 +236,19 @@ static int handle_pagefault_start(struct xe_gt *gt, struct pagefault *pf,
 		 * but when reacquiring vm->lock, there is.
 		 * During not aquiring the vm->lock from this context,
 		 * but vma corresponding to the address where the pagefault occurred
-		 * in another context has allocated.*/
+		 * in another context has allocated.
+		 */
 		if (eudebug_pf)
 			destroy_eudebug_pf = true;
 	}
 
-	err = handle_vma_pagefault(tile, pf, vma);
+	atomic = access_is_atomic(pf->access_type);
+
+	if (xe_vma_is_cpu_addr_mirror(vma))
+		err = xe_svm_handle_pagefault(vm, vma, gt,
+					      pf->page_addr, atomic);
+	else
+		err = handle_vma_pagefault(gt, vma, atomic);
 
 unlock_vm:
 	if (!err)
@@ -276,8 +266,7 @@ unlock_vm:
 	if (!*eudebug_pf_out) {
 		xe_vm_put(vm);
 		*pf_vm = NULL;
-	}
-	else {
+	} else {
 		*pf_vm = vm;
 	}
 
@@ -314,21 +303,22 @@ static int send_pagefault_reply(struct xe_guc *guc,
 	return xe_guc_ct_send(&guc->ct, action, ARRAY_SIZE(action), 0, 0);
 }
 
-static void print_pagefault(struct xe_device *xe, struct pagefault *pf)
+static void print_pagefault(struct xe_gt *gt, struct pagefault *pf)
 {
-	drm_dbg(&xe->drm, "\n\tASID: %d\n"
-		 "\tVFID: %d\n"
-		 "\tPDATA: 0x%04x\n"
-		 "\tFaulted Address: 0x%08x%08x\n"
-		 "\tFaultType: %d\n"
-		 "\tAccessType: %d\n"
-		 "\tFaultLevel: %d\n"
-		 "\tEngineClass: %d\n"
-		 "\tEngineInstance: %d\n",
-		 pf->asid, pf->vfid, pf->pdata, upper_32_bits(pf->page_addr),
-		 lower_32_bits(pf->page_addr),
-		 pf->fault_type, pf->access_type, pf->fault_level,
-		 pf->engine_class, pf->engine_instance);
+	xe_gt_dbg(gt, "\n\tASID: %d\n"
+		  "\tVFID: %d\n"
+		  "\tPDATA: 0x%04x\n"
+		  "\tFaulted Address: 0x%08x%08x\n"
+		  "\tFaultType: %d\n"
+		  "\tAccessType: %d\n"
+		  "\tFaultLevel: %d\n"
+		  "\tEngineClass: %d %s\n"
+		  "\tEngineInstance: %d\n",
+		  pf->asid, pf->vfid, pf->pdata, upper_32_bits(pf->page_addr),
+		  lower_32_bits(pf->page_addr),
+		  pf->fault_type, pf->access_type, pf->fault_level,
+		  pf->engine_class, xe_hw_engine_class_to_str(pf->engine_class),
+		  pf->engine_instance);
 }
 
 #define PF_MSG_LEN_DW	4
@@ -380,7 +370,6 @@ static bool pf_queue_full(struct pf_queue *pf_queue)
 int xe_guc_pagefault_handler(struct xe_guc *guc, u32 *msg, u32 len)
 {
 	struct xe_gt *gt = guc_to_gt(guc);
-	struct xe_device *xe = gt_to_xe(gt);
 	struct pf_queue *pf_queue;
 	unsigned long flags;
 	u32 asid;
@@ -405,7 +394,7 @@ int xe_guc_pagefault_handler(struct xe_guc *guc, u32 *msg, u32 len)
 			pf_queue->num_dw;
 		queue_work(gt->usm.pf_wq, &pf_queue->worker);
 	} else {
-		drm_warn(&xe->drm, "PF Queue full, shouldn't be possible");
+		xe_gt_warn(gt, "PageFault Queue full, shouldn't be possible\n");
 	}
 	spin_unlock_irqrestore(&pf_queue->lock, flags);
 
@@ -418,7 +407,6 @@ static void pf_queue_work_func(struct work_struct *w)
 {
 	struct pf_queue *pf_queue = container_of(w, struct pf_queue, worker);
 	struct xe_gt *gt = pf_queue->gt;
-	struct xe_device *xe = gt_to_xe(gt);
 	struct xe_guc_pagefault_reply reply = {};
 	struct pagefault pf = {};
 	unsigned long threshold;
@@ -432,9 +420,9 @@ static void pf_queue_work_func(struct work_struct *w)
 
 		ret = handle_pagefault_start(gt, &pf, &vm, &eudebug_pf);
 		if (unlikely(ret)) {
-			print_pagefault(xe, &pf);
+			print_pagefault(gt, &pf);
 			pf.fault_unsuccessful = 1;
-			drm_dbg(&xe->drm, "Fault response: Unsuccessful %d\n", ret);
+			xe_gt_dbg(gt, "Fault response: Unsuccessful %pe\n", ERR_PTR(ret));
 		}
 
 		reply.dw0 = FIELD_PREP(PFR_VALID, 1) |
@@ -449,9 +437,8 @@ static void pf_queue_work_func(struct work_struct *w)
 			FIELD_PREP(PFR_PDATA, pf.pdata);
 
 		ret = send_pagefault_reply(&gt->uc.guc, &reply);
-		if (unlikely(ret)) {
-			drm_dbg(&xe->drm, "GuC Pagefault reply failed: %d\n", ret);
-		}
+		if (unlikely(ret))
+			xe_gt_dbg(gt, "GuC Pagefault reply failed: %d\n", ret);
 
 		handle_pagefault_end(gt, vm, eudebug_pf);
 
@@ -499,6 +486,7 @@ static int xe_alloc_pf_queue(struct xe_gt *gt, struct pf_queue *pf_queue)
 #define PF_MULTIPLIER	8
 	pf_queue->num_dw =
 		(num_eus + XE_NUM_HW_ENGINES) * PF_MSG_LEN_DW * PF_MULTIPLIER;
+	pf_queue->num_dw = roundup_pow_of_two(pf_queue->num_dw);
 #undef PF_MULTIPLIER
 
 	pf_queue->gt = gt;
@@ -592,21 +580,21 @@ static int sub_granularity_in_byte(int val)
 	return (granularity_in_byte(val) / 32);
 }
 
-static void print_acc(struct xe_device *xe, struct acc *acc)
+static void print_acc(struct xe_gt *gt, struct acc *acc)
 {
-	drm_warn(&xe->drm, "Access counter request:\n"
-		 "\tType: %s\n"
-		 "\tASID: %d\n"
-		 "\tVFID: %d\n"
-		 "\tEngine: %d:%d\n"
-		 "\tGranularity: 0x%x KB Region/ %d KB sub-granularity\n"
-		 "\tSub_Granularity Vector: 0x%08x\n"
-		 "\tVA Range base: 0x%016llx\n",
-		 acc->access_type ? "AC_NTFY_VAL" : "AC_TRIG_VAL",
-		 acc->asid, acc->vfid, acc->engine_class, acc->engine_instance,
-		 granularity_in_byte(acc->granularity) / SZ_1K,
-		 sub_granularity_in_byte(acc->granularity) / SZ_1K,
-		 acc->sub_granularity, acc->va_range_base);
+	xe_gt_warn(gt, "Access counter request:\n"
+		   "\tType: %s\n"
+		   "\tASID: %d\n"
+		   "\tVFID: %d\n"
+		   "\tEngine: %d:%d\n"
+		   "\tGranularity: 0x%x KB Region/ %d KB sub-granularity\n"
+		   "\tSub_Granularity Vector: 0x%08x\n"
+		   "\tVA Range base: 0x%016llx\n",
+		   acc->access_type ? "AC_NTFY_VAL" : "AC_TRIG_VAL",
+		   acc->asid, acc->vfid, acc->engine_class, acc->engine_instance,
+		   granularity_in_byte(acc->granularity) / SZ_1K,
+		   sub_granularity_in_byte(acc->granularity) / SZ_1K,
+		   acc->sub_granularity, acc->va_range_base);
 }
 
 static struct xe_vma *get_acc_vma(struct xe_vm *vm, struct acc *acc)
@@ -704,7 +692,6 @@ static void acc_queue_work_func(struct work_struct *w)
 {
 	struct acc_queue *acc_queue = container_of(w, struct acc_queue, worker);
 	struct xe_gt *gt = acc_queue->gt;
-	struct xe_device *xe = gt_to_xe(gt);
 	struct acc acc = {};
 	unsigned long threshold;
 	int ret;
@@ -714,8 +701,8 @@ static void acc_queue_work_func(struct work_struct *w)
 	while (get_acc(acc_queue, &acc)) {
 		ret = handle_acc(gt, &acc);
 		if (unlikely(ret)) {
-			print_acc(xe, &acc);
-			drm_warn(&xe->drm, "ACC: Unsuccessful %d\n", ret);
+			print_acc(gt, &acc);
+			xe_gt_warn(gt, "ACC: Unsuccessful %pe\n", ERR_PTR(ret));
 		}
 
 		if (time_after(jiffies, threshold) &&
@@ -760,7 +747,7 @@ int xe_guc_access_counter_notify_handler(struct xe_guc *guc, u32 *msg, u32 len)
 		acc_queue->head = (acc_queue->head + len) % ACC_QUEUE_NUM_DW;
 		queue_work(gt->usm.acc_wq, &acc_queue->worker);
 	} else {
-		drm_warn(&gt_to_xe(gt)->drm, "ACC Queue full, dropping ACC");
+		xe_gt_warn(gt, "ACC Queue full, dropping ACC\n");
 	}
 	spin_unlock(&acc_queue->lock);
 

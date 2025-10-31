@@ -195,7 +195,6 @@ int prelim_xe_debug_metadata_create_ioctl(struct drm_device *dev,
 	if (err)
 		goto put_mdata;
 
-
 	args->metadata_id = id;
 
 	prelim_xe_eudebug_debug_metadata_create(xef, mdata);

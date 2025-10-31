@@ -43,7 +43,7 @@ int vm_bind_op_ext_attach_debug(struct xe_device *xe,
 				struct drm_gpuva_ops *ops,
 				u32 operation, u64 extension);
 
-#else /* CONFIG_DRM_XE_EUDEBUG */
+#else /* CPTCFG_PRELIM_DRM_XE_EUDEBUG */
 
 #include <linux/errno.h>
 
@@ -52,7 +52,11 @@ struct xe_device;
 struct xe_eudebug_vma_metadata;
 struct drm_gpuva_ops;
 
-static inline struct prelim_xe_debug_metadata *prelim_xe_debug_metadata_get(struct xe_file *xef, u32 id) { return NULL; }
+static inline struct prelim_xe_debug_metadata *xe_debug_metadata_get(struct xe_file *xef, u32 id)
+{
+	return NULL;
+}
+
 static inline void prelim_xe_debug_metadata_put(struct prelim_xe_debug_metadata *mdata) { }
 
 static inline int prelim_xe_debug_metadata_create_ioctl(struct drm_device *dev,
@@ -92,7 +96,6 @@ static inline int vm_bind_op_ext_attach_debug(struct xe_device *xe,
 	return -EINVAL;
 }
 
-#endif /* CONFIG_DRM_XE_EUDEBUG */
-
+#endif /* CPTCFG_PRELIM_DRM_XE_EUDEBUG */
 
 #endif

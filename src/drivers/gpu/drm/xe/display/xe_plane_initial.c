@@ -8,19 +8,37 @@
 
 #include "regs/xe_gtt_defs.h"
 #include "xe_ggtt.h"
+#include "xe_mmio.h"
 
-#include "intel_atomic_plane.h"
 #include "intel_crtc.h"
 #include "intel_display.h"
+#include "intel_display_core.h"
+#include "intel_display_regs.h"
 #include "intel_display_types.h"
 #include "intel_fb.h"
 #include "intel_fb_pin.h"
 #include "intel_frontbuffer.h"
+#include "intel_plane.h"
 #include "intel_plane_initial.h"
 #include "xe_bo.h"
 #include "xe_wa.h"
 
 #include <generated/xe_wa_oob.h>
+
+void intel_plane_initial_vblank_wait(struct intel_crtc *crtc)
+{
+	/* Early xe has no irq */
+	struct xe_device *xe = to_xe_device(crtc->base.dev);
+	struct xe_reg pipe_frmtmstmp = XE_REG(i915_mmio_reg_offset(PIPE_FRMTMSTMP(crtc->pipe)));
+	u32 timestamp;
+	int ret;
+
+	timestamp = xe_mmio_read32(xe_root_tile_mmio(xe), pipe_frmtmstmp);
+
+	ret = xe_mmio_wait32_not(xe_root_tile_mmio(xe), pipe_frmtmstmp, ~0U, timestamp, 40000U, &timestamp, false);
+	if (ret < 0)
+		drm_warn(&xe->drm, "waiting for early vblank failed with %i\n", ret);
+}
 
 static bool
 intel_reuse_initial_plane_obj(struct intel_crtc *this,
@@ -70,12 +88,8 @@ initial_plane_bo(struct xe_device *xe,
 
 	base = round_down(plane_config->base, page_size);
 	if (IS_DGFX(xe)) {
-		u64 __iomem *gte = tile0->mem.ggtt->gsm;
-		u64 pte;
+		u64 pte = xe_ggtt_read_pte(tile0->mem.ggtt, base);
 
-		gte += base / XE_PAGE_SIZE;
-
-		pte = ioread64(gte);
 		if (!(pte & XE_GGTT_PTE_DM)) {
 			drm_err(&xe->drm,
 				"Initial plane programming missing DM bit\n");
@@ -170,7 +184,7 @@ intel_alloc_initial_plane_obj(struct intel_crtc *crtc,
 		return false;
 
 	if (intel_framebuffer_init(to_intel_framebuffer(fb),
-				   &bo->ttm.base, &mode_cmd)) {
+				   &bo->ttm.base, fb->format, &mode_cmd)) {
 		drm_dbg_kms(&xe->drm, "intel fb init failed\n");
 		goto err_bo;
 	}
@@ -215,7 +229,7 @@ intel_find_initial_plane_obj(struct intel_crtc *crtc,
 			   plane_state->uapi.rotation, &plane_state->view);
 
 	vma = intel_fb_pin_to_ggtt(fb, &plane_state->view.gtt,
-				   0, 0, false, &plane_state->flags);
+				   0, 0, 0, false, &plane_state->flags);
 	if (IS_ERR(vma))
 		goto nofb;
 
@@ -293,7 +307,7 @@ void intel_initial_plane_config(struct intel_display *display)
 		intel_find_initial_plane_obj(crtc, plane_configs);
 
 		if (display->funcs.display->fixup_initial_plane_config(crtc, plane_config))
-			intel_crtc_wait_for_next_vblank(crtc);
+			intel_plane_initial_vblank_wait(crtc);
 
 		plane_config_fini(plane_config);
 	}

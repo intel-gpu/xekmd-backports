@@ -31,7 +31,7 @@ BKPT_VER=@DOLLAR_SIGN@(shell cat src/versions | grep BACKPORTS_RELEASE_TAG | cut
 # Tagging is needed for decoding
 DEV_TAG=@DOLLAR_SIGN@(shell cat src/versions | grep BASE_KERNEL_TAG | cut -f 2 -d "\"" | cut -d "-" -f 3 2>/dev/null || echo 1)
 
-VERSION=1.$(BKPT_VER)
+VERSION=0.$(BKPT_VER)
 
 #------------------------------------------------------------------------------
 #

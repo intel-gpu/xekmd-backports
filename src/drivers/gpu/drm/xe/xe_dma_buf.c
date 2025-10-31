@@ -72,7 +72,7 @@ static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
 		return ret;
 	}
 
-	ret = xe_bo_pin_external(bo);
+	ret = xe_bo_pin_external(bo, true);
 	xe_assert(xe, !ret);
 
 	return 0;
@@ -233,7 +233,7 @@ static void xe_dma_buf_move_notify(struct dma_buf_attachment *attach)
 	struct drm_gem_object *obj = attach->importer_priv;
 	struct xe_bo *bo = gem_to_xe_bo(obj);
 
-	XE_WARN_ON(xe_bo_evict(bo, false));
+	XE_WARN_ON(xe_bo_evict(bo));
 }
 
 static const struct dma_buf_attach_ops xe_dma_buf_attach_ops = {

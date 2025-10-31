@@ -9,12 +9,15 @@
 #include "regs/xe_bars.h"
 #include "xe_assert.h"
 #include "xe_device.h"
+#include "prelim/xe_eudebug.h"
 #include "xe_gt_sriov_pf_config.h"
 #include "xe_gt_sriov_pf_control.h"
+#include "xe_gt_sriov_printk.h"
 #include "xe_guc_engine_activity.h"
 #include "xe_pci_sriov.h"
 #include "xe_pm.h"
 #include "xe_sriov.h"
+#include "xe_sriov_pf.h"
 #include "xe_sriov_pf_helpers.h"
 #include "xe_sriov_printk.h"
 
@@ -125,8 +128,8 @@ static void pf_engine_activity_stats(struct xe_device *xe, unsigned int num_vfs,
 	for_each_gt(gt, xe, id) {
 		ret = xe_guc_engine_activity_function_stats(&gt->uc.guc, num_vfs, enable);
 		if (ret)
-			xe_sriov_info(xe, "Failed to %s engine activity function stats (%pe)\n",
-				      str_enable_disable(enable), ERR_PTR(ret));
+			xe_gt_sriov_info(gt, "Failed to %s engine activity function stats (%pe)\n",
+					 str_enable_disable(enable), ERR_PTR(ret));
 	}
 }
 
@@ -152,6 +155,14 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
 	xe_assert(xe, num_vfs > 0);
 	xe_assert(xe, num_vfs <= total_vfs);
 	xe_sriov_dbg(xe, "enabling %u VF%s\n", num_vfs, str_plural(num_vfs));
+
+	err = xe_sriov_pf_wait_ready(xe);
+	if (err)
+		goto out;
+
+	err = prelim_xe_eudebug_support_disable(xe);
+	if (err < 0)
+		goto out;
 
 	/*
 	 * We must hold additional reference to the runtime PM to keep PF in D0
@@ -190,7 +201,8 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
 failed:
 	pf_unprovision_vfs(xe, num_vfs);
 	xe_pm_runtime_put(xe);
-
+	prelim_xe_eudebug_support_enable(xe);
+out:
 	xe_sriov_notice(xe, "Failed to enable %u VF%s (%pe)\n",
 			num_vfs, str_plural(num_vfs), ERR_PTR(err));
 	return err;
@@ -218,6 +230,8 @@ static int pf_disable_vfs(struct xe_device *xe)
 
 	/* not needed anymore - see pf_enable_vfs() */
 	xe_pm_runtime_put(xe);
+
+	prelim_xe_eudebug_support_enable(xe);
 
 	xe_sriov_info(xe, "Disabled %u VF%s\n", num_vfs, str_plural(num_vfs));
 	return 0;

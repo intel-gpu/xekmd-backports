@@ -25,6 +25,7 @@
 #include "xe_ring_ops_types.h"
 #include "xe_trace.h"
 #include "xe_vm.h"
+#include "xe_pxp.h"
 #include "prelim/xe_eudebug.h"
 
 enum xe_exec_queue_sched_prop {
@@ -39,6 +40,8 @@ static int exec_queue_user_extensions(struct xe_device *xe, struct xe_exec_queue
 
 static void __xe_exec_queue_free(struct xe_exec_queue *q)
 {
+	if (xe_exec_queue_uses_pxp(q))
+		xe_pxp_exec_queue_remove(gt_to_xe(q->gt)->pxp, q);
 	if (q->vm)
 		xe_vm_put(q->vm);
 
@@ -79,6 +82,7 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
 	INIT_LIST_HEAD(&q->lr.link);
 	INIT_LIST_HEAD(&q->multi_gt_link);
 	INIT_LIST_HEAD(&q->hw_engine_group_link);
+	INIT_LIST_HEAD(&q->pxp.link);
 
 	q->sched_props.timeslice_us = hwe->eclass->sched_props.timeslice_us;
 	q->sched_props.preempt_timeout_us =
@@ -111,29 +115,33 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
 
 static int __xe_exec_queue_init(struct xe_exec_queue *q)
 {
-	struct xe_vm *vm = q->vm;
 	u32 flags = 0;
 	int i, err;
 
-	if (vm) {
-		err = xe_vm_lock(vm, true);
-		if (err)
-			return err;
+	/*
+	 * PXP workloads executing on RCS or CCS must run in isolation (i.e. no
+	 * other workload can use the EUs at the same time). On MTL this is done
+	 * by setting the RUNALONE bit in the LRC, while starting on Xe2 there
+	 * is a dedicated bit for it.
+	 */
+	if (xe_exec_queue_uses_pxp(q) &&
+	    (q->class == XE_ENGINE_CLASS_RENDER || q->class == XE_ENGINE_CLASS_COMPUTE)) {
+		if (GRAPHICS_VER(gt_to_xe(q->gt)) >= 20)
+			flags |= XE_LRC_CREATE_PXP;
+		else
+			flags |= XE_LRC_CREATE_RUNALONE;
 	}
 
 	if (q->eudebug_flags & EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)
-		flags |= LRC_CREATE_RUNALONE;
+		flags |= XE_LRC_CREATE_RUNALONE;
 
 	for (i = 0; i < q->width; ++i) {
 		q->lrc[i] = xe_lrc_create(q->hwe, q->vm, SZ_16K, q->msix_vec, flags);
 		if (IS_ERR(q->lrc[i])) {
 			err = PTR_ERR(q->lrc[i]);
-			goto err_unlock;
+			goto err_lrc;
 		}
 	}
-
-	if (vm)
-		xe_vm_unlock(vm);
 
 	err = q->ops->init(q);
 	if (err)
@@ -141,13 +149,20 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q)
 
 	return 0;
 
-err_unlock:
-	if (vm)
-		xe_vm_unlock(vm);
 err_lrc:
 	for (i = i - 1; i >= 0; --i)
 		xe_lrc_put(q->lrc[i]);
 	return err;
+}
+
+static void __xe_exec_queue_fini(struct xe_exec_queue *q)
+{
+	int i;
+
+	q->ops->fini(q);
+
+	for (i = 0; i < q->width; ++i)
+		xe_lrc_put(q->lrc[i]);
 }
 
 struct xe_exec_queue *xe_exec_queue_create(struct xe_device *xe, struct xe_vm *vm,
@@ -158,6 +173,9 @@ struct xe_exec_queue *xe_exec_queue_create(struct xe_device *xe, struct xe_vm *v
 	struct xe_exec_queue *q;
 	int err;
 
+	/* VMs for GSCCS queues (and only those) must have the XE_VM_FLAG_GSC flag */
+	xe_assert(xe, !vm || (!!(vm->flags & XE_VM_FLAG_GSC) == !!(hwe->engine_id == XE_HW_ENGINE_GSCCS0)));
+
 	q = __xe_exec_queue_alloc(xe, vm, logical_mask, width, hwe, flags,
 				  extensions);
 	if (IS_ERR(q))
@@ -167,12 +185,28 @@ struct xe_exec_queue *xe_exec_queue_create(struct xe_device *xe, struct xe_vm *v
 	if (err)
 		goto err_post_alloc;
 
+	/*
+	 * We can only add the queue to the PXP list after the init is complete,
+	 * because the PXP termination can call exec_queue_kill and that will
+	 * go bad if the queue is only half-initialized. This means that we
+	 * can't do it when we handle the PXP extension in __xe_exec_queue_alloc
+	 * and we need to do it here instead.
+	 */
+	if (xe_exec_queue_uses_pxp(q)) {
+		err = xe_pxp_exec_queue_add(xe->pxp, q);
+		if (err)
+			goto err_post_init;
+	}
+
 	return q;
 
+err_post_init:
+	__xe_exec_queue_fini(q);
 err_post_alloc:
 	__xe_exec_queue_free(q);
 	return ERR_PTR(err);
 }
+ALLOW_ERROR_INJECTION(xe_exec_queue_create, ERRNO);
 
 struct xe_exec_queue *xe_exec_queue_create_class(struct xe_device *xe, struct xe_gt *gt,
 						 struct xe_vm *vm,
@@ -255,6 +289,9 @@ void xe_exec_queue_destroy(struct kref *ref)
 	struct xe_exec_queue *q = container_of(ref, struct xe_exec_queue, refcount);
 	struct xe_exec_queue *eq, *next;
 
+	if (xe_exec_queue_uses_pxp(q))
+		xe_pxp_exec_queue_remove(gt_to_xe(q->gt)->pxp, q);
+
 	xe_exec_queue_last_fence_put_unlocked(q);
 	if (!(q->flags & EXEC_QUEUE_FLAG_BIND_ENGINE_CHILD)) {
 		list_for_each_entry_safe(eq, next, &q->multi_gt_list,
@@ -262,13 +299,11 @@ void xe_exec_queue_destroy(struct kref *ref)
 			xe_exec_queue_put(eq);
 	}
 
-	q->ops->fini(q);
+	q->ops->destroy(q);
 }
 
 void xe_exec_queue_fini(struct xe_exec_queue *q)
 {
-	int i;
-
 	/*
 	 * Before releasing our ref to lrc and xef, accumulate our run ticks
 	 * and wakeup any waiters.
@@ -277,9 +312,7 @@ void xe_exec_queue_fini(struct xe_exec_queue *q)
 	if (q->xef && atomic_dec_and_test(&q->xef->exec_queue.pending_removal))
 		wake_up_var(&q->xef->exec_queue.pending_removal);
 
-	for (i = 0; i < q->width; ++i)
-		xe_lrc_put(q->lrc[i]);
-
+	__xe_exec_queue_fini(q);
 	__xe_exec_queue_free(q);
 }
 
@@ -410,6 +443,22 @@ static int exec_queue_set_timeslice(struct xe_device *xe, struct xe_exec_queue *
 	return 0;
 }
 
+static int
+exec_queue_set_pxp_type(struct xe_device *xe, struct xe_exec_queue *q, u64 value)
+{
+	if (value == DRM_XE_PXP_TYPE_NONE)
+		return 0;
+
+	/* we only support HWDRM sessions right now */
+	if (XE_IOCTL_DBG(xe, value != DRM_XE_PXP_TYPE_HWDRM))
+		return -EINVAL;
+
+	if (!xe_pxp_is_enabled(xe->pxp))
+		return -ENODEV;
+
+	return xe_pxp_exec_queue_set_type(xe->pxp, q, DRM_XE_PXP_TYPE_HWDRM);
+}
+
 static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
 				  u64 value)
 {
@@ -435,10 +484,8 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
 			 !(value & PRELIM_DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)))
 		return -EINVAL;
 
-#if IS_ENABLED(CPTCFG_PRELIM_DRM_XE_EUDEBUG)
-	if (XE_IOCTL_DBG(xe, !xe->eudebug.enable))
+	if (XE_IOCTL_DBG(xe, !prelim_xe_eudebug_is_enabled(xe)))
 		return -EPERM;
-#endif
 
 	q->eudebug_flags = EXEC_QUEUE_EUDEBUG_FLAG_ENABLE;
 	q->sched_props.preempt_timeout_us = 0;
@@ -458,6 +505,7 @@ typedef int (*xe_exec_queue_set_property_fn)(struct xe_device *xe,
 static const xe_exec_queue_set_property_fn exec_queue_set_property_funcs[] = {
 	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY] = exec_queue_set_priority,
 	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_TIMESLICE] = exec_queue_set_timeslice,
+	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_PXP_TYPE] = exec_queue_set_pxp_type,
 	[PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG] = exec_queue_set_eudebug,
 };
 
@@ -470,7 +518,7 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
 	int err;
 	u32 idx;
 
-	err = __copy_from_user(&ext, address, sizeof(ext));
+	err = copy_from_user(&ext, address, sizeof(ext));
 	if (XE_IOCTL_DBG(xe, err))
 		return -EFAULT;
 
@@ -479,6 +527,7 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
 	    XE_IOCTL_DBG(xe, ext.pad) ||
 	    XE_IOCTL_DBG(xe, ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY &&
 			 ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_TIMESLICE &&
+			 ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_PXP_TYPE &&
 			 ext.property != PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG))
 		return -EINVAL;
 
@@ -509,7 +558,7 @@ static int exec_queue_user_extensions(struct xe_device *xe, struct xe_exec_queue
 	if (XE_IOCTL_DBG(xe, ext_number >= MAX_USER_EXTENSIONS))
 		return -E2BIG;
 
-	err = __copy_from_user(&ext, address, sizeof(ext));
+	err = copy_from_user(&ext, address, sizeof(ext));
 	if (XE_IOCTL_DBG(xe, err))
 		return -EFAULT;
 
@@ -531,7 +580,7 @@ static int exec_queue_user_extensions(struct xe_device *xe, struct xe_exec_queue
 	return 0;
 }
 
-static u32 calc_validate_logical_mask(struct xe_device *xe, struct xe_gt *gt,
+static u32 calc_validate_logical_mask(struct xe_device *xe,
 				      struct drm_xe_engine_class_instance *eci,
 				      u16 width, u16 num_placements)
 {
@@ -593,7 +642,6 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
 		u64_to_user_ptr(args->instances);
 	struct xe_hw_engine *hwe;
 	struct xe_vm *vm;
-	struct xe_gt *gt;
 	struct xe_tile *tile;
 	struct xe_exec_queue *q = NULL;
 	u32 logical_mask;
@@ -610,13 +658,12 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
 	if (XE_IOCTL_DBG(xe, !len || len > XE_HW_ENGINE_MAX_INSTANCE))
 		return -EINVAL;
 
-	err = __copy_from_user(eci, user_eci,
-			       sizeof(struct drm_xe_engine_class_instance) *
-			       len);
+	err = copy_from_user(eci, user_eci,
+			     sizeof(struct drm_xe_engine_class_instance) * len);
 	if (XE_IOCTL_DBG(xe, err))
 		return -EFAULT;
 
-	if (XE_IOCTL_DBG(xe, eci[0].gt_id >= xe->info.gt_count))
+	if (XE_IOCTL_DBG(xe, !xe_device_get_gt(xe, eci[0].gt_id)))
 		return -EINVAL;
 
 	if (args->flags & DRM_XE_EXEC_QUEUE_LOW_LATENCY_HINT)
@@ -650,8 +697,7 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
 					      &q->multi_gt_link);
 		}
 	} else {
-		gt = xe_device_get_gt(xe, eci[0].gt_id);
-		logical_mask = calc_validate_logical_mask(xe, gt, eci,
+		logical_mask = calc_validate_logical_mask(xe, eci,
 							  args->width,
 							  args->num_placements);
 		if (XE_IOCTL_DBG(xe, !logical_mask))

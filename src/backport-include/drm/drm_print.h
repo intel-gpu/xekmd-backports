@@ -84,4 +84,26 @@ static inline struct drm_printer drm_line_printer(struct drm_printer *p,
         __DRM_DEFINE_DBG_RATELIMITED(DRIVER, drm, fmt, ## __VA_ARGS__)
 #endif
 
+#ifdef BPM_DRM_COREDUMP_PRINTER_IS_FULL_NOT_PRESENT 
+/**
+ * drm_coredump_printer_is_full() - DRM coredump printer output is full
+ * @p: DRM coredump printer
+ *
+ * DRM printer output is full, useful to short circuit coredump printing once
+ * printer is full.
+ *
+ * RETURNS:
+ * True if DRM coredump printer output buffer is full, False otherwise
+ */
+static inline bool drm_coredump_printer_is_full(struct drm_printer *p)
+{
+	struct drm_print_iterator *iterator = p->arg;
+
+	if (p->printfn != __drm_printfn_coredump)
+		return true;
+
+	return !iterator->remain;
+}
+#endif
+
 #endif /* _BACKPORT_DRM_PRINT_H_ */

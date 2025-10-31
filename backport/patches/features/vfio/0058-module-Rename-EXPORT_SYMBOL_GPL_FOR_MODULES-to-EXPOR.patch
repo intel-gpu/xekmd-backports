@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Vlastimil Babka <vbabka@suse.cz>
+Date: Fri, 8 Aug 2025 15:28:47 +0200
+Subject: [PATCH 58/59] module: Rename EXPORT_SYMBOL_GPL_FOR_MODULES to
+ EXPORT_SYMBOL_FOR_MODULES
+
+Christoph suggested that the explicit _GPL_ can be dropped from the
+module namespace export macro, as it's intended for in-tree modules
+only. It would be possible to restrict it technically, but it was
+pointed out [2] that some cases of using an out-of-tree build of an
+in-tree module with the same name are legitimate. But in that case those
+also have to be GPL anyway so it's unnecessary to spell it out in the
+macro name.
+
+Link: https://lore.kernel.org/all/aFleJN_fE-RbSoFD@infradead.org/ [1]
+Link: https://lore.kernel.org/all/CAK7LNATRkZHwJGpojCnvdiaoDnP%2BaeUXgdey5sb_8muzdWTMkA@mail.gmail.com/ [2]
+Suggested-by: Christoph Hellwig <hch@infradead.org>
+Reviewed-by: Shivank Garg <shivankg@amd.com>
+Acked-by: David Hildenbrand <david@redhat.com>
+Acked-by: Nicolas Schier <n.schier@avm.de>
+Reviewed-by: Daniel Gomez <da.gomez@samsung.com>
+Reviewed-by: Christian Brauner <brauner@kernel.org>
+Signed-off-by: Vlastimil Babka <vbabka@suse.cz>
+Link: https://lore.kernel.org/20250808-export_modules-v4-1-426945bcc5e1@suse.cz
+Signed-off-by: Christian Brauner <brauner@kernel.org>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ Documentation/core-api/symbol-namespaces.rst | 11 ++++++-----
+ include/linux/export.h                       |  2 +-
+ 2 files changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/Documentation/core-api/symbol-namespaces.rst b/Documentation/core-api/symbol-namespaces.rst
+index c6f59c5e2..f26280128 100644
+--- a/Documentation/core-api/symbol-namespaces.rst
++++ b/Documentation/core-api/symbol-namespaces.rst
+@@ -86,20 +86,21 @@ unit as preprocessor statement. The above example would then read::
+ within the corresponding compilation unit before the #include for
+ <linux/export.h>. Typically it's placed before the first #include statement.
+ 
+-2.3 Using the EXPORT_SYMBOL_GPL_FOR_MODULES() macro
+-===================================================
++Using the EXPORT_SYMBOL_FOR_MODULES() macro
++-------------------------------------------
+ 
+ Symbols exported using this macro are put into a module namespace. This
+-namespace cannot be imported.
++namespace cannot be imported. These exports are GPL-only as they are only
++intended for in-tree modules.
+ 
+ The macro takes a comma separated list of module names, allowing only those
+ modules to access this symbol. Simple tail-globs are supported.
+ 
+ For example:
+ 
+-  EXPORT_SYMBOL_GPL_FOR_MODULES(preempt_notifier_inc, "kvm,kvm-*")
++  EXPORT_SYMBOL_FOR_MODULES(preempt_notifier_inc, "kvm,kvm-*")
+ 
+-will limit usage of this symbol to modules whoes name matches the given
++will limit usage of this symbol to modules whose name matches the given
+ patterns.
+ 
+ 3. How to use Symbols exported in Namespaces
+diff --git a/include/linux/export.h b/include/linux/export.h
+index f35d03b41..a686fd0ba 100644
+--- a/include/linux/export.h
++++ b/include/linux/export.h
+@@ -91,6 +91,6 @@
+ #define EXPORT_SYMBOL_NS(sym, ns)	__EXPORT_SYMBOL(sym, "", ns)
+ #define EXPORT_SYMBOL_NS_GPL(sym, ns)	__EXPORT_SYMBOL(sym, "GPL", ns)
+ 
+-#define EXPORT_SYMBOL_GPL_FOR_MODULES(sym, mods) __EXPORT_SYMBOL(sym, "GPL", "module:" mods)
++#define EXPORT_SYMBOL_FOR_MODULES(sym, mods) __EXPORT_SYMBOL(sym, "GPL", "module:" mods)
+ 
+ #endif /* _LINUX_EXPORT_H */
+-- 
+2.34.1
+

@@ -1,0 +1,204 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 1 Oct 2025 01:35:19 +0200
+Subject: [PATCH 01/59] drm/xe/pf: Add top level functions to control VFs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We already have control functions that we use to control the VF
+state on the per-GT basis, but that is low level detail from the
+user point of view, who rather expects VF-level functions.
+
+For now add simple functions that just iterate over all GTs and
+call per-GT control function. We will soon allow to use some of
+them from the user facing interfaces like debugfs.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Michał Winiarski <michal.winiarski@intel.com>
+Link: https://lore.kernel.org/r/20250930233525.201263-2-michal.wajdeczko@intel.com
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/Makefile              |   1 +
+ drivers/gpu/drm/xe/xe_pci_sriov.c        |   8 +-
+ drivers/gpu/drm/xe/xe_sriov_pf_control.c | 104 +++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_pf_control.h |  16 ++++
+ 4 files changed, 124 insertions(+), 5 deletions(-)
+ create mode 100644 drivers/gpu/drm/xe/xe_sriov_pf_control.c
+ create mode 100644 drivers/gpu/drm/xe/xe_sriov_pf_control.h
+
+diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
+index c250a9c0e..e29a66a9d 100644
+--- a/drivers/gpu/drm/xe/Makefile
++++ b/drivers/gpu/drm/xe/Makefile
+@@ -163,6 +163,7 @@ xe-$(CONFIG_PCI_IOV) += \
+ 	xe_lmtt_ml.o \
+ 	xe_pci_sriov.o \
+ 	xe_sriov_pf.o \
++	xe_sriov_pf_control.o \
+ 	xe_sriov_pf_debugfs.o \
+ 	xe_sriov_pf_service.o \
+ 	xe_tile_sriov_pf_debugfs.o
+diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov.c
+index af05db071..9c1c9e669 100644
+--- a/drivers/gpu/drm/xe/xe_pci_sriov.c
++++ b/drivers/gpu/drm/xe/xe_pci_sriov.c
+@@ -17,6 +17,7 @@
+ #include "xe_pm.h"
+ #include "xe_sriov.h"
+ #include "xe_sriov_pf.h"
++#include "xe_sriov_pf_control.h"
+ #include "xe_sriov_pf_helpers.h"
+ #include "xe_sriov_printk.h"
+ 
+@@ -60,13 +61,10 @@ static void pf_unprovision_vfs(struct xe_device *xe, unsigned int num_vfs)
+ 
+ static void pf_reset_vfs(struct xe_device *xe, unsigned int num_vfs)
+ {
+-	struct xe_gt *gt;
+-	unsigned int id;
+ 	unsigned int n;
+ 
+-	for_each_gt(gt, xe, id)
+-		for (n = 1; n <= num_vfs; n++)
+-			xe_gt_sriov_pf_control_trigger_flr(gt, n);
++	for (n = 1; n <= num_vfs; n++)
++		xe_sriov_pf_control_reset_vf(xe, n);
+ }
+ 
+ static struct pci_dev *xe_pci_pf_get_vf_dev(struct xe_device *xe, unsigned int vf_id)
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_sriov_pf_control.c
+new file mode 100644
+index 000000000..56c0dd382
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_control.c
+@@ -0,0 +1,104 @@
++// SPDX-License-Identifier: MIT
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#include "xe_device.h"
++#include "xe_gt_sriov_pf_control.h"
++#include "xe_sriov_pf_control.h"
++
++/**
++ * xe_sriov_pf_control_pause_vf() - Pause a VF on all GTs.
++ * @xe: the &xe_device
++ * @vfid: the VF identifier (can't be 0 == PFID)
++ *
++ * This function is for PF only.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_sriov_pf_control_pause_vf(struct xe_device *xe, unsigned int vfid)
++{
++	struct xe_gt *gt;
++	unsigned int id;
++	int result = 0;
++	int err;
++
++	for_each_gt(gt, xe, id) {
++		err = xe_gt_sriov_pf_control_pause_vf(gt, vfid);
++		result = result ? -EUCLEAN : err;
++	}
++
++	return result;
++}
++
++/**
++ * xe_sriov_pf_control_resume_vf() - Resume a VF on all GTs.
++ * @xe: the &xe_device
++ * @vfid: the VF identifier
++ *
++ * This function is for PF only.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_sriov_pf_control_resume_vf(struct xe_device *xe, unsigned int vfid)
++{
++	struct xe_gt *gt;
++	unsigned int id;
++	int result = 0;
++	int err;
++
++	for_each_gt(gt, xe, id) {
++		err = xe_gt_sriov_pf_control_resume_vf(gt, vfid);
++		result = result ? -EUCLEAN : err;
++	}
++
++	return result;
++}
++
++/**
++ * xe_sriov_pf_control_stop_vf - Stop a VF on all GTs.
++ * @xe: the &xe_device
++ * @vfid: the VF identifier
++ *
++ * This function is for PF only.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_sriov_pf_control_stop_vf(struct xe_device *xe, unsigned int vfid)
++{
++	struct xe_gt *gt;
++	unsigned int id;
++	int result = 0;
++	int err;
++
++	for_each_gt(gt, xe, id) {
++		err = xe_gt_sriov_pf_control_stop_vf(gt, vfid);
++		result = result ? -EUCLEAN : err;
++	}
++
++	return result;
++}
++
++/**
++ * xe_sriov_pf_control_reset_vf() - Perform a VF reset (FLR).
++ * @xe: the &xe_device
++ * @vfid: the VF identifier
++ *
++ * This function is for PF only.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_sriov_pf_control_reset_vf(struct xe_device *xe, unsigned int vfid)
++{
++	struct xe_gt *gt;
++	unsigned int id;
++	int result = 0;
++	int err;
++
++	for_each_gt(gt, xe, id) {
++		err = xe_gt_sriov_pf_control_trigger_flr(gt, vfid);
++		result = result ? -EUCLEAN : err;
++	}
++
++	return result;
++}
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_control.h b/drivers/gpu/drm/xe/xe_sriov_pf_control.h
+new file mode 100644
+index 000000000..9bf059f74
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_control.h
+@@ -0,0 +1,16 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#ifndef _XE_SRIOV_PF_CONTROL_H_
++#define _XE_SRIOV_PF_CONTROL_H_
++
++struct xe_device;
++
++int xe_sriov_pf_control_pause_vf(struct xe_device *xe, unsigned int vfid);
++int xe_sriov_pf_control_resume_vf(struct xe_device *xe, unsigned int vfid);
++int xe_sriov_pf_control_stop_vf(struct xe_device *xe, unsigned int vfid);
++int xe_sriov_pf_control_reset_vf(struct xe_device *xe, unsigned int vfid);
++
++#endif
+-- 
+2.34.1
+

@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Thu, 30 Oct 2025 21:31:34 +0100
+Subject: [PATCH 49/59] drm/intel/pciids: Add match with VFIO override
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In order to allow VFIO users to choose the right driver override, VFIO
+driver variant used for VF migration needs to use Intel Graphics PCI
+IDs.
+Add INTEL_VGA_VFIO_DEVICE match that sets VFIO override_only.
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+---
+ include/drm/intel/pciids.h | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/include/drm/intel/pciids.h b/include/drm/intel/pciids.h
+index 52adc556d..f37122edc 100644
+--- a/include/drm/intel/pciids.h
++++ b/include/drm/intel/pciids.h
+@@ -38,6 +38,13 @@
+ 	.class = PCI_BASE_CLASS_DISPLAY << 16, .class_mask = 0xff << 16, \
+ 	.driver_data = (kernel_ulong_t)(_info), \
+ }
++
++#define INTEL_VGA_VFIO_DEVICE(_id, _info) { \
++	PCI_DEVICE(PCI_VENDOR_ID_INTEL, (_id)), \
++	.class = PCI_BASE_CLASS_DISPLAY << 16, .class_mask = 0xff << 16, \
++	.driver_data = (kernel_ulong_t)(_info), \
++	.override_only = PCI_ID_F_VFIO_DRIVER_OVERRIDE, \
++}
+ #endif
+ 
+ #define INTEL_I810_IDS(MACRO__, ...) \
+-- 
+2.34.1
+

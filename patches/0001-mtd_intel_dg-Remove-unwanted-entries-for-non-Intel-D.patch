@@ -10,6 +10,8 @@ and build instructions for the mtd_intel_dg driver.
 All other driver entries and related config symbols, which
 are not required for this backport, have been removed.
 
+V1: Rebase to 6.17
+
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
  drivers/mtd/devices/Kconfig  | 214 +------------------------------
@@ -17,7 +19,7 @@ Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
  2 files changed, 1 insertion(+), 231 deletions(-)
 
 diff --git a/drivers/mtd/devices/Kconfig b/drivers/mtd/devices/Kconfig
-index 59be6d3..8260b42 100644
+index e518dfe..744e873 100644
 --- a/drivers/mtd/devices/Kconfig
 +++ b/drivers/mtd/devices/Kconfig
 @@ -1,187 +1,5 @@
@@ -121,7 +123,7 @@ index 59be6d3..8260b42 100644
 -config MTD_SPEAR_SMI
 -	tristate "SPEAR MTD NOR Support through SMI controller"
 -	depends on PLAT_SPEAR || COMPILE_TEST
--	default y
+-	default PLAT_SPEAR
 -	help
 -	  This enable SNOR support on SPEAR platforms using SMI controller
 -

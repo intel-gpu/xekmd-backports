@@ -1,7 +1,7 @@
-From ce9e404b72b272d4c11349f4743f1fbcdbde2668 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Maarten Lankhorst <dev@lankhorst.se>
 Date: Thu, 19 Jun 2025 12:49:00 +0200
-Subject: drm/xe: Defer memirq init until needed
+Subject: [PATCH] drm/xe: Defer memirq init until needed
 
 memirqs require allocations into GGTT, which we cannot use until
 after display is enabled.
@@ -21,18 +21,18 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  2 files changed, 7 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index e0a013f1d..e0bd67d9c 100644
+index 47ab669bd..c63da51a1 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -44,7 +44,6 @@
- #include "xe_hw_engine_group.h"
+@@ -45,7 +45,6 @@
  #include "xe_hwmon.h"
  #include "xe_irq.h"
+ #include "xe_late_bind_fw.h"
 -#include "xe_memirq.h"
  #include "xe_mmio.h"
  #include "xe_module.h"
  #include "xe_nvm.h"
-@@ -706,9 +705,6 @@ int xe_device_probe(struct xe_device *xe)
+@@ -707,9 +706,6 @@ int xe_device_probe(struct xe_device *xe)
  		err = xe_ggtt_init_early(tile->mem.ggtt);
  		if (err)
  			return err;
@@ -68,5 +68,5 @@ index 377438ea6..37c44d16b 100644
  	if (IS_ERR(tile->mem.kernel_bb_pool))
  		return PTR_ERR(tile->mem.kernel_bb_pool);
 -- 
-2.34.1
+2.43.0
 

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Pravalika Gurram <pravalika.gurram@intel.com>
 Date: Mon, 27 Oct 2025 20:35:47 +0530
-Subject: [PATCH] drm/xe: fix for iopoll.h
+Subject: drm/xe: fix for iopoll.h
 
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
@@ -13,7 +13,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_iopoll.h
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 8e8bafb9f..c566a8bfc 100644
+index 8a40bbea4..190606e27 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -8,7 +8,6 @@
@@ -24,9 +24,9 @@ index 8e8bafb9f..c566a8bfc 100644
  #include <linux/units.h>
  
  #include <drm/drm_atomic_helper.h>
-@@ -46,6 +45,7 @@
- #include "xe_hwmon.h"
+@@ -47,6 +46,7 @@
  #include "xe_irq.h"
+ #include "xe_late_bind_fw.h"
  #include "xe_mmio.h"
 +#include "xe_iopoll.h"
  #include "xe_module.h"

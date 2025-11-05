@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Mon, 14 Jul 2025 21:36:45 +0200
-Subject: drm/xe: Move debugfs GT attributes under tile directory
+Subject: [PATCH] drm/xe: Move debugfs GT attributes under tile directory
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -38,11 +38,11 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  3 files changed, 38 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index 955fed4f8..23f57d27f 100644
+index 15208fe5203a..612a6f105bd7 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
-@@ -293,14 +293,33 @@ static const struct file_operations wedged_mode_fops = {
- 	.write = wedged_mode_set,
+@@ -331,14 +331,33 @@ static const struct file_operations disable_late_binding_fops = {
+ 	.write = disable_late_binding_set,
  };
  
 +static void create_tile_debugfs(struct xe_tile *tile, struct dentry *root)
@@ -55,10 +55,10 @@ index 955fed4f8..23f57d27f 100644
 +		return;
 +
 +	/*
-+	 * Store the xe_tile pointer as private data of the tile/ directory
-+	 * node so other tile specific attributes under that directory may
-+	 * refer to it by looking at its parent node private data.
-+	 */
++	* Store the xe_tile pointer as private data of the tile/ directory
++	* node so other tile specific attributes under that directory may
++	* refer to it by looking at its parent node private data.
++	*/
 +	tile->debugfs->d_inode->i_private = tile;
 +}
 +
@@ -75,7 +75,7 @@ index 955fed4f8..23f57d27f 100644
  	u8 id;
  
  	drm_debugfs_create_files(debugfs_list,
-@@ -336,6 +355,9 @@ void xe_debugfs_register(struct xe_device *xe)
+@@ -377,6 +396,9 @@ void xe_debugfs_register(struct xe_device *xe)
  	if (man)
  		ttm_resource_manager_create_debugfs(man, root, "stolen_mm");
  
@@ -86,10 +86,10 @@ index 955fed4f8..23f57d27f 100644
  		xe_gt_debugfs_register(gt);
  
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 988696ba6..0b9cd3e3d 100644
+index 254ee9bde9a0..a8c0176e0a1a 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -209,6 +209,9 @@ struct xe_tile {
+@@ -210,6 +210,9 @@ struct xe_tile {
  
  	/** @sysfs: sysfs' kobj used by xe_tile_sysfs */
  	struct kobject *sysfs;
@@ -100,7 +100,7 @@ index 988696ba6..0b9cd3e3d 100644
  
  /**
 diff --git a/drivers/gpu/drm/xe/xe_gt_debugfs.c b/drivers/gpu/drm/xe/xe_gt_debugfs.c
-index ac27415a9..ae64aa3f4 100644
+index ac27415a9528..ae64aa3f4515 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_gt_debugfs.c
 @@ -390,13 +390,18 @@ void xe_gt_debugfs_register(struct xe_gt *gt)
@@ -136,5 +136,5 @@ index ac27415a9..ae64aa3f4 100644
 +	debugfs_create_symlink(name, minor->debugfs_root, symlink);
  }
 -- 
-2.34.1
+2.43.0
 

@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alexander Usyskin <alexander.usyskin@intel.com>
+Date: Fri, 5 Sep 2025 21:19:45 +0530
+Subject: [PATCH] mei: bus: add mei_cldev_mtu interface
+
+Add a new helper function that allows MEI client drivers
+to query the maximum transmission unit (MTU) for a connected
+MEI client.
+
+This is useful for clients that need to transmit large payloads,
+such as firmware blobs, allowing them to determine the maximum
+message size that can be safely sent before starting transmission and
+size of the buffer to allocate when receiving data.
+
+Reviewed-by: Mika Westerberg <mika.westerberg@linux.intel.com>
+Signed-off-by: Alexander Usyskin <alexander.usyskin@intel.com>
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+Reviewed-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Acked-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+Link: https://lore.kernel.org/r/20250905154953.3974335-2-badal.nilawar@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(cherry-picked from commit 8d5b7009aabc27e626e4167fedf1e1c1c3d6b143 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/misc/mei/bus.c     | 13 +++++++++++++
+ include/linux/mei_cl_bus.h |  1 +
+ 2 files changed, 14 insertions(+)
+
+diff --git a/drivers/misc/mei/bus.c b/drivers/misc/mei/bus.c
+index 718ec5d81d94..da8496321274 100644
+--- a/drivers/misc/mei/bus.c
++++ b/drivers/misc/mei/bus.c
+@@ -666,6 +666,19 @@ u8 mei_cldev_ver(const struct mei_cl_device *cldev)
+ }
+ EXPORT_SYMBOL_GPL(mei_cldev_ver);
+ 
++/**
++ * mei_cldev_mtu - max message that client can send and receive
++ *
++ * @cldev: mei client device
++ *
++ * Return: mtu or 0 if client is not connected
++ */
++size_t mei_cldev_mtu(const struct mei_cl_device *cldev)
++{
++	return mei_cl_mtu(cldev->cl);
++}
++EXPORT_SYMBOL_GPL(mei_cldev_mtu);
++
+ /**
+  * mei_cldev_enabled - check whether the device is enabled
+  *
+diff --git a/include/linux/mei_cl_bus.h b/include/linux/mei_cl_bus.h
+index b38a56a13f39..ad5d886cda76 100644
+--- a/include/linux/mei_cl_bus.h
++++ b/include/linux/mei_cl_bus.h
+@@ -118,6 +118,7 @@ int mei_cldev_register_notif_cb(struct mei_cl_device *cldev,
+ 
+ const uuid_le *mei_cldev_uuid(const struct mei_cl_device *cldev);
+ u8 mei_cldev_ver(const struct mei_cl_device *cldev);
++size_t mei_cldev_mtu(const struct mei_cl_device *cldev);
+ 
+ void *mei_cldev_get_drvdata(const struct mei_cl_device *cldev);
+ void mei_cldev_set_drvdata(struct mei_cl_device *cldev, void *data);
+-- 
+2.43.0
+

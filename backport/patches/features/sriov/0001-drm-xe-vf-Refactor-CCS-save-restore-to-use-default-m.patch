@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Pravalika Gurram <pravalika.gurram@intel.com>
 Date: Sun, 28 Sep 2025 04:41:09 +0530
-Subject: drm/xe/vf: Refactor CCS save/restore to use default migration
+Subject: [PATCH] drm/xe/vf: Refactor CCS save/restore to use default migration
  context
 
 Previously, CCS save/restore operations created separate migration
@@ -36,7 +36,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  8 files changed, 66 insertions(+), 36 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 4ed60618a..41cff83b2 100644
+index 4ed60618ae7f..41cff83b2e92 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -700,6 +700,21 @@ int xe_exec_queue_get_property_ioctl(struct drm_device *dev, void *data,
@@ -62,7 +62,7 @@ index 4ed60618a..41cff83b2 100644
   * xe_exec_queue_is_lr() - Whether an exec_queue is long-running
   * @q: The exec_queue
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
-index 9780a0104..00422ba73 100644
+index 9780a01044dc..00422ba73a55 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.h
 @@ -86,5 +86,6 @@ int xe_exec_queue_last_fence_test_dep(struct xe_exec_queue *q,
@@ -73,7 +73,7 @@ index 9780a0104..00422ba73 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index b6fdc7ca6..788f37b35 100644
+index b6fdc7ca687e..788f37b35811 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
 @@ -87,6 +87,8 @@ struct xe_exec_queue {
@@ -86,7 +86,7 @@ index b6fdc7ca6..788f37b35 100644
  	/**
  	 * @flags: flags for this exec queue, should statically setup aside from ban
 diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
-index 578c04668..763104807 100644
+index 578c046689ab..763104807ec4 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.c
 +++ b/drivers/gpu/drm/xe/xe_migrate.c
 @@ -949,7 +949,7 @@ struct dma_fence *xe_migrate_copy(struct xe_migrate *m,
@@ -161,7 +161,7 @@ index 578c04668..763104807 100644
  		size -= src_L0;
  	}
 diff --git a/drivers/gpu/drm/xe/xe_migrate.h b/drivers/gpu/drm/xe/xe_migrate.h
-index c5a4ca9eb..c360ec0dc 100644
+index c5a4ca9eb18c..c360ec0dcc06 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.h
 +++ b/drivers/gpu/drm/xe/xe_migrate.h
 @@ -104,7 +104,7 @@ struct dma_fence *xe_migrate_copy(struct xe_migrate *m,
@@ -174,21 +174,21 @@ index c5a4ca9eb..c360ec0dc 100644
                            enum xe_sriov_vf_ccs_rw_ctxs read_write);
  
 diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
-index 42ad0faca..ccaec8109 100644
+index 8633d48a76db..c6f449607a25 100644
 --- a/drivers/gpu/drm/xe/xe_pm.c
 +++ b/drivers/gpu/drm/xe/xe_pm.c
-@@ -195,6 +195,9 @@ int xe_pm_resume(struct xe_device *xe)
+@@ -197,6 +197,9 @@ int xe_pm_resume(struct xe_device *xe)
  	if (err)
  		goto err;
  
 +	if (IS_SRIOV_VF(xe))
 +		xe_sriov_vf_ccs_register_context(xe);
 +
+ 	xe_late_bind_fw_load(&xe->late_bind);
+ 
  	drm_dbg(&xe->drm, "Device resumed\n");
- 	return 0;
- err:
 diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
-index 7a400ef79..b83d4e339 100644
+index 7a400ef79cd0..b83d4e339159 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
 +++ b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
 @@ -8,6 +8,7 @@
@@ -346,7 +346,7 @@ index 7a400ef79..b83d4e339 100644
  	return err;
  }
 diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs_types.h b/drivers/gpu/drm/xe/xe_sriov_vf_ccs_types.h
-index e240f3fd1..93435a6f4 100644
+index e240f3fd18af..93435a6f4cb6 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_vf_ccs_types.h
 +++ b/drivers/gpu/drm/xe/xe_sriov_vf_ccs_types.h
 @@ -41,11 +41,11 @@ struct xe_sa_manager;
@@ -365,5 +365,5 @@ index e240f3fd1..93435a6f4 100644
  	} mem;
  };
 -- 
-2.34.1
+2.43.0
 

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Thu, 10 Jul 2025 10:30:40 +0000
-Subject: drm/xe/sriov: Mark BMG as SR-IOV capable
+Subject: [PATCH] drm/xe/sriov: Mark BMG as SR-IOV capable
 
 Enable SR-IOV support for BMG platforms. Note that as other flags from
 the platform descriptor, it only means it may have that capability: it
@@ -21,13 +21,13 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  1 file changed, 1 insertion(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index 9f22fd2cd346..7520d3d362db 100644
+index a6d4ae6616d0..c6b6cbb6ee0f 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -346,6 +346,7 @@ static const struct xe_device_desc bmg_desc = {
- 	.has_mbx_power_limits = true,
+@@ -348,6 +348,7 @@ static const struct xe_device_desc bmg_desc = {
  	.has_gsc_nvm = 1,
  	.has_heci_cscfi = 1,
+ 	.has_late_bind = true,
 +	.has_sriov = true,
  };
  

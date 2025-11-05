@@ -411,7 +411,7 @@ index 000000000..dbc0cc9da
 +};
 +EXPORT_SYMBOL_IF_KUNIT(xe_eudebug_test_suite);
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 51b77b992..083710167 100644
+index 56e6d6fd430d..2f407b898485 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -387,8 +387,6 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
@@ -433,18 +433,18 @@ index 51b77b992..083710167 100644
  	if (err || xe_survivability_mode_is_requested(xe)) {
  		int save_err = err;
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 09e189335..bfdcde668 100644
+index 0f91b62222fc..909c10119fd7 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -13,6 +13,7 @@
- #include <drm/ttm/ttm_device.h>
+@@ -14,6 +14,7 @@
  
  #include "xe_devcoredump_types.h"
-+#include "prelim/xe_eudebug_types.h"
  #include "xe_heci_gsc.h"
++#include "prelim/xe_eudebug_types.h"
+ #include "xe_late_bind_fw_types.h"
  #include "xe_lmtt_types.h"
  #include "xe_memirq_types.h"
-@@ -605,8 +606,8 @@ struct xe_device {
+@@ -609,8 +610,8 @@ struct xe_device {
  		/** discovery_lock: used for discovery to block xe ioctls */
  		struct rw_semaphore discovery_lock;
  

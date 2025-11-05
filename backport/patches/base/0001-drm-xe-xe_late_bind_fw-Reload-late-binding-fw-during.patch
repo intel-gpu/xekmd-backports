@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Fri, 5 Sep 2025 21:19:51 +0530
+Subject: [PATCH] drm/xe/xe_late_bind_fw: Reload late binding fw during system
+ resume
+
+Reload late binding fw during resume from system suspend
+
+v2:
+  - Unconditionally reload late binding fw (Rodrigo)
+  - Flush worker during system suspend
+
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250905154953.3974335-8-badal.nilawar@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit 02f52f6d924037a20e90a280363afba10e425367 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pm.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
+index 3a1060290fdb..97f42ac3f605 100644
+--- a/drivers/gpu/drm/xe/xe_pm.c
++++ b/drivers/gpu/drm/xe/xe_pm.c
+@@ -121,6 +121,8 @@ int xe_pm_suspend(struct xe_device *xe)
+ 	drm_dbg(&xe->drm, "Suspending device\n");
+ 	trace_xe_pm_suspend(xe, __builtin_return_address(0));
+ 
++	xe_late_bind_wait_for_worker_completion(&xe->late_bind);
++
+ 	for_each_gt(gt, xe, id)
+ 		xe_gt_suspend_prepare(gt);
+ 
+@@ -190,6 +192,8 @@ int xe_pm_resume(struct xe_device *xe)
+ 
+ 	xe_display_pm_resume(xe);
+ 
++	xe_late_bind_fw_load(&xe->late_bind);
++
+ 	err = xe_bo_restore_user(xe);
+ 	if (err)
+ 		goto err;
+-- 
+2.43.0
+

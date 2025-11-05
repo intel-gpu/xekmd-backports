@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Sun, 28 Sep 2025 19:48:11 +0200
+Subject: drm/xe/vf: Don't claim support for firmware late-bind if
+ VF
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In general, the VFs can't load firmwares so attempt to initialize
+the firmware late-bind component leads to errors like:
+
+ [] xe 0000:03:00.1: [drm] *ERROR* Late bind component not bound
+
+Fixes: 918bd789d62e ("drm/xe/xe_late_bind_fw: Introduce xe_late_bind_fw")
+Closes: https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/6190
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Badal Nilawar <badal.nilawar@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Reviewed-by: Badal Nilawar <badal.nilawar@intel.com>
+Link: https://lore.kernel.org/r/20250928174811.198933-3-michal.wajdeczko@intel.com
+(cherry picked from commit e35e288090f362be88d77b60d9846cea15df173e)
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit 3734c8184d71c946c4128ce44ca1767c084f2358 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 7b3339983..2098b75e7 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -602,6 +602,7 @@ static void vf_update_device_info(struct xe_device *xe)
+ 	xe->info.probe_display = 0;
+ 	xe->info.has_heci_cscfi = 0;
+ 	xe->info.has_heci_gscfi = 0;
++	xe->info.has_late_bind = 0;
+ 	xe->info.skip_guc_pc = 1;
+ 	xe->info.skip_pcode = 1;
+ }
+-- 
+2.34.1
+

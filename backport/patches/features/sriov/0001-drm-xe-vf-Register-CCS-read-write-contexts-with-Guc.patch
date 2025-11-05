@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
 Date: Tue, 22 Jul 2025 17:35:06 +0530
-Subject: drm/xe/vf: Register CCS read/write contexts with Guc
+Subject: [PATCH] drm/xe/vf: Register CCS read/write contexts with Guc
 
 Register read write contexts with newly added flags with GUC and
 enable the context immediately after registration.
@@ -211,27 +211,27 @@ index d5036abbf..f59a348ed 100644
 -struct xe_exec_queue *xe_tile_migrate_exec_queue(struct xe_tile *tile);
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
-index d0c504beb..42ad0faca 100644
+index 1e4b21126..bb18507ee 100644
 --- a/drivers/gpu/drm/xe/xe_pm.c
 +++ b/drivers/gpu/drm/xe/xe_pm.c
-@@ -21,6 +21,7 @@
- #include "xe_guc.h"
+@@ -22,6 +22,7 @@
  #include "xe_irq.h"
+ #include "xe_late_bind_fw.h"
  #include "xe_pcode.h"
 +#include "xe_sriov_vf_ccs.h"
  #include "xe_trace.h"
  #include "xe_wa.h"
  
-@@ -478,6 +479,9 @@ int xe_pm_runtime_resume(struct xe_device *xe)
+@@ -483,6 +484,9 @@ int xe_pm_runtime_resume(struct xe_device *xe)
  			goto out;
  	}
  
 +	if (IS_SRIOV_VF(xe))
 +		xe_sriov_vf_ccs_register_context(xe);
 +
- out:
- 	xe_rpm_lockmap_release(xe);
- 	xe_pm_write_callback_task(xe, NULL);
+ 	if (xe->d3cold.allowed)
+ 		xe_late_bind_fw_load(&xe->late_bind);
+ 
 diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
 index 6ddeb016b..af43e0417 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
@@ -361,10 +361,10 @@ index 5d5e4bd25..1f1baf685 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 8516ae4bf..ae31a9261 100644
+index 785b89600..211c2f906 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -925,7 +925,7 @@ struct dma_fence *xe_vma_rebind(struct xe_vm *vm, struct xe_vma *vma, u8 tile_ma
+@@ -923,7 +923,7 @@ struct dma_fence *xe_vma_rebind(struct xe_vm *vm, struct xe_vma *vma, u8 tile_ma
  	for_each_tile(tile, vm->xe, id) {
  		vops.pt_update_ops[id].wait_vm_bookkeep = true;
  		vops.pt_update_ops[tile->id].q =
@@ -374,5 +374,5 @@ index 8516ae4bf..ae31a9261 100644
  
  	err = xe_vm_ops_add_rebind(&vops, vma, tile_mask);
 -- 
-2.34.1
+2.43.0
 

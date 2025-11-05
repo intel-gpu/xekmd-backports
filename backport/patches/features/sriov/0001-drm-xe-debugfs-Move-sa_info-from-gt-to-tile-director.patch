@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 29 Aug 2025 22:11:03 +0200
-Subject: drm/xe/debugfs: Move sa_info from gt to tile directory
+Subject: [PATCH] drm/xe/debugfs: Move sa_info from gt to tile directory
 
 Our drm-based suballocator is implemented per-tile so it is better
 to show its debug information also per-tile debugfs directory, not
@@ -28,10 +28,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_tile_debugfs.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 3087da5f0..7d536b97e 100644
+index 5caf2939583b..bec1fc487e8e 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -313,6 +313,7 @@ ifeq ($(CONFIG_DEBUG_FS),y)
+@@ -310,6 +310,7 @@ ifeq ($(CONFIG_DEBUG_FS),y)
  		xe_gt_stats.o \
  		xe_guc_debugfs.o \
  		xe_huc_debugfs.o \
@@ -40,7 +40,7 @@ index 3087da5f0..7d536b97e 100644
  
  	xe-$(CONFIG_PCI_IOV) += xe_gt_sriov_pf_debugfs.o
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index 23f57d27f..a21007ade 100644
+index 612a6f105bd7..9efb6ee0559f 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
 @@ -24,6 +24,7 @@
@@ -51,8 +51,8 @@ index 23f57d27f..a21007ade 100644
  #include "xe_wa.h"
  #include "xe_vsec.h"
  
-@@ -293,23 +294,6 @@ static const struct file_operations wedged_mode_fops = {
- 	.write = wedged_mode_set,
+@@ -331,23 +332,6 @@ static const struct file_operations disable_late_binding_fops = {
+ 	.write = disable_late_binding_set,
  };
  
 -static void create_tile_debugfs(struct xe_tile *tile, struct dentry *root)
@@ -65,17 +65,17 @@ index 23f57d27f..a21007ade 100644
 -		return;
 -
 -	/*
--	 * Store the xe_tile pointer as private data of the tile/ directory
--	 * node so other tile specific attributes under that directory may
--	 * refer to it by looking at its parent node private data.
--	 */
+-	* Store the xe_tile pointer as private data of the tile/ directory
+-	* node so other tile specific attributes under that directory may
+-	* refer to it by looking at its parent node private data.
+-	*/
 -	tile->debugfs->d_inode->i_private = tile;
 -}
 -
  void xe_debugfs_register(struct xe_device *xe)
  {
  	struct ttm_device *bdev = &xe->ttm;
-@@ -356,7 +340,7 @@ void xe_debugfs_register(struct xe_device *xe)
+@@ -397,7 +381,7 @@ void xe_debugfs_register(struct xe_device *xe)
  		ttm_resource_manager_create_debugfs(man, root, "stolen_mm");
  
  	for_each_tile(tile, xe, tile_id)
@@ -85,7 +85,7 @@ index 23f57d27f..a21007ade 100644
  	for_each_gt(gt, xe, id)
  		xe_gt_debugfs_register(gt);
 diff --git a/drivers/gpu/drm/xe/xe_gt_debugfs.c b/drivers/gpu/drm/xe/xe_gt_debugfs.c
-index ae64aa3f4..5ee25b290 100644
+index ae64aa3f4515..5ee25b2906b9 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_gt_debugfs.c
 @@ -124,18 +124,6 @@ static int powergate_info(struct xe_gt *gt, struct drm_printer *p)
@@ -117,7 +117,7 @@ index ae64aa3f4..5ee25b290 100644
  	{"register-save-restore", .show = xe_gt_debugfs_simple_show, .data = register_save_restore},
 diff --git a/drivers/gpu/drm/xe/xe_tile_debugfs.c b/drivers/gpu/drm/xe/xe_tile_debugfs.c
 new file mode 100644
-index 000000000..5523874cb
+index 000000000000..5523874cba7b
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_tile_debugfs.c
 @@ -0,0 +1,135 @@
@@ -258,7 +258,7 @@ index 000000000..5523874cb
 +}
 diff --git a/drivers/gpu/drm/xe/xe_tile_debugfs.h b/drivers/gpu/drm/xe/xe_tile_debugfs.h
 new file mode 100644
-index 000000000..0e5f724de
+index 000000000000..0e5f724de37f
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_tile_debugfs.h
 @@ -0,0 +1,13 @@
@@ -276,5 +276,5 @@ index 000000000..0e5f724de
 +
 +#endif
 -- 
-2.34.1
+2.43.0
 

@@ -227,6 +227,60 @@ static bool exec_queue_killed_or_banned_or_wedged(struct xe_exec_queue *q)
 		 EXEC_QUEUE_STATE_BANNED));
 }
 
+#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
+#ifdef CONFIG_PROVE_LOCKING
+static int alloc_submit_wq(struct xe_guc *guc)
+{
+	int i;
+
+	for (i = 0; i < NUM_SUBMIT_WQ; ++i) {
+		guc->submission_state.submit_wq_pool[i] =
+			alloc_ordered_workqueue("submit_wq", 0);
+		if (!guc->submission_state.submit_wq_pool[i])
+			goto err_free;
+	}
+
+	return 0;
+
+err_free:
+	while (i)
+		destroy_workqueue(guc->submission_state.submit_wq_pool[--i]);
+
+	return -ENOMEM;
+}
+
+static void free_submit_wq(struct xe_guc *guc)
+{
+	int i;
+
+	for (i = 0; i < NUM_SUBMIT_WQ; ++i)
+		destroy_workqueue(guc->submission_state.submit_wq_pool[i]);
+}
+
+static struct workqueue_struct *get_submit_wq(struct xe_guc *guc)
+{
+	int idx = guc->submission_state.submit_wq_idx++ % NUM_SUBMIT_WQ;
+
+	return guc->submission_state.submit_wq_pool[idx];
+}
+#else
+static int alloc_submit_wq(struct xe_guc *guc)
+{
+	return 0;
+}
+
+static void free_submit_wq(struct xe_guc *guc)
+{
+
+}
+
+static struct workqueue_struct *get_submit_wq(struct xe_guc *guc)
+{
+	return NULL;
+}
+#endif
+#endif
+
 static void guc_submit_fini(struct drm_device *drm, void *arg)
 {
 	struct xe_guc *guc = arg;
@@ -243,6 +297,9 @@ static void guc_submit_fini(struct drm_device *drm, void *arg)
 	xe_gt_assert(gt, ret);
 
 	xa_destroy(&guc->submission_state.exec_queue_lookup);
+#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
+	free_submit_wq(guc);
+#endif
 }
 
 static void guc_submit_wedged_fini(void *arg)
@@ -304,6 +361,11 @@ int xe_guc_submit_init(struct xe_guc *guc, unsigned int num_ids)
 	if (err)
 		return err;
 
+#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
+	err = alloc_submit_wq(guc);
+	if (err)
+		return err;
+#endif
 	gt->exec_queue_ops = &guc_exec_queue_ops;
 
 	xa_init(&guc->submission_state.exec_queue_lookup);
@@ -1565,10 +1627,18 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
 
 	timeout = (q->vm && xe_vm_in_lr_mode(q->vm)) ? MAX_SCHEDULE_TIMEOUT :
 		  msecs_to_jiffies(q->sched_props.job_timeout_ms);
+#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
+	err = xe_sched_init(&ge->sched, &drm_sched_ops, &xe_sched_ops,
+			    get_submit_wq(guc),
+			    q->lrc[0]->ring.size / MAX_JOB_SIZE_BYTES, 64,
+			    timeout, guc_to_gt(guc)->ordered_wq, NULL,
+			    q->name, gt_to_xe(q->gt)->drm.dev);
+#else
 	err = xe_sched_init(&ge->sched, &drm_sched_ops, &xe_sched_ops,
 			    NULL, q->lrc[0]->ring.size / MAX_JOB_SIZE_BYTES, 64,
 			    timeout, guc_to_gt(guc)->ordered_wq, NULL,
 			    q->name, gt_to_xe(q->gt)->drm.dev);
+#endif
 	if (err)
 		goto err_free;
 

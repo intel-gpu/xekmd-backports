@@ -1,0 +1,105 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 30 Oct 2025 23:23:43 +0100
+Subject: drm/xe/pf: Allow bulk change all VFs priority using sysfs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+It is expected to be a common practice to configure the same level
+of scheduling priority across all VFs and PF (at least as starting
+point). Due to current GuC FW limitations it is also the only way
+to change VFs priority.
+
+Add write-only sysfs attribute that will apply required priority
+level to all VFs and PF at once.
+
+  /sys/bus/pci/drivers/xe/BDF/
+  ├── sriov_admin/
+      ├── .bulk_profile
+      │   └── sched_priority		[WO] low, normal
+
+Writing "low" to this write-only attribute will change PF and
+VFs scheduling priority on all tiles/GTs to LOW (function will
+be scheduled only if it has work submitted). Similarly, writing
+"normal" will change functions priority to NORMAL (functions will
+be scheduled irrespective of whether there is a work or not).
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Acked-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://patch.msgid.link/20251030222348.186658-13-michal.wajdeczko@intel.com
+(cherry-picked from commit 9f64d21dc38cfb09dadb4920fad6fde6249c83b9 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c | 42 +++++++++++++++++++++++++-
+ 1 file changed, 41 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c b/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
+index 0430ffaa746a..19724a28fb33 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
+@@ -24,7 +24,8 @@
+  *     ├── ...
+  *     ├── .bulk_profile
+  *     │   ├── exec_quantum_ms
+- *     │   └── preempt_timeout_us
++ *     │   ├── preempt_timeout_us
++ *     │   └── sched_priority
+  *     ├── pf/
+  *     │   ├── ...
+  *     │   └── profile
+@@ -108,9 +109,48 @@ static XE_SRIOV_DEV_ATTR_WO(NAME)
+ DEFINE_SIMPLE_BULK_PROVISIONING_SRIOV_DEV_ATTR_WO(exec_quantum_ms, eq, u32);
+ DEFINE_SIMPLE_BULK_PROVISIONING_SRIOV_DEV_ATTR_WO(preempt_timeout_us, pt, u32);
+ 
++static const char * const sched_priority_names[] = {
++	[GUC_SCHED_PRIORITY_LOW] = "low",
++	[GUC_SCHED_PRIORITY_NORMAL] = "normal",
++	[GUC_SCHED_PRIORITY_HIGH] = "high",
++};
++
++static bool sched_priority_high_allowed(unsigned int vfid)
++{
++	/* As of today GuC FW allows to select 'high' priority only for the PF. */
++	return vfid == PFID;
++}
++
++static bool sched_priority_bulk_high_allowed(struct xe_device *xe)
++{
++	/* all VFs are equal - it's sufficient to check VF1 only */
++	return sched_priority_high_allowed(VFID(1));
++}
++
++static ssize_t xe_sriov_dev_attr_sched_priority_store(struct xe_device *xe,
++						      const char *buf, size_t count)
++{
++	size_t num_priorities = ARRAY_SIZE(sched_priority_names);
++	int match;
++	int err;
++
++	if (!sched_priority_bulk_high_allowed(xe))
++		num_priorities--;
++
++	match = __sysfs_match_string(sched_priority_names, num_priorities, buf);
++	if (match < 0)
++		return -EINVAL;
++
++	err = xe_sriov_pf_provision_bulk_apply_priority(xe, match);
++	return err ?: count;
++}
++
++static XE_SRIOV_DEV_ATTR_WO(sched_priority);
++
+ static struct attribute *bulk_profile_dev_attrs[] = {
+ 	&xe_sriov_dev_attr_exec_quantum_ms.attr,
+ 	&xe_sriov_dev_attr_preempt_timeout_us.attr,
++	&xe_sriov_dev_attr_sched_priority.attr,
+ 	NULL
+ };
+ 
+-- 
+2.43.0
+

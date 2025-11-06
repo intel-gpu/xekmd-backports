@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 30 Oct 2025 23:23:41 +0100
+Subject: drm/xe/pf: Allow bulk change all VFs EQ/PT using sysfs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+It is expected to be a common practice to configure the same values
+of execution quantum and preemption timeout parameters across all VFs.
+
+Add write-only sysfs attributes that will apply required EQ/PT values
+globally, without forcing admin to update PF and each VF separately.
+
+  /sys/bus/pci/drivers/xe/BDF/
+  ├── sriov_admin/
+      ├── .bulk_profile
+      │   ├── exec_quantum_ms		[WO] unsigned integer
+      │   └── preempt_timeout_us	[WO] unsigned integer
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Acked-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://patch.msgid.link/20251030222348.186658-11-michal.wajdeczko@intel.com
+(cherry-picked from commit 71f5933c4b0f65ea72f7342895a92574608c3295 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c | 36 ++++++++++++++++++++++++++
+ 1 file changed, 36 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c b/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
+index f12d6752e9f1..0430ffaa746a 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
+@@ -22,6 +22,9 @@
+  * :
+  * ├── sriov_admin/
+  *     ├── ...
++ *     ├── .bulk_profile
++ *     │   ├── exec_quantum_ms
++ *     │   └── preempt_timeout_us
+  *     ├── pf/
+  *     │   ├── ...
+  *     │   └── profile
+@@ -84,7 +87,40 @@ struct xe_sriov_vf_attr xe_sriov_vf_attr_##NAME = \
+ 
+ /* device level attributes go here */
+ 
++#define DEFINE_SIMPLE_BULK_PROVISIONING_SRIOV_DEV_ATTR_WO(NAME, ITEM, TYPE)		\
++											\
++static ssize_t xe_sriov_dev_attr_##NAME##_store(struct xe_device *xe,			\
++						const char *buf, size_t count)		\
++{											\
++	TYPE value;									\
++	int err;									\
++											\
++	err = kstrto##TYPE(buf, 0, &value);						\
++	if (err)									\
++		return err;								\
++											\
++	err = xe_sriov_pf_provision_bulk_apply_##ITEM(xe, value);			\
++	return err ?: count;								\
++}											\
++											\
++static XE_SRIOV_DEV_ATTR_WO(NAME)
++
++DEFINE_SIMPLE_BULK_PROVISIONING_SRIOV_DEV_ATTR_WO(exec_quantum_ms, eq, u32);
++DEFINE_SIMPLE_BULK_PROVISIONING_SRIOV_DEV_ATTR_WO(preempt_timeout_us, pt, u32);
++
++static struct attribute *bulk_profile_dev_attrs[] = {
++	&xe_sriov_dev_attr_exec_quantum_ms.attr,
++	&xe_sriov_dev_attr_preempt_timeout_us.attr,
++	NULL
++};
++
++static const struct attribute_group bulk_profile_dev_attr_group = {
++	.name = ".bulk_profile",
++	.attrs = bulk_profile_dev_attrs,
++};
++
+ static const struct attribute_group *xe_sriov_dev_attr_groups[] = {
++	&bulk_profile_dev_attr_group,
+ 	NULL
+ };
+ 
+-- 
+2.43.0
+

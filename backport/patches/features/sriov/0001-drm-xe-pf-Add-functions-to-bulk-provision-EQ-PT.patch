@@ -1,0 +1,112 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 30 Oct 2025 23:23:40 +0100
+Subject: drm/xe/pf: Add functions to bulk provision EQ/PT
+
+We already have functions to configure EQ/PT for single VF across
+all tiles/GTs. Now add helper functions that will do that for all
+VFs (and the PF) at once.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://patch.msgid.link/20251030222348.186658-10-michal.wajdeczko@intel.com
+(cherry-picked from commit b7a73b5775d4a2524674ddf1b997c5e8f5cfe66c linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_pf_provision.c | 56 ++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_pf_provision.h |  2 +
+ 2 files changed, 58 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+index 8040747186d7..0f5bcc076b78 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+@@ -153,6 +153,34 @@ int xe_sriov_pf_provision_set_mode(struct xe_device *xe, enum xe_sriov_provision
+ 	return 0;
+ }
+ 
++/**
++ * xe_sriov_pf_provision_bulk_apply_eq() - Change execution quantum for all VFs and PF.
++ * @xe: the PF &xe_device
++ * @eq: execution quantum in [ms] to set
++ *
++ * Change execution quantum (EQ) provisioning on all tiles/GTs.
++ *
++ * This function can only be called on PF.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_sriov_pf_provision_bulk_apply_eq(struct xe_device *xe, u32 eq)
++{
++	struct xe_gt *gt;
++	unsigned int id;
++	int result = 0;
++	int err;
++
++	guard(mutex)(xe_sriov_pf_master_mutex(xe));
++
++	for_each_gt(gt, xe, id) {
++		err = xe_gt_sriov_pf_config_bulk_set_exec_quantum_locked(gt, eq);
++		result = result ?: err;
++	}
++
++	return result;
++}
++
+ /**
+  * xe_sriov_pf_provision_apply_vf_eq() - Change VF's execution quantum.
+  * @xe: the PF &xe_device
+@@ -226,6 +254,34 @@ int xe_sriov_pf_provision_query_vf_eq(struct xe_device *xe, unsigned int vfid, u
+ 	return !count ? -ENODATA : 0;
+ }
+ 
++/**
++ * xe_sriov_pf_provision_bulk_apply_pt() - Change preemption timeout for all VFs and PF.
++ * @xe: the PF &xe_device
++ * @pt: preemption timeout in [us] to set
++ *
++ * Change preemption timeout (PT) provisioning on all tiles/GTs.
++ *
++ * This function can only be called on PF.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_sriov_pf_provision_bulk_apply_pt(struct xe_device *xe, u32 pt)
++{
++	struct xe_gt *gt;
++	unsigned int id;
++	int result = 0;
++	int err;
++
++	guard(mutex)(xe_sriov_pf_master_mutex(xe));
++
++	for_each_gt(gt, xe, id) {
++		err = xe_gt_sriov_pf_config_bulk_set_preempt_timeout_locked(gt, pt);
++		result = result ?: err;
++	}
++
++	return result;
++}
++
+ /**
+  * xe_sriov_pf_provision_apply_vf_pt() - Change VF's preemption timeout.
+  * @xe: the PF &xe_device
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision.h b/drivers/gpu/drm/xe/xe_sriov_pf_provision.h
+index cb81b5880930..aa8a95b1c0be 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_provision.h
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision.h
+@@ -12,9 +12,11 @@
+ 
+ struct xe_device;
+ 
++int xe_sriov_pf_provision_bulk_apply_eq(struct xe_device *xe, u32 eq);
+ int xe_sriov_pf_provision_apply_vf_eq(struct xe_device *xe, unsigned int vfid, u32 eq);
+ int xe_sriov_pf_provision_query_vf_eq(struct xe_device *xe, unsigned int vfid, u32 *eq);
+ 
++int xe_sriov_pf_provision_bulk_apply_pt(struct xe_device *xe, u32 pt);
+ int xe_sriov_pf_provision_apply_vf_pt(struct xe_device *xe, unsigned int vfid, u32 pt);
+ int xe_sriov_pf_provision_query_vf_pt(struct xe_device *xe, unsigned int vfid, u32 *pt);
+ 
+-- 
+2.43.0
+

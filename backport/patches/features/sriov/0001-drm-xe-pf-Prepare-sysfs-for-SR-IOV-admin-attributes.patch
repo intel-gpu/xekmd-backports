@@ -1,0 +1,429 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 30 Oct 2025 23:23:32 +0100
+Subject: drm/xe/pf: Prepare sysfs for SR-IOV admin attributes
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We already have some SR-IOV specific knobs exposed as debugfs
+files to allow low level tuning of the SR-IOV configurations,
+but those files are mainly for the use by the developers and
+debugfs might not be available on the production builds.
+
+Start building dedicated sysfs sub-tree under xe device, where
+in upcoming patches we will add selected attributes that will
+help provision and manage PF and all VFs:
+
+  /sys/bus/pci/drivers/xe/BDF/
+  ├── sriov_admin/
+      ├── pf/
+      ├── vf1/
+      ├── vf2/
+      :
+      └── vfN/
+
+Add all required data types and helper macros that will be used
+by upcoming patches to define actual attributes.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Acked-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://patch.msgid.link/20251030222348.186658-2-michal.wajdeczko@intel.com
+(cherry-picked from commit 5c170a4d9c530e872f2f788d95258fbaa39b4415 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/Makefile            |   1 +
+ drivers/gpu/drm/xe/xe_sriov_pf.c       |   5 +
+ drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c | 287 +++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_pf_sysfs.h |  13 ++
+ drivers/gpu/drm/xe/xe_sriov_pf_types.h |  11 +
+ 5 files changed, 317 insertions(+)
+ create mode 100644 drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
+ create mode 100644 drivers/gpu/drm/xe/xe_sriov_pf_sysfs.h
+
+diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
+index 8572b7f26cea..abef12b8ece7 100644
+--- a/drivers/gpu/drm/xe/Makefile
++++ b/drivers/gpu/drm/xe/Makefile
+@@ -167,6 +167,7 @@ xe-$(CONFIG_PCI_IOV) += \
+ 	xe_sriov_pf_debugfs.o \
+ 	xe_sriov_pf_provision.o \
+ 	xe_sriov_pf_service.o \
++	xe_sriov_pf_sysfs.o \
+ 	xe_tile_sriov_pf_debugfs.o
+ 
+ # include helpers for tests even when XE is built-in
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf.c b/drivers/gpu/drm/xe/xe_sriov_pf.c
+index 2814f29f1093..c8101e301cb5 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf.c
+@@ -15,6 +15,7 @@
+ #include "xe_sriov_pf.h"
+ #include "xe_sriov_pf_helpers.h"
+ #include "xe_sriov_pf_service.h"
++#include "xe_sriov_pf_sysfs.h"
+ #include "xe_sriov_printk.h"
+ 
+ static unsigned int wanted_max_vfs(struct xe_device *xe)
+@@ -125,6 +126,10 @@ int xe_sriov_pf_init_late(struct xe_device *xe)
+ 			return err;
+ 	}
+ 
++	err = xe_sriov_pf_sysfs_init(xe);
++	if (err)
++		return err;
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c b/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
+new file mode 100644
+index 000000000000..0f2b19ca873e
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
+@@ -0,0 +1,287 @@
++// SPDX-License-Identifier: MIT
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#include <linux/kobject.h>
++#include <linux/sysfs.h>
++
++#include <drm/drm_managed.h>
++
++#include "xe_assert.h"
++#include "xe_sriov.h"
++#include "xe_sriov_pf_helpers.h"
++#include "xe_sriov_pf_sysfs.h"
++#include "xe_sriov_printk.h"
++
++/*
++ * /sys/bus/pci/drivers/xe/BDF/
++ * :
++ * ├── sriov_admin/
++ *     ├── ...
++ *     ├── pf/
++ *     │   ├── ...
++ *     │   └── ...
++ *     ├── vf1/
++ *     │   ├── ...
++ *     │   └── ...
++ *     ├── vf2/
++ *     :
++ *     └── vfN/
++ */
++
++struct xe_sriov_kobj {
++	struct kobject base;
++	struct xe_device *xe;
++	unsigned int vfid;
++};
++#define to_xe_sriov_kobj(p) container_of_const((p), struct xe_sriov_kobj, base)
++
++struct xe_sriov_dev_attr {
++	struct attribute attr;
++	ssize_t (*show)(struct xe_device *xe, char *buf);
++	ssize_t (*store)(struct xe_device *xe, const char *buf, size_t count);
++};
++#define to_xe_sriov_dev_attr(p) container_of_const((p), struct xe_sriov_dev_attr, attr)
++
++#define XE_SRIOV_DEV_ATTR(NAME) \
++struct xe_sriov_dev_attr xe_sriov_dev_attr_##NAME = \
++	__ATTR(NAME, 0644, xe_sriov_dev_attr_##NAME##_show, xe_sriov_dev_attr_##NAME##_store)
++
++#define XE_SRIOV_DEV_ATTR_RO(NAME) \
++struct xe_sriov_dev_attr xe_sriov_dev_attr_##NAME = \
++	__ATTR(NAME, 0444, xe_sriov_dev_attr_##NAME##_show, NULL)
++
++#define XE_SRIOV_DEV_ATTR_WO(NAME) \
++struct xe_sriov_dev_attr xe_sriov_dev_attr_##NAME = \
++	__ATTR(NAME, 0200, NULL, xe_sriov_dev_attr_##NAME##_store)
++
++struct xe_sriov_vf_attr {
++	struct attribute attr;
++	ssize_t (*show)(struct xe_device *xe, unsigned int vfid, char *buf);
++	ssize_t (*store)(struct xe_device *xe, unsigned int vfid, const char *buf, size_t count);
++};
++#define to_xe_sriov_vf_attr(p) container_of_const((p), struct xe_sriov_vf_attr, attr)
++
++#define XE_SRIOV_VF_ATTR(NAME) \
++struct xe_sriov_vf_attr xe_sriov_vf_attr_##NAME = \
++	__ATTR(NAME, 0644, xe_sriov_vf_attr_##NAME##_show, xe_sriov_vf_attr_##NAME##_store)
++
++#define XE_SRIOV_VF_ATTR_RO(NAME) \
++struct xe_sriov_vf_attr xe_sriov_vf_attr_##NAME = \
++	__ATTR(NAME, 0444, xe_sriov_vf_attr_##NAME##_show, NULL)
++
++#define XE_SRIOV_VF_ATTR_WO(NAME) \
++struct xe_sriov_vf_attr xe_sriov_vf_attr_##NAME = \
++	__ATTR(NAME, 0200, NULL, xe_sriov_vf_attr_##NAME##_store)
++
++/* device level attributes go here */
++
++static const struct attribute_group *xe_sriov_dev_attr_groups[] = {
++	NULL
++};
++
++/* and VF-level attributes go here */
++
++static const struct attribute_group *xe_sriov_vf_attr_groups[] = {
++	NULL
++};
++
++/* no user serviceable parts below */
++
++static struct kobject *create_xe_sriov_kobj(struct xe_device *xe, unsigned int vfid)
++{
++	struct xe_sriov_kobj *vkobj;
++
++	xe_sriov_pf_assert_vfid(xe, vfid);
++
++	vkobj = kzalloc(sizeof(*vkobj), GFP_KERNEL);
++	if (!vkobj)
++		return NULL;
++
++	vkobj->xe = xe;
++	vkobj->vfid = vfid;
++	return &vkobj->base;
++}
++
++static void release_xe_sriov_kobj(struct kobject *kobj)
++{
++	struct xe_sriov_kobj *vkobj = to_xe_sriov_kobj(kobj);
++
++	kfree(vkobj);
++}
++
++static ssize_t xe_sriov_dev_attr_show(struct kobject *kobj, struct attribute *attr, char *buf)
++{
++	struct xe_sriov_dev_attr *vattr  = to_xe_sriov_dev_attr(attr);
++	struct xe_sriov_kobj *vkobj = to_xe_sriov_kobj(kobj);
++	struct xe_device *xe = vkobj->xe;
++
++	if (!vattr->show)
++		return -EPERM;
++
++	return vattr->show(xe, buf);
++}
++
++static ssize_t xe_sriov_dev_attr_store(struct kobject *kobj, struct attribute *attr,
++				       const char *buf, size_t count)
++{
++	struct xe_sriov_dev_attr *vattr = to_xe_sriov_dev_attr(attr);
++	struct xe_sriov_kobj *vkobj = to_xe_sriov_kobj(kobj);
++	struct xe_device *xe = vkobj->xe;
++
++	if (!vattr->store)
++		return -EPERM;
++
++	return vattr->store(xe, buf, count);
++}
++
++static ssize_t xe_sriov_vf_attr_show(struct kobject *kobj, struct attribute *attr, char *buf)
++{
++	struct xe_sriov_vf_attr *vattr = to_xe_sriov_vf_attr(attr);
++	struct xe_sriov_kobj *vkobj = to_xe_sriov_kobj(kobj);
++	struct xe_device *xe = vkobj->xe;
++	unsigned int vfid = vkobj->vfid;
++
++	xe_sriov_pf_assert_vfid(xe, vfid);
++
++	if (!vattr->show)
++		return -EPERM;
++
++	return vattr->show(xe, vfid, buf);
++}
++
++static ssize_t xe_sriov_vf_attr_store(struct kobject *kobj, struct attribute *attr,
++				      const char *buf, size_t count)
++{
++	struct xe_sriov_vf_attr *vattr = to_xe_sriov_vf_attr(attr);
++	struct xe_sriov_kobj *vkobj = to_xe_sriov_kobj(kobj);
++	struct xe_device *xe = vkobj->xe;
++	unsigned int vfid = vkobj->vfid;
++
++	xe_sriov_pf_assert_vfid(xe, vfid);
++
++	if (!vattr->store)
++		return -EPERM;
++
++	return vattr->store(xe, vfid, buf, count);
++}
++
++static const struct sysfs_ops xe_sriov_dev_sysfs_ops = {
++	.show = xe_sriov_dev_attr_show,
++	.store = xe_sriov_dev_attr_store,
++};
++
++static const struct sysfs_ops xe_sriov_vf_sysfs_ops = {
++	.show = xe_sriov_vf_attr_show,
++	.store = xe_sriov_vf_attr_store,
++};
++
++static const struct kobj_type xe_sriov_dev_ktype = {
++	.release = release_xe_sriov_kobj,
++	.sysfs_ops = &xe_sriov_dev_sysfs_ops,
++	.default_groups = xe_sriov_dev_attr_groups,
++};
++
++static const struct kobj_type xe_sriov_vf_ktype = {
++	.release = release_xe_sriov_kobj,
++	.sysfs_ops = &xe_sriov_vf_sysfs_ops,
++	.default_groups = xe_sriov_vf_attr_groups,
++};
++
++static int pf_sysfs_error(struct xe_device *xe, int err, const char *what)
++{
++	if (IS_ENABLED(CONFIG_DRM_XE_DEBUG))
++		xe_sriov_dbg(xe, "Failed to setup sysfs %s (%pe)\n", what, ERR_PTR(err));
++	return err;
++}
++
++static void action_put_kobject(void *arg)
++{
++	struct kobject *kobj = arg;
++
++	kobject_put(kobj);
++}
++
++static int pf_setup_root(struct xe_device *xe)
++{
++	struct kobject *parent = &xe->drm.dev->kobj;
++	struct kobject *root;
++	int err;
++
++	root = create_xe_sriov_kobj(xe, PFID);
++	if (!root)
++		return pf_sysfs_error(xe, -ENOMEM, "root obj");
++
++	err = devm_add_action_or_reset(xe->drm.dev, action_put_kobject, root);
++	if (err)
++		return pf_sysfs_error(xe, err, "root action");
++
++	err = kobject_init_and_add(root, &xe_sriov_dev_ktype, parent, "sriov_admin");
++	if (err)
++		return pf_sysfs_error(xe, err, "root init");
++
++	xe_assert(xe, IS_SRIOV_PF(xe));
++	xe_assert(xe, !xe->sriov.pf.sysfs.root);
++	xe->sriov.pf.sysfs.root = root;
++	return 0;
++}
++
++static int pf_setup_tree(struct xe_device *xe)
++{
++	unsigned int totalvfs = xe_sriov_pf_get_totalvfs(xe);
++	struct kobject *root, *kobj;
++	unsigned int n;
++	int err;
++
++	xe_assert(xe, IS_SRIOV_PF(xe));
++	root = xe->sriov.pf.sysfs.root;
++
++	for (n = 0; n <= totalvfs; n++) {
++		kobj = create_xe_sriov_kobj(xe, VFID(n));
++		if (!kobj)
++			return pf_sysfs_error(xe, -ENOMEM, "tree obj");
++
++		err = devm_add_action_or_reset(xe->drm.dev, action_put_kobject, root);
++		if (err)
++			return pf_sysfs_error(xe, err, "tree action");
++
++		if (n)
++			err = kobject_init_and_add(kobj, &xe_sriov_vf_ktype,
++						   root, "vf%u", n);
++		else
++			err = kobject_init_and_add(kobj, &xe_sriov_vf_ktype,
++						   root, "pf");
++		if (err)
++			return pf_sysfs_error(xe, err, "tree init");
++
++		xe_assert(xe, !xe->sriov.pf.vfs[n].kobj);
++		xe->sriov.pf.vfs[n].kobj = kobj;
++	}
++
++	return 0;
++}
++
++/**
++ * xe_sriov_pf_sysfs_init() - Setup PF's SR-IOV sysfs tree.
++ * @xe: the PF &xe_device to setup sysfs
++ *
++ * This function will create additional nodes that will represent PF and VFs
++ * devices, each populated with SR-IOV Xe specific attributes.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_sriov_pf_sysfs_init(struct xe_device *xe)
++{
++	int err;
++
++	err = pf_setup_root(xe);
++	if (err)
++		return err;
++
++	err = pf_setup_tree(xe);
++	if (err)
++		return err;
++
++	return 0;
++}
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.h b/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.h
+new file mode 100644
+index 000000000000..1e6698cc29d3
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.h
+@@ -0,0 +1,13 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#ifndef _XE_SRIOV_PF_SYSFS_H_
++#define _XE_SRIOV_PF_SYSFS_H_
++
++struct xe_device;
++
++int xe_sriov_pf_sysfs_init(struct xe_device *xe);
++
++#endif
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_types.h b/drivers/gpu/drm/xe/xe_sriov_pf_types.h
+index c753cd59aed2..b3cd9797194b 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_types.h
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_types.h
+@@ -12,10 +12,15 @@
+ #include "xe_sriov_pf_provision_types.h"
+ #include "xe_sriov_pf_service_types.h"
+ 
++struct kobject;
++
+ /**
+  * struct xe_sriov_metadata - per-VF device level metadata
+  */
+ struct xe_sriov_metadata {
++	/** @kobj: kobject representing VF in PF's SR-IOV sysfs tree. */
++	struct kobject *kobj;
++
+ 	/** @version: negotiated VF/PF ABI version */
+ 	struct xe_sriov_pf_service_version version;
+ };
+@@ -42,6 +47,12 @@ struct xe_device_pf {
+ 	/** @service: device level service data. */
+ 	struct xe_sriov_pf_service service;
+ 
++	/** @sysfs: device level sysfs data. */
++	struct {
++		/** @sysfs.root: the root kobject for all SR-IOV entries in sysfs. */
++		struct kobject *root;
++	} sysfs;
++
+ 	/** @vfs: metadata for all VFs. */
+ 	struct xe_sriov_metadata *vfs;
+ };
+-- 
+2.43.0
+

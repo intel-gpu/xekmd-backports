@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 2 Oct 2025 19:13:08 +0200
+Subject: drm/xe: Don't force DRM_XE_DEBUG_MEMIRQ for SR-IOV debug
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+For pure SR-IOV debugging there is no need to select already
+separated config for the debugging of the memory based interrupts,
+as the latter is also very noisy on its own. Change config order
+and use a weak reverse dependency instead.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://lore.kernel.org/r/20251002171308.203127-1-michal.wajdeczko@intel.com
+(cherry-picked from commit 869580c415c975ac293a869a3e560e009a07e7c7 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/Kconfig.debug | 16 ++++++++--------
+ 1 file changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/Kconfig.debug b/drivers/gpu/drm/xe/Kconfig.debug
+index 01735c6ece8b..ca5e3848b037 100644
+--- a/drivers/gpu/drm/xe/Kconfig.debug
++++ b/drivers/gpu/drm/xe/Kconfig.debug
+@@ -40,23 +40,23 @@ config DRM_XE_DEBUG_VM
+ 
+ 	  If in doubt, say "N".
+ 
+-config DRM_XE_DEBUG_MEMIRQ
+-	bool "Enable extra memirq debugging"
++config DRM_XE_DEBUG_SRIOV
++	bool "Enable extra SR-IOV debugging"
+ 	default n
++	imply DRM_XE_DEBUG_MEMIRQ
+ 	help
+-	  Choose this option to enable additional debugging info for
+-	  memory based interrupts.
++	  Enable extra SR-IOV debugging info.
+ 
+ 	  Recommended for driver developers only.
+ 
+ 	  If in doubt, say "N".
+ 
+-config DRM_XE_DEBUG_SRIOV
+-	bool "Enable extra SR-IOV debugging"
++config DRM_XE_DEBUG_MEMIRQ
++	bool "Enable extra memirq debugging"
+ 	default n
+-	select DRM_XE_DEBUG_MEMIRQ
+ 	help
+-	  Enable extra SR-IOV debugging info.
++	  Choose this option to enable additional debugging info for
++	  memory based interrupts.
+ 
+ 	  Recommended for driver developers only.
+ 
+-- 
+2.43.0
+

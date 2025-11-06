@@ -1,0 +1,190 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 15 Oct 2025 11:12:08 +0200
+Subject: drm/xe/pf: Disable auto-provisioning if changed using debugfs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When we attempt to tweak VFs configurations using debugfs, stop
+assuming that VFs need auto-(un)provisioning.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://lore.kernel.org/r/20251015091211.592-4-michal.wajdeczko@intel.com
+(cherry-picked from commit b1767ca123ae073c0aec66973a1b70a95930455b linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c   |  7 ++++
+ drivers/gpu/drm/xe/xe_sriov_pf_provision.c    | 39 +++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_pf_provision.h    | 17 ++++++++
+ .../gpu/drm/xe/xe_sriov_pf_provision_types.h  |  4 ++
+ drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c |  3 ++
+ 5 files changed, 70 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c
+index 44fec2aae536..e72b27ba2347 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c
+@@ -23,6 +23,7 @@
+ #include "xe_gt_sriov_pf_service.h"
+ #include "xe_pm.h"
+ #include "xe_sriov_pf.h"
++#include "xe_sriov_pf_provision.h"
+ 
+ /*
+  *      /sys/kernel/debug/dri/BDF/
+@@ -124,6 +125,8 @@ static int POLICY##_set(void *data, u64 val)					\
+ 										\
+ 	xe_pm_runtime_get(xe);							\
+ 	err = xe_gt_sriov_pf_policy_set_##POLICY(gt, val);			\
++	if (!err)								\
++		xe_sriov_pf_provision_set_custom_mode(xe);			\
+ 	xe_pm_runtime_put(xe);							\
+ 										\
+ 	return err;								\
+@@ -189,6 +192,8 @@ static int CONFIG##_set(void *data, u64 val)					\
+ 	xe_pm_runtime_get(xe);							\
+ 	err = xe_sriov_pf_wait_ready(xe) ?:					\
+ 	      xe_gt_sriov_pf_config_set_##CONFIG(gt, vfid, val);		\
++	if (!err)								\
++		xe_sriov_pf_provision_set_custom_mode(xe);			\
+ 	xe_pm_runtime_put(xe);							\
+ 										\
+ 	return err;								\
+@@ -246,6 +251,8 @@ static int set_threshold(void *data, u64 val, enum xe_guc_klv_threshold_index in
+ 
+ 	xe_pm_runtime_get(xe);
+ 	err = xe_gt_sriov_pf_config_set_threshold(gt, vfid, index, val);
++	if (!err)
++		xe_sriov_pf_provision_set_custom_mode(xe);
+ 	xe_pm_runtime_put(xe);
+ 
+ 	return err;
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+index 1e782a96bbdd..23b89c4310ed 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+@@ -10,6 +10,19 @@
+ #include "xe_sriov_pf_helpers.h"
+ #include "xe_sriov_pf_provision.h"
+ #include "xe_sriov_pf_provision_types.h"
++#include "xe_sriov_printk.h"
++
++static const char *mode_to_string(enum xe_sriov_provisioning_mode mode)
++{
++	switch (mode) {
++	case XE_SRIOV_PROVISIONING_MODE_AUTO:
++		return "auto";
++	case XE_SRIOV_PROVISIONING_MODE_CUSTOM:
++		return "custom";
++	default:
++		return "<invalid>";
++	}
++}
+ 
+ static bool pf_auto_provisioning_mode(struct xe_device *xe)
+ {
+@@ -95,3 +108,29 @@ int xe_sriov_pf_unprovision_vfs(struct xe_device *xe, unsigned int num_vfs)
+ 	pf_unprovision_vfs(xe, num_vfs);
+ 	return 0;
+ }
++
++/**
++ * xe_sriov_pf_provision_set_mode() - Change VFs provision mode.
++ * @xe: the PF &xe_device
++ * @mode: the new VFs provisioning mode
++ *
++ * When changing from AUTO to CUSTOM mode, any already allocated VFs resources
++ * will remain allocated and will not be released upon VFs disabling.
++ *
++ * This function can only be called on PF.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_sriov_pf_provision_set_mode(struct xe_device *xe, enum xe_sriov_provisioning_mode mode)
++{
++	xe_assert(xe, IS_SRIOV_PF(xe));
++
++	if (mode == xe->sriov.pf.provision.mode)
++		return 0;
++
++	xe_sriov_dbg(xe, "mode %s changed to %s by %ps\n",
++		     mode_to_string(xe->sriov.pf.provision.mode),
++		     mode_to_string(mode), __builtin_return_address(0));
++	xe->sriov.pf.provision.mode = mode;
++	return 0;
++}
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision.h b/drivers/gpu/drm/xe/xe_sriov_pf_provision.h
+index f6a902190ad7..cf3657a32e90 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_provision.h
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision.h
+@@ -6,9 +6,26 @@
+ #ifndef _XE_SRIOV_PF_PROVISION_H_
+ #define _XE_SRIOV_PF_PROVISION_H_
+ 
++#include "xe_sriov_pf_provision_types.h"
++
+ struct xe_device;
+ 
+ int xe_sriov_pf_provision_vfs(struct xe_device *xe, unsigned int num_vfs);
+ int xe_sriov_pf_unprovision_vfs(struct xe_device *xe, unsigned int num_vfs);
+ 
++int xe_sriov_pf_provision_set_mode(struct xe_device *xe, enum xe_sriov_provisioning_mode mode);
++
++/**
++ * xe_sriov_pf_provision_set_custom_mode() - Change VFs provision mode to custom.
++ * @xe: the PF &xe_device
++ *
++ * This function can only be called on PF.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++static inline int xe_sriov_pf_provision_set_custom_mode(struct xe_device *xe)
++{
++	return xe_sriov_pf_provision_set_mode(xe, XE_SRIOV_PROVISIONING_MODE_CUSTOM);
++}
++
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision_types.h b/drivers/gpu/drm/xe/xe_sriov_pf_provision_types.h
+index f72bc5db3a60..a847b8a4c4da 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_provision_types.h
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision_types.h
+@@ -15,9 +15,13 @@
+  *                                   Any allocated resources to the VFs will be
+  *                                   automatically released when disabling VFs.
+  *                                   This is a default mode.
++ * @XE_SRIOV_PROVISIONING_MODE_CUSTOM: Explicit VFs provisioning using uABI interfaces.
++ *                                     VFs resources remains allocated regardless if
++ *                                     VFs are enabled or not.
+  */
+ enum xe_sriov_provisioning_mode {
+ 	XE_SRIOV_PROVISIONING_MODE_AUTO,
++	XE_SRIOV_PROVISIONING_MODE_CUSTOM,
+ };
+ static_assert(XE_SRIOV_PROVISIONING_MODE_AUTO == 0);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c b/drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c
+index 6ba2332c77d4..f3f478f14ff5 100644
+--- a/drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_tile_sriov_pf_debugfs.c
+@@ -15,6 +15,7 @@
+ #include "xe_tile_sriov_pf_debugfs.h"
+ #include "xe_sriov.h"
+ #include "xe_sriov_pf.h"
++#include "xe_sriov_pf_provision.h"
+ 
+ /*
+  *      /sys/kernel/debug/dri/BDF/
+@@ -143,6 +144,8 @@ static int NAME##_set(void *data, u64 val)					\
+ 	xe_pm_runtime_get(xe);							\
+ 	err = xe_sriov_pf_wait_ready(xe) ?:					\
+ 	      xe_gt_sriov_pf_config_set_##CONFIG(gt, vfid, val);		\
++	if (!err)								\
++		xe_sriov_pf_provision_set_custom_mode(xe);			\
+ 	xe_pm_runtime_put(xe);							\
+ 										\
+ 	return err;								\
+-- 
+2.43.0
+

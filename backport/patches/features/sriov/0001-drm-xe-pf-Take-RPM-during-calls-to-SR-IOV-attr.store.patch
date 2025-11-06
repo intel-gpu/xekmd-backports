@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 30 Oct 2025 23:23:33 +0100
+Subject: drm/xe/pf: Take RPM during calls to SR-IOV attr.store()
+
+We expect that all SR-IOV attr.store() handlers will require active
+runtime PM reference. To simplify implementation of those handlers,
+take an implicit RPM reference on their behalf. Also wait until PF
+completes its restart.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://patch.msgid.link/20251030222348.186658-3-michal.wajdeczko@intel.com
+(cherry-picked from commit f909179475c0de50a3ca5083a43b900eda18d7c9 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c | 16 ++++++++++++++--
+ 1 file changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c b/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
+index 0f2b19ca873e..439a0cd02a86 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
+@@ -9,7 +9,9 @@
+ #include <drm/drm_managed.h>
+ 
+ #include "xe_assert.h"
++#include "xe_pm.h"
+ #include "xe_sriov.h"
++#include "xe_sriov_pf.h"
+ #include "xe_sriov_pf_helpers.h"
+ #include "xe_sriov_pf_sysfs.h"
+ #include "xe_sriov_printk.h"
+@@ -129,11 +131,16 @@ static ssize_t xe_sriov_dev_attr_store(struct kobject *kobj, struct attribute *a
+ 	struct xe_sriov_dev_attr *vattr = to_xe_sriov_dev_attr(attr);
+ 	struct xe_sriov_kobj *vkobj = to_xe_sriov_kobj(kobj);
+ 	struct xe_device *xe = vkobj->xe;
++	ssize_t ret;
+ 
+ 	if (!vattr->store)
+ 		return -EPERM;
+ 
+-	return vattr->store(xe, buf, count);
++	xe_pm_runtime_get(xe);
++	ret = xe_sriov_pf_wait_ready(xe) ?: vattr->store(xe, buf, count);
++	xe_pm_runtime_put(xe);
++
++	return ret;
+ }
+ 
+ static ssize_t xe_sriov_vf_attr_show(struct kobject *kobj, struct attribute *attr, char *buf)
+@@ -158,13 +165,18 @@ static ssize_t xe_sriov_vf_attr_store(struct kobject *kobj, struct attribute *at
+ 	struct xe_sriov_kobj *vkobj = to_xe_sriov_kobj(kobj);
+ 	struct xe_device *xe = vkobj->xe;
+ 	unsigned int vfid = vkobj->vfid;
++	ssize_t ret;
+ 
+ 	xe_sriov_pf_assert_vfid(xe, vfid);
+ 
+ 	if (!vattr->store)
+ 		return -EPERM;
+ 
+-	return vattr->store(xe, vfid, buf, count);
++	xe_pm_runtime_get(xe);
++	ret = xe_sriov_pf_wait_ready(xe) ?: vattr->store(xe, vfid, buf, count);
++	xe_pm_runtime_get(xe);
++
++	return ret;
+ }
+ 
+ static const struct sysfs_ops xe_sriov_dev_sysfs_ops = {
+-- 
+2.43.0
+

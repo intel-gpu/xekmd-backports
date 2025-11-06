@@ -1,0 +1,134 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 15 Oct 2025 11:12:07 +0200
+Subject: drm/xe/pf: Automatically provision VFs only in auto-mode
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We shouldn't attempt to auto-provision VFs once we allow other
+provisioning methods. Make the code aware of the new condition.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://lore.kernel.org/r/20251015091211.592-3-michal.wajdeczko@intel.com
+(cherry-picked from commit 5546bc207110d4b5c187f002097cde07d1926ab3 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_pf_provision.c    | 16 +++++++++-
+ .../gpu/drm/xe/xe_sriov_pf_provision_types.h  | 32 +++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_pf_types.h        |  4 +++
+ 3 files changed, 51 insertions(+), 1 deletion(-)
+ create mode 100644 drivers/gpu/drm/xe/xe_sriov_pf_provision_types.h
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+index 4895d0a70089..1e782a96bbdd 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+@@ -9,6 +9,14 @@
+ #include "xe_sriov.h"
+ #include "xe_sriov_pf_helpers.h"
+ #include "xe_sriov_pf_provision.h"
++#include "xe_sriov_pf_provision_types.h"
++
++static bool pf_auto_provisioning_mode(struct xe_device *xe)
++{
++	xe_assert(xe, IS_SRIOV_PF(xe));
++
++	return xe->sriov.pf.provision.mode == XE_SRIOV_PROVISIONING_MODE_AUTO;
++}
+ 
+ static bool pf_needs_provisioning(struct xe_gt *gt, unsigned int num_vfs)
+ {
+@@ -30,7 +38,7 @@ static int pf_provision_vfs(struct xe_device *xe, unsigned int num_vfs)
+ 
+ 	for_each_gt(gt, xe, id) {
+ 		if (!pf_needs_provisioning(gt, num_vfs))
+-			continue;
++			return -EUCLEAN;
+ 		err = xe_gt_sriov_pf_config_set_fair(gt, VFID(1), num_vfs);
+ 		result = result ?: err;
+ 	}
+@@ -62,6 +70,9 @@ int xe_sriov_pf_provision_vfs(struct xe_device *xe, unsigned int num_vfs)
+ {
+ 	xe_assert(xe, IS_SRIOV_PF(xe));
+ 
++	if (!pf_auto_provisioning_mode(xe))
++		return 0;
++
+ 	return pf_provision_vfs(xe, num_vfs);
+ }
+ 
+@@ -78,6 +89,9 @@ int xe_sriov_pf_unprovision_vfs(struct xe_device *xe, unsigned int num_vfs)
+ {
+ 	xe_assert(xe, IS_SRIOV_PF(xe));
+ 
++	if (!pf_auto_provisioning_mode(xe))
++		return 0;
++
+ 	pf_unprovision_vfs(xe, num_vfs);
+ 	return 0;
+ }
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision_types.h b/drivers/gpu/drm/xe/xe_sriov_pf_provision_types.h
+new file mode 100644
+index 000000000000..f72bc5db3a60
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision_types.h
+@@ -0,0 +1,32 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#ifndef _XE_SRIOV_PF_PROVISION_TYPES_H_
++#define _XE_SRIOV_PF_PROVISION_TYPES_H_
++
++#include <linux/build_bug.h>
++
++/**
++ * enum xe_sriov_provisioning_mode - SR-IOV provisioning mode.
++ *
++ * @XE_SRIOV_PROVISIONING_MODE_AUTO: VFs are provisioned during VFs enabling.
++ *                                   Any allocated resources to the VFs will be
++ *                                   automatically released when disabling VFs.
++ *                                   This is a default mode.
++ */
++enum xe_sriov_provisioning_mode {
++	XE_SRIOV_PROVISIONING_MODE_AUTO,
++};
++static_assert(XE_SRIOV_PROVISIONING_MODE_AUTO == 0);
++
++/**
++ * struct xe_sriov_pf_provision - Data used by the PF provisioning.
++ */
++struct xe_sriov_pf_provision {
++	/** @mode: selected provisioning mode. */
++	enum xe_sriov_provisioning_mode mode;
++};
++
++#endif
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_types.h b/drivers/gpu/drm/xe/xe_sriov_pf_types.h
+index 956a88f9f213..c753cd59aed2 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_types.h
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_types.h
+@@ -9,6 +9,7 @@
+ #include <linux/mutex.h>
+ #include <linux/types.h>
+ 
++#include "xe_sriov_pf_provision_types.h"
+ #include "xe_sriov_pf_service_types.h"
+ 
+ /**
+@@ -35,6 +36,9 @@ struct xe_device_pf {
+ 	/** @master_lock: protects all VFs configurations across GTs */
+ 	struct mutex master_lock;
+ 
++	/** @provision: device level provisioning data. */
++	struct xe_sriov_pf_provision provision;
++
+ 	/** @service: device level service data. */
+ 	struct xe_sriov_pf_service service;
+ 
+-- 
+2.43.0
+

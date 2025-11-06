@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 30 Oct 2025 23:23:38 +0100
+Subject: drm/xe/pf: Fix signature of internal config helpers
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Both pf_get_exec_quantum() and pf_get_preempt_timeout() should
+return u32 as this is a type of the underlying data.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20251030222348.186658-8-michal.wajdeczko@intel.com
+(cherry-picked from commit 3c54ef91219d06ecd52b5ddfb30db43e86c11868 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index ff0db2de0601..78d62470db16 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -1727,7 +1727,7 @@ static int pf_provision_exec_quantum(struct xe_gt *gt, unsigned int vfid,
+ 	return 0;
+ }
+ 
+-static int pf_get_exec_quantum(struct xe_gt *gt, unsigned int vfid)
++static u32 pf_get_exec_quantum(struct xe_gt *gt, unsigned int vfid)
+ {
+ 	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
+ 
+@@ -1830,7 +1830,7 @@ static int pf_provision_preempt_timeout(struct xe_gt *gt, unsigned int vfid,
+ 	return 0;
+ }
+ 
+-static int pf_get_preempt_timeout(struct xe_gt *gt, unsigned int vfid)
++static u32 pf_get_preempt_timeout(struct xe_gt *gt, unsigned int vfid)
+ {
+ 	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
+ 
+-- 
+2.43.0
+

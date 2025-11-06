@@ -1,0 +1,184 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 30 Oct 2025 23:23:44 +0100
+Subject: drm/xe/pf: Allow change PF scheduling priority using sysfs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We have just added bulk change of the scheduling priority for all
+VFs and PF, but that only allow to select LOW and NORMAL priority.
+
+Add read-write attribute under PF to allow changing its priority
+without impacting other VFs priority settings.
+
+For completeness also add read-only attributes under VFs, to show
+currently selected priority levels used by the VFs.
+
+  /sys/bus/pci/drivers/xe/BDF/
+  ├── sriov_admin/
+      ├── pf/
+      │   └── profile
+      │       └── sched_priority	[RW] low, normal, high
+      ├── vf1/
+      │   └── profile
+      │       └── sched_priority	[RO] low, normal
+
+Writing "high" to the PF read-write attribute will change PF
+priority on all tiles/GTs to HIGH (schedule function in the next
+time-slice after current one completes and it has work). Writing
+"low" or "normal" to change priority to LOW/NORMAL is supported.
+
+When read, those files will display the current and available
+scheduling priorities. The currently active priority level will
+be enclosed in square brackets, default output will be like:
+
+ $ grep . -h sriov_admin/{pf,vf1,vf2}/profile/sched_priority
+ [low] normal high
+ [low] normal
+ [low] normal
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Acked-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://patch.msgid.link/20251030222348.186658-14-michal.wajdeczko@intel.com
+(cherry-picked from commit b5b297b9e7b4d6c9815f0c8dc3412470abdbe158 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c | 84 +++++++++++++++++++++++++-
+ 1 file changed, 82 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c b/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
+index 19724a28fb33..0b1b4606ac76 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_sysfs.c
+@@ -17,6 +17,23 @@
+ #include "xe_sriov_pf_sysfs.h"
+ #include "xe_sriov_printk.h"
+ 
++static int emit_choice(char *buf, int choice, const char * const *array, size_t size)
++{
++	int pos = 0;
++	int n;
++
++	for (n = 0; n < size; n++) {
++		pos += sysfs_emit_at(buf, pos, "%s%s%s%s",
++				    n ? " " : "",
++				    n == choice ? "[" : "",
++				    array[n],
++				    n == choice ? "]" : "");
++	}
++	pos += sysfs_emit_at(buf, pos, "\n");
++
++	return pos;
++}
++
+ /*
+  * /sys/bus/pci/drivers/xe/BDF/
+  * :
+@@ -30,12 +47,14 @@
+  *     │   ├── ...
+  *     │   └── profile
+  *     │       ├── exec_quantum_ms
+- *     │       └── preempt_timeout_us
++ *     │       ├── preempt_timeout_us
++ *     │       └── sched_priority
+  *     ├── vf1/
+  *     │   ├── ...
+  *     │   └── profile
+  *     │       ├── exec_quantum_ms
+- *     │       └── preempt_timeout_us
++ *     │       ├── preempt_timeout_us
++ *     │       └── sched_priority
+  *     ├── vf2/
+  *     :
+  *     └── vfN/
+@@ -115,6 +134,12 @@ static const char * const sched_priority_names[] = {
+ 	[GUC_SCHED_PRIORITY_HIGH] = "high",
+ };
+ 
++static bool sched_priority_change_allowed(unsigned int vfid)
++{
++	/* As of today GuC FW allows to selectively change only the PF priority. */
++	return vfid == PFID;
++}
++
+ static bool sched_priority_high_allowed(unsigned int vfid)
+ {
+ 	/* As of today GuC FW allows to select 'high' priority only for the PF. */
+@@ -199,15 +224,70 @@ static XE_SRIOV_VF_ATTR(NAME)
+ DEFINE_SIMPLE_PROVISIONING_SRIOV_VF_ATTR(exec_quantum_ms, eq, u32, "%u\n");
+ DEFINE_SIMPLE_PROVISIONING_SRIOV_VF_ATTR(preempt_timeout_us, pt, u32, "%u\n");
+ 
++static ssize_t xe_sriov_vf_attr_sched_priority_show(struct xe_device *xe, unsigned int vfid,
++						    char *buf)
++{
++	size_t num_priorities = ARRAY_SIZE(sched_priority_names);
++	u32 priority;
++	int err;
++
++	err = xe_sriov_pf_provision_query_vf_priority(xe, vfid, &priority);
++	if (err)
++		return err;
++
++	if (!sched_priority_high_allowed(vfid))
++		num_priorities--;
++
++	xe_assert(xe, priority < num_priorities);
++	return emit_choice(buf, priority, sched_priority_names, num_priorities);
++}
++
++static ssize_t xe_sriov_vf_attr_sched_priority_store(struct xe_device *xe, unsigned int vfid,
++						     const char *buf, size_t count)
++{
++	size_t num_priorities = ARRAY_SIZE(sched_priority_names);
++	int match;
++	int err;
++
++	if (!sched_priority_change_allowed(vfid))
++		return -EOPNOTSUPP;
++
++	if (!sched_priority_high_allowed(vfid))
++		num_priorities--;
++
++	match = __sysfs_match_string(sched_priority_names, num_priorities, buf);
++	if (match < 0)
++		return -EINVAL;
++
++	err = xe_sriov_pf_provision_apply_vf_priority(xe, vfid, match);
++	return err ?: count;
++}
++
++static XE_SRIOV_VF_ATTR(sched_priority);
++
+ static struct attribute *profile_vf_attrs[] = {
+ 	&xe_sriov_vf_attr_exec_quantum_ms.attr,
+ 	&xe_sriov_vf_attr_preempt_timeout_us.attr,
++	&xe_sriov_vf_attr_sched_priority.attr,
+ 	NULL
+ };
+ 
++static umode_t profile_vf_attr_is_visible(struct kobject *kobj,
++					  struct attribute *attr, int index)
++{
++	struct xe_sriov_kobj *vkobj = to_xe_sriov_kobj(kobj);
++
++	if (attr == &xe_sriov_vf_attr_sched_priority.attr &&
++	    !sched_priority_change_allowed(vkobj->vfid))
++		return attr->mode & 0444;
++
++	return attr->mode;
++}
++
+ static const struct attribute_group profile_vf_attr_group = {
+ 	.name = "profile",
+ 	.attrs = profile_vf_attrs,
++	.is_visible = profile_vf_attr_is_visible,
+ };
+ 
+ static const struct attribute_group *xe_sriov_vf_attr_groups[] = {
+-- 
+2.43.0
+

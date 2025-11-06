@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Thu, 5 Dec 2024 00:46:18 +0530
-Subject: [PATCH] drm/xe/eudebug: Prelim rework for Xe EU debug
+Subject: drm/xe/eudebug: Prelim rework for Xe EU debug
 
 Moved all xe_eudebug declarations and definitions to xe_drm_prelim.h
 Removed xe_drm_eudebug.h Moved eudebug related files into prelim/ directory
@@ -68,7 +68,7 @@ index fba32c51e..63c7b4db5 100644
  	depends on DRM_XE
  	default y
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 144173c5a..611c672a4 100644
+index ffd7fbd83..d85c919d4 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -57,7 +57,7 @@ xe-y += xe_bb.o \
@@ -2354,7 +2354,7 @@ index 4651d6f5e..7af7bfa78 100644
  	xe_exec_queue_kill(q);
  
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index ccfed1d7f..3bba06556 100644
+index 0e3ecafcc..8079d69ef 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -22,7 +22,7 @@
@@ -2366,7 +2366,7 @@ index ccfed1d7f..3bba06556 100644
  #include "xe_eu_stall.h"
  #include "xe_exec_queue.h"
  #include "xe_execlist.h"
-@@ -764,7 +764,7 @@ static int do_gt_reset(struct xe_gt *gt)
+@@ -762,7 +762,7 @@ static int do_gt_reset(struct xe_gt *gt)
  
  	xe_gsc_wa_14015076503(gt, true);
  
@@ -2436,7 +2436,7 @@ index cb400c051..123a7000e 100644
  #include "xe_force_wake.h"
  #include "xe_gsc.h"
 diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov.c
-index 47f916fae..4d6a43831 100644
+index 77428e4a1..c78eb0c90 100644
 --- a/drivers/gpu/drm/xe/xe_pci_sriov.c
 +++ b/drivers/gpu/drm/xe/xe_pci_sriov.c
 @@ -9,7 +9,7 @@
@@ -2448,7 +2448,7 @@ index 47f916fae..4d6a43831 100644
  #include "xe_gt_sriov_pf_config.h"
  #include "xe_gt_sriov_pf_control.h"
  #include "xe_gt_sriov_printk.h"
-@@ -160,7 +160,7 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
+@@ -110,7 +110,7 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
  	if (err)
  		goto out;
  
@@ -2457,16 +2457,16 @@ index 47f916fae..4d6a43831 100644
  	if (err < 0)
  		goto out;
  
-@@ -201,7 +201,7 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
+@@ -153,7 +153,7 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
  failed:
- 	pf_unprovision_vfs(xe, num_vfs);
+ 	xe_sriov_pf_unprovision_vfs(xe, num_vfs);
  	xe_pm_runtime_put(xe);
 -	xe_eudebug_support_enable(xe);
 +	prelim_xe_eudebug_support_enable(xe);
  out:
  	xe_sriov_notice(xe, "Failed to enable %u VF%s (%pe)\n",
  			num_vfs, str_plural(num_vfs), ERR_PTR(err));
-@@ -231,7 +231,7 @@ static int pf_disable_vfs(struct xe_device *xe)
+@@ -185,7 +185,7 @@ static int pf_disable_vfs(struct xe_device *xe)
  	/* not needed anymore - see pf_enable_vfs() */
  	xe_pm_runtime_put(xe);
  

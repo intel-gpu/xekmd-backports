@@ -1,0 +1,142 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 30 Oct 2025 23:23:34 +0100
+Subject: drm/xe/pf: Add _locked variants of the VF EQ config functions
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In upcoming patches we will want to configure VF's execution
+quantum (EQ) on all GTs under single lock to avoid potential
+races in parallel GT configuration attempts.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20251030222348.186658-4-michal.wajdeczko@intel.com
+(cherry-picked from commit 5186df42bd5c483f4762d3be22c85759e9ba4836 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 66 ++++++++++++++++------
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h |  4 ++
+ 2 files changed, 53 insertions(+), 17 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index ba406d7c0f43..5ab81e9315db 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -1732,47 +1732,79 @@ static int pf_get_exec_quantum(struct xe_gt *gt, unsigned int vfid)
+ }
+ 
+ /**
+- * xe_gt_sriov_pf_config_set_exec_quantum - Configure execution quantum for the VF.
++ * xe_gt_sriov_pf_config_set_exec_quantum_locked() - Configure PF/VF execution quantum.
+  * @gt: the &xe_gt
+- * @vfid: the VF identifier
++ * @vfid: the PF or VF identifier
+  * @exec_quantum: requested execution quantum in milliseconds (0 is infinity)
+  *
+- * This function can only be called on PF.
++ * This function can only be called on PF with the master mutex hold.
++ * It will log the provisioned value or an error in case of the failure.
+  *
+  * Return: 0 on success or a negative error code on failure.
+  */
+-int xe_gt_sriov_pf_config_set_exec_quantum(struct xe_gt *gt, unsigned int vfid,
+-					   u32 exec_quantum)
++int xe_gt_sriov_pf_config_set_exec_quantum_locked(struct xe_gt *gt, unsigned int vfid,
++						  u32 exec_quantum)
+ {
+ 	int err;
+ 
+-	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
++	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
++
+ 	err = pf_provision_exec_quantum(gt, vfid, exec_quantum);
+-	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
+ 
+ 	return pf_config_set_u32_done(gt, vfid, exec_quantum,
+-				      xe_gt_sriov_pf_config_get_exec_quantum(gt, vfid),
++				      pf_get_exec_quantum(gt, vfid),
+ 				      "execution quantum", exec_quantum_unit, err);
+ }
+ 
+ /**
+- * xe_gt_sriov_pf_config_get_exec_quantum - Get VF's execution quantum.
++ * xe_gt_sriov_pf_config_set_exec_quantum() - Configure PF/VF execution quantum.
+  * @gt: the &xe_gt
+- * @vfid: the VF identifier
++ * @vfid: the PF or VF identifier
++ * @exec_quantum: requested execution quantum in milliseconds (0 is infinity)
+  *
+  * This function can only be called on PF.
++ * It will log the provisioned value or an error in case of the failure.
+  *
+- * Return: VF's (or PF's) execution quantum in milliseconds.
++ * Return: 0 on success or a negative error code on failure.
+  */
+-u32 xe_gt_sriov_pf_config_get_exec_quantum(struct xe_gt *gt, unsigned int vfid)
++int xe_gt_sriov_pf_config_set_exec_quantum(struct xe_gt *gt, unsigned int vfid,
++					   u32 exec_quantum)
+ {
+-	u32 exec_quantum;
++	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
+ 
+-	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
+-	exec_quantum = pf_get_exec_quantum(gt, vfid);
+-	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
++	return xe_gt_sriov_pf_config_set_exec_quantum_locked(gt, vfid, exec_quantum);
++}
++
++/**
++ * xe_gt_sriov_pf_config_get_exec_quantum_locked() - Get PF/VF execution quantum.
++ * @gt: the &xe_gt
++ * @vfid: the PF or VF identifier
++ *
++ * This function can only be called on PF with the master mutex hold.
++ *
++ * Return: execution quantum in milliseconds (or 0 if infinity).
++ */
++u32 xe_gt_sriov_pf_config_get_exec_quantum_locked(struct xe_gt *gt, unsigned int vfid)
++{
++	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
++
++	return pf_get_exec_quantum(gt, vfid);
++}
++
++/**
++ * xe_gt_sriov_pf_config_get_exec_quantum() - Get PF/VF execution quantum.
++ * @gt: the &xe_gt
++ * @vfid: the PF or VF identifier
++ *
++ * This function can only be called on PF.
++ *
++ * Return: execution quantum in milliseconds (or 0 if infinity).
++ */
++u32 xe_gt_sriov_pf_config_get_exec_quantum(struct xe_gt *gt, unsigned int vfid)
++{
++	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
+ 
+-	return exec_quantum;
++	return pf_get_exec_quantum(gt, vfid);
+ }
+ 
+ static const char *preempt_timeout_unit(u32 preempt_timeout)
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
+index 513e6512a575..b4beb5a97031 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
+@@ -40,6 +40,10 @@ int xe_gt_sriov_pf_config_bulk_set_lmem(struct xe_gt *gt, unsigned int vfid, uns
+ u32 xe_gt_sriov_pf_config_get_exec_quantum(struct xe_gt *gt, unsigned int vfid);
+ int xe_gt_sriov_pf_config_set_exec_quantum(struct xe_gt *gt, unsigned int vfid, u32 exec_quantum);
+ 
++u32 xe_gt_sriov_pf_config_get_exec_quantum_locked(struct xe_gt *gt, unsigned int vfid);
++int xe_gt_sriov_pf_config_set_exec_quantum_locked(struct xe_gt *gt, unsigned int vfid,
++						  u32 exec_quantum);
++
+ u32 xe_gt_sriov_pf_config_get_preempt_timeout(struct xe_gt *gt, unsigned int vfid);
+ int xe_gt_sriov_pf_config_set_preempt_timeout(struct xe_gt *gt, unsigned int vfid,
+ 					      u32 preempt_timeout);
+-- 
+2.43.0
+

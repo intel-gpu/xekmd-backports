@@ -1,0 +1,228 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 15 Oct 2025 11:12:06 +0200
+Subject: drm/xe/pf: Promote VFs provisioning helpers
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+As we plan to add more VFs provisioning methods, start moving
+related code into single place.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://lore.kernel.org/r/20251015091211.592-2-michal.wajdeczko@intel.com
+(cherry-picked from commit a5efeaf8a1dbb007ecc6506cf4d532faaf9d02c5 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/Makefile                |  1 +
+ drivers/gpu/drm/xe/xe_pci_sriov.c          | 45 ++----------
+ drivers/gpu/drm/xe/xe_sriov_pf_provision.c | 83 ++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_pf_provision.h | 14 ++++
+ 4 files changed, 102 insertions(+), 41 deletions(-)
+ create mode 100644 drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+ create mode 100644 drivers/gpu/drm/xe/xe_sriov_pf_provision.h
+
+diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
+index e29a66a9d8f6..8572b7f26cea 100644
+--- a/drivers/gpu/drm/xe/Makefile
++++ b/drivers/gpu/drm/xe/Makefile
+@@ -165,6 +165,7 @@ xe-$(CONFIG_PCI_IOV) += \
+ 	xe_sriov_pf.o \
+ 	xe_sriov_pf_control.o \
+ 	xe_sriov_pf_debugfs.o \
++	xe_sriov_pf_provision.o \
+ 	xe_sriov_pf_service.o \
+ 	xe_tile_sriov_pf_debugfs.o
+ 
+diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov.c
+index 9c1c9e669b04..735f51effc7a 100644
+--- a/drivers/gpu/drm/xe/xe_pci_sriov.c
++++ b/drivers/gpu/drm/xe/xe_pci_sriov.c
+@@ -19,46 +19,9 @@
+ #include "xe_sriov_pf.h"
+ #include "xe_sriov_pf_control.h"
+ #include "xe_sriov_pf_helpers.h"
++#include "xe_sriov_pf_provision.h"
+ #include "xe_sriov_printk.h"
+ 
+-static int pf_needs_provisioning(struct xe_gt *gt, unsigned int num_vfs)
+-{
+-	unsigned int n;
+-
+-	for (n = 1; n <= num_vfs; n++)
+-		if (!xe_gt_sriov_pf_config_is_empty(gt, n))
+-			return false;
+-
+-	return true;
+-}
+-
+-static int pf_provision_vfs(struct xe_device *xe, unsigned int num_vfs)
+-{
+-	struct xe_gt *gt;
+-	unsigned int id;
+-	int result = 0, err;
+-
+-	for_each_gt(gt, xe, id) {
+-		if (!pf_needs_provisioning(gt, num_vfs))
+-			continue;
+-		err = xe_gt_sriov_pf_config_set_fair(gt, VFID(1), num_vfs);
+-		result = result ?: err;
+-	}
+-
+-	return result;
+-}
+-
+-static void pf_unprovision_vfs(struct xe_device *xe, unsigned int num_vfs)
+-{
+-	struct xe_gt *gt;
+-	unsigned int id;
+-	unsigned int n;
+-
+-	for_each_gt(gt, xe, id)
+-		for (n = 1; n <= num_vfs; n++)
+-			xe_gt_sriov_pf_config_release(gt, n, true);
+-}
+-
+ static void pf_reset_vfs(struct xe_device *xe, unsigned int num_vfs)
+ {
+ 	unsigned int n;
+@@ -168,7 +131,7 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
+ 	 */
+ 	xe_pm_runtime_get_noresume(xe);
+ 
+-	err = pf_provision_vfs(xe, num_vfs);
++	err = xe_sriov_pf_provision_vfs(xe, num_vfs);
+ 	if (err < 0)
+ 		goto failed;
+ 
+@@ -192,7 +155,7 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
+ 	return num_vfs;
+ 
+ failed:
+-	pf_unprovision_vfs(xe, num_vfs);
++	xe_sriov_pf_unprovision_vfs(xe, num_vfs);
+ 	xe_pm_runtime_put(xe);
+ out:
+ 	xe_sriov_notice(xe, "Failed to enable %u VF%s (%pe)\n",
+@@ -218,7 +181,7 @@ static int pf_disable_vfs(struct xe_device *xe)
+ 
+ 	pf_reset_vfs(xe, num_vfs);
+ 
+-	pf_unprovision_vfs(xe, num_vfs);
++	xe_sriov_pf_unprovision_vfs(xe, num_vfs);
+ 
+ 	/* not needed anymore - see pf_enable_vfs() */
+ 	xe_pm_runtime_put(xe);
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+new file mode 100644
+index 000000000000..4895d0a70089
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+@@ -0,0 +1,83 @@
++// SPDX-License-Identifier: MIT
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#include "xe_assert.h"
++#include "xe_device.h"
++#include "xe_gt_sriov_pf_config.h"
++#include "xe_sriov.h"
++#include "xe_sriov_pf_helpers.h"
++#include "xe_sriov_pf_provision.h"
++
++static bool pf_needs_provisioning(struct xe_gt *gt, unsigned int num_vfs)
++{
++	unsigned int n;
++
++	for (n = 1; n <= num_vfs; n++)
++		if (!xe_gt_sriov_pf_config_is_empty(gt, n))
++			return false;
++
++	return true;
++}
++
++static int pf_provision_vfs(struct xe_device *xe, unsigned int num_vfs)
++{
++	struct xe_gt *gt;
++	unsigned int id;
++	int result = 0;
++	int err;
++
++	for_each_gt(gt, xe, id) {
++		if (!pf_needs_provisioning(gt, num_vfs))
++			continue;
++		err = xe_gt_sriov_pf_config_set_fair(gt, VFID(1), num_vfs);
++		result = result ?: err;
++	}
++
++	return result;
++}
++
++static void pf_unprovision_vfs(struct xe_device *xe, unsigned int num_vfs)
++{
++	struct xe_gt *gt;
++	unsigned int id;
++	unsigned int n;
++
++	for_each_gt(gt, xe, id)
++		for (n = 1; n <= num_vfs; n++)
++			xe_gt_sriov_pf_config_release(gt, n, true);
++}
++
++/**
++ * xe_sriov_pf_provision_vfs() - Provision VFs in auto-mode.
++ * @xe: the PF &xe_device
++ * @num_vfs: the number of VFs to auto-provision
++ *
++ * This function can only be called on PF.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_sriov_pf_provision_vfs(struct xe_device *xe, unsigned int num_vfs)
++{
++	xe_assert(xe, IS_SRIOV_PF(xe));
++
++	return pf_provision_vfs(xe, num_vfs);
++}
++
++/**
++ * xe_sriov_pf_unprovision_vfs() - Unprovision VFs in auto-mode.
++ * @xe: the PF &xe_device
++ * @num_vfs: the number of VFs to unprovision
++ *
++ * This function can only be called on PF.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_sriov_pf_unprovision_vfs(struct xe_device *xe, unsigned int num_vfs)
++{
++	xe_assert(xe, IS_SRIOV_PF(xe));
++
++	pf_unprovision_vfs(xe, num_vfs);
++	return 0;
++}
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision.h b/drivers/gpu/drm/xe/xe_sriov_pf_provision.h
+new file mode 100644
+index 000000000000..f6a902190ad7
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision.h
+@@ -0,0 +1,14 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#ifndef _XE_SRIOV_PF_PROVISION_H_
++#define _XE_SRIOV_PF_PROVISION_H_
++
++struct xe_device;
++
++int xe_sriov_pf_provision_vfs(struct xe_device *xe, unsigned int num_vfs);
++int xe_sriov_pf_unprovision_vfs(struct xe_device *xe, unsigned int num_vfs);
++
++#endif
+-- 
+2.43.0
+

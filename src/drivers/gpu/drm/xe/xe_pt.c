@@ -2456,13 +2456,11 @@ xe_pt_update_ops_run(struct xe_tile *tile, struct xe_vma_ops *vops)
 				err = -ENOMEM;
 				goto free_ifence;
 			}
-#ifndef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
 			cf = dma_fence_array_alloc(2);
 			if (!cf) {
 				err = -ENOMEM;
 				goto free_ifence;
 			}
-#endif
 		}
 	}
 
@@ -2506,21 +2504,10 @@ xe_pt_update_ops_run(struct xe_tile *tile, struct xe_vma_ops *vops)
 						pt_update_ops->last, vm->usm.asid);
 			fences[0] = &ifence->base.base;
 			fences[1] = &mfence->base.base;
-#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
-			cf=dma_fence_array_create(2, fences,
-						vm->composite_fence_ctx,
-						vm->composite_fence_seqno++,
-						false);
-			if (!cf) {
-				err = -ENOMEM;
-				goto free_fence;
-			}
-#else
 			dma_fence_array_init(cf, 2, fences,
 					     vm->composite_fence_ctx,
 					     vm->composite_fence_seqno++,
 					     false);
-#endif
 			fence = &cf->base;
 		} else {
 			fence = &ifence->base.base;
@@ -2558,16 +2545,10 @@ xe_pt_update_ops_run(struct xe_tile *tile, struct xe_vma_ops *vops)
 
 	return fence;
 
-#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
-free_fence:
-	kfree(fence);
-#endif
 free_rfence:
 	kfree(rfence);
 free_ifence:
-#ifndef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
 	kfree(cf);
-#endif
 	kfree(fences);
 	kfree(mfence);
 	kfree(ifence);

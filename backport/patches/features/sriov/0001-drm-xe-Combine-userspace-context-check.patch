@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Piotr=20Pi=C3=B3rkowski?= <piotr.piorkowski@intel.com>
 Date: Fri, 3 Oct 2025 18:26:19 +0200
-Subject: drm/xe: Combine userspace context check
+Subject: [PATCH] drm/xe: Combine userspace context check
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -21,6 +21,7 @@ Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Link: https://lore.kernel.org/r/20251003162619.1984236-6-piotr.piorkowski@intel.com
 (backported from commit 8462d16d1b75325cb7220cd2731a47033baff863 linux-next )
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_exec_queue.c |  3 ++-
  drivers/gpu/drm/xe/xe_execlist.c   |  2 +-
@@ -29,7 +30,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  4 files changed, 11 insertions(+), 11 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index c1c37eeb0..1c2247e74 100644
+index c1c37eeb0412..1c2247e74038 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -159,12 +159,13 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
@@ -48,7 +49,7 @@ index c1c37eeb0..1c2247e74 100644
  			err = PTR_ERR(q->lrc[i]);
  			goto err_lrc;
 diff --git a/drivers/gpu/drm/xe/xe_execlist.c b/drivers/gpu/drm/xe/xe_execlist.c
-index 66001af5c..9fbed1a2f 100644
+index 66001af5cf55..9fbed1a2fcc6 100644
 --- a/drivers/gpu/drm/xe/xe_execlist.c
 +++ b/drivers/gpu/drm/xe/xe_execlist.c
 @@ -269,7 +269,7 @@ struct xe_execlist_port *xe_execlist_port_create(struct xe_device *xe,
@@ -61,7 +62,7 @@ index 66001af5c..9fbed1a2f 100644
  		err = PTR_ERR(port->lrc);
  		goto err;
 diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
-index 623b1dc3a..4c5eaba89 100644
+index 623b1dc3a3bd..4c5eaba897e0 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.c
 +++ b/drivers/gpu/drm/xe/xe_lrc.c
 @@ -1308,7 +1308,8 @@ setup_indirect_ctx(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
@@ -83,7 +84,7 @@ index 623b1dc3a..4c5eaba89 100644
  
 -	if (init_flags & XE_LRC_CREATE_USER_CTX)
 -		bo_flags |= XE_BO_FLAG_FORCE_USER_VRAM;
-+	if ((vm && vm->xef) || flags & XE_LRC_CREATE_USER_CTX) /* userspace */
++	if ((vm && vm->xef) || init_flags & XE_LRC_CREATE_USER_CTX) /* userspace */
 +		bo_flags |= XE_BO_FLAG_PINNED_LATE_RESTORE | XE_BO_FLAG_FORCE_USER_VRAM;
  
  	lrc->bo = xe_bo_create_pin_map_novm(xe, tile,
@@ -107,7 +108,7 @@ index 623b1dc3a..4c5eaba89 100644
  		kfree(lrc);
  		return ERR_PTR(err);
 diff --git a/drivers/gpu/drm/xe/xe_lrc.h b/drivers/gpu/drm/xe/xe_lrc.h
-index 58cf48b17..a61c41086 100644
+index 58cf48b17d59..a61c4108673f 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.h
 +++ b/drivers/gpu/drm/xe/xe_lrc.h
 @@ -48,7 +48,7 @@ struct xe_lrc_snapshot {
@@ -129,5 +130,5 @@ index 58cf48b17..a61c41086 100644
   * reference count reaches 0.
   */
 -- 
-2.34.1
+2.43.0
 

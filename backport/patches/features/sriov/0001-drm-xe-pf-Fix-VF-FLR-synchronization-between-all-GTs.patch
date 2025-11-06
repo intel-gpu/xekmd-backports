@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Sat, 25 Oct 2025 14:49:05 +0200
+Subject: drm/xe/pf: Fix VF FLR synchronization between all GTs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If subsequent VF FLR request is triggered when previous VF FLR
+sequence is still being processed, we ignore it as not needed.
+
+But in case of the multi-GT platforms, one GT may already finish
+its VF FLR processing and will start a new sequence, which includes
+new cross-GT synchronization point.  However, since other GT may
+be still busy with post-sync cleanup steps, this will put on hold
+this new FLR sequence, which might never finish due to lack of any
+future synchronization checkouts.
+
+Add additional cross-GT FLR synchronization point when each GT
+ends processing its own FLR sequence.  This should also help to
+cover the case when one GT fails FLR processing before reaching
+the first synchronization point.
+
+Closes: https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/6287
+Fixes: 2a8fcf7cc950 ("drm/xe/pf: Synchronize VF FLR between all GTs")
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20251025124906.5264-1-michal.wajdeczko@intel.com
+(cherry-picked from commit 3764e9b99fa85ca51be9c08dc82c1121e4654f49 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+index 2e6bd3d1fe1d..9de05db1f090 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
+@@ -997,6 +997,8 @@ static void pf_exit_vf_flr_wip(struct xe_gt *gt, unsigned int vfid)
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_FLR_GUC_DONE);
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_FLR_WAIT_GUC);
+ 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_FLR_SEND_START);
++
++		xe_sriov_pf_control_sync_flr(gt_to_xe(gt), vfid);
+ 	}
+ }
+ 
+-- 
+2.43.0
+

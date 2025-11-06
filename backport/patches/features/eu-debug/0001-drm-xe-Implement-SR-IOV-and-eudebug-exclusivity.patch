@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Christoph Manszewski <christoph.manszewski@intel.com>
 Date: Wed, 29 Jan 2025 18:12:04 +0100
-Subject: drm/xe: Implement SR-IOV and eudebug exclusivity
+Subject: [PATCH] drm/xe: Implement SR-IOV and eudebug exclusivity
 
 v2: use xe_eudebug_is_enabled in exec_queue (Maciej)
 v3: xe_eudebug_is_enabled simplifications (Maciej)
@@ -627,18 +627,18 @@ index 61f9aa84fbb2..1b034b090e07 100644
  	err = xe_mmio_wait32(&gt->mmio, GDRST, GRDOM_FULL, 0, 5000, NULL, false);
  	if (err)
 diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov.c
-index af05db07162e..966f75166e50 100644
+index d0fcde66a774..f884db7248ce 100644
 --- a/drivers/gpu/drm/xe/xe_pci_sriov.c
 +++ b/drivers/gpu/drm/xe/xe_pci_sriov.c
-@@ -19,6 +19,7 @@
- #include "xe_sriov_pf.h"
- #include "xe_sriov_pf_helpers.h"
+@@ -22,6 +22,7 @@
+ #include "xe_sriov_pf_provision.h"
+ #include "xe_sriov_pf_sysfs.h"
  #include "xe_sriov_printk.h"
 +#include "prelim/xe_eudebug.h"
  
- static int pf_needs_provisioning(struct xe_gt *gt, unsigned int num_vfs)
+ static void pf_reset_vfs(struct xe_device *xe, unsigned int num_vfs)
  {
-@@ -155,6 +156,10 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
+@@ -105,6 +106,10 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
  	xe_assert(xe, num_vfs <= total_vfs);
  	xe_sriov_dbg(xe, "enabling %u VF%s\n", num_vfs, str_plural(num_vfs));
  
@@ -649,15 +649,15 @@ index af05db07162e..966f75166e50 100644
  	err = xe_sriov_pf_wait_ready(xe);
  	if (err)
  		goto out;
-@@ -196,6 +201,7 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
+@@ -148,6 +153,7 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
  failed:
- 	pf_unprovision_vfs(xe, num_vfs);
+ 	xe_sriov_pf_unprovision_vfs(xe, num_vfs);
  	xe_pm_runtime_put(xe);
 +	prelim_xe_eudebug_support_enable(xe);
  out:
  	xe_sriov_notice(xe, "Failed to enable %u VF%s (%pe)\n",
  			num_vfs, str_plural(num_vfs), ERR_PTR(err));
-@@ -225,6 +231,8 @@ static int pf_disable_vfs(struct xe_device *xe)
+@@ -179,6 +185,8 @@ static int pf_disable_vfs(struct xe_device *xe)
  	/* not needed anymore - see pf_enable_vfs() */
  	xe_pm_runtime_put(xe);
  

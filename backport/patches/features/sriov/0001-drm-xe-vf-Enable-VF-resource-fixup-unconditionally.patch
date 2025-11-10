@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Fri, 7 Nov 2025 17:10:00 +0100
+Subject: drm/xe/vf: Enable VF resource fixup unconditionally
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+All the feature enabling code is in place - drop the debug flag
+requirement for VF resource fixup.
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+(backported from commit 0a91f30c86dbb858dae8dec43258a9b318faf927 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_vf.c | 8 --------
+ 1 file changed, 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf.c b/drivers/gpu/drm/xe/xe_sriov_vf.c
+index 39c829daa97c..284ce37ca92d 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_sriov_vf.c
+@@ -156,14 +156,6 @@ void xe_sriov_vf_migration_disable(struct xe_device *xe, const char *fmt, ...)
+ 
+ static void vf_migration_init_early(struct xe_device *xe)
+ {
+-	/*
+-	 * TODO: Add conditions to allow specific platforms, when they're
+-	 * supported at production quality.
+-	 */
+-	if (!IS_ENABLED(CONFIG_DRM_XE_DEBUG))
+-		return xe_sriov_vf_migration_disable(xe,
+-				"experimental feature not available on production builds");
+-
+ 	if (!xe_device_has_memirq(xe))
+ 		return xe_sriov_vf_migration_disable(xe, "requires memory-based IRQ support");
+ 
+-- 
+2.34.1
+

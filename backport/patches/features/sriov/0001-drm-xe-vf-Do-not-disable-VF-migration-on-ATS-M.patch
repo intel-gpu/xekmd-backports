@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tomasz Lis <tomasz.lis@intel.com>
+Date: Wed, 22 Oct 2025 00:48:17 +0200
+Subject: drm/xe/vf: Do not disable VF migration on ATS-M
+
+Our current support for the VF migration depends on the availability
+of the MEMIRQ rather than specific graphics version 20.
+
+Relax our early migration support checks to allow also use some older
+platforms like ATS-M for experiments and testing.
+
+Do not allow ADL, as supporting VF migration through MMIO interrupts
+would require additional changes in order to achieve reliability.
+
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Tomasz Lis <tomasz.lis@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20251021224817.1593817-5-tomasz.lis@intel.com
+(backported from commit 13fb4b39e95d7ed62a598881896803d686fdb01d linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_vf.c | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf.c b/drivers/gpu/drm/xe/xe_sriov_vf.c
+index 13d6c094ae8f..39c829daa97c 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_sriov_vf.c
+@@ -164,10 +164,9 @@ static void vf_migration_init_early(struct xe_device *xe)
+ 		return xe_sriov_vf_migration_disable(xe,
+ 				"experimental feature not available on production builds");
+ 
+-	if (GRAPHICS_VER(xe) < 20)
+-		return xe_sriov_vf_migration_disable(xe,
+-				"requires gfx version >= 20, but only %u found",
+-				GRAPHICS_VER(xe));
++	if (!xe_device_has_memirq(xe))
++		return xe_sriov_vf_migration_disable(xe, "requires memory-based IRQ support");
++
+ }
+ 
+ /**
+-- 
+2.34.1
+

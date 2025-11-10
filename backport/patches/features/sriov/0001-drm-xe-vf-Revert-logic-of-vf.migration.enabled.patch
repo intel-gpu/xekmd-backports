@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tomasz Lis <tomasz.lis@intel.com>
+Date: Wed, 22 Oct 2025 00:48:14 +0200
+Subject: drm/xe/vf: Revert logic of vf.migration.enabled
+
+Convert `enabled` property into `disabled`.
+
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Tomasz Lis <tomasz.lis@intel.com>
+Suggested-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20251021224817.1593817-2-tomasz.lis@intel.com
+(backported from commit c94a7702d343f22eec958e82bebb930d9aeeb4a1 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_vf.c       | 7 ++-----
+ drivers/gpu/drm/xe/xe_sriov_vf_types.h | 6 +++---
+ 2 files changed, 5 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf.c b/drivers/gpu/drm/xe/xe_sriov_vf.c
+index 911d5720917b..0d8135f3927c 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_sriov_vf.c
+@@ -130,7 +130,7 @@
+ bool xe_sriov_vf_migration_supported(struct xe_device *xe)
+ {
+ 	xe_assert(xe, IS_SRIOV_VF(xe));
+-	return xe->sriov.vf.migration.enabled;
++	return !xe->sriov.vf.migration.disabled;
+ }
+ 
+ static void vf_disable_migration(struct xe_device *xe, const char *fmt, ...)
+@@ -146,7 +146,7 @@ static void vf_disable_migration(struct xe_device *xe, const char *fmt, ...)
+ 	xe_sriov_notice(xe, "migration disabled: %pV\n", &vaf);
+ 	va_end(va_args);
+ 
+-	xe->sriov.vf.migration.enabled = false;
++	xe->sriov.vf.migration.disabled = true;
+ }
+ 
+ static void vf_migration_init_early(struct xe_device *xe)
+@@ -172,9 +172,6 @@ static void vf_migration_init_early(struct xe_device *xe)
+ 						    "CCS migration requires GuC ABI >= 1.23 but only %u.%u found",
+ 						    guc_version.major, guc_version.minor);
+ 	}
+-
+-	xe->sriov.vf.migration.enabled = true;
+-	xe_sriov_dbg(xe, "migration support enabled\n");
+ }
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_types.h b/drivers/gpu/drm/xe/xe_sriov_vf_types.h
+index 6a0fd0f5463e..d5f72d667817 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf_types.h
++++ b/drivers/gpu/drm/xe/xe_sriov_vf_types.h
+@@ -34,10 +34,10 @@ struct xe_device_vf {
+ 	/** @migration: VF Migration state data */
+ 	struct {
+ 		/**
+-		 * @migration.enabled: flag indicating if migration support
+-		 * was enabled or not due to missing prerequisites
++		 * @migration.disabled: flag indicating if migration support
++		 * was turned off due to missing prerequisites
+ 		 */
+-		bool enabled;
++		bool disabled;
+ 	} migration;
+ 
+ 	/** @ccs: VF CCS state data */
+-- 
+2.34.1
+

@@ -6,6 +6,8 @@ Subject: [PATCH] Revert "drm/xe: Drop GuC submit_wq pool"
 Now that drm sched uses a single lockdep map for all submit_wq, drop the
 GuC submit_wq pool hack.
 
+V1: Rebase to v6.17.1-251107.1
+
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
  drivers/gpu/drm/xe/xe_guc_submit.c | 70 ++++++++++++++++++++++++++
@@ -13,10 +15,10 @@ Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
  2 files changed, 79 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 0104afb..2250987 100644
+index acfc6ca..5221d2c 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -227,6 +227,60 @@ static bool exec_queue_killed_or_banned_or_wedged(struct xe_exec_queue *q)
+@@ -269,6 +269,60 @@ static bool exec_queue_killed_or_banned_or_wedged(struct xe_exec_queue *q)
  		 EXEC_QUEUE_STATE_BANNED));
  }
  
@@ -77,7 +79,7 @@ index 0104afb..2250987 100644
  static void guc_submit_fini(struct drm_device *drm, void *arg)
  {
  	struct xe_guc *guc = arg;
-@@ -243,6 +297,9 @@ static void guc_submit_fini(struct drm_device *drm, void *arg)
+@@ -285,6 +339,9 @@ static void guc_submit_fini(struct drm_device *drm, void *arg)
  	xe_gt_assert(gt, ret);
  
  	xa_destroy(&guc->submission_state.exec_queue_lookup);
@@ -87,7 +89,7 @@ index 0104afb..2250987 100644
  }
  
  static void guc_submit_wedged_fini(void *arg)
-@@ -304,6 +361,11 @@ int xe_guc_submit_init(struct xe_guc *guc, unsigned int num_ids)
+@@ -346,6 +403,11 @@ int xe_guc_submit_init(struct xe_guc *guc, unsigned int num_ids)
  	if (err)
  		return err;
  
@@ -99,19 +101,19 @@ index 0104afb..2250987 100644
  	gt->exec_queue_ops = &guc_exec_queue_ops;
  
  	xa_init(&guc->submission_state.exec_queue_lookup);
-@@ -1565,10 +1627,18 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
+@@ -1743,10 +1805,18 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
  
  	timeout = (q->vm && xe_vm_in_lr_mode(q->vm)) ? MAX_SCHEDULE_TIMEOUT :
  		  msecs_to_jiffies(q->sched_props.job_timeout_ms);
 +#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
 +	err = xe_sched_init(&ge->sched, &drm_sched_ops, &xe_sched_ops,
 +			    get_submit_wq(guc),
-+			    q->lrc[0]->ring.size / MAX_JOB_SIZE_BYTES, 64,
++			    xe_lrc_ring_size() / MAX_JOB_SIZE_BYTES, 64,
 +			    timeout, guc_to_gt(guc)->ordered_wq, NULL,
 +			    q->name, gt_to_xe(q->gt)->drm.dev);
 +#else
  	err = xe_sched_init(&ge->sched, &drm_sched_ops, &xe_sched_ops,
- 			    NULL, q->lrc[0]->ring.size / MAX_JOB_SIZE_BYTES, 64,
+ 			    NULL, xe_lrc_ring_size() / MAX_JOB_SIZE_BYTES, 64,
  			    timeout, guc_to_gt(guc)->ordered_wq, NULL,
  			    q->name, gt_to_xe(q->gt)->drm.dev);
 +#endif
@@ -119,11 +121,11 @@ index 0104afb..2250987 100644
  		goto err_free;
  
 diff --git a/drivers/gpu/drm/xe/xe_guc_types.h b/drivers/gpu/drm/xe/xe_guc_types.h
-index 1fde761..07b7ea9 100644
+index c7b9642..74e4c73 100644
 --- a/drivers/gpu/drm/xe/xe_guc_types.h
 +++ b/drivers/gpu/drm/xe/xe_guc_types.h
-@@ -87,6 +87,15 @@ struct xe_guc {
- 		atomic_t stopped;
+@@ -93,6 +93,15 @@ struct xe_guc {
+ 		atomic_t reset_blocked;
  		/** @submission_state.lock: protects submission state */
  		struct mutex lock;
 +#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT

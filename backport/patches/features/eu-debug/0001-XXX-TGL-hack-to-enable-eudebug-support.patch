@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Christoph Manszewski <christoph.manszewski@intel.com>
+Date: Mon, 24 Jun 2024 14:03:19 +0200
+Subject: [PATCH] XXX: TGL hack to enable eudebug support
+
+In order for TGL to enable eudebugging, setting the GLOBAL_DEBUG_ENABLE
+flag in 'CS_DEBUG_MODE2' register is required. Since this register
+is context saved/restored, dynamically toggling it would require
+to rerecord or swap the golden lrc. As this would require core Xe
+modifications, simply add this register setting to the list of lrc
+workarounds, making it permanent.
+
+Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com>
+(cherry picked from commit 4ea76a0f5fd039fdded8694693398c2660b5488c eudebug-dev)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/tests/xe_eudebug.c | 8 ++++++++
+ drivers/gpu/drm/xe/xe_wa.c            | 4 ++++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/tests/xe_eudebug.c b/drivers/gpu/drm/xe/tests/xe_eudebug.c
+index dbc0cc9da..8d157e467 100644
+--- a/drivers/gpu/drm/xe/tests/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/tests/xe_eudebug.c
+@@ -99,6 +99,14 @@ static void __check_regs(struct xe_gt *gt, bool enable_eudebug)
+ 	if (GRAPHICS_VERx100(xe) >= 1200)
+ 		check_reg(gt, enable_eudebug, TD_CTL.__reg);
+ 
++	if (1200 <= GRAPHICS_VERx100(xe) && GRAPHICS_VERx100(xe) <= 1210) {
++		/*
++		 * CS_DEBUG_MODE2 is render context saved/restored (bspec 45864)
++		 * TODO: Implement register check from gpu context, as MMIO read
++		 * doesn't make sense.
++		 */
++	}
++
+ 	if (GRAPHICS_VERx100(xe) >= 1250 && GRAPHICS_VERx100(xe) <= 1274)
+ 		check_reg(gt, enable_eudebug, ROW_CHICKEN.__reg);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_wa.c b/drivers/gpu/drm/xe/xe_wa.c
+index cf8249fac..4cfe7830f 100644
+--- a/drivers/gpu/drm/xe/xe_wa.c
++++ b/drivers/gpu/drm/xe/xe_wa.c
+@@ -704,6 +704,10 @@ static const struct xe_rtp_entry_sr lrc_was[] = {
+ 	  XE_RTP_RULES(GRAPHICS_VERSION(1200)),
+ 	  XE_RTP_ACTIONS(SET(COMMON_SLICE_CHICKEN4, DISABLE_TDC_LOAD_BALANCING_CALC))
+ 	},
++	{ XE_RTP_NAME("GlobalDebugEnable"),
++	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(1200, 1210), ENGINE_CLASS(RENDER)),
++	  XE_RTP_ACTIONS(SET(CS_DEBUG_MODE2(RENDER_RING_BASE), GLOBAL_DEBUG_ENABLE))
++	},
+ 
+ 	/* DG1 */
+ 
+-- 
+2.43.0
+

@@ -17,4 +17,16 @@
 void __drmm_workqueue_release(struct drm_device *device, void *wq);
 #endif
 
+#ifdef BPM_DRMM_ALLOC_ORDERED_WORKQUEUE_NOT_PRESENT
+#define drmm_alloc_ordered_workqueue(dev, fmt, flags, args...)					\
+	({											\
+		struct workqueue_struct *wq = alloc_ordered_workqueue(fmt, flags, ##args);	\
+		wq ? ({										\
+			int ret = drmm_add_action_or_reset(dev, __drmm_workqueue_release, wq);	\
+			ret ? ERR_PTR(ret) : wq;						\
+		}) :										\
+			wq;									\
+	})
+#endif
+
 #endif /* __BACKPORT_DRM_BUDDY_H__ */

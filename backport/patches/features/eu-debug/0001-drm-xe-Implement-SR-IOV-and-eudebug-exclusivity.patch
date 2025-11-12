@@ -27,7 +27,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_eudebug.h
 
 diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
-index 638d59db3..2cb80790f 100644
+index 638d59db3362..2cb80790fb26 100644
 --- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
 @@ -2296,12 +2296,50 @@ int prelim_xe_eudebug_connect_ioctl(struct drm_device *dev,
@@ -152,7 +152,7 @@ index 638d59db3..2cb80790f 100644
  
  void prelim_xe_eudebug_fini(struct xe_device *xe)
 diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.h b/drivers/gpu/drm/xe/prelim/xe_eudebug.h
-index 6c4423952..518ab1020 100644
+index 6c442395228c..518ab10200c6 100644
 --- a/drivers/gpu/drm/xe/prelim/xe_eudebug.h
 +++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.h
 @@ -27,6 +27,10 @@ int prelim_xe_eudebug_connect_ioctl(struct drm_device *dev,
@@ -178,7 +178,7 @@ index 6c4423952..518ab1020 100644
  static inline void prelim_xe_eudebug_fini(struct xe_device *xe) { }
  
 diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug_types.h b/drivers/gpu/drm/xe/prelim/xe_eudebug_types.h
-index e3a028973..cdd5bcf3f 100644
+index e3a028973469..cdd5bcf3fea8 100644
 --- a/drivers/gpu/drm/xe/prelim/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/prelim/xe_eudebug_types.h
 @@ -176,6 +176,21 @@ struct xe_eudebug {
@@ -204,7 +204,7 @@ index e3a028973..cdd5bcf3f 100644
   * struct xe_eudebug_event - Internal base event struct for eudebug
   */
 diff --git a/drivers/gpu/drm/xe/prelim/xe_gt_debug.h b/drivers/gpu/drm/xe/prelim/xe_gt_debug.h
-index 619a94fee..6256e1e64 100644
+index 619a94feed29..6256e1e645cd 100644
 --- a/drivers/gpu/drm/xe/prelim/xe_gt_debug.h
 +++ b/drivers/gpu/drm/xe/prelim/xe_gt_debug.h
 @@ -6,10 +6,12 @@
@@ -224,7 +224,7 @@ index 619a94fee..6256e1e64 100644
  struct xe_eu_attentions {
 diff --git a/drivers/gpu/drm/xe/tests/xe_eudebug.c b/drivers/gpu/drm/xe/tests/xe_eudebug.c
 new file mode 100644
-index 000000000..dbc0cc9da
+index 000000000000..dbc0cc9dafc0
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/tests/xe_eudebug.c
 @@ -0,0 +1,182 @@
@@ -411,7 +411,7 @@ index 000000000..dbc0cc9da
 +};
 +EXPORT_SYMBOL_IF_KUNIT(xe_eudebug_test_suite);
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 51b77b992..083710167 100644
+index 1b2971c03917..d7ff05e4a557 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -387,8 +387,6 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
@@ -424,8 +424,8 @@ index 51b77b992..083710167 100644
  						       WQ_MEM_RECLAIM);
  	xe->ordered_wq = alloc_ordered_workqueue("xe-ordered-wq", 0);
 @@ -647,6 +645,8 @@ int xe_device_probe_early(struct xe_device *xe)
- 	if (IS_SRIOV_VF(xe))
- 		vf_update_device_info(xe);
+ 
+ 	update_device_info(xe);
  
 +	prelim_xe_eudebug_init(xe);
 +
@@ -433,7 +433,7 @@ index 51b77b992..083710167 100644
  	if (err || xe_survivability_mode_is_requested(xe)) {
  		int save_err = err;
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 09e189335..bfdcde668 100644
+index 5b5286c5bcac..d8726fdfd4c9 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -13,6 +13,7 @@
@@ -444,7 +444,7 @@ index 09e189335..bfdcde668 100644
  #include "xe_heci_gsc.h"
  #include "xe_lmtt_types.h"
  #include "xe_memirq_types.h"
-@@ -605,8 +606,8 @@ struct xe_device {
+@@ -603,8 +604,8 @@ struct xe_device {
  		/** discovery_lock: used for discovery to block xe ioctls */
  		struct rw_semaphore discovery_lock;
  
@@ -457,7 +457,7 @@ index 09e189335..bfdcde668 100644
  		struct delayed_work attention_scan;
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
 new file mode 100644
-index 000000000..2aa3bff0e
+index 000000000000..2aa3bff0eafc
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
 @@ -0,0 +1,137 @@
@@ -599,7 +599,7 @@ index 000000000..2aa3bff0e
 +
 +#endif /* _XE_EUDEBUG_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index e64e690c6..77a3546f8 100644
+index e64e690c6fd0..77a3546f83b8 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -491,10 +491,8 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
@@ -615,7 +615,7 @@ index e64e690c6..77a3546f8 100644
  	q->eudebug_flags = EXEC_QUEUE_EUDEBUG_FLAG_ENABLE;
  	q->sched_props.preempt_timeout_us = 0;
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index 61f9aa84f..1b034b090 100644
+index 61f9aa84fbb2..1b034b090e07 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -728,6 +728,7 @@ static int do_gt_reset(struct xe_gt *gt)
@@ -667,5 +667,5 @@ index d0fcde66a774..f884db7248ce 100644
  	return 0;
  }
 -- 
-2.34.1
+2.43.0
 

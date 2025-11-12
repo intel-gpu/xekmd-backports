@@ -1,0 +1,127 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 24 Oct 2025 22:58:25 +0200
+Subject: [PATCH] drm/xe/pf: Access VF's register using dedicated MMIO view
+
+Instead of creating ad-hoc new register definitions with altered
+register addresses to mimic the VF's access to these registers,
+prepare new MMIO instance per required VF, with shifted internal
+location of the register map.  This will allow to use unmodified
+register definitions in all calls to xe_mmio() functions.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
+Link: https://patch.msgid.link/20251024205826.4652-1-michal.wajdeczko@intel.com
+(backported from commit 4504e780689245f01bee6ee4c19c74051bd87593 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf.c | 36 +++++++----------------------
+ drivers/gpu/drm/xe/xe_mmio.c        | 29 +++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_mmio.h        |  4 ++++
+ 3 files changed, 41 insertions(+), 28 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf.c
+index c4dda87b4..0714c758b 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf.c
+@@ -158,39 +158,19 @@ void xe_gt_sriov_pf_init_hw(struct xe_gt *gt)
+ 	xe_gt_sriov_pf_service_update(gt);
+ }
+ 
+-static u32 pf_get_vf_regs_stride(struct xe_device *xe)
+-{
+-	return GRAPHICS_VERx100(xe) > 1200 ? 0x400 : 0x1000;
+-}
+-
+-static struct xe_reg xe_reg_vf_to_pf(struct xe_reg vf_reg, unsigned int vfid, u32 stride)
+-{
+-	struct xe_reg pf_reg = vf_reg;
+-
+-	pf_reg.vf = 0;
+-	pf_reg.addr += stride * vfid;
+-
+-	return pf_reg;
+-}
+-
+ static void pf_clear_vf_scratch_regs(struct xe_gt *gt, unsigned int vfid)
+ {
+-	u32 stride = pf_get_vf_regs_stride(gt_to_xe(gt));
+-	struct xe_reg scratch;
+-	int n, count;
++	struct xe_mmio mmio;
++	int n;
++
++	xe_mmio_init_vf_view(&mmio, &gt->mmio, vfid);
+ 
+ 	if (xe_gt_is_media_type(gt)) {
+-		count = MED_VF_SW_FLAG_COUNT;
+-		for (n = 0; n < count; n++) {
+-			scratch = xe_reg_vf_to_pf(MED_VF_SW_FLAG(n), vfid, stride);
+-			xe_mmio_write32(&gt->mmio, scratch, 0);
+-		}
++		for (n = 0; n < MED_VF_SW_FLAG_COUNT; n++)
++			xe_mmio_write32(&mmio, MED_VF_SW_FLAG(n), 0);
+ 	} else {
+-		count = VF_SW_FLAG_COUNT;
+-		for (n = 0; n < count; n++) {
+-			scratch = xe_reg_vf_to_pf(VF_SW_FLAG(n), vfid, stride);
+-			xe_mmio_write32(&gt->mmio, scratch, 0);
+-		}
++		for (n = 0; n < VF_SW_FLAG_COUNT; n++)
++			xe_mmio_write32(&mmio, VF_SW_FLAG(n), 0);
+ 	}
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_mmio.c b/drivers/gpu/drm/xe/xe_mmio.c
+index 93d9898bb..f9587937c 100644
+--- a/drivers/gpu/drm/xe/xe_mmio.c
++++ b/drivers/gpu/drm/xe/xe_mmio.c
+@@ -436,3 +436,32 @@ int xe_mmio_wait32_not(struct xe_mmio *mmio, struct xe_reg reg, u32 mask, u32 va
+ {
+ 	return __xe_mmio_wait32(mmio, reg, mask, val, timeout_us, out_val, atomic, false);
+ }
++
++#ifdef CONFIG_PCI_IOV
++static size_t vf_regs_stride(struct xe_device *xe)
++{
++	return GRAPHICS_VERx100(xe) > 1200 ? 0x400 : 0x1000;
++}
++
++/**
++ * xe_mmio_init_vf_view() - Initialize an MMIO instance for accesses like the VF
++ * @mmio: the target &xe_mmio to initialize as VF's view
++ * @base: the source &xe_mmio to initialize from
++ * @vfid: the VF identifier
++ */
++void xe_mmio_init_vf_view(struct xe_mmio *mmio, const struct xe_mmio *base, unsigned int vfid)
++{
++	struct xe_tile *tile = base->tile;
++	struct xe_device *xe = tile->xe;
++	size_t offset = vf_regs_stride(xe) * vfid;
++
++	xe_assert(xe, IS_SRIOV_PF(xe));
++	xe_assert(xe, vfid);
++	xe_assert(xe, !base->sriov_vf_gt);
++	xe_assert(xe, base->regs_size > offset);
++
++	*mmio = *base;
++	mmio->regs += offset;
++	mmio->regs_size -= offset;
++}
++#endif
+diff --git a/drivers/gpu/drm/xe/xe_mmio.h b/drivers/gpu/drm/xe/xe_mmio.h
+index 8a46f4006..0d7317504 100644
+--- a/drivers/gpu/drm/xe/xe_mmio.h
++++ b/drivers/gpu/drm/xe/xe_mmio.h
+@@ -40,4 +40,8 @@ static inline struct xe_mmio *xe_root_tile_mmio(struct xe_device *xe)
+ 	return &xe->tiles[0].mmio;
+ }
+ 
++#ifdef CONFIG_PCI_IOV
++void xe_mmio_init_vf_view(struct xe_mmio *mmio, const struct xe_mmio *base, unsigned int vfid);
++#endif
++
+ #endif
+-- 
+2.34.1
+

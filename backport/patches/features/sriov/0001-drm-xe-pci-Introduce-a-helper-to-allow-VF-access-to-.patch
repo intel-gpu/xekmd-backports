@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Wed, 5 Nov 2025 16:10:23 +0100
+Subject: drm/xe/pci: Introduce a helper to allow VF access to PF
+ xe_device
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In certain scenarios (such as VF migration), VF driver needs to interact
+with PF driver.
+Add a helper to allow VF driver access to PF xe_device.
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c | 17 +++++++++++++++++
+ drivers/gpu/drm/xe/xe_pci.h |  3 +++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index a7ca7af8f..e6886b258 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -1076,6 +1076,23 @@ static struct pci_driver xe_pci_driver = {
+ #endif
+ };
+ 
++/**
++ * xe_pci_get_pf() - Get PF &xe_device.
++ * @pdev: the VF &pci_dev device
++ *
++ * Return: pointer to PF &xe_device, NULL otherwise.
++ */
++struct xe_device *xe_pci_get_pf(struct pci_dev *pdev)
++{
++	struct drm_device *drm;
++
++	drm = pci_iov_get_pf_drvdata(pdev, &xe_pci_driver);
++	if (IS_ERR(drm))
++		return NULL;
++
++	return to_xe_device(drm);
++}
++
+ int xe_register_pci_driver(void)
+ {
+ 	return pci_register_driver(&xe_pci_driver);
+diff --git a/drivers/gpu/drm/xe/xe_pci.h b/drivers/gpu/drm/xe/xe_pci.h
+index 611c1209b..e97800d5c 100644
+--- a/drivers/gpu/drm/xe/xe_pci.h
++++ b/drivers/gpu/drm/xe/xe_pci.h
+@@ -6,6 +6,9 @@
+ #ifndef _XE_PCI_H_
+ #define _XE_PCI_H_
+ 
++struct pci_dev;
++
++struct xe_device *xe_pci_get_pf(struct pci_dev *pdev);
+ int xe_register_pci_driver(void);
+ void xe_unregister_pci_driver(void);
+ 
+-- 
+2.34.1
+

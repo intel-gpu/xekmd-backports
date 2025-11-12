@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Wed, 5 Nov 2025 16:10:22 +0100
+Subject: drm/xe/pf: Enable SR-IOV VF migration
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+All of the necessary building blocks are now in place to support SR-IOV
+VF migration.
+Enable the feature without the need to pass feature enabling debug flags
+for those platforms and rely on .has_memirq presence instead (like with
+VF resource fixup).
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_pf_migration.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+index 30bda27b0..cba7d4b8c 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+@@ -50,8 +50,10 @@ bool xe_sriov_pf_migration_supported(struct xe_device *xe)
+ 
+ static bool pf_check_migration_support(struct xe_device *xe)
+ {
+-	/* XXX: for now this is for feature enabling only */
+-	return IS_ENABLED(CONFIG_DRM_XE_DEBUG);
++	if (xe_device_has_memirq(xe))
++		return true;
++
++	return false;
+ }
+ 
+ static void pf_migration_cleanup(void *arg)
+-- 
+2.34.1
+

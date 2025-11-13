@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tomasz Lis <tomasz.lis@intel.com>
+Date: Wed, 22 Oct 2025 00:48:16 +0200
+Subject: drm/xe: Assert that VF will never use fixed placement of
+ BOs
+
+Most BOs do not care at which offset they will be accessed within
+GGTT or PPGTT. The few which do care, should be only created
+on PF, and mapped within GGTT. On VFs, mapping at fixed offset
+is prohibited, as each VF is granted access to a range of
+GGTT address space.
+
+Since fixed addresses of GGTT mapping can only be used on PF,
+add an assert which makes sure no attempt of fixed placement
+will happen for a driver probed on a VF.
+
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Tomasz Lis <tomasz.lis@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20251021224817.1593817-4-tomasz.lis@intel.com
+(backported from commit 9a940bb52dcb359f639536bed977d837e323a593 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_bo.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
+index 66ed888bba07..ad0da473ee65 100644
+--- a/drivers/gpu/drm/xe/xe_bo.c
++++ b/drivers/gpu/drm/xe/xe_bo.c
+@@ -2275,6 +2275,12 @@ static int __xe_bo_fixed_placement(struct xe_device *xe,
+ 	struct ttm_place *place = bo->placements;
+ 	u32 vram_flag, vram_stolen_flags;
+ 
++	/*
++	 * to allow fixed placement in GGTT of a VF, post-migration fixups would have to
++	 * include selecting a new fixed offset and shifting the page ranges for it
++	 */
++	xe_assert(xe, !IS_SRIOV_VF(xe) || !(bo->flags & XE_BO_FLAG_GGTT));
++
+ 	if (flags & (XE_BO_FLAG_USER | XE_BO_FLAG_SYSTEM))
+ 		return -EINVAL;
+ 
+-- 
+2.34.1
+

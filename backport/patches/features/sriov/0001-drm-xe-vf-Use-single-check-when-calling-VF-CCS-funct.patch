@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Mon, 8 Sep 2025 14:30:21 +0200
-Subject: [PATCH 44/62] drm/xe/vf: Use single check when calling VF CCS
- functions
+Subject: [PATCH] drm/xe/vf: Use single check when calling VF CCS functions
 
 All xe_sriov_vf_ccs() functions but init() expect to be called
 when initialization was successful and CCS handling is ready.
@@ -14,7 +13,7 @@ Cc: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
 Cc: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
 Link: https://lore.kernel.org/r/20250908123025.747-5-michal.wajdeczko@intel.com
-(cherry-picked from commit b179dfd0dbedf314f0f1ba5e038282dfe6dd091e linux-next)
+(backported from commit b179dfd0dbedf314f0f1ba5e038282dfe6dd091e linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_bo.c                 |  8 ++++----
@@ -26,7 +25,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  6 files changed, 27 insertions(+), 17 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
-index af17e469dc6d..037f18c06328 100644
+index f3a963afee06..f4a4cee65dca 100644
 --- a/drivers/gpu/drm/xe/xe_bo.c
 +++ b/drivers/gpu/drm/xe/xe_bo.c
 @@ -972,11 +972,11 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
@@ -52,7 +51,7 @@ index af17e469dc6d..037f18c06328 100644
  			xe_sriov_vf_ccs_detach_bo(bo);
  
  		xe_tt_unmap_sg(xe, ttm_bo->ttm);
-@@ -1527,7 +1527,7 @@ static void xe_ttm_bo_delete_mem_notify(struct ttm_buffer_object *ttm_bo)
+@@ -1516,7 +1516,7 @@ static void xe_ttm_bo_delete_mem_notify(struct ttm_buffer_object *ttm_bo)
  	if (!xe_bo_is_xe_bo(ttm_bo))
  		return;
  
@@ -74,19 +73,19 @@ index bf3a67b5951c..69299d0c9d47 100644
  #include "xe_uc_debugfs.h"
  #include "xe_wa.h"
 diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
-index fb92458263f6..adef97ce932f 100644
+index a5f14b587e7b..21d419479686 100644
 --- a/drivers/gpu/drm/xe/xe_pm.c
 +++ b/drivers/gpu/drm/xe/xe_pm.c
-@@ -210,7 +210,7 @@ int xe_pm_resume(struct xe_device *xe)
+@@ -215,7 +215,7 @@ int xe_pm_resume(struct xe_device *xe)
  
- 	xe_pxp_pm_resume(xe->pxp);
+ 	xe_late_bind_fw_load(&xe->late_bind);
  
 -	if (IS_SRIOV_VF(xe))
 +	if (IS_VF_CCS_READY(xe))
  		xe_sriov_vf_ccs_register_context(xe);
  
  	drm_dbg(&xe->drm, "Device resumed\n");
-@@ -592,7 +592,7 @@ int xe_pm_runtime_resume(struct xe_device *xe)
+@@ -597,7 +597,7 @@ int xe_pm_runtime_resume(struct xe_device *xe)
  
  	xe_pxp_pm_resume(xe->pxp);
  
@@ -94,7 +93,7 @@ index fb92458263f6..adef97ce932f 100644
 +	if (IS_VF_CCS_READY(xe))
  		xe_sriov_vf_ccs_register_context(xe);
  
- out:
+ 	if (xe->d3cold.allowed)
 diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
 index b01bb3660fb1..30aea958a337 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c

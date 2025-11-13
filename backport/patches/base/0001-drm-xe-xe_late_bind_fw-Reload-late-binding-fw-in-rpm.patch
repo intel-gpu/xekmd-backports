@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Fri, 5 Sep 2025 21:19:50 +0530
+Subject: drm/xe/xe_late_bind_fw: Reload late binding fw in rpm
+ resume
+
+Reload late binding fw during runtime resume.
+
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250905154953.3974335-7-badal.nilawar@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit 69ac1bb8fca5ea5fea40364ded86b4ceae2ffa21 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_late_bind_fw.c | 2 +-
+ drivers/gpu/drm/xe/xe_late_bind_fw.h | 1 +
+ drivers/gpu/drm/xe/xe_pm.c           | 4 ++++
+ 3 files changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+index bb161d99602e..d4d64677bf48 100644
+--- a/drivers/gpu/drm/xe/xe_late_bind_fw.c
++++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+@@ -82,7 +82,7 @@ static int xe_late_bind_fw_num_fans(struct xe_late_bind *late_bind)
+ 		return 0;
+ }
+ 
+-static void xe_late_bind_wait_for_worker_completion(struct xe_late_bind *late_bind)
++void xe_late_bind_wait_for_worker_completion(struct xe_late_bind *late_bind)
+ {
+ 	struct xe_device *xe = late_bind_to_xe(late_bind);
+ 	struct xe_late_bind_fw *lbfw;
+diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.h b/drivers/gpu/drm/xe/xe_late_bind_fw.h
+index 28d56ed2bfdc..07e437390539 100644
+--- a/drivers/gpu/drm/xe/xe_late_bind_fw.h
++++ b/drivers/gpu/drm/xe/xe_late_bind_fw.h
+@@ -12,5 +12,6 @@ struct xe_late_bind;
+ 
+ int xe_late_bind_init(struct xe_late_bind *late_bind);
+ int xe_late_bind_fw_load(struct xe_late_bind *late_bind);
++void xe_late_bind_wait_for_worker_completion(struct xe_late_bind *late_bind);
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
+index bb9b6ecad2af..95303a92fea7 100644
+--- a/drivers/gpu/drm/xe/xe_pm.c
++++ b/drivers/gpu/drm/xe/xe_pm.c
+@@ -21,6 +21,7 @@
+ #include "xe_guc.h"
+ #include "xe_i2c.h"
+ #include "xe_irq.h"
++#include "xe_late_bind_fw.h"
+ #include "xe_pcode.h"
+ #include "xe_pxp.h"
+ #include "xe_trace.h"
+@@ -580,6 +581,9 @@ int xe_pm_runtime_resume(struct xe_device *xe)
+ 
+ 	xe_pxp_pm_resume(xe->pxp);
+ 
++	if (xe->d3cold.allowed)
++		xe_late_bind_fw_load(&xe->late_bind);
++
+ out:
+ 	xe_rpm_lockmap_release(xe);
+ 	xe_pm_write_callback_task(xe, NULL);
+-- 
+2.43.0
+

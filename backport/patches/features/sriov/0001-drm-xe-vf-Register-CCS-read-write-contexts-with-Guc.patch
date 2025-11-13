@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
 Date: Tue, 22 Jul 2025 17:35:06 +0530
-Subject: [PATCH 15/62] drm/xe/vf: Register CCS read/write contexts with Guc
+Subject: [PATCH] drm/xe/vf: Register CCS read/write contexts with Guc
 
 Register read write contexts with newly added flags with GUC and
 enable the context immediately after registration.
@@ -17,7 +17,7 @@ Cc: Maarten Lankhorst <maarten.lankhorst@linux.intel.com>
 Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://lore.kernel.org/r/20250722120506.6483-4-satyanarayana.k.v.p@intel.com
-(cherry-picked from commit 916ee4704a8653910f10c65c2b5d6699dfac5df8 linux-next)
+(backported from commit 916ee4704a8653910f10c65c2b5d6699dfac5df8 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_guc_fwif.h     |  5 ++
@@ -132,7 +132,7 @@ index 0d126b807c10..ca55483c5b04 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
-index 30bcfdaef580..3530861abe51 100644
+index 0b470212237a..94467e97654f 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.c
 +++ b/drivers/gpu/drm/xe/xe_migrate.c
 @@ -85,19 +85,6 @@ struct xe_migrate {
@@ -193,27 +193,27 @@ index 83b491f20289..3754d9e6150f 100644
 -struct xe_exec_queue *xe_tile_migrate_exec_queue(struct xe_tile *tile);
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
-index 53085ace1f5d..c25773d7f2e8 100644
+index c0fdda2dc2d0..e42bcd5658d3 100644
 --- a/drivers/gpu/drm/xe/xe_pm.c
 +++ b/drivers/gpu/drm/xe/xe_pm.c
-@@ -23,6 +23,7 @@
- #include "xe_irq.h"
+@@ -24,6 +24,7 @@
+ #include "xe_late_bind_fw.h"
  #include "xe_pcode.h"
  #include "xe_pxp.h"
 +#include "xe_sriov_vf_ccs.h"
  #include "xe_trace.h"
  #include "xe_vm.h"
  #include "xe_wa.h"
-@@ -588,6 +589,9 @@ int xe_pm_runtime_resume(struct xe_device *xe)
+@@ -593,6 +594,9 @@ int xe_pm_runtime_resume(struct xe_device *xe)
  
  	xe_pxp_pm_resume(xe->pxp);
  
 +	if (IS_SRIOV_VF(xe))
 +		xe_sriov_vf_ccs_register_context(xe);
 +
- out:
- 	xe_rpm_lockmap_release(xe);
- 	xe_pm_write_callback_task(xe, NULL);
+ 	if (xe->d3cold.allowed)
+ 		xe_late_bind_fw_load(&xe->late_bind);
+ 
 diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
 index 6ddeb016b892..af43e04179aa 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c

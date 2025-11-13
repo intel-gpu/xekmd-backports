@@ -13,7 +13,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_iopoll.h
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 164f7062e..29788e919 100644
+index 0369d8fb1..e945b6793 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -8,7 +8,6 @@
@@ -29,11 +29,11 @@ index 164f7062e..29788e919 100644
  #include "xe_i2c.h"
  #include "xe_irq.h"
 +#include "xe_iopoll.h"
+ #include "xe_late_bind_fw.h"
  #include "xe_mmio.h"
  #include "xe_module.h"
- #include "xe_nvm.h"
 diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
-index 5a8bb327a..7e6400678 100644
+index 1f07037f5..c34783b67 100644
 --- a/drivers/gpu/drm/xe/xe_guc.c
 +++ b/drivers/gpu/drm/xe/xe_guc.c
 @@ -5,7 +5,6 @@
@@ -44,7 +44,7 @@ index 5a8bb327a..7e6400678 100644
  #include <drm/drm_managed.h>
  
  #include <generated/xe_wa_oob.h>
-@@ -36,6 +35,7 @@
+@@ -35,6 +34,7 @@
  #include "xe_guc_pc.h"
  #include "xe_guc_relay.h"
  #include "xe_guc_submit.h"
@@ -342,5 +342,5 @@ index 000000000..bdd2e0652
 +
 +#endif /* _LINUX_IOPOLL_H */
 -- 
-2.43.0
+2.34.1
 

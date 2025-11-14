@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Thomas=20Hellstr=C3=B6m?= <thomas.hellstrom@linux.intel.com>
 Date: Mon, 8 Sep 2025 12:12:38 +0200
-Subject: drm/xe: Convert existing drm_exec transactions for
- exhaustive eviction
+Subject: drm/xe: Convert existing drm_exec transactions for exhaustive
+ eviction
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -28,9 +28,9 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_exec.c         |  20 ++--
  drivers/gpu/drm/xe/xe_gt_pagefault.c |  20 ++--
- drivers/gpu/drm/xe/xe_vm.c           | 134 +++++++++++----------------
+ drivers/gpu/drm/xe/xe_vm.c           | 133 +++++++++++----------------
  drivers/gpu/drm/xe/xe_vm.h           |   2 -
- 4 files changed, 73 insertions(+), 103 deletions(-)
+ 4 files changed, 73 insertions(+), 102 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_exec.c b/drivers/gpu/drm/xe/xe_exec.c
 index 832a01637..02e79f3f8 100644
@@ -158,7 +158,7 @@ index de4094dd7..48df8ca08 100644
  	up_read(&vm->lock);
  	xe_vm_put(vm);
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index a73c66961..f4c9da29c 100644
+index c835decb3..d1aeaf1b0 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -239,6 +239,7 @@ int xe_vm_add_compute_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
@@ -273,7 +273,7 @@ index a73c66961..f4c9da29c 100644
  out_unlock_outer:
  	if (err == -EAGAIN) {
  		trace_xe_vm_rebind_worker_retry(vm);
-@@ -1224,20 +1193,19 @@ int xe_vm_lock_vma(struct drm_exec *exec, struct xe_vma *vma)
+@@ -1229,20 +1198,19 @@ int xe_vm_lock_vma(struct drm_exec *exec, struct xe_vma *vma)
  
  static void xe_vma_destroy_unlocked(struct xe_vma *vma)
  {
@@ -300,7 +300,7 @@ index a73c66961..f4c9da29c 100644
  }
  
  struct xe_vma *
-@@ -2132,6 +2100,7 @@ static struct xe_vma *new_vma(struct xe_vm *vm, struct drm_gpuva_op_map *op,
+@@ -2139,6 +2107,7 @@ static struct xe_vma *new_vma(struct xe_vm *vm, struct drm_gpuva_op_map *op,
  			      u16 pat_index, unsigned int flags)
  {
  	struct xe_bo *bo = op->gem.obj ? gem_to_xe_bo(op->gem.obj) : NULL;
@@ -308,7 +308,7 @@ index a73c66961..f4c9da29c 100644
  	struct drm_exec exec;
  	struct xe_vma *vma;
  	int err = 0;
-@@ -2139,9 +2108,9 @@ static struct xe_vma *new_vma(struct xe_vm *vm, struct drm_gpuva_op_map *op,
+@@ -2146,9 +2115,9 @@ static struct xe_vma *new_vma(struct xe_vm *vm, struct drm_gpuva_op_map *op,
  	lockdep_assert_held_write(&vm->lock);
  
  	if (bo) {
@@ -321,7 +321,7 @@ index a73c66961..f4c9da29c 100644
  			if (!bo->vm) {
  				err = drm_exec_lock_obj(&exec, xe_vm_obj(vm));
  				drm_exec_retry_on_contention(&exec);
-@@ -2150,27 +2119,35 @@ static struct xe_vma *new_vma(struct xe_vm *vm, struct drm_gpuva_op_map *op,
+@@ -2157,27 +2126,35 @@ static struct xe_vma *new_vma(struct xe_vm *vm, struct drm_gpuva_op_map *op,
  				err = drm_exec_lock_obj(&exec, &bo->ttm.base);
  				drm_exec_retry_on_contention(&exec);
  			}
@@ -374,7 +374,7 @@ index a73c66961..f4c9da29c 100644
  	if (err) {
  		prep_vma_destroy(vm, vma, false);
  		xe_vma_destroy_unlocked(vma);
-@@ -2831,33 +2808,34 @@ static void vm_bind_ioctl_ops_fini(struct xe_vm *vm, struct xe_vma_ops *vops,
+@@ -2843,19 +2820,23 @@ static void vm_bind_ioctl_ops_fini(struct xe_vm *vm, struct xe_vma_ops *vops,
  static int vm_bind_ioctl_ops_execute(struct xe_vm *vm,
  				     struct xe_vma_ops *vops)
  {
@@ -403,9 +403,10 @@ index a73c66961..f4c9da29c 100644
  
  		xe_vm_set_validation_exec(vm, &exec);
  		fence = ops_execute(vm, vops);
- 		xe_vm_set_validation_exec(vm, NULL);
- 		if (IS_ERR(fence)) {
--			err = PTR_ERR(fence);
+@@ -2864,14 +2845,12 @@ static int vm_bind_ioctl_ops_execute(struct xe_vm *vm,
+ 			err = PTR_ERR(fence);
+ 			if (PTR_ERR(fence) == -ENODATA)
+ 				vm_bind_ioctl_ops_fini(vm, vops, NULL);
 -			goto unlock;
 +			return PTR_ERR(fence);
  		}
@@ -419,10 +420,10 @@ index a73c66961..f4c9da29c 100644
  }
  ALLOW_ERROR_INJECTION(vm_bind_ioctl_ops_execute, ERRNO);
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index 7e1eb2ac3..cc1fb062a 100644
+index dab66d22a..840aaae11 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
-@@ -240,8 +240,6 @@ int xe_vma_userptr_pin_pages(struct xe_userptr_vma *uvma);
+@@ -246,8 +246,6 @@ int xe_vma_userptr_pin_pages(struct xe_userptr_vma *uvma);
  
  int xe_vma_userptr_check_repin(struct xe_userptr_vma *uvma);
  
@@ -432,5 +433,5 @@ index 7e1eb2ac3..cc1fb062a 100644
  
  int xe_vm_validate_rebind(struct xe_vm *vm, struct drm_exec *exec,
 -- 
-2.34.1
+2.43.0
 

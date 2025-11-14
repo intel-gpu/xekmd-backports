@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
-Date: Wed, 5 Nov 2025 16:10:15 +0100
+Date: Tue, 11 Nov 2025 02:04:28 +0100
 Subject: drm/xe/pf: Add helpers for VF GGTT migration data
  handling
 MIME-Version: 1.0
@@ -15,14 +15,14 @@ Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
 Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
 ---
  drivers/gpu/drm/xe/xe_ggtt.c               | 104 +++++++++++++++++++++
- drivers/gpu/drm/xe/xe_ggtt.h               |   4 +
+ drivers/gpu/drm/xe/xe_ggtt.h               |   3 +
  drivers/gpu/drm/xe/xe_ggtt_types.h         |   2 +
- drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c |  52 +++++++++++
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c |  57 +++++++++++
  drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h |   5 +
- 5 files changed, 167 insertions(+)
+ 5 files changed, 171 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index b66c6b765..88584e68d 100644
+index b66c6b765..4e65167ed 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
 @@ -137,6 +137,14 @@ static void xe_ggtt_set_pte_and_flush(struct xe_ggtt *ggtt, u64 addr, u64 pte)
@@ -60,12 +60,12 @@ index b66c6b765..88584e68d 100644
  };
  
  static void dev_fini_ggtt(void *arg)
-@@ -874,6 +885,20 @@ u64 xe_ggtt_largest_hole(struct xe_ggtt *ggtt, u64 alignment, u64 *spare)
- 	return max_hole;
+@@ -682,6 +693,20 @@ bool xe_ggtt_node_allocated(const struct xe_ggtt_node *node)
+ 	return drm_mm_node_allocated(&node->base);
  }
  
 +/**
-+ * xe_ggtt_node_pt_size() - Convert GGTT node size to its page table entries size.
++ * xe_ggtt_node_pt_size() - Get the size of page table entries needed to map a GGTT node.
 + * @node: the &xe_ggtt_node
 + *
 + * Return: GGTT node page table entries size in bytes.
@@ -78,9 +78,9 @@ index b66c6b765..88584e68d 100644
 +	return node->base.size / XE_PAGE_SIZE * sizeof(u64);
 +}
 +
- #ifdef CONFIG_PCI_IOV
- static u64 xe_encode_vfid_pte(u16 vfid)
- {
+ /**
+  * xe_ggtt_map_bo - Map the BO into GGTT
+  * @ggtt: the &xe_ggtt where node will be mapped
 @@ -915,6 +940,85 @@ void xe_ggtt_assign(const struct xe_ggtt_node *node, u16 vfid)
  	xe_ggtt_assign_locked(node->ggtt, &node->base, vfid);
  	mutex_unlock(&node->ggtt->lock);
@@ -168,15 +168,19 @@ index b66c6b765..88584e68d 100644
  
  /**
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.h b/drivers/gpu/drm/xe/xe_ggtt.h
-index cc0b58a57..f7feb701c 100644
+index cc0b58a57..364ae1de3 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.h
 +++ b/drivers/gpu/drm/xe/xe_ggtt.h
-@@ -41,8 +41,12 @@ u64 xe_ggtt_largest_hole(struct xe_ggtt *ggtt, u64 alignment, u64 *spare);
- int xe_ggtt_dump(struct xe_ggtt *ggtt, struct drm_printer *p);
- u64 xe_ggtt_print_holes(struct xe_ggtt *ggtt, u64 alignment, struct drm_printer *p);
- 
+@@ -29,6 +29,7 @@ int xe_ggtt_node_insert_locked(struct xe_ggtt_node *node,
+ 			       u32 size, u32 align, u32 mm_flags);
+ void xe_ggtt_node_remove(struct xe_ggtt_node *node, bool invalidate);
+ bool xe_ggtt_node_allocated(const struct xe_ggtt_node *node);
 +size_t xe_ggtt_node_pt_size(const struct xe_ggtt_node *node);
-+
+ void xe_ggtt_map_bo(struct xe_ggtt *ggtt, struct xe_ggtt_node *node,
+ 		    struct xe_bo *bo, u16 pat_index);
+ void xe_ggtt_map_bo_unlocked(struct xe_ggtt *ggtt, struct xe_bo *bo);
+@@ -43,6 +44,8 @@ u64 xe_ggtt_print_holes(struct xe_ggtt *ggtt, u64 alignment, struct drm_printer
+ 
  #ifdef CONFIG_PCI_IOV
  void xe_ggtt_assign(const struct xe_ggtt_node *node, u16 vfid);
 +int xe_ggtt_node_save(struct xe_ggtt_node *node, void *dst, size_t size, u16 vfid);
@@ -198,10 +202,10 @@ index c5e999d58..dacd796f8 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-index e516224a7..767a7896b 100644
+index e516224a7..571c980b0 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-@@ -726,6 +726,58 @@ int xe_gt_sriov_pf_config_set_fair_ggtt(struct xe_gt *gt, unsigned int vfid,
+@@ -726,6 +726,63 @@ int xe_gt_sriov_pf_config_set_fair_ggtt(struct xe_gt *gt, unsigned int vfid,
  	return xe_gt_sriov_pf_config_bulk_set_ggtt(gt, vfid, num_vfs, fair);
  }
  
@@ -227,6 +231,7 @@ index e516224a7..767a7896b 100644
 +	xe_gt_assert(gt, !(!buf ^ !size));
 +
 +	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
++
 +	node = pf_pick_vf_config(gt, vfid)->ggtt_region;
 +
 +	if (!buf)
@@ -249,12 +254,16 @@ index e516224a7..767a7896b 100644
 +int xe_gt_sriov_pf_config_ggtt_restore(struct xe_gt *gt, unsigned int vfid,
 +				       const void *buf, size_t size)
 +{
++	struct xe_ggtt_node *node;
++
 +	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
 +	xe_gt_assert(gt, vfid);
 +
 +	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
 +
-+	return xe_ggtt_node_load(pf_pick_vf_config(gt, vfid)->ggtt_region, buf, size, vfid);
++	node = pf_pick_vf_config(gt, vfid)->ggtt_region;
++
++	return xe_ggtt_node_load(node, buf, size, vfid);
 +}
 +
  static u32 pf_get_min_spare_ctxs(struct xe_gt *gt)

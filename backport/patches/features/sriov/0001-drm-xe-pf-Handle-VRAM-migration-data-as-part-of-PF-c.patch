@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
-Date: Wed, 5 Nov 2025 16:10:20 +0100
+Date: Tue, 11 Nov 2025 02:04:33 +0100
 Subject: drm/xe/pf: Handle VRAM migration data as part of PF
  control
 MIME-Version: 1.0
@@ -23,10 +23,10 @@ Reviewed-by: Matthew Brost <matthew.brost@intel.com>
  5 files changed, 236 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
-index abc2bd092..aae0c9865 100644
+index 25b770077..bf48b0579 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
-@@ -891,6 +891,20 @@ static int pf_handle_vf_save_data(struct xe_gt *gt, unsigned int vfid)
+@@ -892,6 +892,20 @@ static int pf_handle_vf_save_data(struct xe_gt *gt, unsigned int vfid)
  		return -EAGAIN;
  	}
  
@@ -47,7 +47,7 @@ index abc2bd092..aae0c9865 100644
  	return 0;
  }
  
-@@ -1129,6 +1143,9 @@ static int pf_handle_vf_restore_data(struct xe_gt *gt, unsigned int vfid)
+@@ -1130,6 +1144,9 @@ static int pf_handle_vf_restore_data(struct xe_gt *gt, unsigned int vfid)
  	case XE_SRIOV_PACKET_TYPE_GUC:
  		ret = xe_gt_sriov_pf_migration_guc_restore(gt, vfid, data);
  		break;
@@ -55,10 +55,10 @@ index abc2bd092..aae0c9865 100644
 +		ret = xe_gt_sriov_pf_migration_vram_restore(gt, vfid, data);
 +		break;
  	default:
- 		xe_gt_sriov_notice(gt, "Skipping VF%u unknown data type: %d\n", vfid, data->type);
- 		break;
+ 		xe_gt_sriov_notice(gt, "Skipping VF%u unknown data type: %d\n",
+ 				   vfid, data->hdr.type);
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
-index 22f471f26..652c17d81 100644
+index 31c7f207a..5bd9eeffe 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
 @@ -19,6 +19,7 @@
@@ -69,7 +69,7 @@ index 22f471f26..652c17d81 100644
  #include "xe_mmio.h"
  #include "xe_sriov.h"
  #include "xe_sriov_packet.h"
-@@ -501,6 +502,205 @@ int xe_gt_sriov_pf_migration_mmio_restore(struct xe_gt *gt, unsigned int vfid,
+@@ -502,6 +503,205 @@ int xe_gt_sriov_pf_migration_mmio_restore(struct xe_gt *gt, unsigned int vfid,
  	return pf_restore_vf_mmio_mig_data(gt, vfid, data);
  }
  
@@ -275,21 +275,21 @@ index 22f471f26..652c17d81 100644
  /**
   * xe_gt_sriov_pf_migration_size() - Total size of migration data from all components within a GT.
   * @gt: the &xe_gt
-@@ -540,6 +740,13 @@ ssize_t xe_gt_sriov_pf_migration_size(struct xe_gt *gt, unsigned int vfid)
- 		size += sizeof(struct xe_sriov_pf_migration_hdr);
+@@ -541,6 +741,13 @@ ssize_t xe_gt_sriov_pf_migration_size(struct xe_gt *gt, unsigned int vfid)
+ 		size += sizeof(struct xe_sriov_packet_hdr);
  	total += size;
  
 +	size = pf_migration_vram_size(gt, vfid);
 +	if (size < 0)
 +		return size;
 +	if (size > 0)
-+		size += sizeof(struct xe_sriov_pf_migration_hdr);
++		size += sizeof(struct xe_sriov_packet_hdr);
 +	total += size;
 +
  	return total;
  }
  
-@@ -602,6 +809,7 @@ void xe_gt_sriov_pf_migration_save_init(struct xe_gt *gt, unsigned int vfid)
+@@ -603,6 +810,7 @@ void xe_gt_sriov_pf_migration_save_init(struct xe_gt *gt, unsigned int vfid)
  	struct xe_gt_sriov_migration_data *migration = pf_pick_gt_migration(gt, vfid);
  
  	migration->save.data_remaining = 0;
@@ -297,7 +297,7 @@ index 22f471f26..652c17d81 100644
  
  	xe_gt_assert(gt, pf_migration_guc_size(gt, vfid) > 0);
  	pf_migration_save_data_todo(gt, vfid, XE_SRIOV_PACKET_TYPE_GUC);
-@@ -611,6 +819,9 @@ void xe_gt_sriov_pf_migration_save_init(struct xe_gt *gt, unsigned int vfid)
+@@ -612,6 +820,9 @@ void xe_gt_sriov_pf_migration_save_init(struct xe_gt *gt, unsigned int vfid)
  
  	xe_gt_assert(gt, pf_migration_mmio_size(gt, vfid) > 0);
  	pf_migration_save_data_todo(gt, vfid, XE_SRIOV_PACKET_TYPE_MMIO);
@@ -335,7 +335,7 @@ index 9f2487869..f50c64241 100644
  };
  
 diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_sriov_pf_control.c
-index 87205f050..eec218c71 100644
+index 7789d9e14..86668bd42 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_pf_control.c
 +++ b/drivers/gpu/drm/xe/xe_sriov_pf_control.c
 @@ -5,6 +5,7 @@

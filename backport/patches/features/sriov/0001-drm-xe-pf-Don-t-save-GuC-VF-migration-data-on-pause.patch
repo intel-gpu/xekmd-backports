@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
-Date: Wed, 5 Nov 2025 16:10:12 +0100
+Date: Tue, 11 Nov 2025 02:04:25 +0100
 Subject: drm/xe/pf: Don't save GuC VF migration data on pause
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -18,10 +18,10 @@ Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
  2 files changed, 2 insertions(+), 39 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
-index 25937592b..5e8b6929a 100644
+index 171b2ba0a..bb1ff5ff4 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
-@@ -183,7 +183,6 @@ static const char *control_bit_to_string(enum xe_gt_sriov_control_bits bit)
+@@ -184,7 +184,6 @@ static const char *control_bit_to_string(enum xe_gt_sriov_control_bits bit)
  	CASE2STR(PAUSE_SEND_PAUSE);
  	CASE2STR(PAUSE_WAIT_GUC);
  	CASE2STR(PAUSE_GUC_DONE);
@@ -29,7 +29,7 @@ index 25937592b..5e8b6929a 100644
  	CASE2STR(PAUSE_FAILED);
  	CASE2STR(PAUSED);
  	CASE2STR(SAVE_WIP);
-@@ -453,8 +452,7 @@ static void pf_enter_vf_ready(struct xe_gt *gt, unsigned int vfid)
+@@ -454,8 +453,7 @@ static void pf_enter_vf_ready(struct xe_gt *gt, unsigned int vfid)
   *	:       PAUSE_GUC_DONE                          o-----restart
   *	:        |                                      :
   *	:        |   o---<--busy                        :
@@ -39,7 +39,7 @@ index 25937592b..5e8b6929a 100644
   *	:      /                                        :
   *	:     /                                         :
   *	:....o..............o...............o...........:
-@@ -474,7 +472,6 @@ static void pf_exit_vf_pause_wip(struct xe_gt *gt, unsigned int vfid)
+@@ -475,7 +473,6 @@ static void pf_exit_vf_pause_wip(struct xe_gt *gt, unsigned int vfid)
  		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_PAUSE_SEND_PAUSE);
  		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_PAUSE_WAIT_GUC);
  		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_PAUSE_GUC_DONE);
@@ -47,7 +47,7 @@ index 25937592b..5e8b6929a 100644
  	}
  }
  
-@@ -505,41 +502,12 @@ static void pf_enter_vf_pause_rejected(struct xe_gt *gt, unsigned int vfid)
+@@ -506,41 +503,12 @@ static void pf_enter_vf_pause_rejected(struct xe_gt *gt, unsigned int vfid)
  	pf_enter_vf_pause_failed(gt, vfid);
  }
  
@@ -90,7 +90,7 @@ index 25937592b..5e8b6929a 100644
  	return true;
  }
  
-@@ -1983,9 +1951,6 @@ static bool pf_process_vf_state_machine(struct xe_gt *gt, unsigned int vfid)
+@@ -1984,9 +1952,6 @@ static bool pf_process_vf_state_machine(struct xe_gt *gt, unsigned int vfid)
  	if (pf_exit_vf_pause_guc_done(gt, vfid))
  		return true;
  

@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
-Date: Wed, 5 Nov 2025 16:10:07 +0100
+Date: Tue, 11 Nov 2025 02:04:20 +0100
 Subject: drm/xe/pf: Expose VF migration data size over debugfs
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -20,10 +20,10 @@ Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
  5 files changed, 82 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
-index c492677db..0f56dbc04 100644
+index 4e4902281..0ffe64ee4 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
-@@ -395,6 +395,27 @@ ssize_t xe_gt_sriov_pf_migration_write_guc_state(struct xe_gt *gt, unsigned int
+@@ -396,6 +396,27 @@ ssize_t xe_gt_sriov_pf_migration_write_guc_state(struct xe_gt *gt, unsigned int
  }
  #endif /* CONFIG_DEBUG_FS */
  
@@ -111,10 +111,10 @@ index 4ca86ff4b..00fe73bd8 100644
  
  static void pf_populate_with_tiles(struct xe_device *xe, struct dentry *dent, unsigned int vfid)
 diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
-index 54a2c0f9d..30bda27b0 100644
+index dfcc50203..d6c24bea7 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
 +++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
-@@ -309,3 +309,33 @@ ssize_t xe_sriov_pf_migration_write(struct xe_device *xe, unsigned int vfid,
+@@ -310,3 +310,33 @@ ssize_t xe_sriov_pf_migration_write(struct xe_device *xe, unsigned int vfid,
  
  	return produced;
  }

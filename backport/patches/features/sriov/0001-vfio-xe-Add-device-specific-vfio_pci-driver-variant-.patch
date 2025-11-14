@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
-Date: Wed, 5 Nov 2025 16:10:26 +0100
+Date: Tue, 11 Nov 2025 02:04:39 +0100
 Subject: vfio/xe: Add device specific vfio_pci driver variant
  for Intel graphics
 MIME-Version: 1.0
@@ -10,8 +10,8 @@ Content-Transfer-Encoding: 8bit
 In addition to generic VFIO PCI functionality, the driver implements
 VFIO migration uAPI, allowing userspace to enable migration for Intel
 Graphics SR-IOV Virtual Functions.
-The driver binds to VF device, and uses API exposed by Xe driver bound
-to PF device to control VF device state and transfer the migration data.
+The driver binds to VF device and uses API exposed by Xe driver to
+transfer the VF migration data under the control of PF device.
 
 Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
 Acked-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
@@ -21,8 +21,8 @@ Acked-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
  drivers/vfio/pci/Makefile    |   2 +
  drivers/vfio/pci/xe/Kconfig  |  12 +
  drivers/vfio/pci/xe/Makefile |   3 +
- drivers/vfio/pci/xe/main.c   | 555 +++++++++++++++++++++++++++++++++++
- 6 files changed, 581 insertions(+)
+ drivers/vfio/pci/xe/main.c   | 567 +++++++++++++++++++++++++++++++++++
+ 6 files changed, 593 insertions(+)
  create mode 100644 drivers/vfio/pci/xe/Kconfig
  create mode 100644 drivers/vfio/pci/xe/Makefile
  create mode 100644 drivers/vfio/pci/xe/main.c
@@ -68,7 +68,7 @@ index cf00c0a7e..f5d46aa93 100644
 +obj-$(CONFIG_XE_VFIO_PCI) += xe/
 diff --git a/drivers/vfio/pci/xe/Kconfig b/drivers/vfio/pci/xe/Kconfig
 new file mode 100644
-index 000000000..787be8826
+index 000000000..4253f2a86
 --- /dev/null
 +++ b/drivers/vfio/pci/xe/Kconfig
 @@ -0,0 +1,12 @@
@@ -78,7 +78,7 @@ index 000000000..787be8826
 +	depends on DRM_XE
 +	select VFIO_PCI_CORE
 +	help
-+	  This option enables vendor-specific VFIO driver for Intel Graphics.
++	  This option enables device specific VFIO driver variant for Intel Graphics.
 +	  In addition to generic VFIO PCI functionality, it implements VFIO
 +	  migration uAPI allowing userspace to enable migration for
 +	  Intel Graphics SR-IOV Virtual Functions supported by the Xe driver.
@@ -95,10 +95,10 @@ index 000000000..13aa0fd19
 +xe-vfio-pci-y := main.o
 diff --git a/drivers/vfio/pci/xe/main.c b/drivers/vfio/pci/xe/main.c
 new file mode 100644
-index 000000000..32effba9b
+index 000000000..35a81cc3e
 --- /dev/null
 +++ b/drivers/vfio/pci/xe/main.c
-@@ -0,0 +1,555 @@
+@@ -0,0 +1,567 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Copyright © 2025 Intel Corporation
@@ -121,13 +121,14 @@ index 000000000..32effba9b
 +	struct file *filp;
 +	/* serializes accesses to migration data */
 +	struct mutex lock;
++	bool disabled;
 +	struct xe_vfio_pci_core_device *xe_vdev;
 +};
 +
 +struct xe_vfio_pci_core_device {
 +	struct vfio_pci_core_device core_device;
 +	struct xe_device *xe;
-+	/* VF number used by PF, Xe HW/FW components use vfid indexing starting from 1 */
++	/* PF internal control uses vfid index starting from 1 */
 +	unsigned int vfid;
 +	u8 migrate_cap:1;
 +	u8 deferred_reset:1;
@@ -143,17 +144,22 @@ index 000000000..32effba9b
 +
 +static void xe_vfio_pci_disable_file(struct xe_vfio_pci_migration_file *migf)
 +{
-+	struct xe_vfio_pci_core_device *xe_vdev = migf->xe_vdev;
-+
 +	mutex_lock(&migf->lock);
-+	xe_vdev->migf = NULL;
++	migf->disabled = true;
 +	mutex_unlock(&migf->lock);
++}
++
++static void xe_vfio_pci_put_file(struct xe_vfio_pci_core_device *xe_vdev)
++{
++	xe_vfio_pci_disable_file(xe_vdev->migf);
++	fput(xe_vdev->migf->filp);
++	xe_vdev->migf = NULL;
 +}
 +
 +static void xe_vfio_pci_reset(struct xe_vfio_pci_core_device *xe_vdev)
 +{
 +	if (xe_vdev->migf)
-+		xe_vfio_pci_disable_file(xe_vdev->migf);
++		xe_vfio_pci_put_file(xe_vdev);
 +
 +	xe_vdev->mig_state = VFIO_DEVICE_STATE_RUNNING;
 +}
@@ -263,6 +269,11 @@ index 000000000..32effba9b
 +		return -ESPIPE;
 +
 +	mutex_lock(&migf->lock);
++	if (migf->disabled) {
++		mutex_unlock(&migf->lock);
++		return -ENODEV;
++	}
++
 +	ret = xe_sriov_vfio_data_read(migf->xe_vdev->xe, migf->xe_vdev->vfid, buf, len);
 +	mutex_unlock(&migf->lock);
 +
@@ -286,6 +297,11 @@ index 000000000..32effba9b
 +		return -ESPIPE;
 +
 +	mutex_lock(&migf->lock);
++	if (migf->disabled) {
++		mutex_unlock(&migf->lock);
++		return -ENODEV;
++	}
++
 +	ret = xe_sriov_vfio_data_write(migf->xe_vdev->xe, migf->xe_vdev->vfid, buf, len);
 +	mutex_unlock(&migf->lock);
 +
@@ -404,10 +420,8 @@ index 000000000..32effba9b
 +	}
 +
 +	if (cur == VFIO_DEVICE_STATE_STOP_COPY && new == VFIO_DEVICE_STATE_STOP) {
-+		if (xe_vdev->migf) {
-+			fput(xe_vdev->migf->filp);
-+			xe_vfio_pci_disable_file(xe_vdev->migf);
-+		}
++		if (xe_vdev->migf)
++			xe_vfio_pci_put_file(xe_vdev);
 +
 +		ret = xe_sriov_vfio_stop_copy_exit(xe_vdev->xe, xe_vdev->vfid);
 +		if (ret)
@@ -436,10 +450,8 @@ index 000000000..32effba9b
 +	}
 +
 +	if (cur == VFIO_DEVICE_STATE_RESUMING && new == VFIO_DEVICE_STATE_STOP) {
-+		if (xe_vdev->migf) {
-+			fput(xe_vdev->migf->filp);
-+			xe_vfio_pci_disable_file(xe_vdev->migf);
-+		}
++		if (xe_vdev->migf)
++			xe_vfio_pci_put_file(xe_vdev);
 +
 +		ret = xe_sriov_vfio_resume_data_exit(xe_vdev->xe, xe_vdev->vfid);
 +		if (ret)
@@ -546,7 +558,7 @@ index 000000000..32effba9b
 +	mutex_init(&xe_vdev->state_mutex);
 +	spin_lock_init(&xe_vdev->reset_lock);
 +
-+	/* Xe HW/FW components use vfid indexing starting from 1 */
++	/* PF internal control uses vfid index starting from 1 */
 +	xe_vdev->vfid = ret + 1;
 +	xe_vdev->xe = xe;
 +	xe_vdev->migrate_cap = true;

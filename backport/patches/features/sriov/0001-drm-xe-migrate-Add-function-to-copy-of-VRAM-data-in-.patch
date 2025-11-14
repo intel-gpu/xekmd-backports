@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Lukasz Laguna <lukasz.laguna@intel.com>
-Date: Wed, 5 Nov 2025 16:10:19 +0100
+Date: Tue, 11 Nov 2025 02:04:32 +0100
 Subject: drm/xe/migrate: Add function to copy of VRAM data in
  chunks
 MIME-Version: 1.0
@@ -165,7 +165,7 @@ index a07e3c24d..2e331b383 100644
  				 u32 size, u32 pitch)
  {
 diff --git a/drivers/gpu/drm/xe/xe_migrate.h b/drivers/gpu/drm/xe/xe_migrate.h
-index 59d3ffd92..3fd2dfac1 100644
+index 59d3ffd92..992a8896e 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.h
 +++ b/drivers/gpu/drm/xe/xe_migrate.h
 @@ -27,6 +27,11 @@ struct xe_vma;
@@ -180,16 +180,16 @@ index 59d3ffd92..3fd2dfac1 100644
  /**
   * struct xe_migrate_pt_update_ops - Callbacks for the
   * xe_migrate_update_pgtables() function.
-@@ -120,6 +125,9 @@ int xe_migrate_ccs_rw_copy(struct xe_tile *tile, struct xe_exec_queue *q,
+@@ -119,6 +124,9 @@ int xe_migrate_ccs_rw_copy(struct xe_tile *tile, struct xe_exec_queue *q,
+ 
  struct xe_lrc *xe_migrate_lrc(struct xe_migrate *migrate);
  struct xe_exec_queue *xe_migrate_exec_queue(struct xe_migrate *migrate);
- 
 +struct dma_fence *xe_migrate_vram_copy_chunk(struct xe_bo *vram_bo, u64 vram_offset,
 +					     struct xe_bo *sysmem_bo, u64 sysmem_offset,
 +					     u64 size, enum xe_migrate_copy_dir dir);
+ 
  #define XE_MIGRATE_CLEAR_FLAG_BO_DATA		BIT(0)
  #define XE_MIGRATE_CLEAR_FLAG_CCS_DATA		BIT(1)
- #define XE_MIGRATE_CLEAR_FLAG_FULL	(XE_MIGRATE_CLEAR_FLAG_BO_DATA | \
 -- 
 2.34.1
 

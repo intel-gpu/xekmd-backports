@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
-Date: Wed, 5 Nov 2025 16:10:06 +0100
+Date: Tue, 11 Nov 2025 02:04:19 +0100
 Subject: drm/xe/pf: Add minimalistic migration descriptor
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -19,7 +19,7 @@ Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
  3 files changed, 99 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_sriov_packet.c b/drivers/gpu/drm/xe/xe_sriov_packet.c
-index 220c36c52..c39d9a0c5 100644
+index c612f37e9..bab994696 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_packet.c
 +++ b/drivers/gpu/drm/xe/xe_sriov_packet.c
 @@ -5,6 +5,7 @@
@@ -27,10 +27,10 @@ index 220c36c52..c39d9a0c5 100644
  #include "xe_bo.h"
  #include "xe_device.h"
 +#include "xe_guc_klv_helpers.h"
+ #include "xe_printk.h"
  #include "xe_sriov_packet.h"
- #include "xe_sriov_pf_helpers.h"
- #include "xe_sriov_pf_migration.h"
-@@ -340,11 +341,19 @@ ssize_t xe_sriov_packet_write_single(struct xe_device *xe, unsigned int vfid,
+ #include "xe_sriov_packet_types.h"
+@@ -350,11 +351,19 @@ ssize_t xe_sriov_packet_write_single(struct xe_device *xe, unsigned int vfid,
  	return copied;
  }
  
@@ -51,7 +51,7 @@ index 220c36c52..c39d9a0c5 100644
  	int ret;
  
  	data = xe_sriov_packet_alloc(xe);
-@@ -358,11 +367,92 @@ static size_t pf_descriptor_init(struct xe_device *xe, unsigned int vfid)
+@@ -368,11 +377,92 @@ static size_t pf_descriptor_init(struct xe_device *xe, unsigned int vfid)
  		return ret;
  	}
  
@@ -84,14 +84,14 @@ index 220c36c52..c39d9a0c5 100644
 +int xe_sriov_packet_process_descriptor(struct xe_device *xe, unsigned int vfid,
 +				       struct xe_sriov_packet *data)
 +{
-+	u32 num_dwords = data->size / sizeof(u32);
++	u32 num_dwords = data->hdr.size / sizeof(u32);
 +	u32 *klvs = data->vaddr;
 +
-+	xe_assert(xe, data->type == XE_SRIOV_PACKET_TYPE_DESCRIPTOR);
++	xe_assert(xe, data->hdr.type == XE_SRIOV_PACKET_TYPE_DESCRIPTOR);
 +
-+	if (data->size % sizeof(u32)) {
++	if (data->hdr.size % sizeof(u32)) {
 +		xe_sriov_warn(xe, "Aborting migration, descriptor not in KLV format (size=%llu)\n",
-+			      data->size);
++			      data->hdr.size);
 +		return -EINVAL;
 +	}
 +
@@ -145,10 +145,10 @@ index 220c36c52..c39d9a0c5 100644
  {
  	struct xe_sriov_packet **data = pf_pick_pending(xe, vfid);
 diff --git a/drivers/gpu/drm/xe/xe_sriov_packet.h b/drivers/gpu/drm/xe/xe_sriov_packet.h
-index 03ab8edd9..6cd0918f2 100644
+index fd8da5069..2731e52cf 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_packet.h
 +++ b/drivers/gpu/drm/xe/xe_sriov_packet.h
-@@ -32,5 +32,7 @@ ssize_t xe_sriov_packet_read_single(struct xe_device *xe, unsigned int vfid,
+@@ -24,5 +24,7 @@ ssize_t xe_sriov_packet_read_single(struct xe_device *xe, unsigned int vfid,
  ssize_t xe_sriov_packet_write_single(struct xe_device *xe, unsigned int vfid,
  				     const char __user *buf, size_t len);
  int xe_sriov_packet_save_init(struct xe_device *xe, unsigned int vfid);
@@ -157,16 +157,16 @@ index 03ab8edd9..6cd0918f2 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
-index 4e0ca2fd7..54a2c0f9d 100644
+index ad5a45ddb..dfcc50203 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
 +++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
-@@ -176,9 +176,15 @@ xe_sriov_pf_migration_save_consume(struct xe_device *xe, unsigned int vfid)
+@@ -177,9 +177,15 @@ xe_sriov_pf_migration_save_consume(struct xe_device *xe, unsigned int vfid)
  static int pf_handle_descriptor(struct xe_device *xe, unsigned int vfid,
  				struct xe_sriov_packet *data)
  {
 +	int ret;
 +
- 	if (data->tile != 0 || data->gt != 0)
+ 	if (data->hdr.tile_id != 0 || data->hdr.gt_id != 0)
  		return -EINVAL;
  
 +	ret = xe_sriov_packet_process_descriptor(xe, vfid, data);

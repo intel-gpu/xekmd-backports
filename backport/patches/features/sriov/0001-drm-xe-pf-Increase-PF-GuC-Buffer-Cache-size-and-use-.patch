@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
-Date: Wed, 5 Nov 2025 16:10:10 +0100
+Date: Tue, 11 Nov 2025 02:04:23 +0100
 Subject: drm/xe/pf: Increase PF GuC Buffer Cache size and use it
  for VF migration
 MIME-Version: 1.0
@@ -21,7 +21,7 @@ Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
  3 files changed, 30 insertions(+), 33 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
-index 0f56dbc04..88371c205 100644
+index 0ffe64ee4..7b5338be1 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
 @@ -11,7 +11,7 @@
@@ -33,7 +33,7 @@ index 0f56dbc04..88371c205 100644
  #include "xe_guc_ct.h"
  #include "xe_sriov.h"
  #include "xe_sriov_packet.h"
-@@ -57,73 +57,56 @@ static int pf_send_guc_query_vf_state_size(struct xe_gt *gt, unsigned int vfid)
+@@ -58,73 +58,56 @@ static int pf_send_guc_query_vf_state_size(struct xe_gt *gt, unsigned int vfid)
  
  /* Return: number of state dwords saved or a negative error code on failure */
  static int pf_send_guc_save_vf_state(struct xe_gt *gt, unsigned int vfid,

@@ -79,10 +79,10 @@ index 8c4bdc3e0..3e4cff392 100644
  int xe_gt_tlb_invalidation_all(struct xe_gt *gt, struct xe_gt_tlb_invalidation_fence *fence);
  int xe_gt_tlb_invalidation_range(struct xe_gt *gt,
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 5b9920e9b..93265ddf2 100644
+index 930c6a01a..936607ee4 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -3349,6 +3349,68 @@ void xe_vm_unlock(struct xe_vm *vm)
+@@ -3377,6 +3377,68 @@ void xe_vm_unlock(struct xe_vm *vm)
  	dma_resv_unlock(xe_vm_resv(vm));
  }
  
@@ -151,7 +151,7 @@ index 5b9920e9b..93265ddf2 100644
  /**
   * xe_vm_invalidate_vma - invalidate GPU mappings for VMA without a lock
   * @vma: VMA to invalidate
-@@ -3363,11 +3425,9 @@ int xe_vm_invalidate_vma(struct xe_vma *vma)
+@@ -3391,11 +3453,9 @@ int xe_vm_invalidate_vma(struct xe_vma *vma)
  {
  	struct xe_device *xe = xe_vma_vm(vma)->xe;
  	struct xe_tile *tile;
@@ -164,8 +164,8 @@ index 5b9920e9b..93265ddf2 100644
 +	u8 id;
  
  	xe_assert(xe, !xe_vma_is_null(vma));
- 	trace_xe_vma_invalidate(vma);
-@@ -3390,37 +3450,14 @@ int xe_vm_invalidate_vma(struct xe_vma *vma)
+ 	xe_assert(xe, !xe_vma_is_cpu_addr_mirror(vma));
+@@ -3419,37 +3479,14 @@ int xe_vm_invalidate_vma(struct xe_vma *vma)
  		}
  	}
  
@@ -210,10 +210,10 @@ index 5b9920e9b..93265ddf2 100644
  	vma->tile_invalidated = vma->tile_mask;
  
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index cc1fb062a..dcbc082ec 100644
+index 840aaae11..4f374fd35 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
-@@ -211,6 +211,9 @@ int xe_vm_rebind(struct xe_vm *vm, bool rebind_worker);
+@@ -217,6 +217,9 @@ int xe_vm_rebind(struct xe_vm *vm, bool rebind_worker);
  struct dma_fence *xe_vma_rebind(struct xe_vm *vm, struct xe_vma *vma,
  				u8 tile_mask);
  
@@ -224,5 +224,5 @@ index cc1fb062a..dcbc082ec 100644
  
  static inline void xe_vm_queue_rebind_worker(struct xe_vm *vm)
 -- 
-2.34.1
+2.43.0
 

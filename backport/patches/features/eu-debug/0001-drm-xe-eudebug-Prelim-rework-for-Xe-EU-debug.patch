@@ -65,7 +65,7 @@ index 950acf0a6..33729983d 100644
  	depends on DRM_XE
  	default y
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 88b2671fb..6eeda82a9 100644
+index 7b33214a1..43327f3ba 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -56,7 +56,7 @@ xe-y += xe_bb.o \
@@ -1942,7 +1942,7 @@ index 3e3fb501e..619a94fee 100644
  			      const unsigned int settle_time_ms);
  
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 3a87b1d30..1b2971c03 100644
+index 5e98b7984..3fc96e8e3 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -27,11 +27,10 @@
@@ -1958,7 +1958,7 @@ index 3a87b1d30..1b2971c03 100644
  #include "xe_exec.h"
  #include "xe_exec_queue.h"
  #include "xe_force_wake.h"
-@@ -68,6 +67,7 @@
+@@ -69,6 +68,7 @@
  #include "xe_wait_user_fence.h"
  #include "xe_wa.h"
  
@@ -1966,7 +1966,7 @@ index 3a87b1d30..1b2971c03 100644
  #include <generated/xe_wa_oob.h>
  
  static int xe_file_open(struct drm_device *dev, struct drm_file *file)
-@@ -108,7 +108,7 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
+@@ -109,7 +109,7 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
  		put_task_struct(task);
  	}
  
@@ -1975,7 +1975,7 @@ index 3a87b1d30..1b2971c03 100644
  
  	return 0;
  }
-@@ -163,7 +163,7 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -164,7 +164,7 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  
  	xe_pm_runtime_get(xe);
  
@@ -1984,7 +1984,7 @@ index 3a87b1d30..1b2971c03 100644
  
  	/*
  	 * No need for exec_queue.lock here as there is no contention for it
-@@ -211,10 +211,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
+@@ -212,10 +212,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
  	DRM_IOCTL_DEF_DRV(XE_WAIT_USER_FENCE, xe_wait_user_fence_ioctl,
  			  DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_OBSERVATION, xe_observation_ioctl, DRM_RENDER_ALLOW),
@@ -1998,7 +1998,7 @@ index 3a87b1d30..1b2971c03 100644
  			  DRM_RENDER_ALLOW),
  };
  
-@@ -311,7 +311,7 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
+@@ -312,7 +312,7 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
  {
  	struct xe_device *xe = to_xe_device(dev);
  
@@ -2007,7 +2007,7 @@ index 3a87b1d30..1b2971c03 100644
  
  	if (xe->preempt_fence_wq)
  		destroy_workqueue(xe->preempt_fence_wq);
-@@ -387,7 +387,7 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
+@@ -388,7 +388,7 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
  	if (err)
  		goto err;
  
@@ -2194,7 +2194,7 @@ index 5f6f58ed7..000000000
 -
 -#endif
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 5f462af1d..7fae51b71 100644
+index af1261b97..e64e690c6 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -27,7 +27,7 @@
@@ -2321,12 +2321,12 @@ index f7ba04659..8f6e87514 100644
  	xe_vm_put(vm);
  }
 diff --git a/drivers/gpu/drm/xe/xe_hw_engine.c b/drivers/gpu/drm/xe/xe_hw_engine.c
-index b03844546..00be23ee1 100644
+index 37750d72d..a92fbb674 100644
 --- a/drivers/gpu/drm/xe/xe_hw_engine.c
 +++ b/drivers/gpu/drm/xe/xe_hw_engine.c
-@@ -18,7 +18,7 @@
- #include "xe_assert.h"
+@@ -19,7 +19,7 @@
  #include "xe_bo.h"
+ #include "xe_configfs.h"
  #include "xe_device.h"
 -#include "xe_eudebug.h"
 +#include "prelim/xe_eudebug.h"
@@ -3269,5 +3269,5 @@ index 9c86f5969..d5f794b0f 100644
 +
  #endif /* _UAPI_XE_DRM_PRELIM_H_ */
 -- 
-2.34.1
+2.43.0
 

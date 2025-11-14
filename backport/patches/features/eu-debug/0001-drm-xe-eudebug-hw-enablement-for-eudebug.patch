@@ -28,10 +28,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  6 files changed, 70 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_engine_regs.h b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
-index db2d7bd7e..e190d16fc 100644
+index 51b96298b..240c1127c 100644
 --- a/drivers/gpu/drm/xe/regs/xe_engine_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
-@@ -120,6 +120,10 @@
+@@ -123,6 +123,10 @@
  
  #define INDIRECT_RING_STATE(base)		XE_REG((base) + 0x108)
  
@@ -43,7 +43,7 @@ index db2d7bd7e..e190d16fc 100644
  #define RING_BBADDR_UDW(base)			XE_REG((base) + 0x168)
  
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 1f149ba7e..dbc01463c 100644
+index 4f01d3cc0..ac060aa76 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 @@ -473,6 +473,14 @@
@@ -178,18 +178,18 @@ index 326ddbd50..3cd6bc7bb 100644
  static inline void xe_eudebug_file_open(struct xe_file *xef) { }
  static inline void xe_eudebug_file_close(struct xe_file *xef) { }
 diff --git a/drivers/gpu/drm/xe/xe_hw_engine.c b/drivers/gpu/drm/xe/xe_hw_engine.c
-index b26b6fb5c..a2bc42a94 100644
+index 3439c8522..04b6daff8 100644
 --- a/drivers/gpu/drm/xe/xe_hw_engine.c
 +++ b/drivers/gpu/drm/xe/xe_hw_engine.c
-@@ -16,6 +16,7 @@
- #include "xe_assert.h"
+@@ -19,6 +19,7 @@
  #include "xe_bo.h"
+ #include "xe_configfs.h"
  #include "xe_device.h"
 +#include "xe_eudebug.h"
  #include "xe_execlist.h"
  #include "xe_force_wake.h"
  #include "xe_gsc.h"
-@@ -559,6 +560,7 @@ static void hw_engine_init_early(struct xe_gt *gt, struct xe_hw_engine *hwe,
+@@ -563,6 +564,7 @@ static void hw_engine_init_early(struct xe_gt *gt, struct xe_hw_engine *hwe,
  	xe_tuning_process_engine(hwe);
  	xe_wa_process_engine(hwe);
  	hw_engine_setup_default_state(hwe);
@@ -198,10 +198,10 @@ index b26b6fb5c..a2bc42a94 100644
  	xe_reg_sr_init(&hwe->reg_whitelist, hwe->name, gt_to_xe(gt));
  	xe_reg_whitelist_process_engine(hwe);
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
-index ab5a4be2b..2c986715a 100644
+index 9266c8579..273f0fde3 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
-@@ -41,6 +41,8 @@
+@@ -47,6 +47,8 @@
  16023588340	GRAPHICS_VERSION(2001), FUNC(xe_rtp_match_not_sriov_vf)
  14019789679	GRAPHICS_VERSION(1255)
  		GRAPHICS_VERSION_RANGE(1270, 2004)

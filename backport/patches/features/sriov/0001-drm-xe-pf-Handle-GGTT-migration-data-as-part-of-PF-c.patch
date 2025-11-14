@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
-Date: Wed, 5 Nov 2025 16:10:16 +0100
+Date: Tue, 11 Nov 2025 02:04:29 +0100
 Subject: drm/xe/pf: Handle GGTT migration data as part of PF
  control
 MIME-Version: 1.0
@@ -19,10 +19,10 @@ Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
  3 files changed, 129 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
-index 198bf0c93..ee4717f9a 100644
+index 7527aed8c..16524bc18 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
-@@ -867,6 +867,18 @@ static int pf_handle_vf_save_data(struct xe_gt *gt, unsigned int vfid)
+@@ -868,6 +868,18 @@ static int pf_handle_vf_save_data(struct xe_gt *gt, unsigned int vfid)
  		return -EAGAIN;
  	}
  
@@ -41,10 +41,10 @@ index 198bf0c93..ee4717f9a 100644
  	return 0;
  }
  
-@@ -1096,6 +1108,9 @@ static int pf_handle_vf_restore_data(struct xe_gt *gt, unsigned int vfid)
+@@ -1097,6 +1109,9 @@ static int pf_handle_vf_restore_data(struct xe_gt *gt, unsigned int vfid)
  	int ret = 0;
  
- 	switch (data->type) {
+ 	switch (data->hdr.type) {
 +	case XE_SRIOV_PACKET_TYPE_GGTT:
 +		ret = xe_gt_sriov_pf_migration_ggtt_restore(gt, vfid, data);
 +		break;
@@ -52,7 +52,7 @@ index 198bf0c93..ee4717f9a 100644
  		ret = xe_gt_sriov_pf_migration_guc_restore(gt, vfid, data);
  		break;
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
-index 676205e04..e7879c0e5 100644
+index b06538333..3a6c2008f 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
 @@ -7,6 +7,9 @@
@@ -65,7 +65,7 @@ index 676205e04..e7879c0e5 100644
  #include "xe_gt_sriov_pf_control.h"
  #include "xe_gt_sriov_pf_helpers.h"
  #include "xe_gt_sriov_pf_migration.h"
-@@ -41,6 +44,104 @@ static void pf_dump_mig_data(struct xe_gt *gt, unsigned int vfid,
+@@ -42,6 +45,104 @@ static void pf_dump_mig_data(struct xe_gt *gt, unsigned int vfid,
  	}
  }
  
@@ -120,7 +120,7 @@ index 676205e04..e7879c0e5 100644
 +
 +	pf_dump_mig_data(gt, vfid, data, "GGTT data restore");
 +
-+	ret = xe_gt_sriov_pf_config_ggtt_restore(gt, vfid, data->vaddr, data->size);
++	ret = xe_gt_sriov_pf_config_ggtt_restore(gt, vfid, data->vaddr, data->hdr.size);
 +	if (ret) {
 +		xe_gt_sriov_err(gt, "Failed to restore VF%u GGTT data (%pe)\n",
 +				vfid, ERR_PTR(ret));
@@ -170,21 +170,21 @@ index 676205e04..e7879c0e5 100644
  /* Return: number of dwords saved/restored/required or a negative error code on failure */
  static int guc_action_vf_save_restore(struct xe_guc *guc, u32 vfid, u32 opcode,
  				      u64 addr, u32 ndwords)
-@@ -279,6 +380,13 @@ ssize_t xe_gt_sriov_pf_migration_size(struct xe_gt *gt, unsigned int vfid)
- 		size += sizeof(struct xe_sriov_pf_migration_hdr);
+@@ -280,6 +381,13 @@ ssize_t xe_gt_sriov_pf_migration_size(struct xe_gt *gt, unsigned int vfid)
+ 		size += sizeof(struct xe_sriov_packet_hdr);
  	total += size;
  
 +	size = pf_migration_ggtt_size(gt, vfid);
 +	if (size < 0)
 +		return size;
 +	if (size > 0)
-+		size += sizeof(struct xe_sriov_pf_migration_hdr);
++		size += sizeof(struct xe_sriov_packet_hdr);
 +	total += size;
 +
  	return total;
  }
  
-@@ -344,6 +452,9 @@ void xe_gt_sriov_pf_migration_save_init(struct xe_gt *gt, unsigned int vfid)
+@@ -345,6 +453,9 @@ void xe_gt_sriov_pf_migration_save_init(struct xe_gt *gt, unsigned int vfid)
  
  	xe_gt_assert(gt, pf_migration_guc_size(gt, vfid) > 0);
  	pf_migration_save_data_todo(gt, vfid, XE_SRIOV_PACKET_TYPE_GUC);

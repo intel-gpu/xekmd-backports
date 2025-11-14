@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
-Date: Wed, 5 Nov 2025 16:10:17 +0100
+Date: Tue, 11 Nov 2025 02:04:30 +0100
 Subject: drm/xe/pf: Handle MMIO migration data as part of PF
  control
 MIME-Version: 1.0
@@ -19,10 +19,10 @@ Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
  3 files changed, 174 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
-index ee4717f9a..abc2bd092 100644
+index 16524bc18..25b770077 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
-@@ -879,6 +879,18 @@ static int pf_handle_vf_save_data(struct xe_gt *gt, unsigned int vfid)
+@@ -880,6 +880,18 @@ static int pf_handle_vf_save_data(struct xe_gt *gt, unsigned int vfid)
  		return -EAGAIN;
  	}
  
@@ -41,7 +41,7 @@ index ee4717f9a..abc2bd092 100644
  	return 0;
  }
  
-@@ -1111,6 +1123,9 @@ static int pf_handle_vf_restore_data(struct xe_gt *gt, unsigned int vfid)
+@@ -1112,6 +1124,9 @@ static int pf_handle_vf_restore_data(struct xe_gt *gt, unsigned int vfid)
  	case XE_SRIOV_PACKET_TYPE_GGTT:
  		ret = xe_gt_sriov_pf_migration_ggtt_restore(gt, vfid, data);
  		break;
@@ -52,7 +52,7 @@ index ee4717f9a..abc2bd092 100644
  		ret = xe_gt_sriov_pf_migration_guc_restore(gt, vfid, data);
  		break;
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
-index e7879c0e5..22f471f26 100644
+index 3a6c2008f..31c7f207a 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
 @@ -5,10 +5,13 @@
@@ -76,8 +76,8 @@ index e7879c0e5..22f471f26 100644
 +#include "xe_mmio.h"
  #include "xe_sriov.h"
  #include "xe_sriov_packet.h"
- #include "xe_sriov_pf_migration.h"
-@@ -355,6 +359,148 @@ int xe_gt_sriov_pf_migration_guc_restore(struct xe_gt *gt, unsigned int vfid,
+ #include "xe_sriov_packet_types.h"
+@@ -356,6 +360,148 @@ int xe_gt_sriov_pf_migration_guc_restore(struct xe_gt *gt, unsigned int vfid,
  	return pf_restore_vf_guc_state(gt, vfid, data);
  }
  
@@ -175,7 +175,7 @@ index e7879c0e5..22f471f26 100644
 +
 +	pf_dump_mig_data(gt, vfid, data, "MMIO data restore");
 +
-+	ret = pf_migration_mmio_restore(gt, vfid, data->vaddr, data->size);
++	ret = pf_migration_mmio_restore(gt, vfid, data->vaddr, data->hdr.size);
 +	if (ret) {
 +		xe_gt_sriov_err(gt, "Failed to restore VF%u MMIO data (%pe)\n",
 +				vfid, ERR_PTR(ret));
@@ -226,21 +226,21 @@ index e7879c0e5..22f471f26 100644
  /**
   * xe_gt_sriov_pf_migration_size() - Total size of migration data from all components within a GT.
   * @gt: the &xe_gt
-@@ -387,6 +533,13 @@ ssize_t xe_gt_sriov_pf_migration_size(struct xe_gt *gt, unsigned int vfid)
- 		size += sizeof(struct xe_sriov_pf_migration_hdr);
+@@ -388,6 +534,13 @@ ssize_t xe_gt_sriov_pf_migration_size(struct xe_gt *gt, unsigned int vfid)
+ 		size += sizeof(struct xe_sriov_packet_hdr);
  	total += size;
  
 +	size = pf_migration_mmio_size(gt, vfid);
 +	if (size < 0)
 +		return size;
 +	if (size > 0)
-+		size += sizeof(struct xe_sriov_pf_migration_hdr);
++		size += sizeof(struct xe_sriov_packet_hdr);
 +	total += size;
 +
  	return total;
  }
  
-@@ -455,6 +608,9 @@ void xe_gt_sriov_pf_migration_save_init(struct xe_gt *gt, unsigned int vfid)
+@@ -456,6 +609,9 @@ void xe_gt_sriov_pf_migration_save_init(struct xe_gt *gt, unsigned int vfid)
  
  	if (pf_migration_ggtt_size(gt, vfid) > 0)
  		pf_migration_save_data_todo(gt, vfid, XE_SRIOV_PACKET_TYPE_GGTT);

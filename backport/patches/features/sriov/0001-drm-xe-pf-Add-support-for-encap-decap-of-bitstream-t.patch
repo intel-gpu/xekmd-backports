@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
-Date: Wed, 5 Nov 2025 16:10:05 +0100
+Date: Tue, 11 Nov 2025 02:04:18 +0100
 Subject: drm/xe/pf: Add support for encap/decap of bitstream
  to/from packet
 MIME-Version: 1.0
@@ -16,23 +16,23 @@ save and restore side.
 Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
 Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
 ---
- drivers/gpu/drm/xe/xe_sriov_packet.c          | 291 ++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_packet.c          | 293 ++++++++++++++++++
  drivers/gpu/drm/xe/xe_sriov_packet.h          |   6 +
  drivers/gpu/drm/xe/xe_sriov_pf_control.c      |   5 +
  drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c      |  35 +++
  drivers/gpu/drm/xe/xe_sriov_pf_migration.c    | 121 ++++++++
  drivers/gpu/drm/xe/xe_sriov_pf_migration.h    |   5 +
  .../gpu/drm/xe/xe_sriov_pf_migration_types.h  |   9 +
- 7 files changed, 472 insertions(+)
+ 7 files changed, 474 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_sriov_packet.c b/drivers/gpu/drm/xe/xe_sriov_packet.c
-index 2cdcfb207..220c36c52 100644
+index 1ac7e025e..c612f37e9 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_packet.c
 +++ b/drivers/gpu/drm/xe/xe_sriov_packet.c
-@@ -6,6 +6,45 @@
- #include "xe_bo.h"
- #include "xe_device.h"
+@@ -8,6 +8,67 @@
+ #include "xe_printk.h"
  #include "xe_sriov_packet.h"
+ #include "xe_sriov_packet_types.h"
 +#include "xe_sriov_pf_helpers.h"
 +#include "xe_sriov_pf_migration.h"
 +#include "xe_sriov_printk.h"
@@ -72,67 +72,9 @@ index 2cdcfb207..220c36c52 100644
 +
 +	return &xe->sriov.pf.vfs[vfid].migration.trailer;
 +}
- 
- static bool pkt_needs_bo(struct xe_sriov_packet *data)
- {
-@@ -127,3 +166,255 @@ int xe_sriov_packet_init_from_hdr(struct xe_sriov_packet *data)
- 
- 	return mig_pkt_init(data);
- }
 +
-+static ssize_t vf_mig_hdr_read(struct xe_sriov_packet *data,
-+			       char __user *buf, size_t len)
-+{
-+	loff_t offset = sizeof(data->hdr) - data->hdr_remaining;
-+
-+	if (!data->hdr_remaining)
-+		return -EINVAL;
-+
-+	if (len > data->hdr_remaining)
-+		len = data->hdr_remaining;
-+
-+	if (copy_to_user(buf, (void *)&data->hdr + offset, len))
-+		return -EFAULT;
-+
-+	data->hdr_remaining -= len;
-+
-+	return len;
-+}
-+
-+static ssize_t vf_mig_data_read(struct xe_sriov_packet *data,
-+				char __user *buf, size_t len)
-+{
-+	if (len > data->remaining)
-+		len = data->remaining;
-+
-+	if (copy_to_user(buf, data->vaddr + (data->size - data->remaining), len))
-+		return -EFAULT;
-+
-+	data->remaining -= len;
-+
-+	return len;
-+}
-+
-+static ssize_t __vf_mig_packet_read_single(struct xe_sriov_packet **data,
-+					   unsigned int vfid, char __user *buf, size_t len)
-+{
-+	ssize_t copied = 0;
-+
-+	if ((*data)->hdr_remaining)
-+		copied = vf_mig_hdr_read(*data, buf, len);
-+	else
-+		copied = vf_mig_data_read(*data, buf, len);
-+
-+	if ((*data)->remaining == 0 && (*data)->hdr_remaining == 0) {
-+		xe_sriov_packet_free(*data);
-+		*data = NULL;
-+	}
-+
-+	return copied;
-+}
-+
-+static struct xe_sriov_packet **vf_mig_pick_packet(struct xe_device *xe,
-+						   unsigned int vfid)
++static struct xe_sriov_packet **pf_pick_read_packet(struct xe_device *xe,
++						    unsigned int vfid)
 +{
 +	struct xe_sriov_packet **data;
 +
@@ -150,7 +92,65 @@ index 2cdcfb207..220c36c52 100644
 +	if (*data)
 +		return data;
 +
-+	return ERR_PTR(-ENODATA);
++	return NULL;
++}
+ 
+ static bool pkt_needs_bo(struct xe_sriov_packet *data)
+ {
+@@ -135,3 +196,235 @@ int xe_sriov_packet_init_from_hdr(struct xe_sriov_packet *data)
+ 
+ 	return pkt_init(data);
+ }
++
++static ssize_t pkt_hdr_read(struct xe_sriov_packet *data,
++			    char __user *buf, size_t len)
++{
++	loff_t offset = sizeof(data->hdr) - data->hdr_remaining;
++
++	if (!data->hdr_remaining)
++		return -EINVAL;
++
++	if (len > data->hdr_remaining)
++		len = data->hdr_remaining;
++
++	if (copy_to_user(buf, (void *)&data->hdr + offset, len))
++		return -EFAULT;
++
++	data->hdr_remaining -= len;
++
++	return len;
++}
++
++static ssize_t pkt_data_read(struct xe_sriov_packet *data,
++			     char __user *buf, size_t len)
++{
++	if (len > data->remaining)
++		len = data->remaining;
++
++	if (copy_to_user(buf, data->vaddr + (data->hdr.size - data->remaining), len))
++		return -EFAULT;
++
++	data->remaining -= len;
++
++	return len;
++}
++
++static ssize_t pkt_read_single(struct xe_sriov_packet **data,
++			       unsigned int vfid, char __user *buf, size_t len)
++{
++	ssize_t copied = 0;
++
++	if ((*data)->hdr_remaining)
++		copied = pkt_hdr_read(*data, buf, len);
++	else
++		copied = pkt_data_read(*data, buf, len);
++
++	if ((*data)->remaining == 0 && (*data)->hdr_remaining == 0) {
++		xe_sriov_packet_free(*data);
++		*data = NULL;
++	}
++
++	return copied;
 +}
 +
 +/**
@@ -167,16 +167,18 @@ index 2cdcfb207..220c36c52 100644
 +ssize_t xe_sriov_packet_read_single(struct xe_device *xe, unsigned int vfid,
 +				    char __user *buf, size_t len)
 +{
-+	struct xe_sriov_packet **data = vf_mig_pick_packet(xe, vfid);
++	struct xe_sriov_packet **data = pf_pick_read_packet(xe, vfid);
 +
-+	if (IS_ERR(data))
-+		return PTR_ERR(data);
++	if (!data)
++		return -ENODATA;
++	if (IS_ERR(*data))
++		return PTR_ERR(*data);
 +
-+	return __vf_mig_packet_read_single(data, vfid, buf, len);
++	return pkt_read_single(data, vfid, buf, len);
 +}
 +
-+static ssize_t vf_mig_hdr_write(struct xe_sriov_packet *data,
-+				const char __user *buf, size_t len)
++static ssize_t pkt_hdr_write(struct xe_sriov_packet *data,
++			     const char __user *buf, size_t len)
 +{
 +	loff_t offset = sizeof(data->hdr) - data->hdr_remaining;
 +	int ret;
@@ -198,13 +200,13 @@ index 2cdcfb207..220c36c52 100644
 +	return len;
 +}
 +
-+static ssize_t vf_mig_data_write(struct xe_sriov_packet *data,
-+				 const char __user *buf, size_t len)
++static ssize_t pkt_data_write(struct xe_sriov_packet *data,
++			      const char __user *buf, size_t len)
 +{
 +	if (len > data->remaining)
 +		len = data->remaining;
 +
-+	if (copy_from_user(data->vaddr + (data->size - data->remaining), buf, len))
++	if (copy_from_user(data->vaddr + (data->hdr.size - data->remaining), buf, len))
 +		return -EFAULT;
 +
 +	data->remaining -= len;
@@ -236,9 +238,9 @@ index 2cdcfb207..220c36c52 100644
 +	}
 +
 +	if ((*data)->hdr_remaining)
-+		copied = vf_mig_hdr_write(*data, buf, len);
++		copied = pkt_hdr_write(*data, buf, len);
 +	else
-+		copied = vf_mig_data_write(*data, buf, len);
++		copied = pkt_data_write(*data, buf, len);
 +
 +	if ((*data)->hdr_remaining == 0 && (*data)->remaining == 0) {
 +		ret = xe_sriov_pf_migration_restore_produce(xe, vfid, *data);
@@ -332,10 +334,10 @@ index 2cdcfb207..220c36c52 100644
 +	return 0;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_sriov_packet.h b/drivers/gpu/drm/xe/xe_sriov_packet.h
-index 2c5a49897..03ab8edd9 100644
+index 282a35e77..fd8da5069 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_packet.h
 +++ b/drivers/gpu/drm/xe/xe_sriov_packet.h
-@@ -27,4 +27,10 @@ int xe_sriov_packet_init(struct xe_sriov_packet *data, u8 tile_id, u8 gt_id,
+@@ -19,4 +19,10 @@ int xe_sriov_packet_init(struct xe_sriov_packet *data, u8 tile_id, u8 gt_id,
  			 enum xe_sriov_packet_type, loff_t offset, size_t size);
  int xe_sriov_packet_init_from_hdr(struct xe_sriov_packet *data);
  
@@ -347,7 +349,7 @@ index 2c5a49897..03ab8edd9 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_sriov_pf_control.c
-index 8d8a01faf..87205f050 100644
+index e7b904e57..7789d9e14 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_pf_control.c
 +++ b/drivers/gpu/drm/xe/xe_sriov_pf_control.c
 @@ -5,6 +5,7 @@
@@ -437,7 +439,7 @@ index e0e6340c4..4ca86ff4b 100644
  
  static void pf_populate_with_tiles(struct xe_device *xe, struct dentry *dent, unsigned int vfid)
 diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
-index ed44eda94..4e0ca2fd7 100644
+index 11bc2e333..ad5a45ddb 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
 +++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
 @@ -10,6 +10,7 @@
@@ -445,10 +447,10 @@ index ed44eda94..4e0ca2fd7 100644
  #include "xe_pm.h"
  #include "xe_sriov.h"
 +#include "xe_sriov_packet.h"
+ #include "xe_sriov_packet_types.h"
  #include "xe_sriov_pf_helpers.h"
  #include "xe_sriov_pf_migration.h"
- #include "xe_sriov_printk.h"
-@@ -53,6 +54,15 @@ static bool pf_check_migration_support(struct xe_device *xe)
+@@ -54,6 +55,15 @@ static bool pf_check_migration_support(struct xe_device *xe)
  	return IS_ENABLED(CONFIG_DRM_XE_DEBUG);
  }
  
@@ -464,7 +466,7 @@ index ed44eda94..4e0ca2fd7 100644
  /**
   * xe_sriov_pf_migration_init() - Initialize support for SR-IOV VF migration.
   * @xe: the &xe_device
-@@ -62,6 +72,7 @@ static bool pf_check_migration_support(struct xe_device *xe)
+@@ -63,6 +73,7 @@ static bool pf_check_migration_support(struct xe_device *xe)
  int xe_sriov_pf_migration_init(struct xe_device *xe)
  {
  	unsigned int n, totalvfs;
@@ -472,7 +474,7 @@ index ed44eda94..4e0ca2fd7 100644
  
  	xe_assert(xe, IS_SRIOV_PF(xe));
  
-@@ -73,7 +84,15 @@ int xe_sriov_pf_migration_init(struct xe_device *xe)
+@@ -74,7 +85,15 @@ int xe_sriov_pf_migration_init(struct xe_device *xe)
  	for (n = 1; n <= totalvfs; n++) {
  		struct xe_sriov_migration_state *migration = pf_pick_migration(xe, n);
  
@@ -488,14 +490,14 @@ index ed44eda94..4e0ca2fd7 100644
  	}
  
  	return 0;
-@@ -154,6 +173,36 @@ xe_sriov_pf_migration_save_consume(struct xe_device *xe, unsigned int vfid)
+@@ -155,6 +174,36 @@ xe_sriov_pf_migration_save_consume(struct xe_device *xe, unsigned int vfid)
  	return data;
  }
  
 +static int pf_handle_descriptor(struct xe_device *xe, unsigned int vfid,
 +				struct xe_sriov_packet *data)
 +{
-+	if (data->tile != 0 || data->gt != 0)
++	if (data->hdr.tile_id != 0 || data->hdr.gt_id != 0)
 +		return -EINVAL;
 +
 +	xe_sriov_packet_free(data);
@@ -509,9 +511,9 @@ index ed44eda94..4e0ca2fd7 100644
 +	struct xe_gt *gt;
 +	u8 gt_id;
 +
-+	if (data->tile != 0 || data->gt != 0)
++	if (data->hdr.tile_id != 0 || data->hdr.gt_id != 0)
 +		return -EINVAL;
-+	if (data->offset != 0 || data->size != 0 || data->buff || data->bo)
++	if (data->hdr.offset != 0 || data->hdr.size != 0 || data->buff || data->bo)
 +		return -EINVAL;
 +
 +	xe_sriov_packet_free(data);
@@ -525,19 +527,19 @@ index ed44eda94..4e0ca2fd7 100644
  /**
   * xe_sriov_pf_migration_restore_produce() - Produce a VF migration data packet to the device.
   * @xe: the &xe_device
-@@ -173,6 +222,11 @@ int xe_sriov_pf_migration_restore_produce(struct xe_device *xe, unsigned int vfi
+@@ -174,6 +223,11 @@ int xe_sriov_pf_migration_restore_produce(struct xe_device *xe, unsigned int vfi
  
  	xe_assert(xe, IS_SRIOV_PF(xe));
  
-+	if (data->type == XE_SRIOV_PACKET_TYPE_DESCRIPTOR)
++	if (data->hdr.type == XE_SRIOV_PACKET_TYPE_DESCRIPTOR)
 +		return pf_handle_descriptor(xe, vfid, data);
-+	if (data->type == XE_SRIOV_PACKET_TYPE_TRAILER)
++	if (data->hdr.type == XE_SRIOV_PACKET_TYPE_TRAILER)
 +		return pf_handle_trailer(xe, vfid, data);
 +
- 	gt = xe_device_get_gt(xe, data->gt);
- 	if (!gt || data->tile != gt->tile->id) {
+ 	gt = xe_device_get_gt(xe, data->hdr.gt_id);
+ 	if (!gt || data->hdr.tile_id != gt->tile->id) {
  		xe_sriov_err_ratelimited(xe, "VF%d Invalid GT - tile:%u, GT:%u\n",
-@@ -182,3 +236,70 @@ int xe_sriov_pf_migration_restore_produce(struct xe_device *xe, unsigned int vfi
+@@ -183,3 +237,70 @@ int xe_sriov_pf_migration_restore_produce(struct xe_device *xe, unsigned int vfi
  
  	return xe_gt_sriov_pf_migration_restore_produce(gt, vfid, data);
  }
@@ -623,7 +625,7 @@ index d48ff2ecc..dbf809490 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration_types.h b/drivers/gpu/drm/xe/xe_sriov_pf_migration_types.h
-index 3177ca242..7396c86a6 100644
+index 5f2062c8c..363d673ee 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_pf_migration_types.h
 +++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration_types.h
 @@ -7,6 +7,7 @@
@@ -648,7 +650,7 @@ index 3177ca242..7396c86a6 100644
 +	struct xe_sriov_packet *descriptor;
  };
  
- /**
+ #endif
 -- 
 2.34.1
 

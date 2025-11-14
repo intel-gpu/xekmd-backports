@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Lukasz Laguna <lukasz.laguna@intel.com>
-Date: Wed, 5 Nov 2025 16:10:18 +0100
+Date: Tue, 11 Nov 2025 02:04:31 +0100
 Subject: drm/xe/pf: Add helper to retrieve VF's LMEM object
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -18,10 +18,10 @@ Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
  2 files changed, 27 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-index 767a7896b..88f7c273a 100644
+index 571c980b0..a6c22ead7 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-@@ -1654,6 +1654,32 @@ int xe_gt_sriov_pf_config_bulk_set_lmem(struct xe_gt *gt, unsigned int vfid,
+@@ -1659,6 +1659,32 @@ int xe_gt_sriov_pf_config_bulk_set_lmem(struct xe_gt *gt, unsigned int vfid,
  					   "LMEM", n, err);
  }
  

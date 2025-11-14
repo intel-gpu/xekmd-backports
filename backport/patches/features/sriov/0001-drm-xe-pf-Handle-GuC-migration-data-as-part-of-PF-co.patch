@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
-Date: Wed, 5 Nov 2025 16:10:14 +0100
+Date: Tue, 11 Nov 2025 02:04:27 +0100
 Subject: drm/xe/pf: Handle GuC migration data as part of PF
  control
 MIME-Version: 1.0
@@ -13,17 +13,17 @@ stop_copy / resume device state.
 Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
 Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
 ---
- drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c   | 27 ++++++-
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c   | 28 +++++++-
  drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c | 71 +++++++++++++++----
  drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.h |  8 ++-
  .../drm/xe/xe_gt_sriov_pf_migration_types.h   |  5 ++
- 4 files changed, 93 insertions(+), 18 deletions(-)
+ 4 files changed, 94 insertions(+), 18 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
-index 5e8b6929a..198bf0c93 100644
+index bb1ff5ff4..7527aed8c 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_control.c
-@@ -853,6 +853,20 @@ static void pf_enter_vf_save_failed(struct xe_gt *gt, unsigned int vfid)
+@@ -854,6 +854,20 @@ static void pf_enter_vf_save_failed(struct xe_gt *gt, unsigned int vfid)
  
  static int pf_handle_vf_save_data(struct xe_gt *gt, unsigned int vfid)
  {
@@ -44,7 +44,7 @@ index 5e8b6929a..198bf0c93 100644
  	return 0;
  }
  
-@@ -891,6 +905,7 @@ static void pf_exit_vf_save_wait_data(struct xe_gt *gt, unsigned int vfid)
+@@ -892,6 +906,7 @@ static void pf_exit_vf_save_wait_data(struct xe_gt *gt, unsigned int vfid)
  static bool pf_enter_vf_save_wip(struct xe_gt *gt, unsigned int vfid)
  {
  	if (pf_enter_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_WIP)) {
@@ -52,19 +52,20 @@ index 5e8b6929a..198bf0c93 100644
  		pf_enter_vf_wip(gt, vfid);
  		pf_enter_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_PROCESS_DATA);
  		pf_queue_vf(gt, vfid);
-@@ -1078,12 +1093,20 @@ static void pf_enter_vf_restore_failed(struct xe_gt *gt, unsigned int vfid)
+@@ -1079,12 +1094,21 @@ static void pf_enter_vf_restore_failed(struct xe_gt *gt, unsigned int vfid)
  static int pf_handle_vf_restore_data(struct xe_gt *gt, unsigned int vfid)
  {
  	struct xe_sriov_packet *data = xe_gt_sriov_pf_migration_restore_consume(gt, vfid);
 +	int ret = 0;
  
--	xe_gt_sriov_notice(gt, "Skipping VF%u unknown data type: %d\n", vfid, data->type);
-+	switch (data->type) {
+-	xe_gt_sriov_notice(gt, "Skipping VF%u unknown data type: %d\n", vfid, data->hdr.type);
++	switch (data->hdr.type) {
 +	case XE_SRIOV_PACKET_TYPE_GUC:
 +		ret = xe_gt_sriov_pf_migration_guc_restore(gt, vfid, data);
 +		break;
 +	default:
-+		xe_gt_sriov_notice(gt, "Skipping VF%u unknown data type: %d\n", vfid, data->type);
++		xe_gt_sriov_notice(gt, "Skipping VF%u unknown data type: %d\n",
++				   vfid, data->hdr.type);
 +		break;
 +	}
  
@@ -76,10 +77,10 @@ index 5e8b6929a..198bf0c93 100644
  
  static bool pf_handle_vf_restore(struct xe_gt *gt, unsigned int vfid)
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
-index 6e2b07606..676205e04 100644
+index 5954c1a70..b06538333 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
-@@ -176,23 +176,10 @@ static int pf_save_vf_guc_mig_data(struct xe_gt *gt, unsigned int vfid)
+@@ -177,23 +177,10 @@ static int pf_save_vf_guc_mig_data(struct xe_gt *gt, unsigned int vfid)
  	return ret;
  }
  
@@ -104,7 +105,7 @@ index 6e2b07606..676205e04 100644
  	if (!pf_migration_supported(gt))
  		return -ENOPKG;
  
-@@ -279,12 +266,19 @@ int xe_gt_sriov_pf_migration_guc_restore(struct xe_gt *gt, unsigned int vfid,
+@@ -280,12 +267,19 @@ int xe_gt_sriov_pf_migration_guc_restore(struct xe_gt *gt, unsigned int vfid,
  ssize_t xe_gt_sriov_pf_migration_size(struct xe_gt *gt, unsigned int vfid)
  {
  	ssize_t total = 0;
@@ -119,13 +120,13 @@ index 6e2b07606..676205e04 100644
 +	if (size < 0)
 +		return size;
 +	if (size > 0)
-+		size += sizeof(struct xe_sriov_pf_migration_hdr);
++		size += sizeof(struct xe_sriov_packet_hdr);
 +	total += size;
 +
  	return total;
  }
  
-@@ -331,6 +325,53 @@ void xe_gt_sriov_pf_migration_ring_free(struct xe_gt *gt, unsigned int vfid)
+@@ -332,6 +326,53 @@ void xe_gt_sriov_pf_migration_ring_free(struct xe_gt *gt, unsigned int vfid)
  		xe_sriov_packet_free(data);
  }
  

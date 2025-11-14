@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Fri, 14 Nov 2025 11:07:13 +0100
+Subject: drm/xe/pf: Drop the VF VRAM BO reference on successful
+ restore
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The reference is only dropped on error. Fix it by adding the missing
+xe_bo_put().
+
+Fixes: 49cf1b9b609fe ("drm/xe/pf: Handle VRAM migration data as part of PF control")
+Reported-by: Adam Miszczak <adam.miszczak@linux.intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Link: https://patch.msgid.link/20251114100713.1776073-1-michal.winiarski@intel.com
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+(backported from commit dab751b4240f0f0eadea81f93ff0b439379bc6ae linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+index 35a12d48dcc1..7540a3854dc7 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+@@ -661,6 +661,8 @@ static int pf_restore_vf_vram_mig_data(struct xe_gt *gt, unsigned int vfid,
+ 		goto err;
+ 	}
+ 
++	xe_bo_put(vram);
++
+ 	return 0;
+ err:
+ 	xe_bo_put(vram);
+-- 
+2.34.1
+

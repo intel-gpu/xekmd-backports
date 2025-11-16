@@ -1,0 +1,101 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Tue, 26 Aug 2025 12:04:11 +0530
+Subject: drm/xe: Add a helper function to set recovery method
+
+Add a helper function to set recovery method. The recovery
+method can be set before declaring the device wedged and sending the
+drm wedged uevent. If no method is set, default unbind/re-bind method
+will be set.
+
+v2: fix documentation (Raag)
+
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link: https://lore.kernel.org/r/20250826063419.3022216-5-riana.tauro@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-pick from commit 60439ac3f23549ff272e626bd78502123086eaa5 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c       | 26 +++++++++++++++++++++-----
+ drivers/gpu/drm/xe/xe_device.h       |  1 +
+ drivers/gpu/drm/xe/xe_device_types.h |  2 ++
+ 3 files changed, 24 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index bbee680ab..217fdcbcd 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -1143,13 +1143,26 @@ static void xe_device_wedged_fini(struct drm_device *drm, void *arg)
+  * is rebind/bus-reset.
+  */
+ 
++/**
++ * xe_device_set_wedged_method - Set wedged recovery method
++ * @xe: xe device instance
++ * @method: recovery method to set
++ *
++ * Set wedged recovery method to be sent in drm wedged uevent.
++ */
++void xe_device_set_wedged_method(struct xe_device *xe, unsigned long method)
++{
++	xe->wedged.method = method;
++}
++
+ /**
+  * xe_device_declare_wedged - Declare device wedged
+  * @xe: xe device instance
+  *
+  * This is a final state that can only be cleared with the recovery method
+- * specified in the drm wedged uevent. The default recovery method is
+- * re-probe (unbind + bind).
++ * specified in the drm wedged uevent. The method can be set using
++ * xe_device_set_wedged_method before declaring the device as wedged. If no method
++ * is set, reprobe (unbind/re-bind) will be sent by default.
+  *
+  * In this state every IOCTL will be blocked so the GT cannot be used.
+  * In general it will be called upon any critical error such as gt reset
+@@ -1190,9 +1203,12 @@ void xe_device_declare_wedged(struct xe_device *xe)
+ 		xe_gt_declare_wedged(gt);
+ 
+ 	if (xe_device_wedged(xe)) {
++		/* If no wedge recovery method is set, use default */
++		if (!xe->wedged.method)
++			xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_REBIND |
++						    DRM_WEDGE_RECOVERY_BUS_RESET);
++
+ 		/* Notify userspace of wedged device */
+-		drm_dev_wedged_event(&xe->drm,
+-				     DRM_WEDGE_RECOVERY_REBIND | DRM_WEDGE_RECOVERY_BUS_RESET,
+-				     NULL);
++		drm_dev_wedged_event(&xe->drm, xe->wedged.method, NULL);
+ 	}
+ }
+diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
+index bc802e066..32cc6323b 100644
+--- a/drivers/gpu/drm/xe/xe_device.h
++++ b/drivers/gpu/drm/xe/xe_device.h
+@@ -187,6 +187,7 @@ static inline bool xe_device_wedged(struct xe_device *xe)
+ 	return atomic_read(&xe->wedged.flag);
+ }
+ 
++void xe_device_set_wedged_method(struct xe_device *xe, unsigned long method);
+ void xe_device_declare_wedged(struct xe_device *xe);
+ 
+ struct xe_file *xe_file_get(struct xe_file *xef);
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index 7ceb0c90f..c965d8a3b 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -596,6 +596,8 @@ struct xe_device {
+ 		atomic_t flag;
+ 		/** @wedged.mode: Mode controlled by kernel parameter and debugfs */
+ 		int mode;
++		/** @wedged.method: Recovery method to be sent in the drm device wedged uevent */
++		unsigned long method;
+ 	} wedged;
+ 
+ 	/** @bo_device: Struct to control async free of BOs */
+-- 
+2.43.0
+

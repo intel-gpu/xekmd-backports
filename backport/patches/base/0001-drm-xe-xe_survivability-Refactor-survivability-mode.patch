@@ -1,0 +1,289 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Tue, 26 Aug 2025 12:04:12 +0530
+Subject: drm/xe/xe_survivability: Refactor survivability mode
+
+Refactor survivability mode code to support both boot
+and runtime survivability.
+
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link: https://lore.kernel.org/r/20250826063419.3022216-6-riana.tauro@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-pick from commit 41ff795aff53613d4184a35bbfae11a15caf07c5 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c                |  2 +-
+ drivers/gpu/drm/xe/xe_heci_gsc.c              |  2 +-
+ drivers/gpu/drm/xe/xe_pci.c                   |  6 +-
+ drivers/gpu/drm/xe/xe_survivability_mode.c    | 93 +++++++++++++------
+ drivers/gpu/drm/xe/xe_survivability_mode.h    |  4 +-
+ .../gpu/drm/xe/xe_survivability_mode_types.h  |  7 ++
+ 6 files changed, 81 insertions(+), 33 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 217fdcbcd..e75279976 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -722,7 +722,7 @@ int xe_device_probe_early(struct xe_device *xe)
+ 		 * possible, but still return the previous error for error
+ 		 * propagation
+ 		 */
+-		err = xe_survivability_mode_enable(xe);
++		err = xe_survivability_mode_boot_enable(xe);
+ 		if (err)
+ 			return err;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_heci_gsc.c b/drivers/gpu/drm/xe/xe_heci_gsc.c
+index 6d7b62724..a415ca488 100644
+--- a/drivers/gpu/drm/xe/xe_heci_gsc.c
++++ b/drivers/gpu/drm/xe/xe_heci_gsc.c
+@@ -197,7 +197,7 @@ int xe_heci_gsc_init(struct xe_device *xe)
+ 	if (ret)
+ 		return ret;
+ 
+-	if (!def->use_polling && !xe_survivability_mode_is_enabled(xe)) {
++	if (!def->use_polling && !xe_survivability_mode_is_boot_enabled(xe)) {
+ 		ret = heci_gsc_irq_setup(xe);
+ 		if (ret)
+ 			return ret;
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 3c40ef426..2a390f3dc 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -726,7 +726,7 @@ static void xe_pci_remove(struct pci_dev *pdev)
+ 	if (IS_SRIOV_PF(xe))
+ 		xe_pci_sriov_configure(pdev, 0);
+ 
+-	if (xe_survivability_mode_is_enabled(xe))
++	if (xe_survivability_mode_is_boot_enabled(xe))
+ 		return;
+ 
+ 	xe_device_remove(xe);
+@@ -806,7 +806,7 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 	 * flashed through mei. Return success, if survivability mode
+ 	 * is enabled due to pcode failure or configfs being set
+ 	 */
+-	if (xe_survivability_mode_is_enabled(xe))
++	if (xe_survivability_mode_is_boot_enabled(xe))
+ 		return 0;
+ 
+ 	if (err)
+@@ -900,7 +900,7 @@ static int xe_pci_suspend(struct device *dev)
+ 	struct xe_device *xe = pdev_to_xe_device(pdev);
+ 	int err;
+ 
+-	if (xe_survivability_mode_is_enabled(xe))
++	if (xe_survivability_mode_is_boot_enabled(xe))
+ 		return -EBUSY;
+ 
+ 	err = xe_pm_suspend(xe);
+diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
+index 8f7b0add2..57a06c6a0 100644
+--- a/drivers/gpu/drm/xe/xe_survivability_mode.c
++++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
+@@ -123,6 +123,14 @@ static void log_survivability_info(struct pci_dev *pdev)
+ 	}
+ }
+ 
++static int check_boot_failure(struct xe_device *xe)
++{
++	struct xe_survivability *survivability = &xe->survivability;
++
++	return survivability->boot_status == NON_CRITICAL_FAILURE ||
++		survivability->boot_status == CRITICAL_FAILURE;
++}
++
+ static ssize_t survivability_mode_show(struct device *dev,
+ 				       struct device_attribute *attr, char *buff)
+ {
+@@ -132,6 +140,11 @@ static ssize_t survivability_mode_show(struct device *dev,
+ 	struct xe_survivability_info *info = survivability->info;
+ 	int index = 0, count = 0;
+ 
++	count += sysfs_emit_at(buff, count, "Survivability mode type: Boot\n");
++
++	if (!check_boot_failure(xe))
++		return count;
++
+ 	for (index = 0; index < MAX_SCRATCH_MMIO; index++) {
+ 		if (info[index].reg)
+ 			count += sysfs_emit_at(buff, count, "%s: 0x%x - 0x%x\n", info[index].name,
+@@ -152,12 +165,11 @@ static void xe_survivability_mode_fini(void *arg)
+ 	sysfs_remove_file(&dev->kobj, &dev_attr_survivability_mode.attr);
+ }
+ 
+-static int enable_survivability_mode(struct pci_dev *pdev)
++static int create_survivability_sysfs(struct pci_dev *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
+ 	struct xe_device *xe = pdev_to_xe_device(pdev);
+-	struct xe_survivability *survivability = &xe->survivability;
+-	int ret = 0;
++	int ret;
+ 
+ 	/* create survivability mode sysfs */
+ 	ret = sysfs_create_file(&dev->kobj, &dev_attr_survivability_mode.attr);
+@@ -171,6 +183,20 @@ static int enable_survivability_mode(struct pci_dev *pdev)
+ 	if (ret)
+ 		return ret;
+ 
++	return 0;
++}
++
++static int enable_boot_survivability_mode(struct pci_dev *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct xe_device *xe = pdev_to_xe_device(pdev);
++	struct xe_survivability *survivability = &xe->survivability;
++	int ret = 0;
++
++	ret = create_survivability_sysfs(pdev);
++	if (ret)
++		return ret;
++
+ 	/* Make sure xe_heci_gsc_init() knows about survivability mode */
+ 	survivability->mode = true;
+ 
+@@ -193,15 +219,36 @@ static int enable_survivability_mode(struct pci_dev *pdev)
+ 	return ret;
+ }
+ 
++static int init_survivability_mode(struct xe_device *xe)
++{
++	struct xe_survivability *survivability = &xe->survivability;
++	struct xe_survivability_info *info;
++
++	survivability->size = MAX_SCRATCH_MMIO;
++
++	info = devm_kcalloc(xe->drm.dev, survivability->size, sizeof(*info),
++			    GFP_KERNEL);
++	if (!info)
++		return -ENOMEM;
++
++	survivability->info = info;
++
++	populate_survivability_info(xe);
++
++	return 0;
++}
++
+ /**
+- * xe_survivability_mode_is_enabled - check if survivability mode is enabled
++ * xe_survivability_mode_is_boot_enabled- check if boot survivability mode is enabled
+  * @xe: xe device instance
+  *
+- * Returns true if in survivability mode, false otherwise
++ * Returns true if in boot survivability mode of type, else false
+  */
+-bool xe_survivability_mode_is_enabled(struct xe_device *xe)
++bool xe_survivability_mode_is_boot_enabled(struct xe_device *xe)
+ {
+-	return xe->survivability.mode;
++	struct xe_survivability *survivability = &xe->survivability;
++
++	return survivability->mode && survivability->type == XE_SURVIVABILITY_TYPE_BOOT;
+ }
+ 
+ /**
+@@ -242,44 +289,38 @@ bool xe_survivability_mode_is_requested(struct xe_device *xe)
+ 	data = xe_mmio_read32(mmio, PCODE_SCRATCH(0));
+ 	survivability->boot_status = REG_FIELD_GET(BOOT_STATUS, data);
+ 
+-	return survivability->boot_status == NON_CRITICAL_FAILURE ||
+-		survivability->boot_status == CRITICAL_FAILURE;
++	return check_boot_failure(xe);
+ }
+ 
+ /**
+- * xe_survivability_mode_enable - Initialize and enable the survivability mode
++ * xe_survivability_mode_boot_enable - Initialize and enable boot survivability mode
+  * @xe: xe device instance
+  *
+- * Initialize survivability information and enable survivability mode
++ * Initialize survivability information and enable boot survivability mode
+  *
+- * Return: 0 if survivability mode is enabled or not requested; negative error
++ * Return: 0 if boot survivability mode is enabled or not requested, negative error
+  * code otherwise.
+  */
+-int xe_survivability_mode_enable(struct xe_device *xe)
++int xe_survivability_mode_boot_enable(struct xe_device *xe)
+ {
+ 	struct xe_survivability *survivability = &xe->survivability;
+-	struct xe_survivability_info *info;
+ 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
++	int ret;
+ 
+ 	if (!xe_survivability_mode_is_requested(xe))
+ 		return 0;
+ 
+-	survivability->size = MAX_SCRATCH_MMIO;
+-
+-	info = devm_kcalloc(xe->drm.dev, survivability->size, sizeof(*info),
+-			    GFP_KERNEL);
+-	if (!info)
+-		return -ENOMEM;
+-
+-	survivability->info = info;
+-
+-	populate_survivability_info(xe);
++	ret = init_survivability_mode(xe);
++	if (ret)
++		return ret;
+ 
+-	/* Only log debug information and exit if it is a critical failure */
++	/* Log breadcrumbs but do not enter survivability mode for Critical boot errors */
+ 	if (survivability->boot_status == CRITICAL_FAILURE) {
+ 		log_survivability_info(pdev);
+ 		return -ENXIO;
+ 	}
+ 
+-	return enable_survivability_mode(pdev);
++	survivability->type = XE_SURVIVABILITY_TYPE_BOOT;
++
++	return enable_boot_survivability_mode(pdev);
+ }
+diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.h b/drivers/gpu/drm/xe/xe_survivability_mode.h
+index 02231c2bf..f6ee283ea 100644
+--- a/drivers/gpu/drm/xe/xe_survivability_mode.h
++++ b/drivers/gpu/drm/xe/xe_survivability_mode.h
+@@ -10,8 +10,8 @@
+ 
+ struct xe_device;
+ 
+-int xe_survivability_mode_enable(struct xe_device *xe);
+-bool xe_survivability_mode_is_enabled(struct xe_device *xe);
++int xe_survivability_mode_boot_enable(struct xe_device *xe);
++bool xe_survivability_mode_is_boot_enabled(struct xe_device *xe);
+ bool xe_survivability_mode_is_requested(struct xe_device *xe);
+ 
+ #endif /* _XE_SURVIVABILITY_MODE_H_ */
+diff --git a/drivers/gpu/drm/xe/xe_survivability_mode_types.h b/drivers/gpu/drm/xe/xe_survivability_mode_types.h
+index 19d433e25..5dce39349 100644
+--- a/drivers/gpu/drm/xe/xe_survivability_mode_types.h
++++ b/drivers/gpu/drm/xe/xe_survivability_mode_types.h
+@@ -9,6 +9,10 @@
+ #include <linux/limits.h>
+ #include <linux/types.h>
+ 
++enum xe_survivability_type {
++	XE_SURVIVABILITY_TYPE_BOOT,
++};
++
+ struct xe_survivability_info {
+ 	char name[NAME_MAX];
+ 	u32 reg;
+@@ -30,6 +34,9 @@ struct xe_survivability {
+ 
+ 	/** @mode: boolean to indicate survivability mode */
+ 	bool mode;
++
++	/** @type: survivability type */
++	enum xe_survivability_type type;
+ };
+ 
+ #endif /* _XE_SURVIVABILITY_MODE_TYPES_H_ */
+-- 
+2.43.0
+

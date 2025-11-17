@@ -43,10 +43,10 @@ index d47e4ff25..dbc0cc9da 100644
  	kunit_printk(KERN_DEBUG, test, "Test eudebug WAs for graphics version: %u\n",
  		     GRAPHICS_VERx100(xe));
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 29c31145a..c5933f79a 100644
+index 02676931e..d06b9ddb9 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -497,8 +497,6 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
+@@ -498,8 +498,6 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
  	if (err)
  		goto err;
  
@@ -55,9 +55,9 @@ index 29c31145a..c5933f79a 100644
  	xe->preempt_fence_wq = alloc_ordered_workqueue("xe-preempt-fence-wq",
  						       WQ_MEM_RECLAIM);
  	xe->ordered_wq = alloc_ordered_workqueue("xe-ordered-wq", 0);
-@@ -753,6 +751,8 @@ int xe_device_probe_early(struct xe_device *xe)
- 
- 	sriov_update_device_info(xe);
+@@ -757,6 +755,8 @@ int xe_device_probe_early(struct xe_device *xe)
+ 	if (IS_SRIOV_VF(xe))
+ 		sriov_update_device_info(xe);
  
 +	xe_eudebug_init(xe);
 +
@@ -65,7 +65,7 @@ index 29c31145a..c5933f79a 100644
  	if (err || xe_survivability_mode_is_requested(xe)) {
  		int save_err = err;
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 69d112593..90d149468 100644
+index 7484b6e05..02c9c7fbc 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -13,6 +13,7 @@
@@ -76,7 +76,7 @@ index 69d112593..90d149468 100644
  #include "xe_heci_gsc.h"
  #include "xe_late_bind_fw_types.h"
  #include "xe_lmtt_types.h"
-@@ -628,8 +629,8 @@ struct xe_device {
+@@ -633,8 +634,8 @@ struct xe_device {
  		/** discovery_lock: used for discovery to block xe ioctls */
  		struct rw_semaphore discovery_lock;
  

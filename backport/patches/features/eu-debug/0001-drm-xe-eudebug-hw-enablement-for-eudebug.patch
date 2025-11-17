@@ -27,10 +27,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  6 files changed, 70 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_engine_regs.h b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
-index 7ade41e2b7b3..f2d29595a3f2 100644
+index f4c3e1187a00..07b0bc45d228 100644
 --- a/drivers/gpu/drm/xe/regs/xe_engine_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
-@@ -120,6 +120,10 @@
+@@ -123,6 +123,10 @@
  
  #define INDIRECT_RING_STATE(base)		XE_REG((base) + 0x108)
  
@@ -197,18 +197,17 @@ index 796ba8c34a16..d19e529e5c90 100644
  	xe_reg_sr_init(&hwe->reg_whitelist, hwe->name, gt_to_xe(gt));
  	xe_reg_whitelist_process_engine(hwe);
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
-index 710f4423726c..d25407990bea 100644
+index bde76e735398..6ee7fb778970 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
-@@ -67,6 +67,8 @@ no_media_l3	MEDIA_VERSION(3000)
+@@ -68,5 +68,7 @@ no_media_l3	MEDIA_VERSION(3000)
  		MEDIA_VERSION_RANGE(1300, 3000)
  		MEDIA_VERSION(3002)
  		GRAPHICS_VERSION(3003)
 +18022722726	GRAPHICS_VERSION_RANGE(1250, 1274)
 +14015474168	PLATFORM(PVC)
  
- # SoC workaround - currently applies to all platforms with the following
- # primary GT GMDID
+ 15015404425_disable	PLATFORM(PANTHERLAKE), MEDIA_STEP(B0, FOREVER)
 -- 
 2.43.0
 

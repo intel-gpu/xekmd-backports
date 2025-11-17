@@ -1,0 +1,292 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Wed, 12 Nov 2025 14:22:13 +0100
+Subject: drm/xe/pf: Add helpers for VF GGTT migration data handling
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In an upcoming change, the VF GGTT migration data will be handled as
+part of VF control state machine. Add the necessary helpers to allow the
+migration data transfer to/from the HW GGTT resource.
+
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://patch.msgid.link/20251112132220.516975-18-michal.winiarski@intel.com
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+(cherry-picked from commit 624ba6bfedc1b4fdbcb745db5fdaddf628d569d5 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ggtt.c               | 104 +++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_ggtt.h               |   3 +
+ drivers/gpu/drm/xe/xe_ggtt_types.h         |   2 +
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c |  57 +++++++++++
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h |   5 +
+ 5 files changed, 171 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
+index 5402f95269d5..e70016ede693 100644
+--- a/drivers/gpu/drm/xe/xe_ggtt.c
++++ b/drivers/gpu/drm/xe/xe_ggtt.c
+@@ -138,6 +138,14 @@ static void xe_ggtt_set_pte_and_flush(struct xe_ggtt *ggtt, u64 addr, u64 pte)
+ 	ggtt_update_access_counter(ggtt);
+ }
+ 
++static u64 xe_ggtt_get_pte(struct xe_ggtt *ggtt, u64 addr)
++{
++	xe_tile_assert(ggtt->tile, !(addr & XE_PTE_MASK));
++	xe_tile_assert(ggtt->tile, addr < ggtt->size);
++
++	return readq(&ggtt->gsm[addr >> XE_PTE_SHIFT]);
++}
++
+ static void xe_ggtt_clear(struct xe_ggtt *ggtt, u64 start, u64 size)
+ {
+ 	u16 pat_index = tile_to_xe(ggtt->tile)->pat.idx[XE_CACHE_WB];
+@@ -220,16 +228,19 @@ void xe_ggtt_might_lock(struct xe_ggtt *ggtt)
+ static const struct xe_ggtt_pt_ops xelp_pt_ops = {
+ 	.pte_encode_flags = xelp_ggtt_pte_flags,
+ 	.ggtt_set_pte = xe_ggtt_set_pte,
++	.ggtt_get_pte = xe_ggtt_get_pte,
+ };
+ 
+ static const struct xe_ggtt_pt_ops xelpg_pt_ops = {
+ 	.pte_encode_flags = xelpg_ggtt_pte_flags,
+ 	.ggtt_set_pte = xe_ggtt_set_pte,
++	.ggtt_get_pte = xe_ggtt_get_pte,
+ };
+ 
+ static const struct xe_ggtt_pt_ops xelpg_pt_wa_ops = {
+ 	.pte_encode_flags = xelpg_ggtt_pte_flags,
+ 	.ggtt_set_pte = xe_ggtt_set_pte_and_flush,
++	.ggtt_get_pte = xe_ggtt_get_pte,
+ };
+ 
+ static void __xe_ggtt_init_early(struct xe_ggtt *ggtt, u32 reserved)
+@@ -681,6 +692,20 @@ bool xe_ggtt_node_allocated(const struct xe_ggtt_node *node)
+ 	return drm_mm_node_allocated(&node->base);
+ }
+ 
++/**
++ * xe_ggtt_node_pt_size() - Get the size of page table entries needed to map a GGTT node.
++ * @node: the &xe_ggtt_node
++ *
++ * Return: GGTT node page table entries size in bytes.
++ */
++size_t xe_ggtt_node_pt_size(const struct xe_ggtt_node *node)
++{
++	if (!node)
++		return 0;
++
++	return node->base.size / XE_PAGE_SIZE * sizeof(u64);
++}
++
+ /**
+  * xe_ggtt_map_bo - Map the BO into GGTT
+  * @ggtt: the &xe_ggtt where node will be mapped
+@@ -914,6 +939,85 @@ void xe_ggtt_assign(const struct xe_ggtt_node *node, u16 vfid)
+ 	xe_ggtt_assign_locked(node->ggtt, &node->base, vfid);
+ 	mutex_unlock(&node->ggtt->lock);
+ }
++
++/**
++ * xe_ggtt_node_save() - Save a &xe_ggtt_node to a buffer.
++ * @node: the &xe_ggtt_node to be saved
++ * @dst: destination buffer
++ * @size: destination buffer size in bytes
++ * @vfid: VF identifier
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_ggtt_node_save(struct xe_ggtt_node *node, void *dst, size_t size, u16 vfid)
++{
++	struct xe_ggtt *ggtt;
++	u64 start, end;
++	u64 *buf = dst;
++	u64 pte;
++
++	if (!node)
++		return -ENOENT;
++
++	guard(mutex)(&node->ggtt->lock);
++
++	if (xe_ggtt_node_pt_size(node) != size)
++		return -EINVAL;
++
++	ggtt = node->ggtt;
++	start = node->base.start;
++	end = start + node->base.size - 1;
++
++	while (start < end) {
++		pte = ggtt->pt_ops->ggtt_get_pte(ggtt, start);
++		if (vfid != u64_get_bits(pte, GGTT_PTE_VFID))
++			return -EPERM;
++
++		*buf++ = u64_replace_bits(pte, 0, GGTT_PTE_VFID);
++		start += XE_PAGE_SIZE;
++	}
++
++	return 0;
++}
++
++/**
++ * xe_ggtt_node_load() - Load a &xe_ggtt_node from a buffer.
++ * @node: the &xe_ggtt_node to be loaded
++ * @src: source buffer
++ * @size: source buffer size in bytes
++ * @vfid: VF identifier
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_ggtt_node_load(struct xe_ggtt_node *node, const void *src, size_t size, u16 vfid)
++{
++	u64 vfid_pte = xe_encode_vfid_pte(vfid);
++	const u64 *buf = src;
++	struct xe_ggtt *ggtt;
++	u64 start, end;
++
++	if (!node)
++		return -ENOENT;
++
++	guard(mutex)(&node->ggtt->lock);
++
++	if (xe_ggtt_node_pt_size(node) != size)
++		return -EINVAL;
++
++	ggtt = node->ggtt;
++	start = node->base.start;
++	end = start + node->base.size - 1;
++
++	while (start < end) {
++		vfid_pte = u64_replace_bits(*buf++, vfid, GGTT_PTE_VFID);
++		ggtt->pt_ops->ggtt_set_pte(ggtt, start, vfid_pte);
++		start += XE_PAGE_SIZE;
++	}
++	xe_ggtt_invalidate(ggtt);
++
++	return 0;
++}
++
+ #endif
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_ggtt.h b/drivers/gpu/drm/xe/xe_ggtt.h
+index 75fc7a1efea7..93fea4b6079c 100644
+--- a/drivers/gpu/drm/xe/xe_ggtt.h
++++ b/drivers/gpu/drm/xe/xe_ggtt.h
+@@ -29,6 +29,7 @@ int xe_ggtt_node_insert_locked(struct xe_ggtt_node *node,
+ 			       u32 size, u32 align, u32 mm_flags);
+ void xe_ggtt_node_remove(struct xe_ggtt_node *node, bool invalidate);
+ bool xe_ggtt_node_allocated(const struct xe_ggtt_node *node);
++size_t xe_ggtt_node_pt_size(const struct xe_ggtt_node *node);
+ void xe_ggtt_map_bo(struct xe_ggtt *ggtt, struct xe_ggtt_node *node,
+ 		    struct xe_bo *bo, u16 pat_index);
+ void xe_ggtt_map_bo_unlocked(struct xe_ggtt *ggtt, struct xe_bo *bo);
+@@ -43,6 +44,8 @@ u64 xe_ggtt_print_holes(struct xe_ggtt *ggtt, u64 alignment, struct drm_printer
+ 
+ #ifdef CONFIG_PCI_IOV
+ void xe_ggtt_assign(const struct xe_ggtt_node *node, u16 vfid);
++int xe_ggtt_node_save(struct xe_ggtt_node *node, void *dst, size_t size, u16 vfid);
++int xe_ggtt_node_load(struct xe_ggtt_node *node, const void *src, size_t size, u16 vfid);
+ #endif
+ 
+ #ifndef CONFIG_LOCKDEP
+diff --git a/drivers/gpu/drm/xe/xe_ggtt_types.h b/drivers/gpu/drm/xe/xe_ggtt_types.h
+index c5e999d58ff2..dacd796f8184 100644
+--- a/drivers/gpu/drm/xe/xe_ggtt_types.h
++++ b/drivers/gpu/drm/xe/xe_ggtt_types.h
+@@ -78,6 +78,8 @@ struct xe_ggtt_pt_ops {
+ 	u64 (*pte_encode_flags)(struct xe_bo *bo, u16 pat_index);
+ 	/** @ggtt_set_pte: Directly write into GGTT's PTE */
+ 	void (*ggtt_set_pte)(struct xe_ggtt *ggtt, u64 addr, u64 pte);
++	/** @ggtt_get_pte: Directly read from GGTT's PTE */
++	u64 (*ggtt_get_pte)(struct xe_ggtt *ggtt, u64 addr);
+ };
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index 0a83c8e0b4a4..f5b2d8b608a6 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -726,6 +726,63 @@ int xe_gt_sriov_pf_config_set_fair_ggtt(struct xe_gt *gt, unsigned int vfid,
+ 	return xe_gt_sriov_pf_config_bulk_set_ggtt(gt, vfid, num_vfs, fair);
+ }
+ 
++/**
++ * xe_gt_sriov_pf_config_ggtt_save() - Save a VF provisioned GGTT data into a buffer.
++ * @gt: the &xe_gt
++ * @vfid: VF identifier (can't be 0)
++ * @buf: the GGTT data destination buffer (or NULL to query the buf size)
++ * @size: the size of the buffer (or 0 to query the buf size)
++ *
++ * This function can only be called on PF.
++ *
++ * Return: size of the buffer needed to save GGTT data if querying,
++ *         0 on successful save or a negative error code on failure.
++ */
++ssize_t xe_gt_sriov_pf_config_ggtt_save(struct xe_gt *gt, unsigned int vfid,
++					void *buf, size_t size)
++{
++	struct xe_ggtt_node *node;
++
++	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
++	xe_gt_assert(gt, vfid);
++	xe_gt_assert(gt, !(!buf ^ !size));
++
++	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
++
++	node = pf_pick_vf_config(gt, vfid)->ggtt_region;
++
++	if (!buf)
++		return xe_ggtt_node_pt_size(node);
++
++	return xe_ggtt_node_save(node, buf, size, vfid);
++}
++
++/**
++ * xe_gt_sriov_pf_config_ggtt_restore() - Restore a VF provisioned GGTT data from a buffer.
++ * @gt: the &xe_gt
++ * @vfid: VF identifier (can't be 0)
++ * @buf: the GGTT data source buffer
++ * @size: the size of the buffer
++ *
++ * This function can only be called on PF.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_gt_sriov_pf_config_ggtt_restore(struct xe_gt *gt, unsigned int vfid,
++				       const void *buf, size_t size)
++{
++	struct xe_ggtt_node *node;
++
++	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
++	xe_gt_assert(gt, vfid);
++
++	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
++
++	node = pf_pick_vf_config(gt, vfid)->ggtt_region;
++
++	return xe_ggtt_node_load(node, buf, size, vfid);
++}
++
+ static u32 pf_get_min_spare_ctxs(struct xe_gt *gt)
+ {
+ 	/* XXX: preliminary */
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
+index 14d036790695..66223c0e948d 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
+@@ -71,6 +71,11 @@ ssize_t xe_gt_sriov_pf_config_save(struct xe_gt *gt, unsigned int vfid, void *bu
+ int xe_gt_sriov_pf_config_restore(struct xe_gt *gt, unsigned int vfid,
+ 				  const void *buf, size_t size);
+ 
++ssize_t xe_gt_sriov_pf_config_ggtt_save(struct xe_gt *gt, unsigned int vfid,
++					void *buf, size_t size);
++int xe_gt_sriov_pf_config_ggtt_restore(struct xe_gt *gt, unsigned int vfid,
++				       const void *buf, size_t size);
++
+ bool xe_gt_sriov_pf_config_is_empty(struct xe_gt *gt, unsigned int vfid);
+ 
+ int xe_gt_sriov_pf_config_init(struct xe_gt *gt);
+-- 
+2.43.0
+

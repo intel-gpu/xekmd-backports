@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Tue, 9 Sep 2025 18:59:35 +0200
+Subject: drm/xe: Keep xe_gt_err() macro definitions together
+
+There is no need to keep them separated. No functional changes.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20250909165941.31730-2-michal.wajdeczko@intel.com
+(cherry-picked from commit edffa93a93d896463948f966dcf0cf2b9de461d0 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_printk.h | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_printk.h b/drivers/gpu/drm/xe/xe_gt_printk.h
+index 11da0228cea7..fd9cba14383a 100644
+--- a/drivers/gpu/drm/xe/xe_gt_printk.h
++++ b/drivers/gpu/drm/xe/xe_gt_printk.h
+@@ -13,11 +13,14 @@
+ #define xe_gt_printk(_gt, _level, _fmt, ...) \
+ 	drm_##_level(&gt_to_xe(_gt)->drm, "GT%u: " _fmt, (_gt)->info.id, ##__VA_ARGS__)
+ 
++#define xe_gt_err(_gt, _fmt, ...) \
++	xe_gt_printk((_gt), err, _fmt, ##__VA_ARGS__)
++
+ #define xe_gt_err_once(_gt, _fmt, ...) \
+ 	xe_gt_printk((_gt), err_once, _fmt, ##__VA_ARGS__)
+ 
+-#define xe_gt_err(_gt, _fmt, ...) \
+-	xe_gt_printk((_gt), err, _fmt, ##__VA_ARGS__)
++#define xe_gt_err_ratelimited(_gt, _fmt, ...) \
++	xe_gt_printk((_gt), err_ratelimited, _fmt, ##__VA_ARGS__)
+ 
+ #define xe_gt_warn(_gt, _fmt, ...) \
+ 	xe_gt_printk((_gt), warn, _fmt, ##__VA_ARGS__)
+@@ -31,9 +34,6 @@
+ #define xe_gt_dbg(_gt, _fmt, ...) \
+ 	xe_gt_printk((_gt), dbg, _fmt, ##__VA_ARGS__)
+ 
+-#define xe_gt_err_ratelimited(_gt, _fmt, ...) \
+-	xe_gt_printk((_gt), err_ratelimited, _fmt, ##__VA_ARGS__)
+-
+ #define xe_gt_WARN(_gt, _condition, _fmt, ...) \
+ 	drm_WARN(&gt_to_xe(_gt)->drm, _condition, "GT%u: " _fmt, (_gt)->info.id, ##__VA_ARGS__)
+ 
+-- 
+2.43.0
+

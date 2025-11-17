@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Wed, 12 Nov 2025 14:22:20 +0100
+Subject: drm/intel/bmg: Allow device ID usage with single-argument
+ macros
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When INTEL_BMG_G21_IDS were added as a subplatform, token concatenation
+operator usage was omitted, making INTEL_BMG_IDS not usable with
+single-argument macros.
+Fix that by adding the missing operator.
+
+Fixes: 78de8f876683 ("drm/xe: Handle Wa_22010954014 and Wa_14022085890 as device workarounds")
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://patch.msgid.link/20251112132220.516975-25-michal.winiarski@intel.com
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+(backported from commit aaecfadc22cca4c7ad381b1df457e8857c01fe14 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ include/drm/intel/pciids.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/include/drm/intel/pciids.h b/include/drm/intel/pciids.h
+index 6b9f55ffb933..69de0e58904d 100644
+--- a/include/drm/intel/pciids.h
++++ b/include/drm/intel/pciids.h
+@@ -856,7 +856,7 @@
+ 	MACRO__(0xE216, ## __VA_ARGS__)
+ 
+ #define INTEL_BMG_IDS(MACRO__, ...) \
+-	INTEL_BMG_G21_IDS(MACRO__, __VA_ARGS__), \
++	INTEL_BMG_G21_IDS(MACRO__, ## __VA_ARGS__), \
+ 	MACRO__(0xE220, ## __VA_ARGS__), \
+ 	MACRO__(0xE221, ## __VA_ARGS__), \
+ 	MACRO__(0xE222, ## __VA_ARGS__), \
+-- 
+2.43.0
+

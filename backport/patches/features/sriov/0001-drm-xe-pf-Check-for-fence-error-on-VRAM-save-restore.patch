@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Fri, 14 Nov 2025 13:23:39 +0100
+Subject: drm/xe/pf: Check for fence error on VRAM save/restore
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The code incorrectly assumes that the VRAM save/restore fence is valid.
+Fix it by checking for error.
+
+Fixes: 49cf1b9b609fe ("drm/xe/pf: Handle VRAM migration data as part of PF control")
+Suggested-by: Matthew Auld <matthew.auld@intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://patch.msgid.link/20251114122339.1791026-1-michal.winiarski@intel.com
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+(cherry-picked from commit 78ff838a8ab78b3cd438e382ff5204b93db3237e linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+index 7540a3854dc7..d5d918ddce4f 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+@@ -571,6 +571,10 @@ static int pf_save_vram_chunk(struct xe_gt *gt, unsigned int vfid,
+ 	fence = __pf_save_restore_vram(gt, vfid,
+ 				       src_vram, src_vram_offset,
+ 				       data->bo, 0, size, true);
++	if (IS_ERR(fence)) {
++		ret = PTR_ERR(fence);
++		goto fail;
++	}
+ 
+ 	ret = dma_fence_wait_timeout(fence, false, PF_VRAM_SAVE_RESTORE_TIMEOUT);
+ 	dma_fence_put(fence);
+@@ -654,6 +658,11 @@ static int pf_restore_vf_vram_mig_data(struct xe_gt *gt, unsigned int vfid,
+ 
+ 	fence = __pf_save_restore_vram(gt, vfid, vram, data->hdr.offset,
+ 				       data->bo, 0, data->hdr.size, false);
++	if (IS_ERR(fence)) {
++		ret = PTR_ERR(fence);
++		goto err;
++	}
++
+ 	ret = dma_fence_wait_timeout(fence, false, PF_VRAM_SAVE_RESTORE_TIMEOUT);
+ 	dma_fence_put(fence);
+ 	if (!ret) {
+-- 
+2.43.0
+

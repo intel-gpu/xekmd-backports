@@ -1,0 +1,143 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Tue, 11 Nov 2025 02:04:35 +0100
+Subject: drm/xe/pf: Enable SR-IOV VF migration
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+All of the necessary building blocks are now in place to support SR-IOV
+VF migration.
+Flip the enable/disable logic to match VF code and disable the feature
+only for platforms that don't meet the necessary pre-requisites.
+
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/155785/)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c | 12 +++++++
+ drivers/gpu/drm/xe/xe_sriov_pf_migration.c    | 32 ++++++++++++++++---
+ drivers/gpu/drm/xe/xe_sriov_pf_migration.h    |  1 +
+ .../gpu/drm/xe/xe_sriov_pf_migration_types.h  |  4 +--
+ 4 files changed, 42 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+index 35a12d48dcc1..78f7b842fc62 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+@@ -17,6 +17,7 @@
+ #include "xe_gt_sriov_pf_helpers.h"
+ #include "xe_gt_sriov_pf_migration.h"
+ #include "xe_gt_sriov_printk.h"
++#include "xe_guc.h"
+ #include "xe_guc_buf.h"
+ #include "xe_guc_ct.h"
+ #include "xe_migrate.h"
+@@ -1012,6 +1013,15 @@ static void action_ring_cleanup(void *arg)
+ 	ptr_ring_cleanup(r, destroy_pf_packet);
+ }
+ 
++static void pf_gt_migration_check_support(struct xe_gt *gt)
++{
++	if (IS_ENABLED(CONFIG_DRM_XE_DEBUG))
++		return;
++
++	if (GUC_FIRMWARE_VER(&gt->uc.guc) < MAKE_GUC_VER(70, 54, 0))
++		xe_sriov_pf_migration_disable(gt_to_xe(gt), "requires GuC version >= 70.54.0");
++}
++
+ /**
+  * xe_gt_sriov_pf_migration_init() - Initialize support for VF migration.
+  * @gt: the &xe_gt
+@@ -1028,6 +1038,8 @@ int xe_gt_sriov_pf_migration_init(struct xe_gt *gt)
+ 
+ 	xe_gt_assert(gt, IS_SRIOV_PF(xe));
+ 
++	pf_gt_migration_check_support(gt);
++
+ 	if (!pf_migration_supported(gt))
+ 		return 0;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+index 21b06ce6830a..aefc6d81c255 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+@@ -46,13 +46,34 @@ bool xe_sriov_pf_migration_supported(struct xe_device *xe)
+ {
+ 	xe_assert(xe, IS_SRIOV_PF(xe));
+ 
+-	return xe->sriov.pf.migration.supported;
++	return !xe->sriov.pf.migration.disabled;
+ }
+ 
+-static bool pf_check_migration_support(struct xe_device *xe)
++/**
++ * xe_sriov_pf_migration_disable - Turn off SR-IOV VF migration support on PF.
++ * @xe: the &xe_device instance.
++ * @fmt: format string for the log message, to be combined with following VAs.
++ */
++void xe_sriov_pf_migration_disable(struct xe_device *xe, const char *fmt, ...)
++{
++	struct va_format vaf;
++	va_list va_args;
++
++	xe_assert(xe, IS_SRIOV_PF(xe));
++
++	va_start(va_args, fmt);
++	vaf.fmt = fmt;
++	vaf.va  = &va_args;
++	xe_sriov_notice(xe, "migration disabled: %pV\n", &vaf);
++	va_end(va_args);
++
++	xe->sriov.pf.migration.disabled = true;
++}
++
++static void pf_migration_check_support(struct xe_device *xe)
+ {
+-	/* XXX: for now this is for feature enabling only */
+-	return IS_ENABLED(CONFIG_DRM_XE_DEBUG);
++	if (!xe_device_has_memirq(xe))
++		xe_sriov_pf_migration_disable(xe, "requires memory-based IRQ support");
+ }
+ 
+ static void pf_migration_cleanup(void *arg)
+@@ -77,7 +98,8 @@ int xe_sriov_pf_migration_init(struct xe_device *xe)
+ 
+ 	xe_assert(xe, IS_SRIOV_PF(xe));
+ 
+-	xe->sriov.pf.migration.supported = pf_check_migration_support(xe);
++	pf_migration_check_support(xe);
++
+ 	if (!xe_sriov_pf_migration_supported(xe))
+ 		return 0;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration.h b/drivers/gpu/drm/xe/xe_sriov_pf_migration.h
+index b806298a0bb6..f8f408df8481 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_migration.h
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration.h
+@@ -14,6 +14,7 @@ struct xe_sriov_packet;
+ 
+ int xe_sriov_pf_migration_init(struct xe_device *xe);
+ bool xe_sriov_pf_migration_supported(struct xe_device *xe);
++void xe_sriov_pf_migration_disable(struct xe_device *xe, const char *fmt, ...);
+ int xe_sriov_pf_migration_restore_produce(struct xe_device *xe, unsigned int vfid,
+ 					  struct xe_sriov_packet *data);
+ struct xe_sriov_packet *
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration_types.h b/drivers/gpu/drm/xe/xe_sriov_pf_migration_types.h
+index 363d673ee1dd..7d9a8a278d91 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_migration_types.h
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration_types.h
+@@ -14,8 +14,8 @@
+  * struct xe_sriov_pf_migration - Xe device level VF migration data
+  */
+ struct xe_sriov_pf_migration {
+-	/** @supported: indicates whether VF migration feature is supported */
+-	bool supported;
++	/** @disabled: indicates whether VF migration feature is disabled */
++	bool disabled;
+ };
+ 
+ /**
+-- 
+2.43.0
+

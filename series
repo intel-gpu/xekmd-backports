@@ -24,7 +24,7 @@ backport/patches/base/0001-drm-xe-doc-Document-device-wedged-and-runtime-surviv.
 backport/patches/base/0001-drm-xe-Add-support-to-handle-hardware-errors.patch
 backport/patches/base/0001-drm-xe-xe_hw_error-Handle-CSC-Firmware-reported-Hard.patch
 backport/patches/base/0001-drm-xe-xe_hw_error-Add-fault-injection-to-trigger-cs.patch
-# features/sriov
+# sriov
 backport/patches/features/sriov/0001-drm-xe-guc-Increase-GuC-crash-dump-buffer-size.patch
 backport/patches/features/sriov/0001-drm-xe-guc-Recommend-GUC-v70.49.4-for-PTL-BMG.patch
 backport/patches/features/sriov/0001-drm-xe-guc-Add-SLPC-power-profile-interface.patch
@@ -203,7 +203,53 @@ backport/patches/features/sriov/0001-drm-xe-Assert-that-VF-will-never-use-fixed-
 backport/patches/features/sriov/0001-drm-xe-vf-Do-not-disable-VF-migration-on-ATS-M.patch
 backport/patches/features/sriov/0001-drm-xe-vf-Enable-VF-resource-fixup-unconditionally.patch
 backport/patches/features/sriov/0001-drm-xe-vf-Don-t-claim-support-for-firmware-late-bind.patch
-# features/eu-debug
+backport/patches/features/sriov/0001-drm-xe-vf-Rename-sriov_update_device_info.patch
+backport/patches/features/sriov/0001-drm-xe-Keep-xe_gt_err-macro-definitions-together.patch
+backport/patches/features/sriov/0001-drm-xe-Drop-gt_-prefix-from-xe_gt_WARN-macros.patch
+backport/patches/features/sriov/0001-drm-xe-Prepare-format-for-GT-oriented-messages-in-on.patch
+backport/patches/features/sriov/0001-drm-xe-Add-dedicated-printk-macros-for-tile-and-devi.patch
+backport/patches/features/sriov/0001-drm-xe-Use-tile-oriented-messages-in-GGTT-code.patch
+backport/patches/features/sriov/0001-drm-xe-Update-SRIOV-printk-macros.patch
+backport/patches/features/sriov/0001-drm-xe-Add-tile-based-SRIOV-printk-macros.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Update-LMTT-to-use-tile-based-messages.patch
+backport/patches/features/sriov/0001-drm-xe-Update-MEMIRQ-to-use-tile-based-printk-macros.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Improve-reading-VF-config-blob-from-debugf.patch
+backport/patches/features/sriov/0001-drm-pcids-Split-PTL-pciids-group-to-make-wcl-subplat.patch
+backport/patches/features/sriov/0001-drm-i915-display-Add-definition-for-wcl-as-subplatfo.patch
+backport/patches/features/sriov/0001-drm-i915-xe3-Restrict-PTL-intel_encoder_is_c10phy-to.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Access-VF-s-register-using-dedicated-MMIO-.patch
+backport/patches/features/sriov/0001-drm-xe-Handle-Wa_22010954014-and-Wa_14022085890-as-d.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Remove-GuC-version-check-for-migration-sup.patch
+backport/patches/features/sriov/0001-drm-xe-Move-migration-support-to-device-level-struct.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Convert-control-state-to-bitmap.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Add-save-restore-control-state-stubs-and-c.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Add-data-structures-and-handlers-for-migra.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Add-helpers-for-migration-data-packet-allo.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Add-support-for-encap-decap-of-bitstream-t.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Add-minimalistic-migration-descriptor.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Expose-VF-migration-data-size-over-debugfs.patch
+backport/patches/features/sriov/0001-drm-xe-Add-sa-guc_buf_cache-sync-interface.patch
+backport/patches/features/sriov/0001-drm-xe-Allow-the-caller-to-pass-guc_buf_cache-size.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Increase-PF-GuC-Buffer-Cache-size-and-use-.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Remove-GuC-migration-data-save-restore-fro.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Don-t-save-GuC-VF-migration-data-on-pause.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Switch-VF-migration-GuC-save-restore-to-st.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Handle-GuC-migration-data-as-part-of-PF-co.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Add-helpers-for-VF-GGTT-migration-data-han.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Handle-GGTT-migration-data-as-part-of-PF-c.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Handle-MMIO-migration-data-as-part-of-PF-c.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Add-helper-to-retrieve-VF-s-LMEM-object.patch
+backport/patches/features/sriov/0001-drm-xe-migrate-Add-function-to-copy-of-VRAM-data-in-.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Handle-VRAM-migration-data-as-part-of-PF-c.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Add-wait-helper-for-VF-FLR.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Enable-SR-IOV-VF-migration.patch
+backport/patches/features/sriov/0001-drm-xe-pci-Introduce-a-helper-to-allow-VF-access-to-.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Export-helpers-for-VFIO.patch
+backport/patches/features/sriov/0001-drm-intel-bmg-Allow-device-ID-usage-with-single-argu.patch
+backport/patches/features/sriov/0001-vfio-xe-Add-device-specific-vfio_pci-driver-variant-.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Drop-the-VF-VRAM-BO-reference-on-successfu.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Check-for-fence-error-on-VRAM-save-restore.patch
+# eu-debug
 backport/patches/features/eu-debug/0001-ptrace-export-ptrace_may_access.patch
 backport/patches/features/eu-debug/0001-drm-xe-eudebug-Introduce-eudebug-support.patch
 backport/patches/features/eu-debug/0001-drm-xe-eudebug-Introduce-discovery-for-resources.patch

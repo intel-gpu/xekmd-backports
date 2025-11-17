@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Sun, 5 Oct 2025 15:36:37 +0200
+Subject: drm/xe: Update SRIOV printk macros
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Recently we introduced xe-based printk macros, use them instead
+of plain drm-based ones.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://lore.kernel.org/r/20251005133641.2651-2-michal.wajdeczko@intel.com
+(cherry-picked from commit c95f18020799a824b5d1b8b5d95390293f0c2912 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_printk.h | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_printk.h b/drivers/gpu/drm/xe/xe_sriov_printk.h
+index 117e1d541692..4c6b5c3d2190 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_printk.h
++++ b/drivers/gpu/drm/xe/xe_sriov_printk.h
+@@ -1,22 +1,22 @@
+ /* SPDX-License-Identifier: MIT */
+ /*
+- * Copyright © 2023 Intel Corporation
++ * Copyright © 2023-2025 Intel Corporation
+  */
+ 
+ #ifndef _XE_SRIOV_PRINTK_H_
+ #define _XE_SRIOV_PRINTK_H_
+ 
+-#include <drm/drm_print.h>
+-
+-#include "xe_device_types.h"
+-#include "xe_sriov_types.h"
++#include "xe_printk.h"
+ 
+ #define xe_sriov_printk_prefix(xe) \
+ 	((xe)->sriov.__mode == XE_SRIOV_MODE_PF ? "PF: " : \
+ 	 (xe)->sriov.__mode == XE_SRIOV_MODE_VF ? "VF: " : "")
+ 
++#define __XE_SRIOV_PRINTK_FMT(_xe, _fmt, _args...)	\
++	"%s" _fmt, xe_sriov_printk_prefix(_xe), ##_args
++
+ #define xe_sriov_printk(xe, _level, fmt, ...) \
+-	drm_##_level(&(xe)->drm, "%s" fmt, xe_sriov_printk_prefix(xe), ##__VA_ARGS__)
++	xe_##_level((xe), __XE_SRIOV_PRINTK_FMT((xe), fmt, ##__VA_ARGS__))
+ 
+ #define xe_sriov_err(xe, fmt, ...) \
+ 	xe_sriov_printk((xe), err, fmt, ##__VA_ARGS__)
+-- 
+2.43.0
+

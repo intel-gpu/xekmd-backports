@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Sun, 5 Oct 2025 15:36:40 +0200
+Subject: drm/xe: Update MEMIRQ to use tile-based printk macros
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We already have tile-based printk macros, there is no need to
+manually prepare MEMIRQ specific messages to include tile id.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://lore.kernel.org/r/20251005133641.2651-5-michal.wajdeczko@intel.com
+(cherry-picked from commit 430d3288776f790a05da02b81b53c8dec231ecd6 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_memirq.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_memirq.c b/drivers/gpu/drm/xe/xe_memirq.c
+index fc533165c231..2ef9d9aab264 100644
+--- a/drivers/gpu/drm/xe/xe_memirq.c
++++ b/drivers/gpu/drm/xe/xe_memirq.c
+@@ -14,16 +14,15 @@
+ #include "xe_device.h"
+ #include "xe_device_types.h"
+ #include "xe_gt.h"
+-#include "xe_gt_printk.h"
+ #include "xe_guc.h"
+ #include "xe_hw_engine.h"
+ #include "xe_map.h"
+ #include "xe_memirq.h"
++#include "xe_tile_printk.h"
+ 
+ #define memirq_assert(m, condition)	xe_tile_assert(memirq_to_tile(m), condition)
+ #define memirq_printk(m, _level, _fmt, ...)			\
+-	drm_##_level(&memirq_to_xe(m)->drm, "MEMIRQ%u: " _fmt,	\
+-		     memirq_to_tile(m)->id, ##__VA_ARGS__)
++	xe_tile_##_level(memirq_to_tile(m), "MEMIRQ: " _fmt, ##__VA_ARGS__)
+ 
+ #ifdef CONFIG_DRM_XE_DEBUG_MEMIRQ
+ #define memirq_debug(m, _fmt, ...)	memirq_printk(m, dbg, _fmt, ##__VA_ARGS__)
+-- 
+2.43.0
+

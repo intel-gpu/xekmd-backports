@@ -602,6 +602,13 @@ static const struct xe_rtp_entry_sr engine_was[] = {
 		       FUNC(xe_rtp_match_first_render_or_compute)),
 	  XE_RTP_ACTIONS(SET(TDL_TSL_CHICKEN, STK_ID_RESTRICT))
 	},
+	{ XE_RTP_NAME("18041344222"),
+	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(2001, 2002),
+		       FUNC(xe_rtp_match_first_render_or_compute),
+		       FUNC(xe_rtp_match_not_sriov_vf),
+		       FUNC(xe_rtp_match_gt_has_discontiguous_dss_groups)),
+	  XE_RTP_ACTIONS(SET(TDL_CHICKEN, EUSTALL_PERF_SAMPLING_DISABLE))
+	},
 
 	/* Xe2_LPM */
 
@@ -1038,7 +1045,14 @@ void xe_wa_device_dump(struct xe_device *xe, struct drm_printer *p)
 			drm_printf_indent(p, 1, "%s\n", device_oob_was[idx].name);
 }
 
-void xe_wa_dump(struct xe_gt *gt, struct drm_printer *p)
+/**
+ * xe_wa_gt_dump() - Dump GT workarounds into a drm printer.
+ * @gt: the &xe_gt
+ * @p: the &drm_printer
+ *
+ * Return: always 0.
+ */
+int xe_wa_gt_dump(struct xe_gt *gt, struct drm_printer *p)
 {
 	size_t idx;
 
@@ -1046,18 +1060,22 @@ void xe_wa_dump(struct xe_gt *gt, struct drm_printer *p)
 	for_each_set_bit(idx, gt->wa_active.gt, ARRAY_SIZE(gt_was))
 		drm_printf_indent(p, 1, "%s\n", gt_was[idx].name);
 
-	drm_printf(p, "\nEngine Workarounds\n");
+	drm_puts(p, "\n");
+	drm_printf(p, "Engine Workarounds\n");
 	for_each_set_bit(idx, gt->wa_active.engine, ARRAY_SIZE(engine_was))
 		drm_printf_indent(p, 1, "%s\n", engine_was[idx].name);
 
-	drm_printf(p, "\nLRC Workarounds\n");
+	drm_puts(p, "\n");
+	drm_printf(p, "LRC Workarounds\n");
 	for_each_set_bit(idx, gt->wa_active.lrc, ARRAY_SIZE(lrc_was))
 		drm_printf_indent(p, 1, "%s\n", lrc_was[idx].name);
 
-	drm_printf(p, "\nOOB Workarounds\n");
+	drm_puts(p, "\n");
+	drm_printf(p, "OOB Workarounds\n");
 	for_each_set_bit(idx, gt->wa_active.oob, ARRAY_SIZE(oob_was))
 		if (oob_was[idx].name)
 			drm_printf_indent(p, 1, "%s\n", oob_was[idx].name);
+	return 0;
 }
 
 /*

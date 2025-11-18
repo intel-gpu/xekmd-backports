@@ -13,9 +13,12 @@ struct xe_device;
 
 int xe_guc_ct_init_noalloc(struct xe_guc_ct *ct);
 int xe_guc_ct_init(struct xe_guc_ct *ct);
+int xe_guc_ct_init_post_hwconfig(struct xe_guc_ct *ct);
 int xe_guc_ct_enable(struct xe_guc_ct *ct);
+int xe_guc_ct_restart(struct xe_guc_ct *ct);
 void xe_guc_ct_disable(struct xe_guc_ct *ct);
 void xe_guc_ct_stop(struct xe_guc_ct *ct);
+void xe_guc_ct_flush_and_stop(struct xe_guc_ct *ct);
 void xe_guc_ct_fast_path(struct xe_guc_ct *ct);
 
 struct xe_guc_ct_snapshot *xe_guc_ct_snapshot_capture(struct xe_guc_ct *ct);
@@ -72,5 +75,14 @@ xe_guc_ct_send_block_no_fail(struct xe_guc_ct *ct, const u32 *action, u32 len)
 }
 
 long xe_guc_ct_queue_proc_time_jiffies(struct xe_guc_ct *ct);
+
+/**
+ * xe_guc_ct_wake_waiters() - GuC CT wake up waiters
+ * @ct: GuC CT object
+ */
+static inline void xe_guc_ct_wake_waiters(struct xe_guc_ct *ct)
+{
+	wake_up_all(&ct->wq);
+}
 
 #endif

@@ -1,0 +1,96 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Sun, 5 Oct 2025 15:36:38 +0200
+Subject: drm/xe: Add tile-based SRIOV printk macros
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We already have device and GT level SR-IOV specific macros, but
+unlike native case, we don't have yet tile-based ones.
+
+Add macros to match native use case and also update GT-based
+macros to rely on those new tile-based SR-IOV macros. This will
+slightly rearrange the output of the GT logs and instead:
+
+  [...] Tile0: GT0: PF: pushed VF1 config with 2 KLVs...
+
+we might see:
+
+  [...] PF: Tile0: GT0: pushed VF1 config with 2 KLVs...
+
+but that's even better.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://lore.kernel.org/r/20251005133641.2651-3-michal.wajdeczko@intel.com
+(cherry-picked from commit c66e4b6cae1f9cda645ed82e77c35d442cef400d linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_printk.h   |  7 +++--
+ drivers/gpu/drm/xe/xe_tile_sriov_printk.h | 33 +++++++++++++++++++++++
+ 2 files changed, 38 insertions(+), 2 deletions(-)
+ create mode 100644 drivers/gpu/drm/xe/xe_tile_sriov_printk.h
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_printk.h b/drivers/gpu/drm/xe/xe_gt_sriov_printk.h
+index 17624b16300a..d3457d608db8 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_printk.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_printk.h
+@@ -7,10 +7,13 @@
+ #define _XE_GT_SRIOV_PRINTK_H_
+ 
+ #include "xe_gt_printk.h"
+-#include "xe_sriov_printk.h"
++#include "xe_tile_sriov_printk.h"
++
++#define __XE_GT_SRIOV_PRINTK_FMT(_gt, _fmt, ...) \
++	__XE_TILE_SRIOV_PRINTK_FMT((_gt)->tile, __XE_GT_PRINTK_FMT((_gt), _fmt, ##__VA_ARGS__))
+ 
+ #define __xe_gt_sriov_printk(gt, _level, fmt, ...) \
+-	xe_gt_printk((gt), _level, "%s" fmt, xe_sriov_printk_prefix(gt_to_xe(gt)), ##__VA_ARGS__)
++	xe_sriov_##_level(gt_to_xe(gt), __XE_GT_SRIOV_PRINTK_FMT((gt), fmt, ##__VA_ARGS__))
+ 
+ #define xe_gt_sriov_err(_gt, _fmt, ...) \
+ 	__xe_gt_sriov_printk(_gt, err, _fmt, ##__VA_ARGS__)
+diff --git a/drivers/gpu/drm/xe/xe_tile_sriov_printk.h b/drivers/gpu/drm/xe/xe_tile_sriov_printk.h
+new file mode 100644
+index 000000000000..68323512872c
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_tile_sriov_printk.h
+@@ -0,0 +1,33 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#ifndef _XE_TILE_SRIOV_PRINTK_H_
++#define _XE_TILE_SRIOV_PRINTK_H_
++
++#include "xe_tile_printk.h"
++#include "xe_sriov_printk.h"
++
++#define __XE_TILE_SRIOV_PRINTK_FMT(_tile, _fmt, ...) \
++	__XE_TILE_PRINTK_FMT((_tile), _fmt, ##__VA_ARGS__)
++
++#define xe_tile_sriov_printk(_tile, _level, _fmt, ...) \
++	xe_sriov_##_level((_tile)->xe, __XE_TILE_SRIOV_PRINTK_FMT((_tile), _fmt, ##__VA_ARGS__))
++
++#define xe_tile_sriov_err(_tile, _fmt, ...) \
++	xe_tile_sriov_printk(_tile, err, _fmt, ##__VA_ARGS__)
++
++#define xe_tile_sriov_notice(_tile, _fmt, ...) \
++	xe_tile_sriov_printk(_tile, notice, _fmt, ##__VA_ARGS__)
++
++#define xe_tile_sriov_info(_tile, _fmt, ...) \
++	xe_tile_sriov_printk(_tile, info, _fmt, ##__VA_ARGS__)
++
++#define xe_tile_sriov_dbg(_tile, _fmt, ...) \
++	xe_tile_sriov_printk(_tile, dbg, _fmt, ##__VA_ARGS__)
++
++#define xe_tile_sriov_dbg_verbose(_tile, _fmt, ...) \
++	xe_tile_sriov_printk(_tile, dbg_verbose, _fmt, ##__VA_ARGS__)
++
++#endif
+-- 
+2.43.0
+

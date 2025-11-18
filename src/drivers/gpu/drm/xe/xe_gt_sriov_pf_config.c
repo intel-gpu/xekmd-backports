@@ -33,6 +33,7 @@
 #include "xe_migrate.h"
 #include "xe_sriov.h"
 #include "xe_ttm_vram_mgr.h"
+#include "xe_vram_types.h"
 #include "xe_wopcm.h"
 
 #define make_u64_from_u32(hi, lo) ((u64)((u64)(u32)(hi) << 32 | (u32)(lo)))
@@ -923,7 +924,8 @@ static int pf_config_bulk_set_u32_done(struct xe_gt *gt, unsigned int first, uns
 				       const char *what, const char *(*unit)(u32),
 				       unsigned int last, int err)
 {
-	xe_gt_assert(gt, first);
+	char name[8];
+
 	xe_gt_assert(gt, num_vfs);
 	xe_gt_assert(gt, first <= last);
 
@@ -931,8 +933,9 @@ static int pf_config_bulk_set_u32_done(struct xe_gt *gt, unsigned int first, uns
 		return pf_config_set_u32_done(gt, first, value, get(gt, first), what, unit, err);
 
 	if (unlikely(err)) {
-		xe_gt_sriov_notice(gt, "Failed to bulk provision VF%u..VF%u with %s\n",
-				   first, first + num_vfs - 1, what);
+		xe_gt_sriov_notice(gt, "Failed to bulk provision %s..VF%u with %s\n",
+				   xe_sriov_function_name(first, name, sizeof(name)),
+				   first + num_vfs - 1, what);
 		if (last > first)
 			pf_config_bulk_set_u32_done(gt, first, last - first, value,
 						    get, what, unit, last, 0);
@@ -941,8 +944,9 @@ static int pf_config_bulk_set_u32_done(struct xe_gt *gt, unsigned int first, uns
 
 	/* pick actual value from first VF - bulk provisioning shall be equal across all VFs */
 	value = get(gt, first);
-	xe_gt_sriov_info(gt, "VF%u..VF%u provisioned with %u%s %s\n",
-			 first, first + num_vfs - 1, value, unit(value), what);
+	xe_gt_sriov_info(gt, "%s..VF%u provisioned with %u%s %s\n",
+			 xe_sriov_function_name(first, name, sizeof(name)),
+			 first + num_vfs - 1, value, unit(value), what);
 	return 0;
 }
 
@@ -1474,22 +1478,16 @@ static int pf_provision_vf_lmem(struct xe_gt *gt, unsigned int vfid, u64 size)
 		return 0;
 
 	xe_gt_assert(gt, pf_get_lmem_alignment(gt) == SZ_2M);
-	bo = xe_bo_create_locked(xe, tile, NULL,
-				 ALIGN(size, PAGE_SIZE),
-				 ttm_bo_type_kernel,
-				 XE_BO_FLAG_VRAM_IF_DGFX(tile) |
-				 XE_BO_FLAG_NEEDS_2M |
-				 XE_BO_FLAG_PINNED |
-				 XE_BO_FLAG_PINNED_LATE_RESTORE);
+	bo = xe_bo_create_pin_range_novm(xe, tile,
+					 ALIGN(size, PAGE_SIZE), 0, ~0ull,
+					 ttm_bo_type_kernel,
+					 XE_BO_FLAG_VRAM_IF_DGFX(tile) |
+					 XE_BO_FLAG_NEEDS_2M |
+					 XE_BO_FLAG_PINNED |
+					 XE_BO_FLAG_PINNED_LATE_RESTORE |
+					 XE_BO_FLAG_FORCE_USER_VRAM);
 	if (IS_ERR(bo))
 		return PTR_ERR(bo);
-
-	err = xe_bo_pin(bo);
-	xe_bo_unlock(bo);
-	if (unlikely(err)) {
-		xe_bo_put(bo);
-		return err;
-	}
 
 	config->lmem_obj = bo;
 
@@ -1550,7 +1548,8 @@ int xe_gt_sriov_pf_config_set_lmem(struct xe_gt *gt, unsigned int vfid, u64 size
 {
 	int err;
 
-	xe_gt_assert(gt, xe_device_has_lmtt(gt_to_xe(gt)));
+	if (!xe_device_has_lmtt(gt_to_xe(gt)))
+		return -EPERM;
 
 	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
 	if (vfid)
@@ -1604,7 +1603,7 @@ static u64 pf_query_free_lmem(struct xe_gt *gt)
 {
 	struct xe_tile *tile = gt->tile;
 
-	return xe_ttm_vram_get_avail(&tile->mem.vram.ttm.manager);
+	return xe_ttm_vram_get_avail(&tile->mem.vram->ttm.manager);
 }
 
 static u64 pf_query_max_lmem(struct xe_gt *gt)
@@ -1725,7 +1724,7 @@ static int pf_provision_exec_quantum(struct xe_gt *gt, unsigned int vfid,
 	return 0;
 }
 
-static int pf_get_exec_quantum(struct xe_gt *gt, unsigned int vfid)
+static u32 pf_get_exec_quantum(struct xe_gt *gt, unsigned int vfid)
 {
 	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
 
@@ -1733,47 +1732,107 @@ static int pf_get_exec_quantum(struct xe_gt *gt, unsigned int vfid)
 }
 
 /**
- * xe_gt_sriov_pf_config_set_exec_quantum - Configure execution quantum for the VF.
+ * xe_gt_sriov_pf_config_set_exec_quantum_locked() - Configure PF/VF execution quantum.
  * @gt: the &xe_gt
- * @vfid: the VF identifier
+ * @vfid: the PF or VF identifier
+ * @exec_quantum: requested execution quantum in milliseconds (0 is infinity)
+ *
+ * This function can only be called on PF with the master mutex hold.
+ * It will log the provisioned value or an error in case of the failure.
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int xe_gt_sriov_pf_config_set_exec_quantum_locked(struct xe_gt *gt, unsigned int vfid,
+						  u32 exec_quantum)
+{
+	int err;
+
+	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+
+	err = pf_provision_exec_quantum(gt, vfid, exec_quantum);
+
+	return pf_config_set_u32_done(gt, vfid, exec_quantum,
+				      pf_get_exec_quantum(gt, vfid),
+				      "execution quantum", exec_quantum_unit, err);
+}
+
+/**
+ * xe_gt_sriov_pf_config_set_exec_quantum() - Configure PF/VF execution quantum.
+ * @gt: the &xe_gt
+ * @vfid: the PF or VF identifier
  * @exec_quantum: requested execution quantum in milliseconds (0 is infinity)
  *
  * This function can only be called on PF.
+ * It will log the provisioned value or an error in case of the failure.
  *
  * Return: 0 on success or a negative error code on failure.
  */
 int xe_gt_sriov_pf_config_set_exec_quantum(struct xe_gt *gt, unsigned int vfid,
 					   u32 exec_quantum)
 {
-	int err;
+	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
 
-	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
-	err = pf_provision_exec_quantum(gt, vfid, exec_quantum);
-	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
-
-	return pf_config_set_u32_done(gt, vfid, exec_quantum,
-				      xe_gt_sriov_pf_config_get_exec_quantum(gt, vfid),
-				      "execution quantum", exec_quantum_unit, err);
+	return xe_gt_sriov_pf_config_set_exec_quantum_locked(gt, vfid, exec_quantum);
 }
 
 /**
- * xe_gt_sriov_pf_config_get_exec_quantum - Get VF's execution quantum.
+ * xe_gt_sriov_pf_config_get_exec_quantum_locked() - Get PF/VF execution quantum.
  * @gt: the &xe_gt
- * @vfid: the VF identifier
+ * @vfid: the PF or VF identifier
+ *
+ * This function can only be called on PF with the master mutex hold.
+ *
+ * Return: execution quantum in milliseconds (or 0 if infinity).
+ */
+u32 xe_gt_sriov_pf_config_get_exec_quantum_locked(struct xe_gt *gt, unsigned int vfid)
+{
+	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+
+	return pf_get_exec_quantum(gt, vfid);
+}
+
+/**
+ * xe_gt_sriov_pf_config_get_exec_quantum() - Get PF/VF execution quantum.
+ * @gt: the &xe_gt
+ * @vfid: the PF or VF identifier
  *
  * This function can only be called on PF.
  *
- * Return: VF's (or PF's) execution quantum in milliseconds.
+ * Return: execution quantum in milliseconds (or 0 if infinity).
  */
 u32 xe_gt_sriov_pf_config_get_exec_quantum(struct xe_gt *gt, unsigned int vfid)
 {
-	u32 exec_quantum;
+	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
 
-	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
-	exec_quantum = pf_get_exec_quantum(gt, vfid);
-	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
+	return pf_get_exec_quantum(gt, vfid);
+}
 
-	return exec_quantum;
+/**
+ * xe_gt_sriov_pf_config_bulk_set_exec_quantum_locked() - Configure EQ for PF and VFs.
+ * @gt: the &xe_gt to configure
+ * @exec_quantum: requested execution quantum in milliseconds (0 is infinity)
+ *
+ * This function can only be called on PF with the master mutex hold.
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int xe_gt_sriov_pf_config_bulk_set_exec_quantum_locked(struct xe_gt *gt, u32 exec_quantum)
+{
+	unsigned int totalvfs = xe_gt_sriov_pf_get_totalvfs(gt);
+	unsigned int n;
+	int err = 0;
+
+	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+
+	for (n = 0; n <= totalvfs; n++) {
+		err = pf_provision_exec_quantum(gt, VFID(n), exec_quantum);
+		if (err)
+			break;
+	}
+
+	return pf_config_bulk_set_u32_done(gt, 0, 1 + totalvfs, exec_quantum,
+					   pf_get_exec_quantum, "execution quantum",
+					   exec_quantum_unit, n, err);
 }
 
 static const char *preempt_timeout_unit(u32 preempt_timeout)
@@ -1796,7 +1855,7 @@ static int pf_provision_preempt_timeout(struct xe_gt *gt, unsigned int vfid,
 	return 0;
 }
 
-static int pf_get_preempt_timeout(struct xe_gt *gt, unsigned int vfid)
+static u32 pf_get_preempt_timeout(struct xe_gt *gt, unsigned int vfid)
 {
 	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
 
@@ -1804,9 +1863,34 @@ static int pf_get_preempt_timeout(struct xe_gt *gt, unsigned int vfid)
 }
 
 /**
- * xe_gt_sriov_pf_config_set_preempt_timeout - Configure preemption timeout for the VF.
+ * xe_gt_sriov_pf_config_set_preempt_timeout_locked() - Configure PF/VF preemption timeout.
  * @gt: the &xe_gt
- * @vfid: the VF identifier
+ * @vfid: the PF or VF identifier
+ * @preempt_timeout: requested preemption timeout in microseconds (0 is infinity)
+ *
+ * This function can only be called on PF with the master mutex hold.
+ * It will log the provisioned value or an error in case of the failure.
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int xe_gt_sriov_pf_config_set_preempt_timeout_locked(struct xe_gt *gt, unsigned int vfid,
+						     u32 preempt_timeout)
+{
+	int err;
+
+	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+
+	err = pf_provision_preempt_timeout(gt, vfid, preempt_timeout);
+
+	return pf_config_set_u32_done(gt, vfid, preempt_timeout,
+				      pf_get_preempt_timeout(gt, vfid),
+				      "preemption timeout", preempt_timeout_unit, err);
+}
+
+/**
+ * xe_gt_sriov_pf_config_set_preempt_timeout() - Configure PF/VF preemption timeout.
+ * @gt: the &xe_gt
+ * @vfid: the PF or VF identifier
  * @preempt_timeout: requested preemption timeout in microseconds (0 is infinity)
  *
  * This function can only be called on PF.
@@ -1816,35 +1900,69 @@ static int pf_get_preempt_timeout(struct xe_gt *gt, unsigned int vfid)
 int xe_gt_sriov_pf_config_set_preempt_timeout(struct xe_gt *gt, unsigned int vfid,
 					      u32 preempt_timeout)
 {
-	int err;
+	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
 
-	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
-	err = pf_provision_preempt_timeout(gt, vfid, preempt_timeout);
-	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
-
-	return pf_config_set_u32_done(gt, vfid, preempt_timeout,
-				      xe_gt_sriov_pf_config_get_preempt_timeout(gt, vfid),
-				      "preemption timeout", preempt_timeout_unit, err);
+	return xe_gt_sriov_pf_config_set_preempt_timeout_locked(gt, vfid, preempt_timeout);
 }
 
 /**
- * xe_gt_sriov_pf_config_get_preempt_timeout - Get VF's preemption timeout.
+ * xe_gt_sriov_pf_config_get_preempt_timeout_locked() - Get PF/VF preemption timeout.
  * @gt: the &xe_gt
- * @vfid: the VF identifier
+ * @vfid: the PF or VF identifier
+ *
+ * This function can only be called on PF with the master mutex hold.
+ *
+ * Return: preemption timeout in microseconds (or 0 if infinity).
+ */
+u32 xe_gt_sriov_pf_config_get_preempt_timeout_locked(struct xe_gt *gt, unsigned int vfid)
+{
+	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+
+	return pf_get_preempt_timeout(gt, vfid);
+}
+
+/**
+ * xe_gt_sriov_pf_config_get_preempt_timeout() - Get PF/VF preemption timeout.
+ * @gt: the &xe_gt
+ * @vfid: the PF or VF identifier
  *
  * This function can only be called on PF.
  *
- * Return: VF's (or PF's) preemption timeout in microseconds.
+ * Return: preemption timeout in microseconds (or 0 if infinity).
  */
 u32 xe_gt_sriov_pf_config_get_preempt_timeout(struct xe_gt *gt, unsigned int vfid)
 {
-	u32 preempt_timeout;
+	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
 
-	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
-	preempt_timeout = pf_get_preempt_timeout(gt, vfid);
-	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
+	return pf_get_preempt_timeout(gt, vfid);
+}
 
-	return preempt_timeout;
+/**
+ * xe_gt_sriov_pf_config_bulk_set_preempt_timeout_locked() - Configure PT for PF and VFs.
+ * @gt: the &xe_gt to configure
+ * @preempt_timeout: requested preemption timeout in microseconds (0 is infinity)
+ *
+ * This function can only be called on PF with the master mutex hold.
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int xe_gt_sriov_pf_config_bulk_set_preempt_timeout_locked(struct xe_gt *gt, u32 preempt_timeout)
+{
+	unsigned int totalvfs = xe_gt_sriov_pf_get_totalvfs(gt);
+	unsigned int n;
+	int err = 0;
+
+	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+
+	for (n = 0; n <= totalvfs; n++) {
+		err = pf_provision_preempt_timeout(gt, VFID(n), preempt_timeout);
+		if (err)
+			break;
+	}
+
+	return pf_config_bulk_set_u32_done(gt, 0, 1 + totalvfs, preempt_timeout,
+					   pf_get_preempt_timeout, "preemption timeout",
+					   preempt_timeout_unit, n, err);
 }
 
 static const char *sched_priority_unit(u32 priority)

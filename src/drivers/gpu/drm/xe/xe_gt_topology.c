@@ -12,6 +12,7 @@
 #include "regs/xe_gt_regs.h"
 #include "xe_assert.h"
 #include "xe_gt.h"
+#include "xe_gt_mcr.h"
 #include "xe_gt_printk.h"
 #include "xe_mmio.h"
 #include "xe_wa.h"
@@ -262,8 +263,14 @@ static const char *eu_type_to_str(enum xe_gt_eu_type eu_type)
 	return NULL;
 }
 
-void
-xe_gt_topology_dump(struct xe_gt *gt, struct drm_printer *p)
+/**
+ * xe_gt_topology_dump() - Dump GT topology into a drm printer.
+ * @gt: the &xe_gt
+ * @p: the &drm_printer
+ *
+ * Return: always 0.
+ */
+int xe_gt_topology_dump(struct xe_gt *gt, struct drm_printer *p)
 {
 	drm_printf(p, "dss mask (geometry): %*pb\n", XE_MAX_DSS_FUSE_BITS,
 		   gt->fuse_topo.g_dss_mask);
@@ -277,6 +284,7 @@ xe_gt_topology_dump(struct xe_gt *gt, struct drm_printer *p)
 
 	drm_printf(p, "L3 bank mask:        %*pb\n", XE_MAX_L3_BANK_MASK_BITS,
 		   gt->fuse_topo.l3_bank_mask);
+	return 0;
 }
 
 /*
@@ -327,4 +335,20 @@ bool xe_gt_has_geometry_dss(struct xe_gt *gt, unsigned int dss)
 bool xe_gt_has_compute_dss(struct xe_gt *gt, unsigned int dss)
 {
 	return test_bit(dss, gt->fuse_topo.c_dss_mask);
+}
+
+bool xe_gt_has_discontiguous_dss_groups(const struct xe_gt *gt)
+{
+	unsigned int xecore;
+	int last_group = -1;
+	u16 group, instance;
+
+	for_each_dss_steering(xecore, gt, group, instance) {
+		if (last_group != group) {
+			if (group - last_group > 1)
+				return true;
+			last_group = group;
+		}
+	}
+	return false;
 }

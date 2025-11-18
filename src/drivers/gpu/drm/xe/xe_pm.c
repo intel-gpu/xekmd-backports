@@ -23,6 +23,7 @@
 #include "xe_irq.h"
 #include "xe_pcode.h"
 #include "xe_pxp.h"
+#include "xe_sriov_vf_ccs.h"
 #include "xe_trace.h"
 #include "xe_vm.h"
 #include "xe_wa.h"
@@ -209,6 +210,9 @@ int xe_pm_resume(struct xe_device *xe)
 
 	xe_pxp_pm_resume(xe->pxp);
 
+	if (IS_VF_CCS_READY(xe))
+		xe_sriov_vf_ccs_register_context(xe);
+
 	drm_dbg(&xe->drm, "Device resumed\n");
 	return 0;
 err:
@@ -243,6 +247,10 @@ static bool xe_pm_pci_d3cold_capable(struct xe_device *xe)
 static void xe_pm_runtime_init(struct xe_device *xe)
 {
 	struct device *dev = xe->drm.dev;
+
+	/* Our current VFs do not support RPM. so, disable it */
+	if (IS_SRIOV_VF(xe))
+		return;
 
 	/*
 	 * Disable the system suspend direct complete optimization.
@@ -388,6 +396,10 @@ err_unregister:
 static void xe_pm_runtime_fini(struct xe_device *xe)
 {
 	struct device *dev = xe->drm.dev;
+
+	/* Our current VFs do not support RPM. so, disable it */
+	if (IS_SRIOV_VF(xe))
+		return;
 
 	pm_runtime_get_sync(dev);
 	pm_runtime_forbid(dev);
@@ -579,6 +591,9 @@ int xe_pm_runtime_resume(struct xe_device *xe)
 	}
 
 	xe_pxp_pm_resume(xe->pxp);
+
+	if (IS_VF_CCS_READY(xe))
+		xe_sriov_vf_ccs_register_context(xe);
 
 out:
 	xe_rpm_lockmap_release(xe);

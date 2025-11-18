@@ -9,12 +9,18 @@
 #include <linux/mutex.h>
 #include <linux/types.h>
 
+#include "xe_sriov_pf_provision_types.h"
 #include "xe_sriov_pf_service_types.h"
+
+struct kobject;
 
 /**
  * struct xe_sriov_metadata - per-VF device level metadata
  */
 struct xe_sriov_metadata {
+	/** @kobj: kobject representing VF in PF's SR-IOV sysfs tree. */
+	struct kobject *kobj;
+
 	/** @version: negotiated VF/PF ABI version */
 	struct xe_sriov_pf_service_version version;
 };
@@ -35,8 +41,17 @@ struct xe_device_pf {
 	/** @master_lock: protects all VFs configurations across GTs */
 	struct mutex master_lock;
 
+	/** @provision: device level provisioning data. */
+	struct xe_sriov_pf_provision provision;
+
 	/** @service: device level service data. */
 	struct xe_sriov_pf_service service;
+
+	/** @sysfs: device level sysfs data. */
+	struct {
+		/** @sysfs.root: the root kobject for all SR-IOV entries in sysfs. */
+		struct kobject *root;
+	} sysfs;
 
 	/** @vfs: metadata for all VFs. */
 	struct xe_sriov_metadata *vfs;

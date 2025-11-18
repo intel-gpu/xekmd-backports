@@ -22,8 +22,10 @@
 #include "xe_pm.h"
 #include "xe_pxp_debugfs.h"
 #include "xe_sriov.h"
-#include "xe_sriov_pf.h"
+#include "xe_sriov_pf_debugfs.h"
+#include "xe_sriov_vf.h"
 #include "xe_step.h"
+#include "xe_tile_debugfs.h"
 #include "xe_wa.h"
 #include "xe_vsec.h"
 
@@ -36,7 +38,7 @@
 DECLARE_FAULT_ATTR(gt_reset_failure);
 
 static void read_residency_counter(struct xe_device *xe, struct xe_mmio *mmio,
-				   u32 offset, char *name, struct drm_printer *p)
+				   u32 offset, const char *name, struct drm_printer *p)
 {
 	u64 residency = 0;
 	int ret;
@@ -132,9 +134,9 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
 	p = drm_seq_file_printer(m);
 	xe_pm_runtime_get(xe);
 	mmio = xe_root_tile_mmio(xe);
-	struct {
+	static const struct {
 		u32 offset;
-		char *name;
+		const char *name;
 	} residencies[] = {
 		{BMG_G2_RESIDENCY_OFFSET, "Package G2"},
 		{BMG_G6_RESIDENCY_OFFSET, "Package G6"},
@@ -161,9 +163,9 @@ static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
 	xe_pm_runtime_get(xe);
 	mmio = xe_root_tile_mmio(xe);
 
-	struct {
+	static const struct {
 		u32 offset;
-		char *name;
+		const char *name;
 	} residencies[] = {
 		{BMG_PCIE_LINK_L0_RESIDENCY_OFFSET, "PCIE LINK L0 RESIDENCY"},
 		{BMG_PCIE_LINK_L1_RESIDENCY_OFFSET, "PCIE LINK L1 RESIDENCY"},
@@ -333,8 +335,10 @@ void xe_debugfs_register(struct xe_device *xe)
 	struct drm_minor *minor = xe->drm.primary;
 	struct dentry *root = minor->debugfs_root;
 	struct ttm_resource_manager *man;
+	struct xe_tile *tile;
 	struct xe_gt *gt;
 	u32 mem_type;
+	u8 tile_id;
 	u8 id;
 
 	drm_debugfs_create_files(debugfs_list,
@@ -373,6 +377,9 @@ void xe_debugfs_register(struct xe_device *xe)
 	if (man)
 		ttm_resource_manager_create_debugfs(man, root, "stolen_mm");
 
+	for_each_tile(tile, xe, tile_id)
+		xe_tile_debugfs_register(tile);
+
 	for_each_gt(gt, xe, id)
 		xe_gt_debugfs_register(gt);
 
@@ -382,4 +389,6 @@ void xe_debugfs_register(struct xe_device *xe)
 
 	if (IS_SRIOV_PF(xe))
 		xe_sriov_pf_debugfs_register(xe, root);
+	else if (IS_SRIOV_VF(xe))
+		xe_sriov_vf_debugfs_register(xe, root);
 }

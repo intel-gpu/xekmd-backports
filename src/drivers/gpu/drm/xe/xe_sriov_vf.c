@@ -3,19 +3,15 @@
  * Copyright © 2023-2024 Intel Corporation
  */
 
+#include <drm/drm_debugfs.h>
 #include <drm/drm_managed.h>
 
-#include "xe_assert.h"
-#include "xe_device.h"
 #include "xe_gt.h"
-#include "xe_gt_sriov_printk.h"
 #include "xe_gt_sriov_vf.h"
-#include "xe_guc_ct.h"
-#include "xe_pm.h"
-#include "xe_sriov.h"
+#include "xe_guc.h"
 #include "xe_sriov_printk.h"
 #include "xe_sriov_vf.h"
-#include "xe_tile_sriov_vf.h"
+#include "xe_sriov_vf_ccs.h"
 
 /**
  * DOC: VF restore procedure in PF KMD and VF KMD
@@ -124,16 +120,62 @@
  *      |                               |                               |
  */
 
-static bool vf_migration_supported(struct xe_device *xe)
+/**
+ * xe_sriov_vf_migration_supported - Report whether SR-IOV VF migration is
+ * supported or not.
+ * @xe: the &xe_device to check
+ *
+ * Returns: true if VF migration is supported, false otherwise.
+ */
+bool xe_sriov_vf_migration_supported(struct xe_device *xe)
+{
+	xe_assert(xe, IS_SRIOV_VF(xe));
+	return xe->sriov.vf.migration.enabled;
+}
+
+static void vf_disable_migration(struct xe_device *xe, const char *fmt, ...)
+{
+	struct va_format vaf;
+	va_list va_args;
+
+	xe_assert(xe, IS_SRIOV_VF(xe));
+
+	va_start(va_args, fmt);
+	vaf.fmt = fmt;
+	vaf.va  = &va_args;
+	xe_sriov_notice(xe, "migration disabled: %pV\n", &vaf);
+	va_end(va_args);
+
+	xe->sriov.vf.migration.enabled = false;
+}
+
+static void vf_migration_init_early(struct xe_device *xe)
 {
 	/*
 	 * TODO: Add conditions to allow specific platforms, when they're
 	 * supported at production quality.
 	 */
-	return IS_ENABLED(CPTCFG_DRM_XE_DEBUG);
-}
+	if (!IS_ENABLED(CPTCFG_DRM_XE_DEBUG))
+		return vf_disable_migration(xe,
+					    "experimental feature not available on production builds");
 
-static void migration_worker_func(struct work_struct *w);
+	if (GRAPHICS_VER(xe) < 20)
+		return vf_disable_migration(xe, "requires gfx version >= 20, but only %u found",
+					    GRAPHICS_VER(xe));
+
+	if (!IS_DGFX(xe)) {
+		struct xe_uc_fw_version guc_version;
+
+		xe_gt_sriov_vf_guc_versions(xe_device_get_gt(xe, 0), NULL, &guc_version);
+		if (MAKE_GUC_VER_STRUCT(guc_version) < MAKE_GUC_VER(1, 23, 0))
+			return vf_disable_migration(xe,
+						    "CCS migration requires GuC ABI >= 1.23 but only %u.%u found",
+						    guc_version.major, guc_version.minor);
+	}
+
+	xe->sriov.vf.migration.enabled = true;
+	xe_sriov_dbg(xe, "migration support enabled\n");
+}
 
 /**
  * xe_sriov_vf_init_early - Initialize SR-IOV VF specific data.
@@ -141,168 +183,50 @@ static void migration_worker_func(struct work_struct *w);
  */
 void xe_sriov_vf_init_early(struct xe_device *xe)
 {
-	INIT_WORK(&xe->sriov.vf.migration.worker, migration_worker_func);
-
-	if (!vf_migration_supported(xe))
-		xe_sriov_info(xe, "migration not supported by this module version\n");
+	vf_migration_init_early(xe);
 }
 
-static bool gt_vf_post_migration_needed(struct xe_gt *gt)
-{
-	return test_bit(gt->info.id, &gt_to_xe(gt)->sriov.vf.migration.gt_flags);
-}
-
-/*
- * Notify GuCs marked in flags about resource fixups apply finished.
- * @xe: the &xe_device struct instance
- * @gt_flags: flags marking to which GTs the notification shall be sent
+/**
+ * xe_sriov_vf_init_late() - SR-IOV VF late initialization functions.
+ * @xe: the &xe_device to initialize
+ *
+ * This function initializes code for CCS migration.
+ *
+ * Return: 0 on success or a negative error code on failure.
  */
-static int vf_post_migration_notify_resfix_done(struct xe_device *xe, unsigned long gt_flags)
+int xe_sriov_vf_init_late(struct xe_device *xe)
 {
-	struct xe_gt *gt;
-	unsigned int id;
 	int err = 0;
 
-	for_each_gt(gt, xe, id) {
-		if (!test_bit(id, &gt_flags))
-			continue;
-		/* skip asking GuC for RESFIX exit if new recovery request arrived */
-		if (gt_vf_post_migration_needed(gt))
-			continue;
-		err = xe_gt_sriov_vf_notify_resfix_done(gt);
-		if (err)
-			break;
-		clear_bit(id, &gt_flags);
-	}
+	if (xe_sriov_vf_migration_supported(xe))
+		err = xe_sriov_vf_ccs_init(xe);
 
-	if (gt_flags && !err)
-		drm_dbg(&xe->drm, "another recovery imminent, skipped some notifications\n");
 	return err;
 }
 
-static int vf_get_next_migrated_gt_id(struct xe_device *xe)
+static int sa_info_vf_ccs(struct seq_file *m, void *data)
 {
-	struct xe_gt *gt;
-	unsigned int id;
+	struct drm_info_node *node = m->private;
+	struct xe_device *xe = to_xe_device(node->minor->dev);
+	struct drm_printer p = drm_seq_file_printer(m);
 
-	for_each_gt(gt, xe, id) {
-		if (test_and_clear_bit(id, &xe->sriov.vf.migration.gt_flags))
-			return id;
-	}
-	return -1;
-}
-
-/**
- * Perform post-migration fixups on a single GT.
- *
- * After migration, GuC needs to be re-queried for VF configuration to check
- * if it matches previous provisioning. Most of VF provisioning shall be the
- * same, except GGTT range, since GGTT is not virtualized per-VF. If GGTT
- * range has changed, we have to perform fixups - shift all GGTT references
- * used anywhere within the driver. After the fixups in this function succeed,
- * it is allowed to ask the GuC bound to this GT to continue normal operation.
- *
- * Returns: 0 if the operation completed successfully, or a negative error
- * code otherwise.
- */
-static int gt_vf_post_migration_fixups(struct xe_gt *gt)
-{
-	s64 shift;
-	int err;
-
-	err = xe_gt_sriov_vf_query_config(gt);
-	if (err)
-		return err;
-
-	shift = xe_gt_sriov_vf_ggtt_shift(gt);
-	if (shift) {
-		xe_tile_sriov_vf_fixup_ggtt_nodes(gt_to_tile(gt), shift);
-		/* FIXME: add the recovery steps */
-		xe_guc_ct_fixup_messages_with_ggtt(&gt->uc.guc.ct, shift);
-	}
+	xe_sriov_vf_ccs_print(xe, &p);
 	return 0;
 }
 
-static void vf_post_migration_recovery(struct xe_device *xe)
-{
-	unsigned long fixed_gts = 0;
-	int id, err;
-
-	drm_dbg(&xe->drm, "migration recovery in progress\n");
-	xe_pm_runtime_get(xe);
-
-	if (!vf_migration_supported(xe)) {
-		xe_sriov_err(xe, "migration not supported by this module version\n");
-		err = -ENOTRECOVERABLE;
-		goto fail;
-	}
-
-	while (id = vf_get_next_migrated_gt_id(xe), id >= 0) {
-		struct xe_gt *gt = xe_device_get_gt(xe, id);
-
-		err = gt_vf_post_migration_fixups(gt);
-		if (err)
-			goto fail;
-
-		set_bit(id, &fixed_gts);
-	}
-
-	err = vf_post_migration_notify_resfix_done(xe, fixed_gts);
-	if (err)
-		goto fail;
-
-	xe_pm_runtime_put(xe);
-	drm_notice(&xe->drm, "migration recovery ended\n");
-	return;
-fail:
-	xe_pm_runtime_put(xe);
-	drm_err(&xe->drm, "migration recovery failed (%pe)\n", ERR_PTR(err));
-	xe_device_declare_wedged(xe);
-}
-
-static void migration_worker_func(struct work_struct *w)
-{
-	struct xe_device *xe = container_of(w, struct xe_device,
-					    sriov.vf.migration.worker);
-
-	vf_post_migration_recovery(xe);
-}
-
-/*
- * Check if post-restore recovery is coming on any of GTs.
- * @xe: the &xe_device struct instance
- *
- * Return: True if migration recovery worker will soon be running. Any worker currently
- * executing does not affect the result.
- */
-static bool vf_ready_to_recovery_on_any_gts(struct xe_device *xe)
-{
-	struct xe_gt *gt;
-	unsigned int id;
-
-	for_each_gt(gt, xe, id) {
-		if (test_bit(id, &xe->sriov.vf.migration.gt_flags))
-			return true;
-	}
-	return false;
-}
+static const struct drm_info_list debugfs_list[] = {
+	{ .name = "sa_info_vf_ccs", .show = sa_info_vf_ccs },
+};
 
 /**
- * xe_sriov_vf_start_migration_recovery - Start VF migration recovery.
- * @xe: the &xe_device to start recovery on
+ * xe_sriov_vf_debugfs_register - Register VF debugfs attributes.
+ * @xe: the &xe_device
+ * @root: the root &dentry
  *
- * This function shall be called only by VF.
+ * Prepare debugfs attributes exposed by the VF.
  */
-void xe_sriov_vf_start_migration_recovery(struct xe_device *xe)
+void xe_sriov_vf_debugfs_register(struct xe_device *xe, struct dentry *root)
 {
-	bool started;
-
-	xe_assert(xe, IS_SRIOV_VF(xe));
-
-	if (!vf_ready_to_recovery_on_any_gts(xe))
-		return;
-
-	started = queue_work(xe->sriov.wq, &xe->sriov.vf.migration.worker);
-	drm_info(&xe->drm, "VF migration recovery %s\n", started ?
-		 "scheduled" : "already in progress");
+	drm_debugfs_create_files(debugfs_list, ARRAY_SIZE(debugfs_list),
+				 root, xe->drm.primary);
 }

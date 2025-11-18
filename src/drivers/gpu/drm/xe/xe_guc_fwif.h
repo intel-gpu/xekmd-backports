@@ -45,6 +45,11 @@
 #define GUC_MAX_ENGINE_CLASSES		16
 #define GUC_MAX_INSTANCES_PER_CLASS	32
 
+#define GUC_CONTEXT_NORMAL			0
+#define GUC_CONTEXT_COMPRESSION_SAVE		1
+#define GUC_CONTEXT_COMPRESSION_RESTORE	2
+#define GUC_CONTEXT_COUNT			(GUC_CONTEXT_COMPRESSION_RESTORE + 1)
+
 /* Helper for context registration H2G */
 struct guc_ctxt_registration_info {
 	u32 flags;
@@ -60,6 +65,7 @@ struct guc_ctxt_registration_info {
 	u32 hwlrca_hi;
 };
 #define CONTEXT_REGISTRATION_FLAG_KMD	BIT(0)
+#define CONTEXT_REGISTRATION_FLAG_TYPE	GENMASK(2, 1)
 
 /* 32-bit KLV structure as used by policy updates and others */
 struct guc_klv_generic_dw_t {

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Fri, 2 Jun 2023 01:33:14 +0200
-Subject: [PATCH] drm/xe: Add EUDEBUG_ENABLE exec queue property
+Subject: drm/xe: Add EUDEBUG_ENABLE exec queue property
 
 Introduce exec queue immutable property of eudebug
 with a flags as value to enable eudebug specific feature(s).
@@ -35,7 +35,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  5 files changed, 64 insertions(+), 6 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index fecb7c8a9779..4644d6846aae 100644
+index fecb7c8a9..4644d6846 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -1338,7 +1338,7 @@ static int exec_queue_create_events(struct xe_eudebug *d,
@@ -57,7 +57,7 @@ index fecb7c8a9779..4644d6846aae 100644
  
  	h_c = find_handle(d->res, XE_EUDEBUG_RES_TYPE_CLIENT, xef);
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 01b372ea9115..4c261f1d60eb 100644
+index bc2992bc3..453525291 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -180,6 +180,9 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
@@ -132,18 +132,18 @@ index 01b372ea9115..4c261f1d60eb 100644
  
  	idx = array_index_nospec(ext.property, ARRAY_SIZE(exec_queue_set_property_funcs));
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
-index 411d7316cdd7..544312a2eac6 100644
+index df7cfe7b2..129e58e08 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.h
-@@ -85,5 +85,6 @@ void xe_exec_queue_update_run_ticks(struct xe_exec_queue *q);
+@@ -84,5 +84,6 @@ int xe_exec_queue_last_fence_test_dep(struct xe_exec_queue *q,
+ void xe_exec_queue_update_run_ticks(struct xe_exec_queue *q);
  int xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch);
- void xe_exec_queue_jobs_ring_restore(struct xe_exec_queue *q);
  struct xe_lrc *xe_exec_queue_lrc(struct xe_exec_queue *q);
 +int xe_exec_queue_is_debuggable(struct xe_exec_queue *q);
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index 9093cc95f3cf..a9fbffa8b435 100644
+index 9093cc95f..a9fbffa8b 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
 @@ -96,6 +96,13 @@ struct xe_exec_queue {
@@ -161,7 +161,7 @@ index 9093cc95f3cf..a9fbffa8b435 100644
  		/** @multi_gt_list: list head for VM bind engines if multi-GT */
  		struct list_head multi_gt_list;
 diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
-index 4c5eaba897e0..9c29324fe0ae 100644
+index 4c5eaba89..9c29324fe 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.c
 +++ b/drivers/gpu/drm/xe/xe_lrc.c
 @@ -1308,8 +1308,7 @@ setup_indirect_ctx(struct xe_lrc *lrc, struct xe_hw_engine *hwe)

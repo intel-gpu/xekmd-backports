@@ -1,0 +1,133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Fri, 3 Oct 2025 01:38:22 +0200
+Subject: Revert "drm/xe/vf: Rebase exec queue parallel commands during
+ migration recovery"
+
+This reverts commit ba180a362128cb71d16c3f0ce6645448011d2607.
+
+Due to change in the VF migration recovery design this code
+is not needed any more.
+
+v3:
+ - Add commit message (Michal / Lucas)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20251002233824.203417-2-michal.wajdeczko@intel.com
+(backported from commit 08c98f3f2bd7bf5dddd98b17c7caf94d07fad107 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/abi/guc_actions_abi.h |  8 ----
+ drivers/gpu/drm/xe/xe_guc_submit.c       | 54 ------------------------
+ 2 files changed, 62 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/abi/guc_actions_abi.h b/drivers/gpu/drm/xe/abi/guc_actions_abi.h
+index 1baa969aa..b9f67d7a0 100644
+--- a/drivers/gpu/drm/xe/abi/guc_actions_abi.h
++++ b/drivers/gpu/drm/xe/abi/guc_actions_abi.h
+@@ -194,14 +194,6 @@ enum xe_guc_register_context_multi_lrc_param_offsets {
+ 	XE_GUC_REGISTER_CONTEXT_MULTI_LRC_MSG_MIN_LEN = 11,
+ };
+ 
+-enum xe_guc_context_wq_item_offsets {
+-	XE_GUC_CONTEXT_WQ_HEADER_DATA_0_TYPE_LEN = 0,
+-	XE_GUC_CONTEXT_WQ_EL_INFO_DATA_1_CTX_DESC_LOW,
+-	XE_GUC_CONTEXT_WQ_EL_INFO_DATA_2_GUCCTX_RINGTAIL_FREEZEPOCS,
+-	XE_GUC_CONTEXT_WQ_EL_INFO_DATA_3_WI_FENCE_ID,
+-	XE_GUC_CONTEXT_WQ_EL_CHILD_LIST_DATA_4_RINGTAIL,
+-};
+-
+ enum xe_guc_report_status {
+ 	XE_GUC_REPORT_STATUS_UNKNOWN = 0x0,
+ 	XE_GUC_REPORT_STATUS_ACKED = 0x1,
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index ee81ccd54..9de47efb2 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -782,18 +782,12 @@ static void wq_item_append(struct xe_exec_queue *q)
+ 	if (wq_wait_for_space(q, wqi_size))
+ 		return;
+ 
+-	xe_gt_assert(guc_to_gt(guc), i == XE_GUC_CONTEXT_WQ_HEADER_DATA_0_TYPE_LEN);
+ 	wqi[i++] = FIELD_PREP(WQ_TYPE_MASK, WQ_TYPE_MULTI_LRC) |
+ 		FIELD_PREP(WQ_LEN_MASK, len_dw);
+-	xe_gt_assert(guc_to_gt(guc), i == XE_GUC_CONTEXT_WQ_EL_INFO_DATA_1_CTX_DESC_LOW);
+ 	wqi[i++] = xe_lrc_descriptor(q->lrc[0]);
+-	xe_gt_assert(guc_to_gt(guc), i ==
+-		     XE_GUC_CONTEXT_WQ_EL_INFO_DATA_2_GUCCTX_RINGTAIL_FREEZEPOCS);
+ 	wqi[i++] = FIELD_PREP(WQ_GUC_ID_MASK, q->guc->id) |
+ 		FIELD_PREP(WQ_RING_TAIL_MASK, q->lrc[0]->ring.tail / sizeof(u64));
+-	xe_gt_assert(guc_to_gt(guc), i == XE_GUC_CONTEXT_WQ_EL_INFO_DATA_3_WI_FENCE_ID);
+ 	wqi[i++] = 0;
+-	xe_gt_assert(guc_to_gt(guc), i == XE_GUC_CONTEXT_WQ_EL_CHILD_LIST_DATA_4_RINGTAIL);
+ 	for (j = 1; j < q->width; ++j) {
+ 		struct xe_lrc *lrc = q->lrc[j];
+ 
+@@ -814,50 +808,6 @@ static void wq_item_append(struct xe_exec_queue *q)
+ 	parallel_write(xe, map, wq_desc.tail, q->guc->wqi_tail);
+ }
+ 
+-static int wq_items_rebase(struct xe_exec_queue *q)
+-{
+-	struct xe_guc *guc = exec_queue_to_guc(q);
+-	struct xe_device *xe = guc_to_xe(guc);
+-	struct iosys_map map = xe_lrc_parallel_map(q->lrc[0]);
+-	int i = q->guc->wqi_head;
+-
+-	/* the ring starts after a header struct */
+-	iosys_map_incr(&map, offsetof(struct guc_submit_parallel_scratch, wq[0]));
+-
+-	while ((i % WQ_SIZE) != (q->guc->wqi_tail % WQ_SIZE)) {
+-		u32 len_dw, type, val;
+-
+-		if (drm_WARN_ON_ONCE(&xe->drm, i < 0 || i > 2 * WQ_SIZE))
+-			break;
+-
+-		val = xe_map_rd_ring_u32(xe, &map, i / sizeof(u32) +
+-					 XE_GUC_CONTEXT_WQ_HEADER_DATA_0_TYPE_LEN,
+-					 WQ_SIZE / sizeof(u32));
+-		len_dw = FIELD_GET(WQ_LEN_MASK, val);
+-		type = FIELD_GET(WQ_TYPE_MASK, val);
+-
+-		if (drm_WARN_ON_ONCE(&xe->drm, len_dw >= WQ_SIZE / sizeof(u32)))
+-			break;
+-
+-		if (type == WQ_TYPE_MULTI_LRC) {
+-			val = xe_lrc_descriptor(q->lrc[0]);
+-			xe_map_wr_ring_u32(xe, &map, i / sizeof(u32) +
+-					   XE_GUC_CONTEXT_WQ_EL_INFO_DATA_1_CTX_DESC_LOW,
+-					   WQ_SIZE / sizeof(u32), val);
+-		} else if (drm_WARN_ON_ONCE(&xe->drm, type != WQ_TYPE_NOOP)) {
+-			break;
+-		}
+-
+-		i += (len_dw + 1) * sizeof(u32);
+-	}
+-
+-	if ((i % WQ_SIZE) != (q->guc->wqi_tail % WQ_SIZE)) {
+-		xe_gt_err(q->gt, "Exec queue fixups incomplete - wqi parse failed\n");
+-		return -EBADMSG;
+-	}
+-	return 0;
+-}
+-
+ #define RESUME_PENDING	~0x0ull
+ static void submit_exec_queue(struct xe_exec_queue *q, struct xe_sched_job *job)
+ {
+@@ -3011,10 +2961,6 @@ int xe_guc_contexts_hwsp_rebase(struct xe_guc *guc, void *scratch)
+ 		err = xe_exec_queue_contexts_hwsp_rebase(q, scratch);
+ 		if (err)
+ 			break;
+-		if (xe_exec_queue_is_parallel(q))
+-			err = wq_items_rebase(q);
+-		if (err)
+-			break;
+ 	}
+ 	mutex_unlock(&guc->submission_state.lock);
+ 
+-- 
+2.43.0
+

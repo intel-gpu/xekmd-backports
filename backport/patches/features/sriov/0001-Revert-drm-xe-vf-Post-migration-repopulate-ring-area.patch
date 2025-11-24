@@ -1,0 +1,125 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Fri, 3 Oct 2025 01:38:23 +0200
+Subject: Revert "drm/xe/vf: Post migration, repopulate ring area for
+ pending request"
+
+This reverts commit a0dda25d24e636df5c30a9370464b7cebc709faf.
+
+Due to change in the VF migration recovery design this code
+is not needed any more.
+
+v3:
+ - Add commit message (Michal / Lucas)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20251002233824.203417-3-michal.wajdeczko@intel.com
+(backported from commit 6c640592e84cd04cd6c61bf7afd83808cc20c9f4 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c | 24 ------------------------
+ drivers/gpu/drm/xe/xe_exec_queue.h |  3 +--
+ drivers/gpu/drm/xe/xe_guc_submit.c | 24 ------------------------
+ drivers/gpu/drm/xe/xe_guc_submit.h |  2 --
+ 4 files changed, 1 insertion(+), 52 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index fbca2a6fe..85610217a 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -1132,27 +1132,3 @@ int xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch)
+ 
+ 	return err;
+ }
+-
+-/**
+- * xe_exec_queue_jobs_ring_restore - Re-emit ring commands of requests pending on given queue.
+- * @q: the &xe_exec_queue struct instance
+- */
+-void xe_exec_queue_jobs_ring_restore(struct xe_exec_queue *q)
+-{
+-	struct xe_gpu_scheduler *sched = &q->guc->sched;
+-	struct xe_sched_job *job;
+-
+-	/*
+-	 * This routine is used within VF migration recovery. This means
+-	 * using the lock here introduces a restriction: we cannot wait
+-	 * for any GFX HW response while the lock is taken.
+-	 */
+-	spin_lock(&sched->base.job_list_lock);
+-	list_for_each_entry(job, &sched->base.pending_list, drm.list) {
+-		if (xe_sched_job_is_error(job))
+-			continue;
+-
+-		q->ring_ops->emit_job(job);
+-	}
+-	spin_unlock(&sched->base.job_list_lock);
+-}
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
+index 6ae11a1c7..a4dfbe858 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue.h
+@@ -90,7 +90,6 @@ void xe_exec_queue_update_run_ticks(struct xe_exec_queue *q);
+ 
+ int xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch);
+ 
+-void xe_exec_queue_jobs_ring_restore(struct xe_exec_queue *q);
+-
+ struct xe_lrc *xe_exec_queue_lrc(struct xe_exec_queue *q);
++
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index dc471e136..0556551fd 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -898,30 +898,6 @@ guc_exec_queue_run_job(struct drm_sched_job *drm_job)
+ 	return job->fence;
+ }
+ 
+-/**
+- * xe_guc_jobs_ring_rebase - Re-emit ring commands of requests pending
+- * on all queues under a guc.
+- * @guc: the &xe_guc struct instance
+- */
+-void xe_guc_jobs_ring_rebase(struct xe_guc *guc)
+-{
+-	struct xe_exec_queue *q;
+-	unsigned long index;
+-
+-	/*
+-	 * This routine is used within VF migration recovery. This means
+-	 * using the lock here introduces a restriction: we cannot wait
+-	 * for any GFX HW response while the lock is taken.
+-	 */
+-	mutex_lock(&guc->submission_state.lock);
+-	xa_for_each(&guc->submission_state.exec_queue_lookup, index, q) {
+-		if (exec_queue_killed_or_banned_or_wedged(q))
+-			continue;
+-		xe_exec_queue_jobs_ring_restore(q);
+-	}
+-	mutex_unlock(&guc->submission_state.lock);
+-}
+-
+ static void guc_exec_queue_free_job(struct drm_sched_job *drm_job)
+ {
+ 	struct xe_sched_job *job = to_xe_sched_job(drm_job);
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.h b/drivers/gpu/drm/xe/xe_guc_submit.h
+index 95da85c71..b49a2748e 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.h
++++ b/drivers/gpu/drm/xe/xe_guc_submit.h
+@@ -35,8 +35,6 @@ int xe_guc_exec_queue_memory_cat_error_handler(struct xe_guc *guc, u32 *msg,
+ int xe_guc_exec_queue_reset_failure_handler(struct xe_guc *guc, u32 *msg, u32 len);
+ int xe_guc_error_capture_handler(struct xe_guc *guc, u32 *msg, u32 len);
+ 
+-void xe_guc_jobs_ring_rebase(struct xe_guc *guc);
+-
+ struct xe_guc_submit_exec_queue_snapshot *
+ xe_guc_exec_queue_snapshot_capture(struct xe_exec_queue *q);
+ void
+-- 
+2.43.0
+

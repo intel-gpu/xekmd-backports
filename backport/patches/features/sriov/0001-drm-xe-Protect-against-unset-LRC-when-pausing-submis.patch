@@ -1,0 +1,72 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tomasz Lis <tomasz.lis@intel.com>
+Date: Mon, 24 Nov 2025 23:28:53 +0100
+Subject: drm/xe: Protect against unset LRC when pausing submissions
+
+While pausing submissions, it is possible to encouner an exec queue
+which is during creation, and therefore doesn't have a valid xe_lrc
+struct reference.
+
+Protect agains such situation, by checking for NULL before access.
+
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Fixes: c25c1010df88 ("drm/xe/vf: Replay GuC submission state on pause / unpause")
+Signed-off-by: Tomasz Lis <tomasz.lis@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20251124222853.1900800-1-tomasz.lis@intel.com
+(cherry-picked from commit 07cf4b864f523f01d2bb522a05813df30b076ba8 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_submit.c | 22 ++++++++++++++++------
+ 1 file changed, 16 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index f6d565fea7f5..b5961c7354b0 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -2083,6 +2083,18 @@ static void guc_exec_queue_revert_pending_state_change(struct xe_guc *guc,
+ 	q->guc->resume_time = 0;
+ }
+ 
++static void lrc_parallel_clear(struct xe_lrc *lrc)
++{
++	struct xe_device *xe = gt_to_xe(lrc->gt);
++	struct iosys_map map = xe_lrc_parallel_map(lrc);
++	int i;
++
++	for (i = 0; i < WQ_SIZE / sizeof(u32); ++i)
++		parallel_write(xe, map, wq[i],
++			       FIELD_PREP(WQ_TYPE_MASK, WQ_TYPE_NOOP) |
++			       FIELD_PREP(WQ_LEN_MASK, 0));
++}
++
+ /*
+  * This function is quite complex but only real way to ensure no state is lost
+  * during VF resume flows. The function scans the queue state, make adjustments
+@@ -2106,8 +2118,8 @@ static void guc_exec_queue_pause(struct xe_guc *guc, struct xe_exec_queue *q)
+ 	guc_exec_queue_revert_pending_state_change(guc, q);
+ 
+ 	if (xe_exec_queue_is_parallel(q)) {
+-		struct xe_device *xe = guc_to_xe(guc);
+-		struct iosys_map map = xe_lrc_parallel_map(q->lrc[0]);
++		/* Pairs with WRITE_ONCE in __xe_exec_queue_init  */
++		struct xe_lrc *lrc = READ_ONCE(q->lrc[0]);
+ 
+ 		/*
+ 		 * NOP existing WQ commands that may contain stale GGTT
+@@ -2115,10 +2127,8 @@ static void guc_exec_queue_pause(struct xe_guc *guc, struct xe_exec_queue *q)
+ 		 * seems to get confused if the WQ head/tail pointers are
+ 		 * adjusted.
+ 		 */
+-		for (i = 0; i < WQ_SIZE / sizeof(u32); ++i)
+-			parallel_write(xe, map, wq[i],
+-				       FIELD_PREP(WQ_TYPE_MASK, WQ_TYPE_NOOP) |
+-				       FIELD_PREP(WQ_LEN_MASK, 0));
++		if (lrc)
++			lrc_parallel_clear(lrc);
+ 	}
+ 
+ 	job = xe_sched_first_pending_job(sched);
+-- 
+2.43.0
+

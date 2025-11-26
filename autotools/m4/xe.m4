@@ -51,7 +51,6 @@ AC_DEFUN([AC_XE_CONFIG], [
 
 dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/i915_gsc_proxy_mei_interface.h])
-	AC_KERNEL_CHECK_HEADERS([drm/i915_component.h])
 	AC_KERNEL_CHECK_HEADERS([drm/intel/i915_drm.h])
 	AC_KERNEL_CHECK_HEADERS([linux/wordpart.h])
 	AC_KERNEL_CHECK_HEADERS([linux/workqueue_types.h])

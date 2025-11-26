@@ -25,4 +25,8 @@ struct drm_wedge_task_info {
 };
 #endif
 
+#ifdef BPM_DRM_WEDGE_RECOVERY_VENDOR_NOT_PRESENT
+#define DRM_WEDGE_RECOVERY_VENDOR       BIT(3)  /* vendor specific recovery */
+#endif
+
 #endif

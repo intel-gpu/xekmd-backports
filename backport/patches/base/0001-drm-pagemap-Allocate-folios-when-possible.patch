@@ -1,0 +1,138 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Francois Dugast <francois.dugast@intel.com>
+Date: Tue, 5 Aug 2025 15:59:05 +0200
+Subject: drm/pagemap: Allocate folios when possible
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If the order is greater than zero, allocate a folio when populating the
+RAM PFNs instead of allocating individual pages one after the other. For
+example if 2MB folios are used instead of 4KB pages, this reduces the
+number of calls to the allocation API by 512.
+
+v2:
+- Use page order instead of extra argument (Matthew Brost)
+- Allocate with folio_alloc() (Matthew Brost)
+- Loop for mpages and free_pages based on order (Matthew Brost)
+
+v3:
+- Fix loops in drm_pagemap_migrate_populate_ram_pfn() (Matthew Brost)
+
+v4:
+- Use folio_trylock(), set local variable to NULL (Matthew Brost)
+
+Cc: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Acked-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Acked-by: Maarten Lankhorst <maarten.lankhorst@linux.intel.com>
+Link: https://lore.kernel.org/r/20250805140028.599361-5-francois.dugast@intel.com
+Signed-off-by: Francois Dugast <francois.dugast@intel.com>
+(cherry-picked from commit ddeda6136038b4b313bb6f9b44f2d363e1233814 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/drm_pagemap.c | 54 ++++++++++++++++++++++++++---------
+ 1 file changed, 40 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/gpu/drm/drm_pagemap.c b/drivers/gpu/drm/drm_pagemap.c
+index 0312edb8d..22c44807e 100644
+--- a/drivers/gpu/drm/drm_pagemap.c
++++ b/drivers/gpu/drm/drm_pagemap.c
+@@ -460,54 +460,80 @@ static int drm_pagemap_migrate_populate_ram_pfn(struct vm_area_struct *vas,
+ {
+ 	unsigned long i;
+ 
+-	for (i = 0; i < npages; ++i, addr += PAGE_SIZE) {
+-		struct page *page, *src_page;
++	for (i = 0; i < npages;) {
++		struct page *page = NULL, *src_page;
++		struct folio *folio;
++		unsigned int order = 0;
+ 
+ 		if (!(src_mpfn[i] & MIGRATE_PFN_MIGRATE))
+-			continue;
++			goto next;
+ 
+ 		src_page = migrate_pfn_to_page(src_mpfn[i]);
+ 		if (!src_page)
+-			continue;
++			goto next;
+ 
+ 		if (fault_page) {
+ 			if (src_page->zone_device_data !=
+ 			    fault_page->zone_device_data)
+-				continue;
++				goto next;
+ 		}
+ 
++		order = folio_order(page_folio(src_page));
++
++		/* TODO: Support fallback to single pages if THP allocation fails */
+ 		if (vas)
+-			page = alloc_page_vma(GFP_HIGHUSER, vas, addr);
++			folio = vma_alloc_folio(GFP_HIGHUSER, order, vas, addr);
+ 		else
+-			page = alloc_page(GFP_HIGHUSER);
++			folio = folio_alloc(GFP_HIGHUSER, order);
+ 
+-		if (!page)
++		if (!folio)
+ 			goto free_pages;
+ 
++		page = folio_page(folio, 0);
+ 		mpfn[i] = migrate_pfn(page_to_pfn(page));
++
++next:
++		if (page)
++			addr += page_size(page);
++		else
++			addr += PAGE_SIZE;
++
++		i += NR_PAGES(order);
+ 	}
+ 
+-	for (i = 0; i < npages; ++i) {
++	for (i = 0; i < npages;) {
+ 		struct page *page = migrate_pfn_to_page(mpfn[i]);
++		unsigned int order = 0;
+ 
+ 		if (!page)
+-			continue;
++			goto next_lock;
+ 
+-		WARN_ON_ONCE(!trylock_page(page));
+-		++*mpages;
++		WARN_ON_ONCE(!folio_trylock(page_folio(page)));
++
++		order = folio_order(page_folio(page));
++		*mpages += NR_PAGES(order);
++
++next_lock:
++		i += NR_PAGES(order);
+ 	}
+ 
+ 	return 0;
+ 
+ free_pages:
+-	for (i = 0; i < npages; ++i) {
++	for (i = 0; i < npages;) {
+ 		struct page *page = migrate_pfn_to_page(mpfn[i]);
++		unsigned int order = 0;
+ 
+ 		if (!page)
+-			continue;
++			goto next_put;
+ 
+ 		put_page(page);
+ 		mpfn[i] = 0;
++
++		order = folio_order(page_folio(page));
++
++next_put:
++		i += NR_PAGES(order);
+ 	}
+ 	return -ENOMEM;
+ }
+-- 
+2.43.0
+

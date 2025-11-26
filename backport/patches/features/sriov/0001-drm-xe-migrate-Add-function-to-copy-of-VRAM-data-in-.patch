@@ -26,10 +26,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  2 files changed, 131 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
-index 3254ec0d76c9..2ee85d48de1f 100644
+index ddf98b519..d2d65a68b 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.c
 +++ b/drivers/gpu/drm/xe/xe_migrate.c
-@@ -28,6 +28,7 @@
+@@ -29,6 +29,7 @@
  #include "xe_lrc.h"
  #include "xe_map.h"
  #include "xe_mocs.h"
@@ -37,7 +37,7 @@ index 3254ec0d76c9..2ee85d48de1f 100644
  #include "xe_pt.h"
  #include "xe_res_cursor.h"
  #include "xe_sa.h"
-@@ -1139,6 +1140,128 @@ struct xe_exec_queue *xe_migrate_exec_queue(struct xe_migrate *migrate)
+@@ -1208,6 +1209,128 @@ struct xe_exec_queue *xe_migrate_exec_queue(struct xe_migrate *migrate)
  	return migrate->q;
  }
  
@@ -166,8 +166,8 @@ index 3254ec0d76c9..2ee85d48de1f 100644
  static void emit_clear_link_copy(struct xe_gt *gt, struct xe_bb *bb, u64 src_ofs,
  				 u32 size, u32 pitch)
  {
-@@ -1800,11 +1923,6 @@ static void build_pt_update_batch_sram(struct xe_migrate *m,
- 	}
+@@ -1906,11 +2029,6 @@ static bool xe_migrate_vram_use_pde(struct drm_pagemap_addr *sram_addr,
+ 	return true;
  }
  
 -enum xe_migrate_copy_dir {
@@ -179,10 +179,10 @@ index 3254ec0d76c9..2ee85d48de1f 100644
  #define XE_CACHELINE_MASK	(XE_CACHELINE_BYTES - 1)
  
 diff --git a/drivers/gpu/drm/xe/xe_migrate.h b/drivers/gpu/drm/xe/xe_migrate.h
-index 033b0c839b8c..6f635a3986b8 100644
+index 4fad324b6..d7bcc6ad8 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.h
 +++ b/drivers/gpu/drm/xe/xe_migrate.h
-@@ -27,6 +27,11 @@ struct xe_vma;
+@@ -28,6 +28,11 @@ struct xe_vma;
  
  enum xe_sriov_vf_ccs_rw_ctxs;
  
@@ -194,7 +194,7 @@ index 033b0c839b8c..6f635a3986b8 100644
  /**
   * struct xe_migrate_pt_update_ops - Callbacks for the
   * xe_migrate_update_pgtables() function.
-@@ -130,6 +135,9 @@ int xe_migrate_ccs_rw_copy(struct xe_tile *tile, struct xe_exec_queue *q,
+@@ -131,6 +136,9 @@ int xe_migrate_ccs_rw_copy(struct xe_tile *tile, struct xe_exec_queue *q,
  
  struct xe_lrc *xe_migrate_lrc(struct xe_migrate *migrate);
  struct xe_exec_queue *xe_migrate_exec_queue(struct xe_migrate *migrate);

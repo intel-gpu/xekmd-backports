@@ -1,0 +1,86 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Sun, 12 Oct 2025 20:45:54 -0700
+Subject: drm/xe: Fix build_pt_update_batch_sram for non-4K PAGE_SIZE
+
+The build_pt_update_batch_sram function in the Xe migrate layer assumes
+PAGE_SIZE == XE_PAGE_SIZE (4K), which is not a valid assumption on
+non-x86 platforms. This patch updates build_pt_update_batch_sram to
+correctly handle PAGE_SIZE > 4K by programming multiple 4K GPU pages per
+CPU page.
+
+v5:
+ - Mask off non-address bits during compare
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Tested-by: Simon Richter <Simon.Richter@hogyros.de>
+Reviewed-by: Stuart Summers <stuart.summers@intel.com>
+Link: https://lore.kernel.org/r/20251013034555.4121168-2-matthew.brost@intel.com
+(cherry-picked from commit 55991d854f65d58cfe2c7d5219ffbd83d07c2577 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_migrate.c | 30 ++++++++++++++++++++++--------
+ 1 file changed, 22 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 456d7f121..8ce2b5b58 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -1590,13 +1590,15 @@ static void build_pt_update_batch_sram(struct xe_migrate *m,
+ 				       u32 size)
+ {
+ 	u16 pat_index = tile_to_xe(m->tile)->pat.idx[XE_CACHE_WB];
++	u64 gpu_page_size = 0x1ull << xe_pt_shift(0);
+ 	u32 ptes;
+ 	int i = 0;
+ 
+-	ptes = DIV_ROUND_UP(size, XE_PAGE_SIZE);
++	ptes = DIV_ROUND_UP(size, gpu_page_size);
+ 	while (ptes) {
+ 		u32 chunk = min(MAX_PTE_PER_SDI, ptes);
+ 
++		chunk = ALIGN_DOWN(chunk, PAGE_SIZE / XE_PAGE_SIZE);
+ 		bb->cs[bb->len++] = MI_STORE_DATA_IMM | MI_SDI_NUM_QW(chunk);
+ 		bb->cs[bb->len++] = pt_offset;
+ 		bb->cs[bb->len++] = 0;
+@@ -1605,18 +1607,30 @@ static void build_pt_update_batch_sram(struct xe_migrate *m,
+ 		ptes -= chunk;
+ 
+ 		while (chunk--) {
+-			u64 addr = sram_addr[i].addr & PAGE_MASK;
++			u64 addr = sram_addr[i].addr & ~(gpu_page_size - 1);
++			u64 pte, orig_addr = addr;
+ 
+ 			xe_tile_assert(m->tile, sram_addr[i].proto ==
+ 				       DRM_INTERCONNECT_SYSTEM);
+ 			xe_tile_assert(m->tile, addr);
+-			addr = m->q->vm->pt_ops->pte_encode_addr(m->tile->xe,
+-								 addr, pat_index,
+-								 0, false, 0);
+-			bb->cs[bb->len++] = lower_32_bits(addr);
+-			bb->cs[bb->len++] = upper_32_bits(addr);
+ 
+-			i++;
++again:
++			pte = m->q->vm->pt_ops->pte_encode_addr(m->tile->xe,
++								addr, pat_index,
++								0, false, 0);
++			bb->cs[bb->len++] = lower_32_bits(pte);
++			bb->cs[bb->len++] = upper_32_bits(pte);
++
++			if (gpu_page_size < PAGE_SIZE) {
++				addr += XE_PAGE_SIZE;
++				if (orig_addr + PAGE_SIZE != addr) {
++					chunk--;
++					goto again;
++				}
++				i++;
++			} else {
++				i += gpu_page_size / PAGE_SIZE;
++			}
+ 		}
+ 	}
+ }
+-- 
+2.43.0
+

@@ -42,7 +42,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_vm_madvise.c
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 66da0ff3c6b5..0c56447ea185 100644
+index f7e14c42e..5ba92ffb5 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -61,7 +61,7 @@ xe-y += xe_bb.o \
@@ -55,11 +55,11 @@ index 66da0ff3c6b5..0c56447ea185 100644
  	xe_gt_topology.o \
  	xe_guc.o \
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index d58ffd565693..e803cdb8624a 100644
+index 2ce9515ad..7dbaf8a7c 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -293,8 +293,8 @@ struct xe_device {
- 		u8 has_mbx_power_limits:1;
+@@ -301,8 +301,8 @@ struct xe_device {
+ 		u8 has_mem_copy_instr:1;
  		/** @info.has_pxp: Device has PXP support */
  		u8 has_pxp:1;
 -		/** @info.has_range_tlb_invalidation: Has range based TLB invalidations */
@@ -70,7 +70,7 @@ index d58ffd565693..e803cdb8624a 100644
  		u8 has_sriov:1;
  		/** @info.has_usm: Device has unified shared memory support */
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 065622cea66d..9b1e70e20565 100644
+index 065622cea..9b1e70e20 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -75,7 +75,7 @@ static int alloc_dep_schedulers(struct xe_device *xe, struct xe_exec_queue *q)
@@ -83,7 +83,7 @@ index 065622cea66d..9b1e70e20565 100644
  #define MAX_TLB_INVAL_JOBS	16	/* Picking a reasonable value */
  		dep_scheduler = xe_dep_scheduler_create(xe, wq, q->name,
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index 0bb002fece30..5d7111ac4e34 100644
+index 0bb002fec..5d7111ac4 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
 @@ -23,7 +23,7 @@
@@ -108,7 +108,7 @@ index 0bb002fece30..5d7111ac4e34 100644
  
  static void xe_ggtt_invalidate(struct xe_ggtt *ggtt)
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index ad73be9e3086..5444db5386a2 100644
+index ad73be9e3..5444db538 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -37,7 +37,7 @@
@@ -155,7 +155,7 @@ index ad73be9e3086..5444db5386a2 100644
 +	xe_gt_tlb_inval_reset(gt);
  }
 diff --git a/drivers/gpu/drm/xe/xe_gt_pagefault.c b/drivers/gpu/drm/xe/xe_gt_pagefault.c
-index 57e399d09628..7e362f91f940 100644
+index 57e399d09..7e362f91f 100644
 --- a/drivers/gpu/drm/xe/xe_gt_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_gt_pagefault.c
 @@ -16,7 +16,6 @@
@@ -170,7 +170,7 @@ diff --git a/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c b/drivers/gpu/drm/xe/xe
 similarity index 61%
 rename from drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c
 rename to drivers/gpu/drm/xe/xe_gt_tlb_inval.c
-index db00c5adead9..1571fd917830 100644
+index db00c5ade..1571fd917 100644
 --- a/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c
 +++ b/drivers/gpu/drm/xe/xe_gt_tlb_inval.c
 @@ -5,8 +5,6 @@
@@ -783,7 +783,7 @@ index db00c5adead9..1571fd917830 100644
  		set_bit(FENCE_STACK_BIT, &fence->base.flags);
 diff --git a/drivers/gpu/drm/xe/xe_gt_tlb_inval.h b/drivers/gpu/drm/xe/xe_gt_tlb_inval.h
 new file mode 100644
-index 000000000000..b1258ac4e8fb
+index 000000000..b1258ac4e
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_gt_tlb_inval.h
 @@ -0,0 +1,41 @@
@@ -829,7 +829,7 @@ index 000000000000..b1258ac4e8fb
 +
 +#endif	/* _XE_GT_TLB_INVAL_ */
 diff --git a/drivers/gpu/drm/xe/xe_gt_tlb_inval_job.c b/drivers/gpu/drm/xe/xe_gt_tlb_inval_job.c
-index e9255be26467..41e0ea92ea5a 100644
+index e9255be26..41e0ea92e 100644
 --- a/drivers/gpu/drm/xe/xe_gt_tlb_inval_job.c
 +++ b/drivers/gpu/drm/xe/xe_gt_tlb_inval_job.c
 @@ -7,7 +7,7 @@
@@ -905,7 +905,7 @@ diff --git a/drivers/gpu/drm/xe/xe_gt_tlb_invalidation_types.h b/drivers/gpu/drm
 similarity index 55%
 rename from drivers/gpu/drm/xe/xe_gt_tlb_invalidation_types.h
 rename to drivers/gpu/drm/xe/xe_gt_tlb_inval_types.h
-index de6e825e0851..919430359103 100644
+index de6e825e0..919430359 100644
 --- a/drivers/gpu/drm/xe/xe_gt_tlb_invalidation_types.h
 +++ b/drivers/gpu/drm/xe/xe_gt_tlb_inval_types.h
 @@ -3,20 +3,20 @@
@@ -947,7 +947,7 @@ index de6e825e0851..919430359103 100644
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.h b/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.h
 deleted file mode 100644
-index 3e4cff3922d6..000000000000
+index 3e4cff392..000000000
 --- a/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.h
 +++ /dev/null
 @@ -1,41 +0,0 @@
@@ -993,7 +993,7 @@ index 3e4cff3922d6..000000000000
 -
 -#endif	/* _XE_GT_TLB_INVALIDATION_ */
 diff --git a/drivers/gpu/drm/xe/xe_gt_types.h b/drivers/gpu/drm/xe/xe_gt_types.h
-index 420900ecaa97..d413326b4b1f 100644
+index 420900eca..d413326b4 100644
 --- a/drivers/gpu/drm/xe/xe_gt_types.h
 +++ b/drivers/gpu/drm/xe/xe_gt_types.h
 @@ -185,38 +185,38 @@ struct xe_gt {
@@ -1045,7 +1045,7 @@ index 420900ecaa97..d413326b4b1f 100644
  	/**
  	 * @ccs_mode: Number of compute engines enabled.
 diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
-index 4813fb2e7979..763178f07c98 100644
+index 4813fb2e7..763178f07 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ct.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ct.c
 @@ -26,7 +26,7 @@
@@ -1078,7 +1078,7 @@ index 4813fb2e7979..763178f07c98 100644
  	default:
  		xe_gt_warn(gt, "NOT_POSSIBLE");
 diff --git a/drivers/gpu/drm/xe/xe_lmtt.c b/drivers/gpu/drm/xe/xe_lmtt.c
-index 775d3e0236a8..dfb182e762ef 100644
+index 775d3e023..dfb182e76 100644
 --- a/drivers/gpu/drm/xe/xe_lmtt.c
 +++ b/drivers/gpu/drm/xe/xe_lmtt.c
 @@ -11,7 +11,7 @@
@@ -1122,7 +1122,7 @@ index 775d3e0236a8..dfb182e762ef 100644
  	return result;
  }
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index f64942737a0b..29ab10a69212 100644
+index e1c23e768..f7e55b329 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
 @@ -55,7 +55,7 @@ static const struct xe_graphics_desc graphics_xelp = {
@@ -1143,7 +1143,7 @@ index f64942737a0b..29ab10a69212 100644
  	.has_usm = 1, \
  	.has_64bit_timestamp = 1, \
  	.va_bits = 48, \
-@@ -668,7 +668,7 @@ static int xe_info_init(struct xe_device *xe,
+@@ -674,7 +674,7 @@ static int xe_info_init(struct xe_device *xe,
  	/* Runtime detection may change this later */
  	xe->info.has_flat_ccs = graphics_desc->has_flat_ccs;
  
@@ -1153,10 +1153,10 @@ index f64942737a0b..29ab10a69212 100644
  	xe->info.has_64bit_timestamp = graphics_desc->has_64bit_timestamp;
  
 diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
-index 4de6f69ed975..b63002fc0f67 100644
+index 3d6bb20cc..6268b726b 100644
 --- a/drivers/gpu/drm/xe/xe_pci_types.h
 +++ b/drivers/gpu/drm/xe/xe_pci_types.h
-@@ -60,7 +60,7 @@ struct xe_graphics_desc {
+@@ -62,7 +62,7 @@ struct xe_graphics_desc {
  	u8 has_atomic_enable_pte_bit:1;
  	u8 has_flat_ccs:1;
  	u8 has_indirect_ring_state:1;
@@ -1166,7 +1166,7 @@ index 4de6f69ed975..b63002fc0f67 100644
  	u8 has_64bit_timestamp:1;
  };
 diff --git a/drivers/gpu/drm/xe/xe_svm.c b/drivers/gpu/drm/xe/xe_svm.c
-index f59fcadeba1b..9cc3d59c4e84 100644
+index 3bcb87c7c..0f92478d3 100644
 --- a/drivers/gpu/drm/xe/xe_svm.c
 +++ b/drivers/gpu/drm/xe/xe_svm.c
 @@ -7,7 +7,7 @@
@@ -1188,7 +1188,7 @@ index f59fcadeba1b..9cc3d59c4e84 100644
  
  range_notifier_event_end:
 diff --git a/drivers/gpu/drm/xe/xe_trace.h b/drivers/gpu/drm/xe/xe_trace.h
-index 21486a6f693a..36538f50d06f 100644
+index 21486a6f6..36538f50d 100644
 --- a/drivers/gpu/drm/xe/xe_trace.h
 +++ b/drivers/gpu/drm/xe/xe_trace.h
 @@ -14,7 +14,7 @@
@@ -1250,7 +1250,7 @@ index 21486a6f693a..36538f50d06f 100644
  );
  
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index e60df7baf502..ebb223bb44e0 100644
+index e60df7baf..ebb223bb4 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -28,7 +28,7 @@
@@ -1368,7 +1368,7 @@ index e60df7baf502..ebb223bb44e0 100644
  	/* WRITE_ONCE pairs with READ_ONCE in xe_vm_has_valid_gpu_mapping() */
  	WRITE_ONCE(vma->tile_invalidated, vma->tile_mask);
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index 905fc518a5c7..b1ba3beffebb 100644
+index 905fc518a..b1ba3beff 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
 @@ -228,8 +228,8 @@ struct dma_fence *xe_vm_range_rebind(struct xe_vm *vm,
@@ -1384,7 +1384,7 @@ index 905fc518a5c7..b1ba3beffebb 100644
  
 diff --git a/drivers/gpu/drm/xe/xe_vm_madvise.c b/drivers/gpu/drm/xe/xe_vm_madvise.c
 new file mode 100644
-index 000000000000..09c5783ee523
+index 000000000..09c5783ee
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_vm_madvise.c
 @@ -0,0 +1,445 @@

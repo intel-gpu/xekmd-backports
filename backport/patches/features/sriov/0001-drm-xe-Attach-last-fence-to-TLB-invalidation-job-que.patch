@@ -1,0 +1,302 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Fri, 31 Oct 2025 16:40:46 -0700
+Subject: drm/xe: Attach last fence to TLB invalidation job queues
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add support for attaching the last fence to TLB invalidation job queues
+to address serialization issues during bursts of unbind jobs. Ensure
+that user fence signaling for a bind job reflects both the bind job
+itself and the last fences of all related TLB invalidations. Maintain
+submission order based solely on the state of the bind and TLB
+invalidation queues.
+
+Introduce support functions for last fence attachment to TLB
+invalidation queues.
+
+v3:
+ - Fix assert in xe_exec_queue_tlb_inval_last_fence_set (CI)
+ - Ensure migrate lock held for migrate queues (Testing)
+v5:
+ - Style nits (Thomas)
+ - Rewrite commit message (Thomas)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Link: https://patch.msgid.link/20251031234050.3043507-3-matthew.brost@intel.com
+(backported from commit b2d7ec41f2a3ab99cf0bf0fafc20d4d10bb6b0de linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c       | 103 ++++++++++++++++++++++-
+ drivers/gpu/drm/xe/xe_exec_queue.h       |  21 +++++
+ drivers/gpu/drm/xe/xe_exec_queue_types.h |   5 ++
+ drivers/gpu/drm/xe/xe_migrate.c          |  14 +++
+ drivers/gpu/drm/xe/xe_migrate.h          |   8 ++
+ drivers/gpu/drm/xe/xe_vm.c               |   7 +-
+ 6 files changed, 156 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index c47eb5a3c..805a1fcef 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -364,6 +364,7 @@ void xe_exec_queue_destroy(struct kref *ref)
+ {
+ 	struct xe_exec_queue *q = container_of(ref, struct xe_exec_queue, refcount);
+ 	struct xe_exec_queue *eq, *next;
++	int i;
+ 
+ 	if (q->ufence_syncobj)
+ 		drm_syncobj_put(q->ufence_syncobj);
+@@ -372,6 +373,9 @@ void xe_exec_queue_destroy(struct kref *ref)
+ 		xe_pxp_exec_queue_remove(gt_to_xe(q->gt)->pxp, q);
+ 
+ 	xe_exec_queue_last_fence_put_unlocked(q);
++	for_each_tlb_inval(i)
++		xe_exec_queue_tlb_inval_last_fence_put_unlocked(q, i);
++
+ 	if (!(q->flags & EXEC_QUEUE_FLAG_BIND_ENGINE_CHILD)) {
+ 		list_for_each_entry_safe(eq, next, &q->multi_gt_list,
+ 					 multi_gt_link)
+@@ -989,7 +993,9 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
+ static void xe_exec_queue_last_fence_lockdep_assert(struct xe_exec_queue *q,
+ 						    struct xe_vm *vm)
+ {
+-	if (q->flags & EXEC_QUEUE_FLAG_VM) {
++	if (q->flags & EXEC_QUEUE_FLAG_MIGRATE) {
++		xe_migrate_job_lock_assert(q);
++	} else if (q->flags & EXEC_QUEUE_FLAG_VM) {
+ 		lockdep_assert_held(&vm->lock);
+ 	} else {
+ 		xe_vm_assert_held(vm);
+@@ -1088,6 +1094,7 @@ void xe_exec_queue_last_fence_set(struct xe_exec_queue *q, struct xe_vm *vm,
+ 				  struct dma_fence *fence)
+ {
+ 	xe_exec_queue_last_fence_lockdep_assert(q, vm);
++	xe_assert(vm->xe, !dma_fence_is_container(fence));
+ 
+ 	xe_exec_queue_last_fence_put(q, vm);
+ 	q->last_fence = dma_fence_get(fence);
+@@ -1116,6 +1123,100 @@ int xe_exec_queue_last_fence_test_dep(struct xe_exec_queue *q, struct xe_vm *vm)
+ 	return err;
+ }
+ 
++/**
++ * xe_exec_queue_tlb_inval_last_fence_put() - Drop ref to last TLB invalidation fence
++ * @q: The exec queue
++ * @vm: The VM the engine does a bind for
++ * @type: Either primary or media GT
++ */
++void xe_exec_queue_tlb_inval_last_fence_put(struct xe_exec_queue *q,
++					    struct xe_vm *vm,
++					    unsigned int type)
++{
++	xe_exec_queue_last_fence_lockdep_assert(q, vm);
++	xe_assert(vm->xe, type == XE_EXEC_QUEUE_TLB_INVAL_MEDIA_GT ||
++		  type == XE_EXEC_QUEUE_TLB_INVAL_PRIMARY_GT);
++
++	xe_exec_queue_tlb_inval_last_fence_put_unlocked(q, type);
++}
++
++/**
++ * xe_exec_queue_tlb_inval_last_fence_put_unlocked() - Drop ref to last TLB
++ * invalidation fence unlocked
++ * @q: The exec queue
++ * @type: Either primary or media GT
++ *
++ * Only safe to be called from xe_exec_queue_destroy().
++ */
++void xe_exec_queue_tlb_inval_last_fence_put_unlocked(struct xe_exec_queue *q,
++						     unsigned int type)
++{
++	xe_assert(q->vm->xe, type == XE_EXEC_QUEUE_TLB_INVAL_MEDIA_GT ||
++		  type == XE_EXEC_QUEUE_TLB_INVAL_PRIMARY_GT);
++
++	dma_fence_put(q->tlb_inval[type].last_fence);
++	q->tlb_inval[type].last_fence = NULL;
++}
++
++/**
++ * xe_exec_queue_tlb_inval_last_fence_get() - Get last fence for TLB invalidation
++ * @q: The exec queue
++ * @vm: The VM the engine does a bind for
++ * @type: Either primary or media GT
++ *
++ * Get last fence, takes a ref
++ *
++ * Returns: last fence if not signaled, dma fence stub if signaled
++ */
++struct dma_fence *xe_exec_queue_tlb_inval_last_fence_get(struct xe_exec_queue *q,
++							 struct xe_vm *vm,
++							 unsigned int type)
++{
++	struct dma_fence *fence;
++
++	xe_exec_queue_last_fence_lockdep_assert(q, vm);
++	xe_assert(vm->xe, type == XE_EXEC_QUEUE_TLB_INVAL_MEDIA_GT ||
++		  type == XE_EXEC_QUEUE_TLB_INVAL_PRIMARY_GT);
++	xe_assert(vm->xe, q->flags & (EXEC_QUEUE_FLAG_VM |
++				      EXEC_QUEUE_FLAG_MIGRATE));
++
++	if (q->tlb_inval[type].last_fence &&
++	    test_bit(DMA_FENCE_FLAG_SIGNALED_BIT,
++		     &q->tlb_inval[type].last_fence->flags))
++		xe_exec_queue_tlb_inval_last_fence_put(q, vm, type);
++
++	fence = q->tlb_inval[type].last_fence ?: dma_fence_get_stub();
++	dma_fence_get(fence);
++	return fence;
++}
++
++/**
++ * xe_exec_queue_tlb_inval_last_fence_set() - Set last fence for TLB invalidation
++ * @q: The exec queue
++ * @vm: The VM the engine does a bind for
++ * @fence: The fence
++ * @type: Either primary or media GT
++ *
++ * Set the last fence for the tlb invalidation type on the queue. Increases
++ * reference count for fence, when closing queue
++ * xe_exec_queue_tlb_inval_last_fence_put should be called.
++ */
++void xe_exec_queue_tlb_inval_last_fence_set(struct xe_exec_queue *q,
++					    struct xe_vm *vm,
++					    struct dma_fence *fence,
++					    unsigned int type)
++{
++	xe_exec_queue_last_fence_lockdep_assert(q, vm);
++	xe_assert(vm->xe, type == XE_EXEC_QUEUE_TLB_INVAL_MEDIA_GT ||
++		  type == XE_EXEC_QUEUE_TLB_INVAL_PRIMARY_GT);
++	xe_assert(vm->xe, q->flags & (EXEC_QUEUE_FLAG_VM |
++				      EXEC_QUEUE_FLAG_MIGRATE));
++	xe_assert(vm->xe, !dma_fence_is_container(fence));
++
++	xe_exec_queue_tlb_inval_last_fence_put(q, vm, type);
++	q->tlb_inval[type].last_fence = dma_fence_get(fence);
++}
++
+ /**
+  * xe_exec_queue_contexts_hwsp_rebase - Re-compute GGTT references
+  * within all LRCs of a queue.
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
+index a4dfbe858..1ba7354b3 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue.h
+@@ -14,6 +14,10 @@ struct drm_file;
+ struct xe_device;
+ struct xe_file;
+ 
++#define for_each_tlb_inval(__i)	\
++	for (__i = XE_EXEC_QUEUE_TLB_INVAL_PRIMARY_GT; \
++	     __i <= XE_EXEC_QUEUE_TLB_INVAL_MEDIA_GT; ++__i)
++
+ struct xe_exec_queue *xe_exec_queue_create(struct xe_device *xe, struct xe_vm *vm,
+ 					   u32 logical_mask, u16 width,
+ 					   struct xe_hw_engine *hw_engine, u32 flags,
+@@ -86,6 +90,23 @@ void xe_exec_queue_last_fence_set(struct xe_exec_queue *e, struct xe_vm *vm,
+ 				  struct dma_fence *fence);
+ int xe_exec_queue_last_fence_test_dep(struct xe_exec_queue *q,
+ 				      struct xe_vm *vm);
++
++void xe_exec_queue_tlb_inval_last_fence_put(struct xe_exec_queue *q,
++					    struct xe_vm *vm,
++					    unsigned int type);
++
++void xe_exec_queue_tlb_inval_last_fence_put_unlocked(struct xe_exec_queue *q,
++						     unsigned int type);
++
++struct dma_fence *xe_exec_queue_tlb_inval_last_fence_get(struct xe_exec_queue *q,
++							 struct xe_vm *vm,
++							 unsigned int type);
++
++void xe_exec_queue_tlb_inval_last_fence_set(struct xe_exec_queue *q,
++					    struct xe_vm *vm,
++					    struct dma_fence *fence,
++					    unsigned int type);
++
+ void xe_exec_queue_update_run_ticks(struct xe_exec_queue *q);
+ 
+ int xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch);
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
+index 838266c39..4ef61e803 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
+@@ -146,6 +146,11 @@ struct xe_exec_queue {
+ 		 * dependency scheduler
+ 		 */
+ 		struct xe_dep_scheduler *dep_scheduler;
++		/**
++		 * @last_fence: last fence for tlb invalidation, protected by
++		 * vm->lock in write mode
++		 */
++		struct dma_fence *last_fence;
+ 	} tlb_inval[XE_EXEC_QUEUE_TLB_INVAL_COUNT];
+ 
+ 	/** @pxp: PXP info tracking */
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 80ef0da0b..15b2503b7 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -2451,6 +2451,20 @@ void xe_migrate_job_unlock(struct xe_migrate *m, struct xe_exec_queue *q)
+ 		xe_vm_assert_held(q->vm);	/* User queues VM's should be locked */
+ }
+ 
++#if IS_ENABLED(CONFIG_PROVE_LOCKING)
++/**
++ * xe_migrate_job_lock_assert() - Assert migrate job lock held of queue
++ * @q: Migrate queue
++ */
++void xe_migrate_job_lock_assert(struct xe_exec_queue *q)
++{
++	struct xe_migrate *m = gt_to_tile(q->gt)->migrate;
++
++	xe_gt_assert(q->gt, q == m->q);
++	lockdep_assert_held(&m->job_mutex);
++}
++#endif
++
+ #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
+ #include "tests/xe_migrate.c"
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_migrate.h b/drivers/gpu/drm/xe/xe_migrate.h
+index d7bcc6ad8..260e298e5 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.h
++++ b/drivers/gpu/drm/xe/xe_migrate.h
+@@ -160,6 +160,14 @@ xe_migrate_update_pgtables(struct xe_migrate *m,
+ 
+ void xe_migrate_wait(struct xe_migrate *m);
+ 
++#if IS_ENABLED(CONFIG_PROVE_LOCKING)
++void xe_migrate_job_lock_assert(struct xe_exec_queue *q);
++#else
++static inline void xe_migrate_job_lock_assert(struct xe_exec_queue *q)
++{
++}
++#endif
++
+ void xe_migrate_job_lock(struct xe_migrate *m, struct xe_exec_queue *q);
+ void xe_migrate_job_unlock(struct xe_migrate *m, struct xe_exec_queue *q);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index 0fce6084c..28b4aa07a 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -2010,8 +2010,13 @@ void xe_vm_close_and_put(struct xe_vm *vm)
+ 
+ 	down_write(&vm->lock);
+ 	for_each_tile(tile, xe, id) {
+-		if (vm->q[id])
++		if (vm->q[id]) {
++			int i;
++
+ 			xe_exec_queue_last_fence_put(vm->q[id], vm);
++			for_each_tlb_inval(i)
++				xe_exec_queue_tlb_inval_last_fence_put(vm->q[id], vm, i);
++		}
+ 	}
+ 	up_write(&vm->lock);
+ 
+-- 
+2.43.0
+

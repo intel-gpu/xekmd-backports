@@ -30,7 +30,7 @@ Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Link: https://lore.kernel.org/r/20250905154953.3974335-4-badal.nilawar@intel.com
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
-(cherry-picked from commit 918bd789d62e6ecbcbc37b2c631ee9127f17bfa9 linux-next)
+(backported from commit 918bd789d62e6ecbcbc37b2c631ee9127f17bfa9 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/Makefile                |  1 +
@@ -59,7 +59,7 @@ index 02f73dffe..c6e9ca7df 100644
  	xe_migrate.o \
  	xe_mmio.o \
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index c9c91b21e..f019f74ac 100644
+index 6137bfdee..00b2e0068 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -45,6 +45,7 @@
@@ -70,7 +70,7 @@ index c9c91b21e..f019f74ac 100644
  #include "xe_mmio.h"
  #include "xe_module.h"
  #include "xe_nvm.h"
-@@ -876,6 +877,10 @@ int xe_device_probe(struct xe_device *xe)
+@@ -896,6 +897,10 @@ int xe_device_probe(struct xe_device *xe)
  	if (err)
  		return err;
  
@@ -82,10 +82,10 @@ index c9c91b21e..f019f74ac 100644
  	if (err)
  		return err;
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 150440455..22946455f 100644
+index cced03efa..9a7a6a22e 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -15,6 +15,7 @@
+@@ -14,6 +14,7 @@
  
  #include "xe_devcoredump_types.h"
  #include "xe_heci_gsc.h"
@@ -93,7 +93,7 @@ index 150440455..22946455f 100644
  #include "xe_lmtt_types.h"
  #include "xe_memirq_types.h"
  #include "xe_oa_types.h"
-@@ -331,6 +332,8 @@ struct xe_device {
+@@ -275,6 +276,8 @@ struct xe_device {
  		u8 has_heci_cscfi:1;
  		/** @info.has_heci_gscfi: device has heci gscfi */
  		u8 has_heci_gscfi:1;
@@ -102,7 +102,7 @@ index 150440455..22946455f 100644
  		/** @info.has_llc: Device has a shared CPU+GPU last level cache */
  		u8 has_llc:1;
  		/** @info.has_mbx_power_limits: Device has support to manage power limits using
-@@ -584,6 +587,9 @@ struct xe_device {
+@@ -530,6 +533,9 @@ struct xe_device {
  	/** @nvm: discrete graphics non-volatile memory */
  	struct intel_dg_nvm_dev *nvm;
  
@@ -263,18 +263,18 @@ index 000000000..f79e5aefe
 +
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index 2a390f3dc..cab13a30d 100644
+index 94016940c..e1c23e768 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -327,6 +327,7 @@ static const struct xe_device_desc bmg_desc = {
+@@ -328,6 +328,7 @@ static const struct xe_device_desc bmg_desc = {
  	.has_mbx_power_limits = true,
  	.has_gsc_nvm = 1,
  	.has_heci_cscfi = 1,
 +	.has_late_bind = true,
  	.has_sriov = true,
+ 	.has_mem_copy_instr = true,
  	.max_gt_per_tile = 2,
- 	.needs_scratch = true,
-@@ -574,6 +575,7 @@ static int xe_info_init_early(struct xe_device *xe,
+@@ -577,6 +578,7 @@ static int xe_info_init_early(struct xe_device *xe,
  	xe->info.has_gsc_nvm = desc->has_gsc_nvm;
  	xe->info.has_heci_gscfi = desc->has_heci_gscfi;
  	xe->info.has_heci_cscfi = desc->has_heci_cscfi;
@@ -283,7 +283,7 @@ index 2a390f3dc..cab13a30d 100644
  	xe->info.has_pxp = desc->has_pxp;
  	xe->info.has_sriov = desc->has_sriov;
 diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
-index 4de6f69ed..51a607d32 100644
+index a5d89ea36..3d6bb20cc 100644
 --- a/drivers/gpu/drm/xe/xe_pci_types.h
 +++ b/drivers/gpu/drm/xe/xe_pci_types.h
 @@ -39,6 +39,7 @@ struct xe_device_desc {
@@ -293,7 +293,7 @@ index 4de6f69ed..51a607d32 100644
 +	u8 has_late_bind:1;
  	u8 has_llc:1;
  	u8 has_mbx_power_limits:1;
- 	u8 has_pxp:1;
+ 	u8 has_mem_copy_instr:1;
 -- 
-2.34.1
+2.43.0
 

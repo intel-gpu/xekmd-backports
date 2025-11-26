@@ -1,0 +1,85 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Fri, 31 Oct 2025 16:40:48 -0700
+Subject: drm/xe: Skip TLB invalidation waits in page fault binds
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Avoid waiting on unrelated TLB invalidations when servicing page fault
+binds. Since the migrate queue is shared across processes, TLB
+invalidations triggered by other processes may occur concurrently but
+are not relevant to the current bind. Teach the bind pipeline to skip
+waits on such invalidations to prevent unnecessary serialization.
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Link: https://patch.msgid.link/20251031234050.3043507-5-matthew.brost@intel.com
+(backported from commit ebb0880d497356befb0ff4d36fb0e1d072701805 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vm.c       | 14 ++++++++++++--
+ drivers/gpu/drm/xe/xe_vm_types.h |  1 +
+ 2 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index 8d2e02fc2..5022b0ab2 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -995,6 +995,7 @@ struct dma_fence *xe_vma_rebind(struct xe_vm *vm, struct xe_vma *vma, u8 tile_ma
+ 	xe_assert(vm->xe, xe_vm_in_fault_mode(vm));
+ 
+ 	xe_vma_ops_init(&vops, vm, NULL, NULL, 0);
++	vops.flags |= XE_VMA_OPS_FLAG_SKIP_TLB_WAIT;
+ 	for_each_tile(tile, vm->xe, id) {
+ 		vops.pt_update_ops[id].wait_vm_bookkeep = true;
+ 		vops.pt_update_ops[tile->id].q =
+@@ -1085,6 +1086,7 @@ struct dma_fence *xe_vm_range_rebind(struct xe_vm *vm,
+ 	xe_assert(vm->xe, xe_vma_is_cpu_addr_mirror(vma));
+ 
+ 	xe_vma_ops_init(&vops, vm, NULL, NULL, 0);
++	vops.flags |= XE_VMA_OPS_FLAG_SKIP_TLB_WAIT;
+ 	for_each_tile(tile, vm->xe, id) {
+ 		vops.pt_update_ops[id].wait_vm_bookkeep = true;
+ 		vops.pt_update_ops[tile->id].q =
+@@ -3233,8 +3235,13 @@ static struct dma_fence *ops_execute(struct xe_vm *vm,
+ 	if (number_tiles == 0)
+ 		return ERR_PTR(-ENODATA);
+ 
+-	for_each_tile(tile, vm->xe, id)
+-		n_fence += (1 + XE_MAX_GT_PER_TILE);
++	if (vops->flags & XE_VMA_OPS_FLAG_SKIP_TLB_WAIT) {
++		for_each_tile(tile, vm->xe, id)
++			++n_fence;
++	} else {
++		for_each_tile(tile, vm->xe, id)
++			n_fence += (1 + XE_MAX_GT_PER_TILE);
++	}
+ 
+ 	fences = kmalloc_array(n_fence, sizeof(*fences), GFP_KERNEL);
+ 	if (!fences) {
+@@ -3275,6 +3282,9 @@ static struct dma_fence *ops_execute(struct xe_vm *vm,
+ 
+ collect_fences:
+ 		fences[current_fence++] = fence ?: dma_fence_get_stub();
++		if (vops->flags & XE_VMA_OPS_FLAG_SKIP_TLB_WAIT)
++			continue;
++
+ 		xe_migrate_job_lock(tile->migrate, q);
+ 		for_each_tlb_inval(i)
+ 			fences[current_fence++] =
+diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
+index fc049f955..f3752094e 100644
+--- a/drivers/gpu/drm/xe/xe_vm_types.h
++++ b/drivers/gpu/drm/xe/xe_vm_types.h
+@@ -478,6 +478,7 @@ struct xe_vma_ops {
+ 	struct xe_vm_pgtable_update_ops pt_update_ops[XE_MAX_TILES_PER_DEVICE];
+ 	/** @flag: signify the properties within xe_vma_ops*/
+ #define XE_VMA_OPS_FLAG_HAS_SVM_PREFETCH BIT(0)
++#define XE_VMA_OPS_FLAG_SKIP_TLB_WAIT   BIT(1)
+ 	u32 flags;
+ #ifdef TEST_VM_OPS_ERROR
+ 	/** @inject_error: inject error to test error handling */
+-- 
+2.43.0
+

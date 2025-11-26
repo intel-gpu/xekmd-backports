@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Francois Dugast <francois.dugast@intel.com>
+Date: Tue, 5 Aug 2025 15:59:07 +0200
+Subject: drm/xe/svm: Migrate folios when possible
+
+The DMA mapping can now correspond to a folio (order > 0), so move
+the iterator by the number of pages in the folio in order to migrate
+all pages at once.
+
+This requires forcing contiguous memory for SVM BOs, which greatly
+simplifies the code and enables 2MB device page support, allowing a
+major performance improvement. Negative effects like extra eviction
+are unlikely as SVM BOs have a maximal size of 2MB.
+
+v2:
+- Improve commit message (Matthew Brost)
+- Fix increment, chunk, assert match (Matthew Brost)
+
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20250805140028.599361-7-francois.dugast@intel.com
+Signed-off-by: Francois Dugast <francois.dugast@intel.com>
+(cherry-picked from commit 979f61633d069d761da606bef5efec42d33509e2 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_bo.c  | 2 ++
+ drivers/gpu/drm/xe/xe_svm.c | 8 ++++++++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
+index df11b9afd..a67bf6be2 100644
+--- a/drivers/gpu/drm/xe/xe_bo.c
++++ b/drivers/gpu/drm/xe/xe_bo.c
+@@ -200,6 +200,8 @@ static bool force_contiguous(u32 bo_flags)
+ 	else if (bo_flags & XE_BO_FLAG_PINNED &&
+ 		 !(bo_flags & XE_BO_FLAG_PINNED_LATE_RESTORE))
+ 		return true; /* needs vmap */
++	else if (bo_flags & XE_BO_FLAG_CPU_ADDR_MIRROR)
++		return true;
+ 
+ 	/*
+ 	 * For eviction / restore on suspend / resume objects pinned in VRAM
+diff --git a/drivers/gpu/drm/xe/xe_svm.c b/drivers/gpu/drm/xe/xe_svm.c
+index 637516e44..3f0bd055f 100644
+--- a/drivers/gpu/drm/xe/xe_svm.c
++++ b/drivers/gpu/drm/xe/xe_svm.c
+@@ -388,6 +388,14 @@ static int xe_svm_copy(struct page **pages,
+ 			}
+ 
+ 			match = vram_addr + PAGE_SIZE * (i - pos) == __vram_addr;
++			/* Expected with contiguous memory */
++			xe_assert(vr->xe, match);
++
++			if (pagemap_addr[i].order) {
++				i += NR_PAGES(pagemap_addr[i].order) - 1;
++				chunk = (i - pos) == (XE_MIGRATE_CHUNK_SIZE / PAGE_SIZE);
++				last = (i + 1) == npages;
++			}
+ 		}
+ 
+ 		/*
+-- 
+2.43.0
+

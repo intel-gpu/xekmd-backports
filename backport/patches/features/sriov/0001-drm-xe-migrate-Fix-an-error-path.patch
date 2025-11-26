@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Thomas=20Hellstr=C3=B6m?= <thomas.hellstrom@linux.intel.com>
+Date: Wed, 10 Sep 2025 18:09:39 +0200
+Subject: drm/xe/migrate: Fix an error path
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The exhaustive eviction accidently changed an error path goto to
+a return. Fix this.
+
+Fixes: 59eabff2a352 ("drm/xe: Convert xe_bo_create_pin_map() for exhaustive eviction")
+Cc: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Reviewed-by: Francois Dugast <francois.dugast@intel.com>
+Link: https://lore.kernel.org/r/20250910160939.103473-1-thomas.hellstrom@linux.intel.com
+(cherry-picked from commit 1117e7d1e8e66bf7e40291178b829a8513f83a7a linux-next)
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_migrate.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index f4fbddd59..80ef0da0b 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -448,7 +448,7 @@ int xe_migrate_init(struct xe_migrate *m)
+ 
+ 	err = xe_migrate_lock_prepare_vm(tile, m, vm);
+ 	if (err)
+-		return err;
++		goto err_out;
+ 
+ 	if (xe->info.has_usm) {
+ 		struct xe_hw_engine *hwe = xe_gt_hw_engine(primary_gt,
+-- 
+2.43.0
+

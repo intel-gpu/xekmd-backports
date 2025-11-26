@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Wed, 22 Oct 2025 17:38:32 +0100
+Subject: drm/xe/migrate: fix chunk handling for 2M page emit
+
+On systems with PAGE_SIZE > 4K the chunk will likely be rounded down to
+zero, if say we have single 2M page, so one huge pte, since we also try
+to align the chunk to PAGE_SIZE / XE_PAGE_SIZE, which will be 16 on 64K
+systems. Make the ALIGN_DOWN conditional for 4K PTEs where we can
+encounter gpu_page_size < PAGE_SIZE.
+
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20251022163836.191405-4-matthew.auld@intel.com
+(cherry-picked from commit fb188d8b00fc221fcc744109dfa29b9945c91913 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_migrate.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 9a4ff6843..6f478c21e 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -1613,7 +1613,9 @@ static void build_pt_update_batch_sram(struct xe_migrate *m,
+ 	while (ptes) {
+ 		u32 chunk = min(MAX_PTE_PER_SDI, ptes);
+ 
+-		chunk = ALIGN_DOWN(chunk, PAGE_SIZE / XE_PAGE_SIZE);
++		if (!level)
++			chunk = ALIGN_DOWN(chunk, PAGE_SIZE / XE_PAGE_SIZE);
++
+ 		bb->cs[bb->len++] = MI_STORE_DATA_IMM | MI_SDI_NUM_QW(chunk);
+ 		bb->cs[bb->len++] = pt_offset;
+ 		bb->cs[bb->len++] = 0;
+-- 
+2.43.0
+

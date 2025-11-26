@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Date: Wed, 5 Nov 2025 03:13:11 +0200
+Subject: drm/xe: Remove never used code in xe_vm_create()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Clang is not happy with set but unused variable (this is visible
+with `make LLVM=1` build:
+
+  drivers/gpu/drm/xe/xe_vm.c:1462:11: error: variable 'number_tiles' set
+  but not used [-Werror,-Wunused-but-set-variable]
+
+The use of this variable was removed in the commit mentioned below as
+"Fixes:" but only its declaration and update remain.
+It seems like the variable is not used along with the assignment that
+does not have side effects as far as I can see.
+Remove those altogether.
+
+Fixes: cb99e12ba8cb ("drm/xe: Decouple bind queue last fence from TLB invalidations")
+Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Reviewed-by: Michał Winiarski <michal.winiarski@intel.com>
+Link: https://patch.msgid.link/20251105011311.3177875-1-gwan-gyeong.mun@intel.com
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+(cherry-picked from commit 1f2cf5295cdba71818288c9e495b4ef5097565ed linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vm.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index 5022b0ab2..292c5705f 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -1736,7 +1736,7 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags, struct xe_file *xef)
+ 	struct xe_validation_ctx ctx;
+ 	struct drm_exec exec;
+ 	struct xe_vm *vm;
+-	int err, number_tiles = 0;
++	int err;
+ 	struct xe_tile *tile;
+ 	u8 id;
+ 
+@@ -1900,7 +1900,6 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags, struct xe_file *xef)
+ 				goto err_close;
+ 			}
+ 			vm->q[id] = q;
+-			number_tiles++;
+ 		}
+ 	}
+ 
+-- 
+2.43.0
+

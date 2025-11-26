@@ -1,0 +1,75 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Wed, 22 Oct 2025 17:38:31 +0100
+Subject: drm/xe/migrate: rework size restrictions for sram pte emit
+
+We allow the input size to not be aligned to PAGE_SIZE, which leads to
+various bugs in build_pt_update_batch_sram() for PAGE_SIZE > 4K systems.
+For example if ptes is exactly one gpu_page_size then the chunk size is
+rounded down to zero.  The simplest fix looks to be forcing PAGE_SIZE
+aligned inputs.
+
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20251022163836.191405-3-matthew.auld@intel.com
+(cherry-picked from commit aaeef7a9c8b9206039a588a23e4dc11dddbefe2d linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_migrate.c | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 9d52c89cd..9a4ff6843 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -1607,6 +1607,8 @@ static void build_pt_update_batch_sram(struct xe_migrate *m,
+ 	u32 ptes;
+ 	int i = 0;
+ 
++	xe_tile_assert(m->tile, PAGE_ALIGNED(size));
++
+ 	ptes = DIV_ROUND_UP(size, gpu_page_size);
+ 	while (ptes) {
+ 		u32 chunk = min(MAX_PTE_PER_SDI, ptes);
+@@ -1620,12 +1622,13 @@ static void build_pt_update_batch_sram(struct xe_migrate *m,
+ 		ptes -= chunk;
+ 
+ 		while (chunk--) {
+-			u64 addr = sram_addr[i].addr & ~(gpu_page_size - 1);
+-			u64 pte, orig_addr = addr;
++			u64 addr = sram_addr[i].addr;
++			u64 pte;
+ 
+ 			xe_tile_assert(m->tile, sram_addr[i].proto ==
+ 				       DRM_INTERCONNECT_SYSTEM);
+ 			xe_tile_assert(m->tile, addr);
++			xe_tile_assert(m->tile, PAGE_ALIGNED(addr));
+ 
+ again:
+ 			pte = m->q->vm->pt_ops->pte_encode_addr(m->tile->xe,
+@@ -1636,7 +1639,7 @@ static void build_pt_update_batch_sram(struct xe_migrate *m,
+ 
+ 			if (gpu_page_size < PAGE_SIZE) {
+ 				addr += XE_PAGE_SIZE;
+-				if (orig_addr + PAGE_SIZE != addr) {
++				if (!PAGE_ALIGNED(addr)) {
+ 					chunk--;
+ 					goto again;
+ 				}
+@@ -1727,10 +1730,10 @@ static struct dma_fence *xe_migrate_vram(struct xe_migrate *m,
+ 
+ 	if (use_pde)
+ 		build_pt_update_batch_sram(m, bb, m->large_page_copy_pdes,
+-					   sram_addr, len + sram_offset, 1);
++					   sram_addr, npages << PAGE_SHIFT, 1);
+ 	else
+ 		build_pt_update_batch_sram(m, bb, pt_slot * XE_PAGE_SIZE,
+-					   sram_addr, len + sram_offset, 0);
++					   sram_addr, npages << PAGE_SHIFT, 0);
+ 
+ 	if (dir == XE_MIGRATE_COPY_TO_VRAM) {
+ 		if (use_pde)
+-- 
+2.43.0
+

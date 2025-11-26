@@ -28,10 +28,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  4 files changed, 19 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index e0a4b40f7967..a18ff379f690 100644
+index 41dfb1a61..1cd479932 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -323,6 +323,8 @@ struct xe_device {
+@@ -331,6 +331,8 @@ struct xe_device {
  		u8 skip_mtcfg:1;
  		/** @info.skip_pcode: skip access to PCODE uC */
  		u8 skip_pcode:1;
@@ -41,7 +41,7 @@ index e0a4b40f7967..a18ff379f690 100644
  
  	/** @wa_active: keep track of active workarounds */
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index 591077c99f63..fb08f1b19122 100644
+index 87ae93c3d..436a51c4f 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -67,7 +67,11 @@
@@ -77,18 +77,18 @@ index 591077c99f63..fb08f1b19122 100644
  	return gt;
  }
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index f64942737a0b..e71673e23f08 100644
+index f7e55b329..bbb1759b2 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -339,6 +339,7 @@ static const struct xe_device_desc ptl_desc = {
- 	.has_sriov = true,
+@@ -343,6 +343,7 @@ static const struct xe_device_desc ptl_desc = {
+ 	.has_mem_copy_instr = true,
  	.max_gt_per_tile = 2,
  	.needs_scratch = true,
 +	.needs_shared_vf_gt_wq = true,
  };
  
  #undef PLATFORM
-@@ -581,6 +582,7 @@ static int xe_info_init_early(struct xe_device *xe,
+@@ -587,6 +588,7 @@ static int xe_info_init_early(struct xe_device *xe,
  	xe->info.skip_mtcfg = desc->skip_mtcfg;
  	xe->info.skip_pcode = desc->skip_pcode;
  	xe->info.needs_scratch = desc->needs_scratch;
@@ -97,10 +97,10 @@ index f64942737a0b..e71673e23f08 100644
  	xe->info.probe_display = IS_ENABLED(CONFIG_DRM_XE_DISPLAY) &&
  				 xe_modparam.probe_display &&
 diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
-index 4de6f69ed975..cbe69e9bc8b6 100644
+index 6268b726b..66f94e2ef 100644
 --- a/drivers/gpu/drm/xe/xe_pci_types.h
 +++ b/drivers/gpu/drm/xe/xe_pci_types.h
-@@ -47,6 +47,7 @@ struct xe_device_desc {
+@@ -49,6 +49,7 @@ struct xe_device_desc {
  	u8 skip_guc_pc:1;
  	u8 skip_mtcfg:1;
  	u8 skip_pcode:1;

@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Wed, 22 Oct 2025 17:38:33 +0100
+Subject: drm/xe/migrate: fix batch buffer sizing
+
+In xe_migrate_vram() the copy can straddle page boundaries, so the len
+might look like a single page, but actually accounting for the offset
+within the page we will need to emit more than one PTE. Otherwise in
+some cases the batch buffer will be undersized leading to warnings
+later.  We already have npages so use that instead.
+
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20251022163836.191405-5-matthew.auld@intel.com
+(cherry-picked from commit 1413329456aaf5d209ab9c73ae710fb88785ef78 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_migrate.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 6f478c21e..1fbee3710 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -1703,7 +1703,7 @@ static struct dma_fence *xe_migrate_vram(struct xe_migrate *m,
+ 
+ 	xe_assert(xe, npages * PAGE_SIZE <= MAX_PREEMPTDISABLE_TRANSFER);
+ 
+-	batch_size += pte_update_cmd_size(len);
++	batch_size += pte_update_cmd_size(npages << PAGE_SHIFT);
+ 	batch_size += EMIT_COPY_DW;
+ 
+ 	bb = xe_bb_new(gt, batch_size, use_usm_batch);
+-- 
+2.43.0
+

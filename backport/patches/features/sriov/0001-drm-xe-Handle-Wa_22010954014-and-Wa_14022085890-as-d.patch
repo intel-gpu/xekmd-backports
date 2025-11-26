@@ -27,7 +27,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  7 files changed, 17 insertions(+), 9 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device_wa_oob.rules b/drivers/gpu/drm/xe/xe_device_wa_oob.rules
-index 3a0c4ccc4224..d3f78b9c3a62 100644
+index 3a0c4ccc4..d3f78b9c3 100644
 --- a/drivers/gpu/drm/xe/xe_device_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_device_wa_oob.rules
 @@ -1,2 +1,4 @@
@@ -36,7 +36,7 @@ index 3a0c4ccc4224..d3f78b9c3a62 100644
  		PLATFORM(PANTHERLAKE)
 +14022085890	SUBPLATFORM(BATTLEMAGE, G21)
 diff --git a/drivers/gpu/drm/xe/xe_guc_pc.c b/drivers/gpu/drm/xe/xe_guc_pc.c
-index 78ba9a977a13..a92817da772c 100644
+index 78ba9a977..a92817da7 100644
 --- a/drivers/gpu/drm/xe/xe_guc_pc.c
 +++ b/drivers/gpu/drm/xe/xe_guc_pc.c
 @@ -13,6 +13,7 @@
@@ -57,10 +57,10 @@ index 78ba9a977a13..a92817da772c 100644
  
  out:
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index e490c110cb88..0cccfd784b48 100644
+index d1b7a0543..8cbe86007 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -318,6 +318,8 @@ static const struct xe_device_desc lnl_desc = {
+@@ -319,6 +319,8 @@ static const struct xe_device_desc lnl_desc = {
  	.needs_scratch = true,
  };
  
@@ -69,8 +69,8 @@ index e490c110cb88..0cccfd784b48 100644
  static const struct xe_device_desc bmg_desc = {
  	DGFX_FEATURES,
  	PLATFORM(BATTLEMAGE),
-@@ -330,6 +332,10 @@ static const struct xe_device_desc bmg_desc = {
- 	.has_sriov = true,
+@@ -333,6 +335,10 @@ static const struct xe_device_desc bmg_desc = {
+ 	.has_mem_copy_instr = true,
  	.max_gt_per_tile = 2,
  	.needs_scratch = true,
 +	.subplatforms = (const struct xe_subplatform_desc[]) {
@@ -81,7 +81,7 @@ index e490c110cb88..0cccfd784b48 100644
  
  static const struct xe_device_desc ptl_desc = {
 diff --git a/drivers/gpu/drm/xe/xe_platform_types.h b/drivers/gpu/drm/xe/xe_platform_types.h
-index d08574c4cdb8..3e332214c7bb 100644
+index d08574c4c..3e332214c 100644
 --- a/drivers/gpu/drm/xe/xe_platform_types.h
 +++ b/drivers/gpu/drm/xe/xe_platform_types.h
 @@ -34,6 +34,7 @@ enum xe_subplatform {
@@ -93,10 +93,10 @@ index d08574c4cdb8..3e332214c7bb 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_wa.c b/drivers/gpu/drm/xe/xe_wa.c
-index cf8249facc9c..04da523224fd 100644
+index 9cf34f3d1..319bdece5 100644
 --- a/drivers/gpu/drm/xe/xe_wa.c
 +++ b/drivers/gpu/drm/xe/xe_wa.c
-@@ -1097,6 +1097,6 @@ void xe_wa_apply_tile_workarounds(struct xe_tile *tile)
+@@ -1089,6 +1089,6 @@ void xe_wa_apply_tile_workarounds(struct xe_tile *tile)
  	if (IS_SRIOV_VF(tile->xe))
  		return;
  
@@ -105,7 +105,7 @@ index cf8249facc9c..04da523224fd 100644
  		xe_mmio_rmw32(mmio, XEHP_CLOCK_GATE_DIS, 0, SGSI_SIDECLK_DIS);
  }
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
-index 34ccb7fdeea0..bde76e735398 100644
+index c57e32dea..a5ec6b8f9 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
 @@ -14,7 +14,6 @@
@@ -116,7 +116,7 @@ index 34ccb7fdeea0..bde76e735398 100644
  14019821291	MEDIA_VERSION_RANGE(1300, 2000)
  14015076503	MEDIA_VERSION(1300)
  16020292621	GRAPHICS_VERSION(2004), GRAPHICS_STEP(A0, B0)
-@@ -70,8 +69,4 @@ no_media_l3	MEDIA_VERSION(3000)
+@@ -70,9 +69,5 @@ no_media_l3	MEDIA_VERSION(3000)
  		MEDIA_VERSION(3002)
  		GRAPHICS_VERSION(3003)
  
@@ -125,8 +125,9 @@ index 34ccb7fdeea0..bde76e735398 100644
 -14022085890	GRAPHICS_VERSION(2001)
 -
  15015404425_disable	PLATFORM(PANTHERLAKE), MEDIA_STEP(B0, FOREVER)
+ 14020316580    MEDIA_VERSION(1301)
 diff --git a/include/drm/intel/pciids.h b/include/drm/intel/pciids.h
-index 97fde8356fb2..6b9f55ffb933 100644
+index 97fde8356..6b9f55ffb 100644
 --- a/include/drm/intel/pciids.h
 +++ b/include/drm/intel/pciids.h
 @@ -844,7 +844,7 @@

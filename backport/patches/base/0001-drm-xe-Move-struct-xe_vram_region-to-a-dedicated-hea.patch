@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Piotr=20Pi=C3=B3rkowski?= <piotr.piorkowski@intel.com>
 Date: Mon, 14 Jul 2025 20:48:16 +0200
-Subject: [PATCH 18/62] drm/xe: Move struct xe_vram_region to a dedicated
- header
+Subject: [PATCH] drm/xe: Move struct xe_vram_region to a dedicated header
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -41,7 +40,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_vram_types.h
 
 diff --git a/drivers/gpu/drm/xe/display/xe_fb_pin.c b/drivers/gpu/drm/xe/display/xe_fb_pin.c
-index 2187b2de64e1..f2cfba674899 100644
+index 2187b2de6..f2cfba674 100644
 --- a/drivers/gpu/drm/xe/display/xe_fb_pin.c
 +++ b/drivers/gpu/drm/xe/display/xe_fb_pin.c
 @@ -16,6 +16,7 @@
@@ -53,7 +52,7 @@ index 2187b2de64e1..f2cfba674899 100644
  static void
  write_dpt_rotated(struct xe_bo *bo, struct iosys_map *map, u32 *dpt_ofs, u32 bo_ofs,
 diff --git a/drivers/gpu/drm/xe/display/xe_plane_initial.c b/drivers/gpu/drm/xe/display/xe_plane_initial.c
-index b1bf7e8d9f9f..b2d27458def5 100644
+index b1bf7e8d9..b2d27458d 100644
 --- a/drivers/gpu/drm/xe/display/xe_plane_initial.c
 +++ b/drivers/gpu/drm/xe/display/xe_plane_initial.c
 @@ -21,6 +21,7 @@
@@ -65,10 +64,10 @@ index b1bf7e8d9f9f..b2d27458def5 100644
  
  #include <generated/xe_wa_oob.h>
 diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
-index 62079919c0f5..af17e469dc6d 100644
+index df11b9afd..d9f024f13 100644
 --- a/drivers/gpu/drm/xe/xe_bo.c
 +++ b/drivers/gpu/drm/xe/xe_bo.c
-@@ -37,6 +37,7 @@
+@@ -36,6 +36,7 @@
  #include "xe_trace_bo.h"
  #include "xe_ttm_stolen_mgr.h"
  #include "xe_vm.h"
@@ -77,7 +76,7 @@ index 62079919c0f5..af17e469dc6d 100644
  const char *const xe_mem_type_to_name[TTM_NUM_MEM_TYPES]  = {
  	[XE_PL_SYSTEM] = "system",
 diff --git a/drivers/gpu/drm/xe/xe_bo_types.h b/drivers/gpu/drm/xe/xe_bo_types.h
-index 89d2d78c2f06..cf604adc13a3 100644
+index ff560d824..57d346981 100644
 --- a/drivers/gpu/drm/xe/xe_bo_types.h
 +++ b/drivers/gpu/drm/xe/xe_bo_types.h
 @@ -9,6 +9,7 @@
@@ -89,10 +88,10 @@ index 89d2d78c2f06..cf604adc13a3 100644
  #include <drm/ttm/ttm_device.h>
  #include <drm/ttm/ttm_placement.h>
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index f6dec8d2d35e..57edbc63da6f 100644
+index 031c1f848..c7a3ad15f 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -64,6 +64,7 @@
+@@ -65,6 +65,7 @@
  #include "xe_ttm_sys_mgr.h"
  #include "xe_vm.h"
  #include "xe_vram.h"
@@ -101,7 +100,7 @@ index f6dec8d2d35e..57edbc63da6f 100644
  #include "xe_wait_user_fence.h"
  #include "xe_wa.h"
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 50352d5a35dd..a5a9f78e49c9 100644
+index cf66ac1f0..7d48027b9 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -10,7 +10,6 @@
@@ -113,7 +112,7 @@ index 50352d5a35dd..a5a9f78e49c9 100644
  
  #include "xe_devcoredump_types.h"
 @@ -27,7 +26,6 @@
- #include "xe_sriov_vf_ccs_types.h"
+ #include "xe_sriov_vf_types.h"
  #include "xe_step_types.h"
  #include "xe_survivability_mode_types.h"
 -#include "xe_ttm_vram_mgr_types.h"
@@ -193,7 +192,7 @@ index 50352d5a35dd..a5a9f78e49c9 100644
   * struct xe_mmio - register mmio structure
   *
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-index e7b0ea209060..61a357946fe1 100644
+index e7b0ea209..61a357946 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 @@ -33,6 +33,7 @@
@@ -205,7 +204,7 @@ index e7b0ea209060..61a357946fe1 100644
  
  #define make_u64_from_u32(hi, lo) ((u64)((u64)(u32)(hi) << 32 | (u32)(lo)))
 diff --git a/drivers/gpu/drm/xe/xe_svm.c b/drivers/gpu/drm/xe/xe_svm.c
-index e6871734ffa9..901f9a0268e6 100644
+index e6871734f..901f9a026 100644
 --- a/drivers/gpu/drm/xe/xe_svm.c
 +++ b/drivers/gpu/drm/xe/xe_svm.c
 @@ -17,6 +17,7 @@
@@ -238,7 +237,7 @@ index e6871734ffa9..901f9a0268e6 100644
  				       xe_svm_range_end(range),
  				       range->base.gpusvm->mm,
 diff --git a/drivers/gpu/drm/xe/xe_tile.c b/drivers/gpu/drm/xe/xe_tile.c
-index 858ce0183aaa..bd2ff91a7d1c 100644
+index 858ce0183..bd2ff91a7 100644
 --- a/drivers/gpu/drm/xe/xe_tile.c
 +++ b/drivers/gpu/drm/xe/xe_tile.c
 @@ -20,6 +20,7 @@
@@ -250,7 +249,7 @@ index 858ce0183aaa..bd2ff91a7d1c 100644
  /**
   * DOC: Multi-tile Design
 diff --git a/drivers/gpu/drm/xe/xe_tile.h b/drivers/gpu/drm/xe/xe_tile.h
-index 440bc9e11c8b..dceb6297aa01 100644
+index 440bc9e11..dceb6297a 100644
 --- a/drivers/gpu/drm/xe/xe_tile.h
 +++ b/drivers/gpu/drm/xe/xe_tile.h
 @@ -18,18 +18,6 @@ int xe_tile_alloc_vram(struct xe_tile *tile);
@@ -273,7 +272,7 @@ index 440bc9e11c8b..dceb6297aa01 100644
  {
  	return tile->id == 0;
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-index 3de2df47959b..8f9b8a1d2c05 100644
+index 3de2df479..8f9b8a1d2 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 @@ -15,6 +15,7 @@
@@ -285,7 +284,7 @@ index 3de2df47959b..8f9b8a1d2c05 100644
  static inline struct drm_buddy_block *
  xe_ttm_vram_mgr_first_block(struct list_head *list)
 diff --git a/drivers/gpu/drm/xe/xe_vram.c b/drivers/gpu/drm/xe/xe_vram.c
-index c93e9b96354b..366e5d8a85ca 100644
+index c93e9b963..366e5d8a8 100644
 --- a/drivers/gpu/drm/xe/xe_vram.c
 +++ b/drivers/gpu/drm/xe/xe_vram.c
 @@ -21,6 +21,7 @@
@@ -298,7 +297,7 @@ index c93e9b96354b..366e5d8a85ca 100644
  
 diff --git a/drivers/gpu/drm/xe/xe_vram_types.h b/drivers/gpu/drm/xe/xe_vram_types.h
 new file mode 100644
-index 000000000000..a01838236036
+index 000000000..a01838236
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_vram_types.h
 @@ -0,0 +1,74 @@

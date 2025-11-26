@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Wed, 22 Oct 2025 17:38:34 +0100
+Subject: drm/xe/migrate: trim batch buffer sizing
+
+We have an extra two dwords, but it looks like we should only need one
+for the extra bb_end. Likely this is just leftover from back when the
+arb handling was moved into the ring programming.
+
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20251022163836.191405-6-matthew.auld@intel.com
+(cherry-picked from commit 0171dcce33fb0c5c26129d8334cd13e511b5522a linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_migrate.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 1fbee3710..3837938b1 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -837,7 +837,7 @@ struct dma_fence *xe_migrate_copy(struct xe_migrate *m,
+ 				&ccs_it);
+ 
+ 	while (size) {
+-		u32 batch_size = 2; /* arb_clear() + MI_BATCH_BUFFER_END */
++		u32 batch_size = 1; /* MI_BATCH_BUFFER_END */
+ 		struct xe_sched_job *job;
+ 		struct xe_bb *bb;
+ 		u32 flush_flags = 0;
+@@ -1125,7 +1125,7 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
+ 
+ 		/* Calculate final sizes and batch size.. */
+ 		pte_flags = clear_vram ? PTE_UPDATE_FLAG_IS_VRAM : 0;
+-		batch_size = 2 +
++		batch_size = 1 +
+ 			pte_update_size(m, pte_flags, src, &src_it,
+ 					&clear_L0, &clear_L0_ofs, &clear_L0_pt,
+ 					clear_bo_data ? emit_clear_cmd_len(gt) : 0, 0,
+@@ -1685,7 +1685,7 @@ static struct dma_fence *xe_migrate_vram(struct xe_migrate *m,
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	bool use_usm_batch = xe->info.has_usm;
+ 	struct dma_fence *fence = NULL;
+-	u32 batch_size = 2;
++	u32 batch_size = 1;
+ 	u64 src_L0_ofs, dst_L0_ofs;
+ 	struct xe_sched_job *job;
+ 	struct xe_bb *bb;
+-- 
+2.43.0
+

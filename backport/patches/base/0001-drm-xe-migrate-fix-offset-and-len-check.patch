@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Wed, 22 Oct 2025 17:38:30 +0100
+Subject: [PATCH] drm/xe/migrate: fix offset and len check
+
+Restriction here is pitch of 4bytes to match pixel width (32b), and hw
+restriction where src and dst must be aligned to 64bytes. If any of that
+is not possible then we need a bounce buffer.
+
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://lore.kernel.org/r/20251022163836.191405-2-matthew.auld@intel.com
+(cherry-picked from commit 3c767f762be973711421876d9e05e4dfd93f74ce linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_migrate.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 503c485aa..9d52c89cd 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -1692,7 +1692,7 @@ static struct dma_fence *xe_migrate_vram(struct xe_migrate *m,
+ 	unsigned long i, j;
+ 	bool use_pde = xe_migrate_vram_use_pde(sram_addr, len + sram_offset);
+ 
+-	if (drm_WARN_ON(&xe->drm, (len & XE_CACHELINE_MASK) ||
++	if (drm_WARN_ON(&xe->drm, (!IS_ALIGNED(len, pitch)) ||
+ 			(sram_offset | vram_addr) & XE_CACHELINE_MASK))
+ 		return ERR_PTR(-EOPNOTSUPP);
+ 
+@@ -1912,8 +1912,9 @@ int xe_migrate_access_memory(struct xe_migrate *m, struct xe_bo *bo,
+ 	xe_bo_assert_held(bo);
+ 
+ 	/* Use bounce buffer for small access and unaligned access */
+-	if (!IS_ALIGNED(len, XE_CACHELINE_BYTES) ||
+-	    !IS_ALIGNED((unsigned long)buf + offset, XE_CACHELINE_BYTES)) {
++	if (!IS_ALIGNED(len, 4) ||
++	    !IS_ALIGNED(page_offset, XE_CACHELINE_BYTES) ||
++	    !IS_ALIGNED(offset, XE_CACHELINE_BYTES)) {
+ 		int buf_offset = 0;
+ 		void *bounce;
+ 		int err;
+-- 
+2.43.0
+

@@ -1,0 +1,378 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Fri, 31 Oct 2025 16:40:45 -0700
+Subject: drm/xe: Enforce correct user fence signaling order using
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Prevent application hangs caused by out-of-order fence signaling when
+user fences are attached. Use drm_syncobj (via dma-fence-chain) to
+guarantee that each user fence signals in order, regardless of the
+signaling order of the attached fences. Ensure user fence writebacks to
+user space occur in the correct sequence.
+
+v7:
+ - Skip drm_syncbj create of error (CI)
+
+Fixes: dd08ebf6c352 ("drm/xe: Introduce a new DRM driver for Intel GPUs")
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Link: https://patch.msgid.link/20251031234050.3043507-2-matthew.brost@intel.com
+(backported from commit adda4e855ab6409a3edaa585293f1f2069ab7299 linux-next)
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec.c             |  3 +-
+ drivers/gpu/drm/xe/xe_exec_queue.c       | 14 ++++++++
+ drivers/gpu/drm/xe/xe_exec_queue_types.h |  7 ++++
+ drivers/gpu/drm/xe/xe_oa.c               | 45 ++++++++++++++++--------
+ drivers/gpu/drm/xe/xe_oa_types.h         |  8 +++++
+ drivers/gpu/drm/xe/xe_sync.c             | 17 +++++++--
+ drivers/gpu/drm/xe/xe_sync.h             |  3 ++
+ drivers/gpu/drm/xe/xe_sync_types.h       |  3 ++
+ drivers/gpu/drm/xe/xe_vm.c               |  4 +++
+ 9 files changed, 86 insertions(+), 18 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec.c b/drivers/gpu/drm/xe/xe_exec.c
+index f87bc1d53..f67bf5790 100644
+--- a/drivers/gpu/drm/xe/xe_exec.c
++++ b/drivers/gpu/drm/xe/xe_exec.c
+@@ -164,7 +164,8 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+ 
+ 	for (num_syncs = 0; num_syncs < args->num_syncs; num_syncs++) {
+ 		err = xe_sync_entry_parse(xe, xef, &syncs[num_syncs],
+-					  &syncs_user[num_syncs], SYNC_PARSE_FLAG_EXEC |
++					  &syncs_user[num_syncs], NULL, 0,
++					  SYNC_PARSE_FLAG_EXEC |
+ 					  (xe_vm_in_lr_mode(vm) ?
+ 					   SYNC_PARSE_FLAG_LR_MODE : 0));
+ 		if (err)
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index 85610217a..c47eb5a3c 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -10,6 +10,7 @@
+ #include <drm/drm_device.h>
+ #include <drm/drm_drv.h>
+ #include <drm/drm_file.h>
++#include <drm/drm_syncobj.h>
+ #include <uapi/drm/xe_drm.h>
+ 
+ #include "xe_dep_scheduler.h"
+@@ -345,6 +346,16 @@ struct xe_exec_queue *xe_exec_queue_create_bind(struct xe_device *xe,
+ 	}
+ 	xe_vm_put(migrate_vm);
+ 
++	if (!IS_ERR(q)) {
++		int err = drm_syncobj_create(&q->ufence_syncobj,
++					     DRM_SYNCOBJ_CREATE_SIGNALED,
++					     NULL);
++		if (err) {
++			xe_exec_queue_put(q);
++			return ERR_PTR(err);
++		}
++	}
++
+ 	return q;
+ }
+ ALLOW_ERROR_INJECTION(xe_exec_queue_create_bind, ERRNO);
+@@ -354,6 +365,9 @@ void xe_exec_queue_destroy(struct kref *ref)
+ 	struct xe_exec_queue *q = container_of(ref, struct xe_exec_queue, refcount);
+ 	struct xe_exec_queue *eq, *next;
+ 
++	if (q->ufence_syncobj)
++		drm_syncobj_put(q->ufence_syncobj);
++
+ 	if (xe_exec_queue_uses_pxp(q))
+ 		xe_pxp_exec_queue_remove(gt_to_xe(q->gt)->pxp, q);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
+index 282505fa1..838266c39 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
+@@ -15,6 +15,7 @@
+ #include "xe_hw_fence_types.h"
+ #include "xe_lrc_types.h"
+ 
++struct drm_syncobj;
+ struct xe_execlist_exec_queue;
+ struct xe_gt;
+ struct xe_guc_exec_queue;
+@@ -155,6 +156,12 @@ struct xe_exec_queue {
+ 		struct list_head link;
+ 	} pxp;
+ 
++	/** @ufence_syncobj: User fence syncobj */
++	struct drm_syncobj *ufence_syncobj;
++
++	/** @ufence_timeline_value: User fence timeline value */
++	u64 ufence_timeline_value;
++
+ 	/** @ops: submission backend exec queue operations */
+ 	const struct xe_exec_queue_ops *ops;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_oa.c b/drivers/gpu/drm/xe/xe_oa.c
+index c1966c5e5..80fbde8ac 100644
+--- a/drivers/gpu/drm/xe/xe_oa.c
++++ b/drivers/gpu/drm/xe/xe_oa.c
+@@ -10,6 +10,7 @@
+ 
+ #include <drm/drm_drv.h>
+ #include <drm/drm_managed.h>
++#include <drm/drm_syncobj.h>
+ #include <uapi/drm/xe_drm.h>
+ 
+ #include <generated/xe_wa_oob.h>
+@@ -1389,7 +1390,9 @@ static int xe_oa_user_extensions(struct xe_oa *oa, enum xe_oa_user_extn_from fro
+ 	return 0;
+ }
+ 
+-static int xe_oa_parse_syncs(struct xe_oa *oa, struct xe_oa_open_param *param)
++static int xe_oa_parse_syncs(struct xe_oa *oa,
++			     struct xe_oa_stream *stream,
++			     struct xe_oa_open_param *param)
+ {
+ 	int ret, num_syncs, num_ufence = 0;
+ 
+@@ -1409,7 +1412,9 @@ static int xe_oa_parse_syncs(struct xe_oa *oa, struct xe_oa_open_param *param)
+ 
+ 	for (num_syncs = 0; num_syncs < param->num_syncs; num_syncs++) {
+ 		ret = xe_sync_entry_parse(oa->xe, param->xef, &param->syncs[num_syncs],
+-					  &param->syncs_user[num_syncs], 0);
++					  &param->syncs_user[num_syncs],
++					  stream->ufence_syncobj,
++					  ++stream->ufence_timeline_value, 0);
+ 		if (ret)
+ 			goto err_syncs;
+ 
+@@ -1539,7 +1544,7 @@ static long xe_oa_config_locked(struct xe_oa_stream *stream, u64 arg)
+ 		return -ENODEV;
+ 
+ 	param.xef = stream->xef;
+-	err = xe_oa_parse_syncs(stream->oa, &param);
++	err = xe_oa_parse_syncs(stream->oa, stream, &param);
+ 	if (err)
+ 		goto err_config_put;
+ 
+@@ -1635,6 +1640,7 @@ static void xe_oa_destroy_locked(struct xe_oa_stream *stream)
+ 	if (stream->exec_q)
+ 		xe_exec_queue_put(stream->exec_q);
+ 
++	drm_syncobj_put(stream->ufence_syncobj);
+ 	kfree(stream);
+ }
+ 
+@@ -1826,6 +1832,7 @@ static int xe_oa_stream_open_ioctl_locked(struct xe_oa *oa,
+ 					  struct xe_oa_open_param *param)
+ {
+ 	struct xe_oa_stream *stream;
++	struct drm_syncobj *ufence_syncobj;
+ 	int stream_fd;
+ 	int ret;
+ 
+@@ -1836,17 +1843,31 @@ static int xe_oa_stream_open_ioctl_locked(struct xe_oa *oa,
+ 		goto exit;
+ 	}
+ 
++	ret = drm_syncobj_create(&ufence_syncobj, DRM_SYNCOBJ_CREATE_SIGNALED,
++				 NULL);
++	if (ret)
++		goto exit;
++
+ 	stream = kzalloc(sizeof(*stream), GFP_KERNEL);
+ 	if (!stream) {
+ 		ret = -ENOMEM;
+-		goto exit;
++		goto err_syncobj;
+ 	}
+-
++	stream->ufence_syncobj = ufence_syncobj;
+ 	stream->oa = oa;
+-	ret = xe_oa_stream_init(stream, param);
++
++	ret = xe_oa_parse_syncs(oa, stream, param);
+ 	if (ret)
+ 		goto err_free;
+ 
++	ret = xe_oa_stream_init(stream, param);
++	if (ret) {
++		while (param->num_syncs--)
++			xe_sync_entry_cleanup(&param->syncs[param->num_syncs]);
++		kfree(param->syncs);
++		goto err_free;
++	}
++
+ 	if (!param->disabled) {
+ 		ret = xe_oa_enable_locked(stream);
+ 		if (ret)
+@@ -1870,6 +1891,8 @@ static int xe_oa_stream_open_ioctl_locked(struct xe_oa *oa,
+ 	xe_oa_stream_destroy(stream);
+ err_free:
+ 	kfree(stream);
++err_syncobj:
++	drm_syncobj_put(ufence_syncobj);
+ exit:
+ 	return ret;
+ }
+@@ -2083,22 +2106,14 @@ int xe_oa_stream_open_ioctl(struct drm_device *dev, u64 data, struct drm_file *f
+ 		goto err_exec_q;
+ 	}
+ 
+-	ret = xe_oa_parse_syncs(oa, &param);
+-	if (ret)
+-		goto err_exec_q;
+-
+ 	mutex_lock(&param.hwe->gt->oa.gt_lock);
+ 	ret = xe_oa_stream_open_ioctl_locked(oa, &param);
+ 	mutex_unlock(&param.hwe->gt->oa.gt_lock);
+ 	if (ret < 0)
+-		goto err_sync_cleanup;
++		goto err_exec_q;
+ 
+ 	return ret;
+ 
+-err_sync_cleanup:
+-	while (param.num_syncs--)
+-		xe_sync_entry_cleanup(&param.syncs[param.num_syncs]);
+-	kfree(param.syncs);
+ err_exec_q:
+ 	if (param.exec_q)
+ 		xe_exec_queue_put(param.exec_q);
+diff --git a/drivers/gpu/drm/xe/xe_oa_types.h b/drivers/gpu/drm/xe/xe_oa_types.h
+index 2628f78c4..daf701b5d 100644
+--- a/drivers/gpu/drm/xe/xe_oa_types.h
++++ b/drivers/gpu/drm/xe/xe_oa_types.h
+@@ -15,6 +15,8 @@
+ #include "regs/xe_reg_defs.h"
+ #include "xe_hw_engine_types.h"
+ 
++struct drm_syncobj;
++
+ #define DEFAULT_XE_OA_BUFFER_SIZE SZ_16M
+ 
+ enum xe_oa_report_header {
+@@ -248,6 +250,12 @@ struct xe_oa_stream {
+ 	/** @xef: xe_file with which the stream was opened */
+ 	struct xe_file *xef;
+ 
++	/** @ufence_syncobj: User fence syncobj */
++	struct drm_syncobj *ufence_syncobj;
++
++	/** @ufence_timeline_value: User fence timeline value */
++	u64 ufence_timeline_value;
++
+ 	/** @last_fence: fence to use in stream destroy when needed */
+ 	struct dma_fence *last_fence;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_sync.c b/drivers/gpu/drm/xe/xe_sync.c
+index 82872a51f..d48ab7b32 100644
+--- a/drivers/gpu/drm/xe/xe_sync.c
++++ b/drivers/gpu/drm/xe/xe_sync.c
+@@ -113,6 +113,8 @@ static void user_fence_cb(struct dma_fence *fence, struct dma_fence_cb *cb)
+ int xe_sync_entry_parse(struct xe_device *xe, struct xe_file *xef,
+ 			struct xe_sync_entry *sync,
+ 			struct drm_xe_sync __user *sync_user,
++			struct drm_syncobj *ufence_syncobj,
++			u64 ufence_timeline_value,
+ 			unsigned int flags)
+ {
+ 	struct drm_xe_sync sync_in;
+@@ -192,10 +194,15 @@ int xe_sync_entry_parse(struct xe_device *xe, struct xe_file *xef,
+ 		if (exec) {
+ 			sync->addr = sync_in.addr;
+ 		} else {
++			sync->ufence_timeline_value = ufence_timeline_value;
+ 			sync->ufence = user_fence_create(xe, sync_in.addr,
+ 							 sync_in.timeline_value);
+ 			if (XE_IOCTL_DBG(xe, IS_ERR(sync->ufence)))
+ 				return PTR_ERR(sync->ufence);
++			sync->ufence_chain_fence = dma_fence_chain_alloc();
++			if (!sync->ufence_chain_fence)
++				return -ENOMEM;
++			sync->ufence_syncobj = ufence_syncobj;
+ 		}
+ 
+ 		break;
+@@ -239,7 +246,12 @@ void xe_sync_entry_signal(struct xe_sync_entry *sync, struct dma_fence *fence)
+ 	} else if (sync->ufence) {
+ 		int err;
+ 
+-		dma_fence_get(fence);
++		drm_syncobj_add_point(sync->ufence_syncobj,
++				      sync->ufence_chain_fence,
++				      fence, sync->ufence_timeline_value);
++		sync->ufence_chain_fence = NULL;
++
++		fence = drm_syncobj_fence_get(sync->ufence_syncobj);
+ 		user_fence_get(sync->ufence);
+ 		err = dma_fence_add_callback(fence, &sync->ufence->cb,
+ 					     user_fence_cb);
+@@ -259,7 +271,8 @@ void xe_sync_entry_cleanup(struct xe_sync_entry *sync)
+ 		drm_syncobj_put(sync->syncobj);
+ 	dma_fence_put(sync->fence);
+ 	dma_fence_chain_free(sync->chain_fence);
+-	if (sync->ufence)
++	dma_fence_chain_free(sync->ufence_chain_fence);
++	if (!IS_ERR_OR_NULL(sync->ufence))
+ 		user_fence_put(sync->ufence);
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_sync.h b/drivers/gpu/drm/xe/xe_sync.h
+index 256ffc1e5..51f2d803e 100644
+--- a/drivers/gpu/drm/xe/xe_sync.h
++++ b/drivers/gpu/drm/xe/xe_sync.h
+@@ -8,6 +8,7 @@
+ 
+ #include "xe_sync_types.h"
+ 
++struct drm_syncobj;
+ struct xe_device;
+ struct xe_exec_queue;
+ struct xe_file;
+@@ -21,6 +22,8 @@ struct xe_vm;
+ int xe_sync_entry_parse(struct xe_device *xe, struct xe_file *xef,
+ 			struct xe_sync_entry *sync,
+ 			struct drm_xe_sync __user *sync_user,
++			struct drm_syncobj *ufence_syncobj,
++			u64 ufence_timeline_value,
+ 			unsigned int flags);
+ int xe_sync_entry_add_deps(struct xe_sync_entry *sync,
+ 			   struct xe_sched_job *job);
+diff --git a/drivers/gpu/drm/xe/xe_sync_types.h b/drivers/gpu/drm/xe/xe_sync_types.h
+index 30ac3f519..b88f1833e 100644
+--- a/drivers/gpu/drm/xe/xe_sync_types.h
++++ b/drivers/gpu/drm/xe/xe_sync_types.h
+@@ -18,9 +18,12 @@ struct xe_sync_entry {
+ 	struct drm_syncobj *syncobj;
+ 	struct dma_fence *fence;
+ 	struct dma_fence_chain *chain_fence;
++	struct dma_fence_chain *ufence_chain_fence;
++	struct drm_syncobj *ufence_syncobj;
+ 	struct xe_user_fence *ufence;
+ 	u64 addr;
+ 	u64 timeline_value;
++	u64 ufence_timeline_value;
+ 	u32 type;
+ 	u32 flags;
+ };
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index d1f45a080..0fce6084c 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -3750,8 +3750,12 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+ 
+ 	syncs_user = u64_to_user_ptr(args->syncs);
+ 	for (num_syncs = 0; num_syncs < args->num_syncs; num_syncs++) {
++		struct xe_exec_queue *__q = q ?: vm->q[0];
++
+ 		err = xe_sync_entry_parse(xe, xef, &syncs[num_syncs],
+ 					  &syncs_user[num_syncs],
++					  __q->ufence_syncobj,
++					  ++__q->ufence_timeline_value,
+ 					  (xe_vm_in_lr_mode(vm) ?
+ 					   SYNC_PARSE_FLAG_LR_MODE : 0) |
+ 					  (!args->num_binds ?
+-- 
+2.43.0
+

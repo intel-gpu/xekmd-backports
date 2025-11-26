@@ -1,0 +1,65 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Sanjay Yadav <sanjay.kumar.yadav@intel.com>
+Date: Thu, 4 Sep 2025 21:44:23 +0530
+Subject: drm/xe/migrate: Remove unneeded emit_pte() when copying CCS
+ only
+
+In xe_migrate_copy(), when copy_only_ccs is true, we only need two
+emit_pte() calls one for the BO and one for the raw CCS storage.
+However, the current implementation issues three emit_pte() calls,
+resulting in an unnecessary PTE programming job.
+
+This fix removes the redundant emit_pte() call to avoid programming
+the same PTEs twice and reducing overhead during CCS-only migration.
+
+v2: Preserve correct behavior on DG2, which requires both CCS and
+page copies.
+
+Signed-off-by: Sanjay Yadav <sanjay.kumar.yadav@intel.com>
+Suggested-by: Matthew Auld <matthew.auld@intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Link: https://lore.kernel.org/r/20250904161423.2448727-1-sanjay.kumar.yadav@intel.com
+(cherry-picked from commit c4dfa0bea23df9a6870df439f2bae43ecbb73822 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_migrate.c | 16 ++++++++++------
+ 1 file changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 62179551b..9f0b0f328 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -915,11 +915,15 @@ struct dma_fence *xe_migrate_copy(struct xe_migrate *m,
+ 		batch_size += pte_update_size(m, pte_flags, src, &src_it, &src_L0,
+ 					      &src_L0_ofs, &src_L0_pt, 0, 0,
+ 					      avail_pts);
+-
+-		pte_flags = dst_is_vram ? PTE_UPDATE_FLAG_IS_VRAM : 0;
+-		batch_size += pte_update_size(m, pte_flags, dst, &dst_it, &src_L0,
+-					      &dst_L0_ofs, &dst_L0_pt, 0,
+-					      avail_pts, avail_pts);
++		if (copy_only_ccs) {
++			dst_L0_ofs = src_L0_ofs;
++		} else {
++			pte_flags = dst_is_vram ? PTE_UPDATE_FLAG_IS_VRAM : 0;
++			batch_size += pte_update_size(m, pte_flags, dst,
++						      &dst_it, &src_L0,
++						      &dst_L0_ofs, &dst_L0_pt,
++						      0, avail_pts, avail_pts);
++		}
+ 
+ 		if (copy_system_ccs) {
+ 			xe_assert(xe, type_device);
+@@ -949,7 +953,7 @@ struct dma_fence *xe_migrate_copy(struct xe_migrate *m,
+ 
+ 		if (dst_is_vram && xe_migrate_allow_identity(src_L0, &dst_it))
+ 			xe_res_next(&dst_it, src_L0);
+-		else
++		else if (!copy_only_ccs)
+ 			emit_pte(m, bb, dst_L0_pt, dst_is_vram, copy_system_ccs,
+ 				 &dst_it, src_L0, dst);
+ 
+-- 
+2.43.0
+

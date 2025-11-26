@@ -1,0 +1,149 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Fri, 31 Oct 2025 16:40:50 -0700
+Subject: drm/xe: Remove last fence dependency check from binds and
+ execs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Eliminate redundant last fence dependency checks in exec and bind jobs,
+as they are now equivalent to xe_exec_queue_is_idle. Simplify the code
+by removing this dead logic.
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Link: https://patch.msgid.link/20251031234050.3043507-7-matthew.brost@intel.com
+(backported from commit 1a2cf01e1c92f29fd22ae394c06860da1c339339 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec.c       |  3 ---
+ drivers/gpu/drm/xe/xe_exec_queue.c | 23 -----------------------
+ drivers/gpu/drm/xe/xe_exec_queue.h |  2 --
+ drivers/gpu/drm/xe/xe_pt.c         |  7 -------
+ drivers/gpu/drm/xe/xe_sched_job.c  | 17 -----------------
+ drivers/gpu/drm/xe/xe_sched_job.h  |  1 -
+ 6 files changed, 53 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec.c b/drivers/gpu/drm/xe/xe_exec.c
+index f67bf5790..7b4156b81 100644
+--- a/drivers/gpu/drm/xe/xe_exec.c
++++ b/drivers/gpu/drm/xe/xe_exec.c
+@@ -293,9 +293,6 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+ 		goto err_put_job;
+ 
+ 	if (!xe_vm_in_lr_mode(vm)) {
+-		err = xe_sched_job_last_fence_add_dep(job, vm);
+-		if (err)
+-			goto err_put_job;
+ 
+ 		err = down_read_interruptible(&vm->userptr.notifier_lock);
+ 		if (err)
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index 805a1fcef..363eccd1d 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -1100,29 +1100,6 @@ void xe_exec_queue_last_fence_set(struct xe_exec_queue *q, struct xe_vm *vm,
+ 	q->last_fence = dma_fence_get(fence);
+ }
+ 
+-/**
+- * xe_exec_queue_last_fence_test_dep - Test last fence dependency of queue
+- * @q: The exec queue
+- * @vm: The VM the engine does a bind or exec for
+- *
+- * Returns:
+- * -ETIME if there exists an unsignalled last fence dependency, zero otherwise.
+- */
+-int xe_exec_queue_last_fence_test_dep(struct xe_exec_queue *q, struct xe_vm *vm)
+-{
+-	struct dma_fence *fence;
+-	int err = 0;
+-
+-	fence = xe_exec_queue_last_fence_get(q, vm);
+-	if (fence) {
+-		err = test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags) ?
+-			0 : -ETIME;
+-		dma_fence_put(fence);
+-	}
+-
+-	return err;
+-}
+-
+ /**
+  * xe_exec_queue_tlb_inval_last_fence_put() - Drop ref to last TLB invalidation fence
+  * @q: The exec queue
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
+index 1ba7354b3..fda4d4f9b 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue.h
+@@ -88,8 +88,6 @@ struct dma_fence *xe_exec_queue_last_fence_get_for_resume(struct xe_exec_queue *
+ 							  struct xe_vm *vm);
+ void xe_exec_queue_last_fence_set(struct xe_exec_queue *e, struct xe_vm *vm,
+ 				  struct dma_fence *fence);
+-int xe_exec_queue_last_fence_test_dep(struct xe_exec_queue *q,
+-				      struct xe_vm *vm);
+ 
+ void xe_exec_queue_tlb_inval_last_fence_put(struct xe_exec_queue *q,
+ 					    struct xe_vm *vm,
+diff --git a/drivers/gpu/drm/xe/xe_pt.c b/drivers/gpu/drm/xe/xe_pt.c
+index e4d50e186..0fd591e87 100644
+--- a/drivers/gpu/drm/xe/xe_pt.c
++++ b/drivers/gpu/drm/xe/xe_pt.c
+@@ -1323,13 +1323,6 @@ static int xe_pt_vm_dependencies(struct xe_sched_job *job,
+ 			return err;
+ 	}
+ 
+-	if (!(pt_update_ops->q->flags & EXEC_QUEUE_FLAG_KERNEL)) {
+-		if (job)
+-			err = xe_sched_job_last_fence_add_dep(job, vm);
+-		else
+-			err = xe_exec_queue_last_fence_test_dep(pt_update_ops->q, vm);
+-	}
+-
+ 	for (i = 0; job && !err && i < vops->num_syncs; i++)
+ 		err = xe_sync_entry_add_deps(&vops->syncs[i], job);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_sched_job.c b/drivers/gpu/drm/xe/xe_sched_job.c
+index d21bf8f26..6b63b4daa 100644
+--- a/drivers/gpu/drm/xe/xe_sched_job.c
++++ b/drivers/gpu/drm/xe/xe_sched_job.c
+@@ -295,23 +295,6 @@ void xe_sched_job_push(struct xe_sched_job *job)
+ 	xe_sched_job_put(job);
+ }
+ 
+-/**
+- * xe_sched_job_last_fence_add_dep - Add last fence dependency to job
+- * @job:job to add the last fence dependency to
+- * @vm: virtual memory job belongs to
+- *
+- * Returns:
+- * 0 on success, or an error on failing to expand the array.
+- */
+-int xe_sched_job_last_fence_add_dep(struct xe_sched_job *job, struct xe_vm *vm)
+-{
+-	struct dma_fence *fence;
+-
+-	fence = xe_exec_queue_last_fence_get(job->q, vm);
+-
+-	return drm_sched_job_add_dependency(&job->drm, fence);
+-}
+-
+ /**
+  * xe_sched_job_init_user_fence - Initialize user_fence for the job
+  * @job: job whose user_fence needs an init
+diff --git a/drivers/gpu/drm/xe/xe_sched_job.h b/drivers/gpu/drm/xe/xe_sched_job.h
+index 3dc72c5c1..ff5621bd3 100644
+--- a/drivers/gpu/drm/xe/xe_sched_job.h
++++ b/drivers/gpu/drm/xe/xe_sched_job.h
+@@ -58,7 +58,6 @@ bool xe_sched_job_completed(struct xe_sched_job *job);
+ void xe_sched_job_arm(struct xe_sched_job *job);
+ void xe_sched_job_push(struct xe_sched_job *job);
+ 
+-int xe_sched_job_last_fence_add_dep(struct xe_sched_job *job, struct xe_vm *vm);
+ void xe_sched_job_init_user_fence(struct xe_sched_job *job,
+ 				  struct xe_sync_entry *sync);
+ 
+-- 
+2.43.0
+

@@ -26,7 +26,6 @@ Note:
 
 | Branch Name | Kernel Version | Status |
 |-------------|----------------|--------|
-| kernel-backport/main | 6.17 | Running |
 | kernel-backport/main_6.14 | 6.14 | Running |
 | kernel-backport/main_6.11 | 6.11 | Frozen |
 

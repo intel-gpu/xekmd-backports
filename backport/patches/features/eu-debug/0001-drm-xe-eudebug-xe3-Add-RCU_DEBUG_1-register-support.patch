@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
+Date: Thu, 27 Nov 2025 13:50:18 +0100
+Subject: drm/xe/eudebug/xe3: Add RCU_DEBUG_1 register support
+
+Format of Register_RenderControlUnitDebug1 is different from
+previous gens. Adjust it so it matches PTL/xe3 format.
+
+Acked-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+---
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+index 3c4cdc526..e831e36c7 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+@@ -1469,6 +1469,17 @@ static u32 engine_status_xe2(const struct xe_hw_engine * const hwe,
+ 	return (rcu_debug1 >> shift) & RCU_DEBUG_1_ENGINE_STATUS;
+ }
+
++static u32 engine_status_xe3(const struct xe_hw_engine * const hwe,
++			     u32 rcu_debug1)
++{
++	const unsigned int first = 6;
++	const unsigned int incr = 4;
++	const unsigned int i = rcu_debug1_engine_index(hwe);
++	const unsigned int shift = first + (i * incr);
++
++	return (rcu_debug1 >> shift) & RCU_DEBUG_1_ENGINE_STATUS;
++}
++
+ static u32 engine_status(const struct xe_hw_engine * const hwe,
+ 			 u32 rcu_debug1)
+ {
+@@ -1478,6 +1489,8 @@ static u32 engine_status(const struct xe_hw_engine * const hwe,
+ 		status = engine_status_xe1(hwe, rcu_debug1);
+ 	else if (GRAPHICS_VER(gt_to_xe(hwe->gt)) < 30)
+ 		status = engine_status_xe2(hwe, rcu_debug1);
++	else if (GRAPHICS_VER(gt_to_xe(hwe->gt)) < 35)
++		status = engine_status_xe3(hwe, rcu_debug1);
+ 	else
+ 		XE_WARN_ON(GRAPHICS_VER(gt_to_xe(hwe->gt)));
+
+--
+2.43.0

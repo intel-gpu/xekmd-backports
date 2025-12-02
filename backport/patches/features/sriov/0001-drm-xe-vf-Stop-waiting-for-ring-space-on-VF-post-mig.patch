@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tomasz Lis <tomasz.lis@intel.com>
+Date: Fri, 28 Nov 2025 16:08:12 +0100
+Subject: [PATCH] drm/xe/vf: Stop waiting for ring space on VF post migration
+ recovery
+
+If wait for ring space started just before migration, it can delay
+the recovery process, by waiting without bailout path for up to 2
+seconds.
+
+Two second wait for recovery is not acceptable, and if the ring was
+completely filled even without the migration temporarely stopping
+execution, then such wait will result in thousands of jobs (assuming
+constant flow) being added while the wait is happening.
+
+While this will not cause data corruption, it will lead to error
+messages getting logged due to reset being scheduled on a GT under
+recovery. Also several seconds of unresponsiveness, as the backlog
+of jobs gets progressively executed.
+
+Add a bailout condition, to make sure the recovery starts without
+much delay. The recovery is expected to finish in about 100 ms even
+under a stress, so the condition verification period needs to be
+below that - settling at 64 ms.
+
+NOTE: THIS PATCH SHOULH BE TREATED AS A FIX ONLY IF THE RELATED TEST FAIL
+CAN BE REPRODUCED ON 'drm-tip'. IF THERE IS NO SUCH REPRO, THEN THIS
+CHANGE MAY INSTEAD HIDE AN ISSUE REMAINING SOMEWHERE IN THE BACKPORT.
+
+Fixes: a4dae94aad6ace04d3960 ("drm/xe/vf: Wakeup in GuC backend on VF post migration recovery")
+---
+ drivers/gpu/drm/xe/xe_guc_submit.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index b5961c735..92c65fa16 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -721,21 +721,23 @@ static int wq_wait_for_space(struct xe_exec_queue *q, u32 wqi_size)
+ 	struct xe_guc *guc = exec_queue_to_guc(q);
+ 	struct xe_device *xe = guc_to_xe(guc);
+ 	struct iosys_map map = xe_lrc_parallel_map(q->lrc[0]);
+-	unsigned int sleep_period_ms = 1;
++	unsigned int sleep_period_ms = 1, sleep_total_ms = 0;
+ 
+ #define AVAILABLE_SPACE \
+ 	CIRC_SPACE(q->guc->wqi_tail, q->guc->wqi_head, WQ_SIZE)
+ 	if (wqi_size > AVAILABLE_SPACE && !vf_recovery(guc)) {
+ try_again:
+ 		q->guc->wqi_head = parallel_read(xe, map, wq_desc.head);
+-		if (wqi_size > AVAILABLE_SPACE) {
+-			if (sleep_period_ms == 1024) {
++		if (wqi_size > AVAILABLE_SPACE && !vf_recovery(guc)) {
++			if (sleep_total_ms > 2000) {
+ 				xe_gt_reset_async(q->gt);
+ 				return -ENODEV;
+ 			}
+ 
+ 			msleep(sleep_period_ms);
+-			sleep_period_ms <<= 1;
++			sleep_total_ms += sleep_period_ms;
++			if (sleep_period_ms < 64)
++				sleep_period_ms <<= 1;
+ 			goto try_again;
+ 		}
+ 	}
+-- 
+2.34.1
+

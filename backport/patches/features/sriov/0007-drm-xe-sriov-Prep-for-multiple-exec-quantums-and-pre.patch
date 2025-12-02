@@ -1,0 +1,158 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Date: Wed, 26 Nov 2025 17:45:13 -0800
+Subject: [PATCH 07/10] drm/xe/sriov: Prep for multiple exec quantums and
+ preemption timeouts
+
+Each scheduler group can be independently configured with its own exec
+quantum and preemption timeouts. The existing KLVs to configure those
+parameter will apply the value to all groups (even if they're not
+enabled at the moment).
+
+When scheduler groups are disable the GuC used the values from Group 0.
+
+Signed-off-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+---
+ drivers/gpu/drm/xe/abi/guc_klvs_abi.h         |  7 ++++--
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c    | 25 +++++++++++++------
+ .../gpu/drm/xe/xe_gt_sriov_pf_config_types.h  |  5 ++--
+ 3 files changed, 25 insertions(+), 12 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
+index d0c0e06e0..ec9db0c64 100644
+--- a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
++++ b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
+@@ -290,7 +290,9 @@ enum  {
+  *      infinitely long compute or shader kernel. In such a scenario, the
+  *      PF would need to trigger a VM PAUSE and then change the KLV to force
+  *      it to take effect. Such cases might typically happen on a 1PF+1VF
+- *      Virtualization config enabled for heavier workloads like AI/ML.
++ *      Virtualization config enabled for heavier workloads like AI/ML. If
++ *      scheduling groups are supported, the provided value is applied to all
++ *      groups (even if they've not yet been enabled).
+  *
+  *      The max value for this KLV is 100 seconds, anything exceeding that
+  *      will be clamped to the max.
+@@ -312,7 +314,8 @@ enum  {
+  *      In this case, the PF would need to trigger a VM PAUSE and then change
+  *      the KLV to force it to take effect. Such cases might typically happen
+  *      on a 1PF+1VF Virtualization config enabled for heavier workloads like
+- *      AI/ML.
++ *      AI/ML. If scheduling groups are supported, the provided value is applied
++ *      to all groups (even if they've not yet been enabled).
+  *
+  *      The max value for this KLV is 100 seconds, anything exceeding that
+  *      will be clamped to the max.
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index a6c22ead7..ce90a6ff4 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -297,10 +297,10 @@ static u32 encode_config(u32 *cfg, const struct xe_gt_sriov_config *config, bool
+ 	}
+ 
+ 	cfg[n++] = PREP_GUC_KLV_TAG(VF_CFG_EXEC_QUANTUM);
+-	cfg[n++] = config->exec_quantum;
++	cfg[n++] = config->exec_quantum[0];
+ 
+ 	cfg[n++] = PREP_GUC_KLV_TAG(VF_CFG_PREEMPT_TIMEOUT);
+-	cfg[n++] = config->preempt_timeout;
++	cfg[n++] = config->preempt_timeout[0];
+ 
+ #define encode_threshold_config(TAG, ...) ({					\
+ 	cfg[n++] = PREP_GUC_KLV_TAG(VF_CFG_THRESHOLD_##TAG);			\
+@@ -1801,12 +1801,15 @@ static int pf_provision_exec_quantum(struct xe_gt *gt, unsigned int vfid,
+ {
+ 	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
+ 	int err;
++	int i;
+ 
+ 	err = pf_push_vf_cfg_exec_quantum(gt, vfid, &exec_quantum);
+ 	if (unlikely(err))
+ 		return err;
+ 
+-	config->exec_quantum = exec_quantum;
++	for (i = 0; i < GUC_KLV_VGT_POLICY_ENGINE_GROUP_MAX_COUNT; i++)
++		config->exec_quantum[i] = exec_quantum;
++
+ 	return 0;
+ }
+ 
+@@ -1814,7 +1817,7 @@ static u32 pf_get_exec_quantum(struct xe_gt *gt, unsigned int vfid)
+ {
+ 	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
+ 
+-	return config->exec_quantum;
++	return config->exec_quantum[0];
+ }
+ 
+ /**
+@@ -1931,12 +1934,14 @@ static int pf_provision_preempt_timeout(struct xe_gt *gt, unsigned int vfid,
+ {
+ 	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
+ 	int err;
++	int i;
+ 
+ 	err = pf_push_vf_cfg_preempt_timeout(gt, vfid, &preempt_timeout);
+ 	if (unlikely(err))
+ 		return err;
+ 
+-	config->preempt_timeout = preempt_timeout;
++	for (i = 0; i < GUC_KLV_VGT_POLICY_ENGINE_GROUP_MAX_COUNT; i++)
++		config->preempt_timeout[i] = preempt_timeout;
+ 
+ 	return 0;
+ }
+@@ -1945,7 +1950,7 @@ static u32 pf_get_preempt_timeout(struct xe_gt *gt, unsigned int vfid)
+ {
+ 	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
+ 
+-	return config->preempt_timeout;
++	return config->preempt_timeout[0];
+ }
+ 
+ /**
+@@ -2124,10 +2129,14 @@ u32 xe_gt_sriov_pf_config_get_sched_priority(struct xe_gt *gt, unsigned int vfid
+ 
+ static void pf_reset_config_sched(struct xe_gt *gt, struct xe_gt_sriov_config *config)
+ {
++	int i;
++
+ 	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+ 
+-	config->exec_quantum = 0;
+-	config->preempt_timeout = 0;
++	for (i = 0; i < GUC_KLV_VGT_POLICY_ENGINE_GROUP_MAX_COUNT; i++) {
++		config->exec_quantum[i] = 0;
++		config->preempt_timeout[i] = 0;
++	}
+ }
+ 
+ static int pf_provision_threshold(struct xe_gt *gt, unsigned int vfid,
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config_types.h
+index 686c7b3b6..abf003946 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config_types.h
+@@ -6,6 +6,7 @@
+ #ifndef _XE_GT_SRIOV_PF_CONFIG_TYPES_H_
+ #define _XE_GT_SRIOV_PF_CONFIG_TYPES_H_
+ 
++#include "abi/guc_klvs_abi.h"
+ #include "xe_ggtt_types.h"
+ #include "xe_guc_klv_thresholds_set_types.h"
+ 
+@@ -30,9 +31,9 @@ struct xe_gt_sriov_config {
+ 	/** @begin_db: start index of GuC doorbell ID range. */
+ 	u16 begin_db;
+ 	/** @exec_quantum: execution-quantum in milliseconds. */
+-	u32 exec_quantum;
++	u32 exec_quantum[GUC_KLV_VGT_POLICY_ENGINE_GROUP_MAX_COUNT];
+ 	/** @preempt_timeout: preemption timeout in microseconds. */
+-	u32 preempt_timeout;
++	u32 preempt_timeout[GUC_KLV_VGT_POLICY_ENGINE_GROUP_MAX_COUNT];
+ 	/** @sched_priority: scheduling priority. */
+ 	u32 sched_priority;
+ 	/** @thresholds: GuC thresholds for adverse events notifications. */
+-- 
+2.34.1
+

@@ -1,0 +1,261 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Date: Wed, 26 Nov 2025 17:45:15 -0800
+Subject: [PATCH 09/10] drm/xe/sriov: Add functions to set preempt timeouts for
+ each group
+
+The KLV to set the preemption timeout for each groups works the exact
+same way as the one for the exec quantums, so we add similar functions.
+
+Signed-off-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+---
+ drivers/gpu/drm/xe/abi/guc_klvs_abi.h      |  12 ++
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 157 ++++++++++++++++++++-
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h |   8 ++
+ 3 files changed, 173 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
+index 9ee69f2c0..08c566212 100644
+--- a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
++++ b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
+@@ -393,6 +393,16 @@ enum  {
+  *      the GuC always sets the EQ for all groups (even the non-enabled ones),
+  *      so if we provide fewer values than the max the GuC will use 0 for the
+  *      remaining groups.
++ *
++ * _`GUC_KLV_VF_CFG_ENGINE_GROUP_PREEMPT_TIMEOUT' : 0x8A0F
++ *      This config sets the VFs-preemption-timeout for each scheduling group in
++ *      microseconds. The driver must provide an array of values, with each of
++ *      them matching the respective group index (first value goes to group 0,
++ *      second to group 1, etc). The setting of group values follows the same
++ *      behavior and rules as setting via GUC_KLV_VF_CFG_PREEMPT_TIMEOUT. Note
++ *      that the GuC always sets the EQ for all groups (even the non-enabled
++ *      ones), so if we provide fewer values than the max the GuC will use 0 for
++ *      the remaining groups.
+  */
+ 
+ #define GUC_KLV_VF_CFG_GGTT_START_KEY		0x0001
+@@ -456,6 +466,8 @@ enum  {
+ 
+ #define GUC_KLV_VF_CFG_ENGINE_GROUP_EXEC_QUANTUM_KEY	0x8a0e
+ 
++#define GUC_KLV_VF_CFG_ENGINE_GROUP_PREEMPT_TIMEOUT_KEY	0x8a0f
++
+ /*
+  * Workaround keys:
+  */
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index 7912974a0..6199dab64 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -324,8 +324,15 @@ static u32 encode_config(struct xe_gt *gt, u32 *cfg,
+ 		cfg[n++] = config->exec_quantum[0];
+ 	}
+ 
+-	cfg[n++] = PREP_GUC_KLV_TAG(VF_CFG_PREEMPT_TIMEOUT);
+-	cfg[n++] = config->preempt_timeout[0];
++	if (xe_sriov_gt_pf_policy_has_valid_sched_group_modes(gt)) {
++		cfg[n++] = PREP_GUC_KLV_CONST(GUC_KLV_VF_CFG_ENGINE_GROUP_PREEMPT_TIMEOUT_KEY,
++					      GUC_KLV_VGT_POLICY_ENGINE_GROUP_MAX_COUNT);
++		for (i = 0; i < GUC_KLV_VGT_POLICY_ENGINE_GROUP_MAX_COUNT; i++)
++			cfg[n++] = config->exec_quantum[i];
++	} else {
++		cfg[n++] = PREP_GUC_KLV_TAG(VF_CFG_PREEMPT_TIMEOUT);
++		cfg[n++] = config->preempt_timeout[0];
++	}
+ 
+ #define encode_threshold_config(TAG, ...) ({					\
+ 	cfg[n++] = PREP_GUC_KLV_TAG(VF_CFG_THRESHOLD_##TAG);			\
+@@ -2151,11 +2158,16 @@ static int pf_provision_preempt_timeout(struct xe_gt *gt, unsigned int vfid,
+ 	return 0;
+ }
+ 
+-static u32 pf_get_preempt_timeout(struct xe_gt *gt, unsigned int vfid)
++static u32 pf_get_group_preempt_timeout(struct xe_gt *gt, unsigned int vfid, u8 group)
+ {
+ 	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
+ 
+-	return config->preempt_timeout[0];
++	return config->preempt_timeout[group];
++}
++
++static u32 pf_get_preempt_timeout(struct xe_gt *gt, unsigned int vfid)
++{
++	return pf_get_group_preempt_timeout(gt, vfid, 0);
+ }
+ 
+ /**
+@@ -2261,6 +2273,138 @@ int xe_gt_sriov_pf_config_bulk_set_preempt_timeout_locked(struct xe_gt *gt, u32
+ 					   preempt_timeout_unit, n, err);
+ }
+ 
++static int pf_provision_groups_preempt_timeouts(struct xe_gt *gt, unsigned int vfid,
++						const u32 *preempt_timeouts, u32 count)
++{
++	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
++	int err;
++	int i;
++
++	err = pf_push_vf_grp_cfg_u32(gt, vfid, GUC_KLV_VF_CFG_ENGINE_GROUP_PREEMPT_TIMEOUT_KEY,
++				     preempt_timeouts, count);
++	if (unlikely(err))
++		return err;
++
++	/*
++	 * GuC silently clamps values exceeding the max and zeroes out the
++	 * quantum for groups not in the array
++	 */
++	for (i = 0; i < GUC_KLV_VGT_POLICY_ENGINE_GROUP_MAX_COUNT; i++) {
++		if (i < count)
++			config->preempt_timeout[i] =
++				min_t(u32, preempt_timeouts[i],
++				      GUC_KLV_VF_CFG_PREEMPT_TIMEOUT_MAX_VALUE);
++		else
++			config->preempt_timeout[i] = 0;
++	}
++
++	return 0;
++}
++
++static void pf_get_groups_preempt_timeouts(struct xe_gt *gt, unsigned int vfid,
++					   u32 *preempt_timeouts, u32 max_count)
++{
++	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
++	u32 count = min_t(u32, max_count, GUC_KLV_VGT_POLICY_ENGINE_GROUP_MAX_COUNT);
++
++	memcpy(preempt_timeouts, config->preempt_timeout, sizeof(u32) * count);
++}
++
++/**
++ * xe_gt_sriov_pf_config_set_groups_preempt_timeouts() - Configure PF/VF PTs for sched groups.
++ * @gt: the &xe_gt
++ * @vfid: the PF or VF identifier
++ * @preempt_timeouts: array of requested PTs in microseconds (0 is infinity)
++ * @count: number of entries in the array
++ *
++ * This function can only be called on PF.
++ * It will log the provisioned value or an error in case of the failure.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_gt_sriov_pf_config_set_groups_preempt_timeouts(struct xe_gt *gt, unsigned int vfid,
++						      u32 *preempt_timeouts, u32 count)
++{
++	int err;
++
++	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
++
++	err = pf_provision_groups_preempt_timeouts(gt, vfid, preempt_timeouts, count);
++
++	return pf_groups_cfg_set_u32_array_done(gt, vfid, preempt_timeouts, count,
++						pf_get_groups_preempt_timeouts,
++						"preempt_timeout",
++						preempt_timeout_unit, err);
++}
++
++/**
++ * xe_gt_sriov_pf_config_get_groups_preempt_timeouts - Get PF/VF sched groups PTs
++ * @gt: the &xe_gt
++ * @vfid: the PF or VF identifier
++ * @preempt_timeouts: array in which to store the preemption timeouts values
++ * @max_count: maximum number of entries to store
++ *
++ * This function can only be called on PF.
++ */
++void xe_gt_sriov_pf_config_get_groups_preempt_timeouts(struct xe_gt *gt, unsigned int vfid,
++						       u32 *preempt_timeouts, u32 max_count)
++{
++	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
++
++	return pf_get_groups_preempt_timeouts(gt, vfid, preempt_timeouts, max_count);
++}
++
++/**
++ * xe_gt_sriov_pf_config_set_group_preempt_timeout - Configure PF/VF PT for a sched group.
++ * @gt: the &xe_gt
++ * @vfid: the PF or VF identifier
++ * @group: index of the group to configure
++ * @preempt_timeout: requested PT in microseconds (0 is infinity)
++ *
++ * This function can only be called on PF.
++ * It will log the provisioned value or an error in case of the failure.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_gt_sriov_pf_config_set_group_preempt_timeout(struct xe_gt *gt, unsigned int vfid,
++						    u8 group, u32 preempt_timeout)
++{
++	u32 values[GUC_KLV_VGT_POLICY_ENGINE_GROUP_MAX_COUNT];
++	int err;
++
++	xe_gt_assert(gt, group < GUC_KLV_VGT_POLICY_ENGINE_GROUP_MAX_COUNT);
++
++	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
++
++	pf_get_groups_preempt_timeouts(gt, vfid, values, ARRAY_SIZE(values));
++	values[group] = preempt_timeout;
++
++	err = pf_provision_groups_preempt_timeouts(gt, vfid, values, ARRAY_SIZE(values));
++
++	return pf_group_config_set_u32_done(gt, vfid, group, preempt_timeout,
++					    pf_get_group_preempt_timeout(gt, vfid, group),
++					    "preempt_timeout", preempt_timeout_unit, err);
++}
++
++/**
++ * xe_gt_sriov_pf_config_get_group_preempt_timeout - Get PF/VF PT for a sched groups
++ * @gt: the &xe_gt
++ * @vfid: the PF or VF identifier
++ * @group: index of the group for which to get the PT
++ *
++ * This function can only be called on PF.
++ *
++ * Return: preemption timeout in microseconds (or 0 if infinity).
++ */
++u32 xe_gt_sriov_pf_config_get_group_preempt_timeout(struct xe_gt *gt, unsigned int vfid, u8 group)
++{
++	xe_gt_assert(gt, group < GUC_KLV_VGT_POLICY_ENGINE_GROUP_MAX_COUNT);
++
++	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
++
++	return pf_get_group_preempt_timeout(gt, vfid, group);
++}
++
+ static const char *sched_priority_unit(u32 priority)
+ {
+ 	return priority == GUC_SCHED_PRIORITY_LOW ? "(low)" :
+@@ -2708,6 +2852,11 @@ static int pf_restore_vf_config_klv(struct xe_gt *gt, unsigned int vfid,
+ 			return -EBADMSG;
+ 		return pf_provision_groups_exec_quantums(gt, vfid, value, len);
+ 
++	case GUC_KLV_VF_CFG_ENGINE_GROUP_PREEMPT_TIMEOUT_KEY:
++		if (len > GUC_KLV_VGT_POLICY_ENGINE_GROUP_MAX_COUNT)
++			return -EBADMSG;
++		return pf_provision_groups_preempt_timeouts(gt, vfid, value, len);
++
+ 	case GUC_KLV_VF_CFG_PREEMPT_TIMEOUT_KEY:
+ 		if (len != GUC_KLV_VF_CFG_PREEMPT_TIMEOUT_LEN)
+ 			return -EBADMSG;
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
+index aaf6bb824..f4bfb26b2 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
+@@ -63,6 +63,14 @@ int xe_gt_sriov_pf_config_set_preempt_timeout_locked(struct xe_gt *gt, unsigned
+ 						     u32 preempt_timeout);
+ int xe_gt_sriov_pf_config_bulk_set_preempt_timeout_locked(struct xe_gt *gt, u32 preempt_timeout);
+ 
++void xe_gt_sriov_pf_config_get_groups_preempt_timeouts(struct xe_gt *gt, unsigned int vfid,
++						       u32 *preempt_timeout, u32 max_count);
++int xe_gt_sriov_pf_config_set_groups_preempt_timeouts(struct xe_gt *gt, unsigned int vfid,
++						      u32 *preempt_timeout, u32 count);
++u32 xe_gt_sriov_pf_config_get_group_preempt_timeout(struct xe_gt *gt, unsigned int vfid, u8 group);
++int xe_gt_sriov_pf_config_set_group_preempt_timeout(struct xe_gt *gt, unsigned int vfid,
++						    u8 group, u32 preempt_timeout);
++
+ u32 xe_gt_sriov_pf_config_get_sched_priority(struct xe_gt *gt, unsigned int vfid);
+ int xe_gt_sriov_pf_config_set_sched_priority(struct xe_gt *gt, unsigned int vfid, u32 priority);
+ 
+-- 
+2.34.1
+

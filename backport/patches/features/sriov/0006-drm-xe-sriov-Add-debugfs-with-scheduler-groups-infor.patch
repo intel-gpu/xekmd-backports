@@ -1,0 +1,245 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Date: Wed, 26 Nov 2025 17:45:12 -0800
+Subject: [PATCH 06/10] drm/xe/sriov: Add debugfs with scheduler groups
+ information
+
+When schedulers groups are enabled, we dynamically create new debugfs
+folders under the GT folder for the PF and each VF. The aim is to have
+all the info for each VF under the sched_groups folder, with individual
+folders per-group under it. Right now the only info is the engine list,
+but follow up patches will add execution quantum and preemption timeout
+as well (which are configurable per-group-per-VF).
+
+Note that the engine lists are not configurable per-VF and therefore not
+strictly needed in the VF folders. However, it is still useful to have
+them there because an admin might want to check the engine list while
+configuring the EQ/PT values for a specific VF.
+
+Signed-off-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c | 140 +++++++++++++++++++-
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_types.h   |   4 +
+ 2 files changed, 143 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c
+index 6e03d8b4d..1efc0ae91 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c
+@@ -5,6 +5,7 @@
+ 
+ #include <linux/debugfs.h>
+ 
++#include <drm/drm_managed.h>
+ #include <drm/drm_print.h>
+ #include <drm/drm_debugfs.h>
+ 
+@@ -21,6 +22,7 @@
+ #include "xe_gt_sriov_pf_monitor.h"
+ #include "xe_gt_sriov_pf_policy.h"
+ #include "xe_gt_sriov_pf_service.h"
++#include "xe_guc.h"
+ #include "xe_pm.h"
+ #include "xe_sriov_pf.h"
+ #include "xe_sriov_pf_provision.h"
+@@ -163,8 +165,127 @@ static void pf_add_policy_attrs(struct xe_gt *gt, struct dentry *parent)
+  *          :   ├── tile0
+  *              :   ├── gt0
+  *                  :   ├── sched_groups_mode
++ *                      ├── sched_groups
++ *                      :   ├── group0
++ *                          :   └── engines
++ *                          :
++ *                          └── groupN
++ *          :                   └── engines
++ *          ├── vf1
++ *          :   ├── tile0
++ *              :   ├── gt0
++ *                  :   ├── sched_groups
++ *                      :   ├── group0
++ *                          :   └── engines
+  */
+ 
++struct sched_group_info {
++	struct xe_gt *gt;
++	u32 *masks;
++};
++
++static int sched_group_engines_info(struct seq_file *m, void *data)
++{
++	struct drm_printer p = drm_seq_file_printer(m);
++	struct sched_group_info *gi = m->private;
++	struct xe_gt *gt = gi->gt;
++	struct xe_hw_engine *hwe;
++	enum xe_hw_engine_id id;
++	bool first = true;
++
++	for_each_hw_engine(hwe, gt, id) {
++		u8 guc_class = xe_engine_class_to_guc_class(hwe->class);
++		u32 mask = gi->masks[guc_class];
++
++		if (mask & BIT(hwe->logical_instance)) {
++			drm_printf(&p, "%s%s", first ? "" : " ", hwe->name);
++
++			first = false;
++		}
++	}
++
++	drm_printf(&p, "\n");
++
++	return 0;
++}
++
++static int sched_group_engines_open(struct inode *inode, struct file *file)
++{
++	return single_open(file, sched_group_engines_info, inode->i_private);
++}
++
++static const struct file_operations sched_group_engines_fops = {
++	.owner = THIS_MODULE,
++	.open = sched_group_engines_open,
++	.read = seq_read,
++	.llseek = seq_lseek,
++	.release = single_release,
++};
++
++static void __sched_group_info_cleanup(struct xe_gt *gt, struct dentry *dent)
++{
++	if (dent->d_inode->i_private)
++		drmm_kfree(&gt_to_xe(gt)->drm, dent->d_inode->i_private);
++
++	debugfs_remove_recursive(dent);
++}
++
++#define GROUP_INFO_ROOT "sched_groups"
++static void sched_group_info_register(struct xe_gt *gt, unsigned int vfid)
++{
++	struct xe_gt_sriov_pf_policy *policy = &gt->sriov.pf.policy;
++	u32 mode = policy->guc.sched_groups.current_mode;
++	u8 num_groups = policy->guc.sched_groups.modes[mode].num_masks / GUC_MAX_ENGINE_CLASSES;
++	struct sched_group_info *infos;
++	struct dentry *parent;
++	struct dentry *old;
++	u8 g;
++
++	if (!gt->sriov.pf.debugfs_roots)
++		return;
++
++	/* remove existing debugfs entries for old groups */
++	old = debugfs_lookup(GROUP_INFO_ROOT, gt->sriov.pf.debugfs_roots[vfid]);
++	if (old)
++		__sched_group_info_cleanup(gt, old);
++
++	/* re-create debugfs for new groups (if any)*/
++	if (!num_groups)
++		return;
++
++	parent = debugfs_create_dir(GROUP_INFO_ROOT, gt->sriov.pf.debugfs_roots[vfid]);
++	if (IS_ERR(parent))
++		return;
++
++	infos = drmm_kzalloc(&gt_to_xe(gt)->drm, sizeof(*infos) * num_groups, GFP_KERNEL);
++	if (!infos)
++		goto out_err;
++	parent->d_inode->i_private = infos;
++
++	for (g = 0; g < num_groups; g++) {
++		struct sched_group_info *info = &infos[g];
++		u32 base = g * GUC_MAX_ENGINE_CLASSES;
++		struct dentry *dent;
++		char name[10];
++
++		snprintf(name, sizeof(name), "group%u", g);
++		dent = debugfs_create_dir(name, parent);
++		if (IS_ERR(dent))
++			goto out_err;
++
++		info->gt = gt;
++		info->masks = &policy->guc.sched_groups.modes[mode].masks[base];
++
++		dent->d_inode->i_private = info;
++		debugfs_create_file("engines", 0644, dent, info, &sched_group_engines_fops);
++	}
++
++	return;
++
++out_err:
++	__sched_group_info_cleanup(gt, parent);
++}
++
+ static const char *sched_group_mode_to_string(enum xe_sriov_sched_group_modes mode)
+ {
+ 	switch (mode) {
+@@ -221,7 +342,7 @@ static ssize_t sched_groups_write(struct file *file, const char __user *ubuf,
+ 	struct xe_gt *gt = extract_gt(file_inode(file)->i_private);
+ 	char name[32];
+ 	int ret;
+-	int m;
++	int m, i;
+ 
+ 	if (*pos)
+ 		return -ESPIPE;
+@@ -251,6 +372,10 @@ static ssize_t sched_groups_write(struct file *file, const char __user *ubuf,
+ 	ret = xe_gt_sriov_pf_policy_set_sched_groups_mode(gt, m);
+ 	xe_pm_runtime_put(gt_to_xe(gt));
+ 
++	if (!ret)
++		for (i = 0; i <= xe_sriov_pf_get_totalvfs(gt_to_xe(gt)); i++)
++			sched_group_info_register(gt, i);
++
+ 	return (ret < 0) ? ret : size;
+ }
+ 
+@@ -697,6 +822,19 @@ void xe_gt_sriov_pf_debugfs_populate(struct xe_gt *gt, struct dentry *parent, un
+ 		return;
+ 	dent->d_inode->i_private = gt;
+ 
++	/*
++	 * we allocate an array to store the GT-level dentries for PF and all
++	 * VFs when creating the PF folder. Failing to create this allocation
++	 * is not fatal.
++	 */
++	if (vfid == 0)
++		gt->sriov.pf.debugfs_roots =
++			drmm_kcalloc(&gt_to_xe(gt)->drm,
++				     1 + xe_sriov_pf_get_totalvfs(gt_to_xe(gt)),
++				     sizeof(struct dentry *), GFP_KERNEL);
++	if (gt->sriov.pf.debugfs_roots)
++		gt->sriov.pf.debugfs_roots[vfid] = dent;
++
+ 	xe_gt_assert(gt, extract_gt(dent) == gt);
+ 	xe_gt_assert(gt, extract_vfid(dent) == vfid);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_types.h
+index 667b83104..747ec5dae 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_types.h
+@@ -15,6 +15,8 @@
+ #include "xe_gt_sriov_pf_policy_types.h"
+ #include "xe_gt_sriov_pf_service_types.h"
+ 
++struct dentry;
++
+ /**
+  * struct xe_gt_sriov_metadata - GT level per-VF metadata.
+  */
+@@ -52,6 +54,7 @@ struct xe_gt_sriov_pf_workers {
+  * @migration: migration data.
+  * @spare: PF-only provisioning configuration.
+  * @vfs: metadata for all VFs.
++ * @debugfs_root: GT debugfs root for all VFs.
+  */
+ struct xe_gt_sriov_pf {
+ 	struct xe_gt_sriov_pf_workers workers;
+@@ -60,6 +63,7 @@ struct xe_gt_sriov_pf {
+ 	struct xe_gt_sriov_pf_policy policy;
+ 	struct xe_gt_sriov_spare_config spare;
+ 	struct xe_gt_sriov_metadata *vfs;
++	struct dentry **debugfs_roots;
+ };
+ 
+ #endif
+-- 
+2.34.1
+

@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Date: Mon, 1 Dec 2025 15:20:15 +0530
+Subject: [PATCH 3/4] drm/xe/vf: Requeue recovery on GuC MIGRATION error during
+ VF post-migration
+
+Handle GuC response `XE_GUC_RESPONSE_VF_MIGRATED` as a special case in the
+VF post-migration recovery flow. When this error occurs, it indicates that
+a new migration was detected while the resource fixup process was still in
+progress. Instead of failing immediately, requeue the VF into the recovery
+path to allow proper handling of the new migration event.
+
+This improves robustness of VF recovery in SR-IOV environments where
+migrations can overlap with resource fixup steps.
+
+Signed-off-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Tomasz Lis <tomasz.lis@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c | 3 +++
+ drivers/gpu/drm/xe/xe_guc.c         | 6 ++++++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index 7db1aeddc..ff3592f4e 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -1270,6 +1270,9 @@ static void vf_post_migration_recovery(struct xe_gt *gt)
+ 
+ 	err = vf_post_migration_resfix_done(gt, marker);
+ 	if (err) {
++		if (err == -EREMCHG)
++			goto queue;
++
+ 		xe_gt_sriov_err(gt, "Recovery failed at GuC RESFIX_DONE step (%pe)\n",
+ 				ERR_PTR(err));
+ 		goto fail;
+diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
+index 08169b266..57b7fc511 100644
+--- a/drivers/gpu/drm/xe/xe_guc.c
++++ b/drivers/gpu/drm/xe/xe_guc.c
+@@ -1474,6 +1474,12 @@ int xe_guc_mmio_send_recv(struct xe_guc *guc, const u32 *request,
+ 		u32 hint = FIELD_GET(GUC_HXG_FAILURE_MSG_0_HINT, header);
+ 		u32 error = FIELD_GET(GUC_HXG_FAILURE_MSG_0_ERROR, header);
+ 
++		if (unlikely(error == XE_GUC_RESPONSE_VF_MIGRATED)) {
++			xe_gt_dbg(gt, "GuC mmio request %#x rejected due to MIGRATION (hint %#x)\n",
++				  request[0], hint);
++			return -EREMCHG;
++		}
++
+ 		xe_gt_err(gt, "GuC mmio request %#x: failure %#x hint %#x\n",
+ 			  request[0], error, hint);
+ 		return -ENXIO;
+-- 
+2.34.1
+

@@ -1,0 +1,178 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Date: Mon, 1 Dec 2025 15:20:16 +0530
+Subject: [PATCH 4/4] drm/xe/vf: Add debugfs entries to test VF double
+ migration
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+VF migration sends a marker to the GUC before resource fixups begin,
+and repeats the marker with the RESFIX_DONE notification. This prevents
+the GUC from submitting jobs during double migration events.
+
+To reliably test double migration, a second migration must be triggered
+while fixups from the first migration are still in progress. Since fixups
+complete quickly, reproducing this scenario is difficult. Introduce
+debugfs controls to add delays in the post-fixup phase, creating a
+deterministic window for subsequent migrations.
+
+New debugfs entries:
+	/sys/kernel/debug/dri/BDF/
+	├── tile0
+	│   ├─gt0
+	│   │ ├──vf
+	│   │ │  ├── resfix_stoppers
+
+resfix_stoppers: Predefined checkpoints that allow the migration process
+to pause at specific stages. The stages are given below.
+
+VF_MIGRATION_WAIT_RESFIX_START		- BIT(0)
+VF_MIGRATION_WAIT_FIXUPS		- BIT(1)
+VF_MIGRATION_WAIT_RESTART_JOBS		- BIT(2)
+VF_MIGRATION_WAIT_RESFIX_DONE		- BIT(3)
+
+Each state will pause with a 1-second delay per iteration, continuing until
+its corresponding bit is cleared.
+
+Signed-off-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Tomasz Lis <tomasz.lis@intel.com>
+Acked-by: Adam Miszczak <adam.miszczak@linux.intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c         | 40 +++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_gt_sriov_vf_debugfs.c | 12 +++++++
+ drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h   |  8 +++++
+ 3 files changed, 60 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index ff3592f4e..684829682 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -5,6 +5,7 @@
+ 
+ #include <linux/bitfield.h>
+ #include <linux/bsearch.h>
++#include <linux/delay.h>
+ 
+ #include <drm/drm_managed.h>
+ #include <drm/drm_print.h>
+@@ -42,6 +43,37 @@
+ 
+ #define make_u64_from_u32(hi, lo) ((u64)((u64)(u32)(hi) << 32 | (u32)(lo)))
+ 
++#ifdef CONFIG_DRM_XE_DEBUG
++enum VF_MIGRATION_WAIT_POINTS {
++	VF_MIGRATION_WAIT_RESFIX_START	= BIT(0),
++	VF_MIGRATION_WAIT_FIXUPS	= BIT(1),
++	VF_MIGRATION_WAIT_RESTART_JOBS	= BIT(2),
++	VF_MIGRATION_WAIT_RESFIX_DONE	= BIT(3),
++};
++
++#define VF_MIGRATION_WAIT_DELAY_IN_MS	1000
++static void vf_post_migration_inject_wait(struct xe_gt *gt,
++					  enum VF_MIGRATION_WAIT_POINTS wait)
++{
++	while (gt->sriov.vf.migration.debug.resfix_stoppers & wait) {
++		xe_gt_dbg(gt,
++			  "*TESTING* injecting %u ms delay due to resfix_stoppers=%#x, to continue clear %#x\n",
++			  VF_MIGRATION_WAIT_DELAY_IN_MS,
++			  gt->sriov.vf.migration.debug.resfix_stoppers, wait);
++
++		msleep(VF_MIGRATION_WAIT_DELAY_IN_MS);
++	}
++}
++
++#define VF_MIGRATION_INJECT_WAIT(gt, _POS) ({					\
++	struct xe_gt *__gt = (gt);						\
++	vf_post_migration_inject_wait(__gt, VF_MIGRATION_WAIT_##_POS);		\
++	})
++
++#else
++#define VF_MIGRATION_INJECT_WAIT(_gt, ...)	typecheck(struct xe_gt *, (_gt))
++#endif
++
+ static int guc_action_vf_reset(struct xe_guc *guc)
+ {
+ 	u32 request[GUC_HXG_REQUEST_MSG_MIN_LEN] = {
+@@ -321,6 +353,8 @@ static int vf_resfix_start(struct xe_gt *gt, u16 marker)
+ 
+ 	xe_gt_assert(gt, IS_SRIOV_VF(gt_to_xe(gt)));
+ 
++	VF_MIGRATION_INJECT_WAIT(gt, RESFIX_START);
++
+ 	xe_gt_sriov_dbg_verbose(gt, "Sending resfix start marker %u\n", marker);
+ 
+ 	return guc_action_vf_resfix_start(guc, marker);
+@@ -1159,6 +1193,8 @@ static int vf_post_migration_fixups(struct xe_gt *gt)
+ 	void *buf = gt->sriov.vf.migration.scratch;
+ 	int err;
+ 
++	VF_MIGRATION_INJECT_WAIT(gt, FIXUPS);
++
+ 	/* xe_gt_sriov_vf_query_config will fixup the GGTT addresses */
+ 	err = xe_gt_sriov_vf_query_config(gt);
+ 	if (err)
+@@ -1177,6 +1213,8 @@ static int vf_post_migration_fixups(struct xe_gt *gt)
+ 
+ static void vf_post_migration_rearm(struct xe_gt *gt)
+ {
++	VF_MIGRATION_INJECT_WAIT(gt, RESTART_JOBS);
++
+ 	/*
+ 	 * Make sure interrupts on the new HW are properly set. The GuC IRQ
+ 	 * must be working at this point, since the recovery did started,
+@@ -1207,6 +1245,8 @@ static void vf_post_migration_abort(struct xe_gt *gt)
+ 
+ static int vf_post_migration_resfix_done(struct xe_gt *gt, u16 marker)
+ {
++	VF_MIGRATION_INJECT_WAIT(gt, RESFIX_DONE);
++
+ 	spin_lock_irq(&gt->sriov.vf.migration.lock);
+ 	if (gt->sriov.vf.migration.recovery_queued)
+ 		xe_gt_sriov_dbg(gt, "another recovery imminent\n");
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf_debugfs.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf_debugfs.c
+index 2ed5b6780..507718326 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf_debugfs.c
+@@ -69,4 +69,16 @@ void xe_gt_sriov_vf_debugfs_register(struct xe_gt *gt, struct dentry *root)
+ 	vfdentry->d_inode->i_private = gt;
+ 
+ 	drm_debugfs_create_files(vf_info, ARRAY_SIZE(vf_info), vfdentry, minor);
++
++	/*
++	 *      /sys/kernel/debug/dri/BDF/
++	 *      ├── tile0
++	 *          ├── gt0
++	 *              ├── vf
++	 *                  ├── resfix_stoppers
++	 */
++	if (IS_ENABLED(CONFIG_DRM_XE_DEBUG)) {
++		debugfs_create_x8("resfix_stoppers", 0600, vfdentry,
++				  &gt->sriov.vf.migration.debug.resfix_stoppers);
++	}
+ }
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
+index b2e324b41..3a1afeb64 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
+@@ -51,6 +51,14 @@ struct xe_gt_sriov_vf_migration {
+ 	wait_queue_head_t wq;
+ 	/** @scratch: Scratch memory for VF recovery */
+ 	void *scratch;
++	/** @debug: Debug hooks for delaying migration */
++	struct {
++		/**
++		 * @debug.resfix_stoppers: Stop and wait at different stages
++		 * during post migration recovery
++		 */
++		u8 resfix_stoppers;
++	} debug;
+ 	/**
+ 	 * @resfix_marker: Marker sent on start and on end of post-migration
+ 	 * steps.
+-- 
+2.34.1
+

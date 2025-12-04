@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Colin Ian King <colin.i.king@gmail.com>
+Date: Wed, 24 Sep 2025 11:22:08 +0100
+Subject: drm/xe/xe_late_bind_fw: Fix missing initialization of
+ variable offset
+
+The variable offset is not being initialized, and it is only set inside
+a for-loop if entry->name is the same as manifest_entry. In the case
+where it is not initialized a non-zero check on offset is potentialy checking
+a bogus uninitalized value. Fix this by initializing offset to zero.
+
+Fixes: efa29317a553 ("drm/xe/xe_late_bind_fw: Extract and print version info")
+Signed-off-by: Colin Ian King <colin.i.king@gmail.com>
+Reviewed-by: Badal Nilawar <badal.nilawar@intel.com>
+Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Link: https://lore.kernel.org/r/20250924102208.9216-1-colin.i.king@gmail.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry picked from commit 20f3b28e2e07747fd27301f0f5deb3cb569ee15c)
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(backported from commit 5b440a8bbafcc673bcff33438c68ea03993948b2 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_late_bind_fw.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+index 38f3feb2a..8f5082e68 100644
+--- a/drivers/gpu/drm/xe/xe_late_bind_fw.c
++++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+@@ -60,7 +60,7 @@ static int parse_cpd_header(struct xe_late_bind_fw *lb_fw,
+ 	const struct gsc_manifest_header *manifest;
+ 	const struct gsc_cpd_entry *entry;
+ 	size_t min_size = sizeof(*header);
+-	u32 offset;
++	u32 offset = 0;
+ 	int i;
+ 
+ 	/* manifest_entry is mandatory */
+@@ -116,7 +116,7 @@ static int parse_lb_layout(struct xe_late_bind_fw *lb_fw,
+ 	const struct csc_fpt_header *header = data;
+ 	const struct csc_fpt_entry *entry;
+ 	size_t min_size = sizeof(*header);
+-	u32 offset;
++	u32 offset = 0;
+ 	int i;
+ 
+ 	/* fpt_entry is mandatory */
+-- 
+2.34.1
+

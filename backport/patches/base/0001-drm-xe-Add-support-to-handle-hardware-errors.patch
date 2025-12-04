@@ -46,7 +46,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_hw_error.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 9e07677df36d..c6e9ca7dfc4c 100644
+index 07c71a299..02f73dffe 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -80,6 +80,7 @@ xe-y += xe_bb.o \
@@ -56,10 +56,10 @@ index 9e07677df36d..c6e9ca7dfc4c 100644
 +	xe_hw_error.o \
  	xe_hw_fence.o \
  	xe_irq.o \
- 	xe_late_bind_fw.o \
+ 	xe_lrc.o \
 diff --git a/drivers/gpu/drm/xe/regs/xe_hw_error_regs.h b/drivers/gpu/drm/xe/regs/xe_hw_error_regs.h
 new file mode 100644
-index 000000000000..ed9b81fb28a0
+index 000000000..ed9b81fb2
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/regs/xe_hw_error_regs.h
 @@ -0,0 +1,15 @@
@@ -79,7 +79,7 @@ index 000000000000..ed9b81fb28a0
 +
 +#endif
 diff --git a/drivers/gpu/drm/xe/regs/xe_irq_regs.h b/drivers/gpu/drm/xe/regs/xe_irq_regs.h
-index 13635e4331d4..7c2a3a140142 100644
+index 13635e433..7c2a3a140 100644
 --- a/drivers/gpu/drm/xe/regs/xe_irq_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_irq_regs.h
 @@ -18,6 +18,7 @@
@@ -92,7 +92,7 @@ index 13635e4331d4..7c2a3a140142 100644
  #define   GT_DW_IRQ(x)				REG_BIT(x)
 diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
 new file mode 100644
-index 000000000000..0fa45792f1c0
+index 000000000..0fa45792f
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_hw_error.c
 @@ -0,0 +1,109 @@
@@ -207,7 +207,7 @@ index 000000000000..0fa45792f1c0
 +}
 diff --git a/drivers/gpu/drm/xe/xe_hw_error.h b/drivers/gpu/drm/xe/xe_hw_error.h
 new file mode 100644
-index 000000000000..d86e28c5180c
+index 000000000..d86e28c51
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_hw_error.h
 @@ -0,0 +1,15 @@
@@ -227,7 +227,7 @@ index 000000000000..d86e28c5180c
 +void xe_hw_error_init(struct xe_device *xe);
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_irq.c b/drivers/gpu/drm/xe/xe_irq.c
-index 5df5b8c2a3e4..870edaf69388 100644
+index 5df5b8c2a..870edaf69 100644
 --- a/drivers/gpu/drm/xe/xe_irq.c
 +++ b/drivers/gpu/drm/xe/xe_irq.c
 @@ -18,6 +18,7 @@
@@ -256,5 +256,5 @@ index 5df5b8c2a3e4..870edaf69388 100644
  
  	if (xe_device_has_msix(xe)) {
 -- 
-2.43.0
+2.34.1
 

@@ -47,11 +47,11 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_late_bind_fw_types.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 07c71a29963d..9e07677df36d 100644
+index 02f73dffe..c6e9ca7df 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -82,6 +82,7 @@ xe-y += xe_bb.o \
- 	xe_hw_engine_group.o \
+@@ -83,6 +83,7 @@ xe-y += xe_bb.o \
+ 	xe_hw_error.o \
  	xe_hw_fence.o \
  	xe_irq.o \
 +	xe_late_bind_fw.o \
@@ -59,7 +59,7 @@ index 07c71a29963d..9e07677df36d 100644
  	xe_migrate.o \
  	xe_mmio.o \
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 6ece4defa9df..5db283fb5b15 100644
+index c9c91b21e..f019f74ac 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -45,6 +45,7 @@
@@ -82,7 +82,7 @@ index 6ece4defa9df..5db283fb5b15 100644
  	if (err)
  		return err;
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 7ceb0c90f391..c1e67af69b3b 100644
+index 150440455..22946455f 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -15,6 +15,7 @@
@@ -93,7 +93,7 @@ index 7ceb0c90f391..c1e67af69b3b 100644
  #include "xe_lmtt_types.h"
  #include "xe_memirq_types.h"
  #include "xe_oa_types.h"
-@@ -328,6 +329,8 @@ struct xe_device {
+@@ -331,6 +332,8 @@ struct xe_device {
  		u8 has_heci_cscfi:1;
  		/** @info.has_heci_gscfi: device has heci gscfi */
  		u8 has_heci_gscfi:1;
@@ -102,7 +102,7 @@ index 7ceb0c90f391..c1e67af69b3b 100644
  		/** @info.has_llc: Device has a shared CPU+GPU last level cache */
  		u8 has_llc:1;
  		/** @info.has_mbx_power_limits: Device has support to manage power limits using
-@@ -581,6 +584,9 @@ struct xe_device {
+@@ -584,6 +587,9 @@ struct xe_device {
  	/** @nvm: discrete graphics non-volatile memory */
  	struct intel_dg_nvm_dev *nvm;
  
@@ -114,7 +114,7 @@ index 7ceb0c90f391..c1e67af69b3b 100644
  
 diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
 new file mode 100644
-index 000000000000..5f386f860728
+index 000000000..5f386f860
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
 @@ -0,0 +1,84 @@
@@ -204,7 +204,7 @@ index 000000000000..5f386f860728
 +}
 diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.h b/drivers/gpu/drm/xe/xe_late_bind_fw.h
 new file mode 100644
-index 000000000000..4c73571c3e62
+index 000000000..4c73571c3
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_late_bind_fw.h
 @@ -0,0 +1,15 @@
@@ -225,7 +225,7 @@ index 000000000000..4c73571c3e62
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw_types.h b/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
 new file mode 100644
-index 000000000000..f79e5aefed94
+index 000000000..f79e5aefe
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
 @@ -0,0 +1,33 @@
@@ -263,7 +263,7 @@ index 000000000000..f79e5aefed94
 +
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index 3c40ef426f0c..e3d70deda470 100644
+index 2a390f3dc..cab13a30d 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
 @@ -327,6 +327,7 @@ static const struct xe_device_desc bmg_desc = {
@@ -283,7 +283,7 @@ index 3c40ef426f0c..e3d70deda470 100644
  	xe->info.has_pxp = desc->has_pxp;
  	xe->info.has_sriov = desc->has_sriov;
 diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
-index 4de6f69ed975..51a607d323fb 100644
+index 4de6f69ed..51a607d32 100644
 --- a/drivers/gpu/drm/xe/xe_pci_types.h
 +++ b/drivers/gpu/drm/xe/xe_pci_types.h
 @@ -39,6 +39,7 @@ struct xe_device_desc {
@@ -295,5 +295,5 @@ index 4de6f69ed975..51a607d323fb 100644
  	u8 has_mbx_power_limits:1;
  	u8 has_pxp:1;
 -- 
-2.43.0
+2.34.1
 

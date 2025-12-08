@@ -10,29 +10,33 @@ structure to improve drm dev printk function output.
 manage origin member availability if origin member is not
 available in struct drm_printer.
 
+v1: Rebase to v6.17.1-251023.15
+
 Reference:
     c2ef66e9ad8 drm/print: Improve drm_dbg_printer
 
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/gpu/drm/xe/xe_gt_printk.h | 4 ++++
- 1 file changed, 4 insertions(+)
+ drivers/gpu/drm/xe/xe_gt_printk.h   | 4 ++++
+ drivers/gpu/drm/xe/xe_printk.h      | 4 ++++
+ drivers/gpu/drm/xe/xe_tile_printk.h | 4 ++++
+ 3 files changed, 12 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_printk.h b/drivers/gpu/drm/xe/xe_gt_printk.h
-index 2f9baf7..3bf68d4 100644
+index 1313d32..8d8156f 100644
 --- a/drivers/gpu/drm/xe/xe_gt_printk.h
 +++ b/drivers/gpu/drm/xe/xe_gt_printk.h
-@@ -77,7 +77,9 @@ static inline void __xe_gt_printfn_dbg(struct drm_printer *p, struct va_format *
- 	 * redirect to the tweaked drm_dbg_printer() instead.
+@@ -74,7 +74,9 @@ static inline void __xe_gt_printfn_dbg(struct drm_printer *p, struct va_format *
+ 	 * redirect to the tweaked xe_tile_dbg_printer() instead.
  	 */
- 	dbg = drm_dbg_printer(&gt_to_xe(gt)->drm, DRM_UT_DRIVER, NULL);
+ 	dbg = xe_tile_dbg_printer((gt)->tile);
 +#ifndef BPM_STRUCT_DRM_PRINTER_ORIGIN_NOT_PRESENT
  	dbg.origin = p->origin;
 +#endif
  
- 	drm_printf(&dbg, "GT%u: %pV", gt->info.id, vaf);
+ 	drm_printf(&dbg, __XE_GT_PRINTK_FMT(gt, "%pV", vaf));
  }
-@@ -123,7 +125,9 @@ static inline struct drm_printer xe_gt_dbg_printer(struct xe_gt *gt)
+@@ -120,7 +122,9 @@ static inline struct drm_printer xe_gt_dbg_printer(struct xe_gt *gt)
  	struct drm_printer p = {
  		.printfn = __xe_gt_printfn_dbg,
  		.arg = gt,
@@ -42,5 +46,53 @@ index 2f9baf7..3bf68d4 100644
  	};
  	return p;
  }
+diff --git a/drivers/gpu/drm/xe/xe_printk.h b/drivers/gpu/drm/xe/xe_printk.h
+index c5be238..ec6ee4a 100644
+--- a/drivers/gpu/drm/xe/xe_printk.h
++++ b/drivers/gpu/drm/xe/xe_printk.h
+@@ -75,7 +75,9 @@ static inline void __xe_printfn_dbg(struct drm_printer *p, struct va_format *vaf
+ 	 * redirect to the tweaked drm_dbg_printer() instead.
+ 	 */
+ 	ddp = drm_dbg_printer(&xe->drm, DRM_UT_DRIVER, NULL);
++#ifndef BPM_STRUCT_DRM_PRINTER_ORIGIN_NOT_PRESENT
+ 	ddp.origin = p->origin;
++#endif
+ 
+ 	drm_printf(&ddp, __XE_PRINTK_FMT(xe, "%pV", vaf));
+ }
+@@ -121,7 +123,9 @@ static inline struct drm_printer xe_dbg_printer(struct xe_device *xe)
+ 	struct drm_printer p = {
+ 		.printfn = __xe_printfn_dbg,
+ 		.arg = xe,
++#ifndef BPM_STRUCT_DRM_PRINTER_ORIGIN_NOT_PRESENT
+ 		.origin = (const void *)_THIS_IP_,
++#endif
+ 	};
+ 	return p;
+ }
+diff --git a/drivers/gpu/drm/xe/xe_tile_printk.h b/drivers/gpu/drm/xe/xe_tile_printk.h
+index 63640a4..573eae2 100644
+--- a/drivers/gpu/drm/xe/xe_tile_printk.h
++++ b/drivers/gpu/drm/xe/xe_tile_printk.h
+@@ -73,7 +73,9 @@ static inline void __xe_tile_printfn_dbg(struct drm_printer *p, struct va_format
+ 	 * redirect to the tweaked xe_dbg_printer() instead.
+ 	 */
+ 	dbg = xe_dbg_printer(tile->xe);
++#ifndef BPM_STRUCT_DRM_PRINTER_ORIGIN_NOT_PRESENT
+ 	dbg.origin = p->origin;
++#endif
+ 
+ 	drm_printf(&dbg, __XE_TILE_PRINTK_FMT(tile, "%pV", vaf));
+ }
+@@ -119,7 +121,9 @@ static inline struct drm_printer xe_tile_dbg_printer(struct xe_tile *tile)
+ 	struct drm_printer p = {
+ 		.printfn = __xe_tile_printfn_dbg,
+ 		.arg = tile,
++#ifndef BPM_STRUCT_DRM_PRINTER_ORIGIN_NOT_PRESENT
+ 		.origin = (const void *)_THIS_IP_,
++#endif
+ 	};
+ 	return p;
+ }
 -- 
-2.34.1
+2.43.0

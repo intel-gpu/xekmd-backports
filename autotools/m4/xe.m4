@@ -54,6 +54,8 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/intel/i915_drm.h])
 	AC_KERNEL_CHECK_HEADERS([linux/wordpart.h])
 	AC_KERNEL_CHECK_HEADERS([linux/workqueue_types.h])
+	dnl # v6.8-d84f31791517 locking/mutex: split out mutex_types.h
+	AC_KERNEL_CHECK_HEADERS([linux/mutex_types.h])
 
 	AC_KERNEL_WAIT
 ])

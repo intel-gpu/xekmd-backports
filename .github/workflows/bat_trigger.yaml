@@ -1,0 +1,20 @@
+name: BAT Testing
+
+on:
+  pull_request_target:
+    branches:
+      - "kernel-backport/main"
+      - "kernel-backport/main_6.14"
+
+jobs:
+  queue-testing:
+    runs-on: lgci-runner
+    steps:
+      - name: Queue testing
+        run: |
+          curl -X POST ${{ secrets.SERVER_URL }} \
+            --user "${{ secrets.USER }}:${{ secrets.TOKEN }}" \
+            --data-urlencode "TARGET_COMMIT=${{ github.event.pull_request.head.sha }}" \
+            --data-urlencode "PR_NUMBER=${{ github.event.pull_request.number }}" \
+            --data-urlencode "TARGET_BRANCH=${{ github.event.pull_request.base.ref }}" \
+            --data-urlencode "DEBUG=false"

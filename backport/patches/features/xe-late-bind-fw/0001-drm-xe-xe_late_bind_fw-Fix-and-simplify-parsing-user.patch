@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 2 Oct 2025 21:27:36 +0200
+Subject: drm/xe/xe_late_bind_fw: Fix and simplify parsing user input
+
+Code was wrongly passing sizeof(uval) as the number base to use,
+and unlike other debugfs entries that represent bool data, it
+wasn't using the dedicated function to parse user input as bool.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Badal Nilawar <badal.nilawar@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Link: https://lore.kernel.org/r/20251002192736.203186-1-michal.wajdeczko@intel.com
+(cherry-picked from commit 71f1939e0d9e6702c0424c31521b72b7f025e6dd linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_debugfs.c | 11 ++++-------
+ 1 file changed, 4 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
+index dba0a9c4a4d2..34f622bef3e0 100644
+--- a/drivers/gpu/drm/xe/xe_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_debugfs.c
+@@ -349,17 +349,14 @@ static ssize_t disable_late_binding_set(struct file *f, const char __user *ubuf,
+ {
+ 	struct xe_device *xe = file_inode(f)->i_private;
+ 	struct xe_late_bind *late_bind = &xe->late_bind;
+-	u32 uval;
+-	ssize_t ret;
++	bool val;
++	int ret;
+ 
+-	ret = kstrtouint_from_user(ubuf, size, sizeof(uval), &uval);
++	ret = kstrtobool_from_user(ubuf, size, &val);
+ 	if (ret)
+ 		return ret;
+ 
+-	if (uval > 1)
+-		return -EINVAL;
+-
+-	late_bind->disable = !!uval;
++	late_bind->disable = val;
+ 	return size;
+ }
+ 
+-- 
+2.34.1
+

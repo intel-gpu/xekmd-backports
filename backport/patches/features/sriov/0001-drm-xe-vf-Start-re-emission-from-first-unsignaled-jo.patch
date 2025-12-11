@@ -1,0 +1,136 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Fri, 21 Nov 2025 07:27:50 -0800
+Subject: drm/xe/vf: Start re-emission from first unsignaled job during
+ VF migration
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The LRC software ring tail is reset to the first unsignaled pending
+job's head.
+
+Fix the re-emission logic to begin submitting from the first unsignaled
+job detected, rather than scanning all pending jobs, which can cause
+imbalance.
+
+v2:
+ - Include missing local changes
+v3:
+ - s/skip_replay/restore_replay (Tomasz)
+
+Fixes: c25c1010df88 ("drm/xe/vf: Replay GuC submission state on pause / unpause")
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Tomasz Lis <tomasz.lis@intel.com>
+Link: https://patch.msgid.link/20251121152750.240557-1-matthew.brost@intel.com
+(cherry picked from commit 00937fe1921ab346b6f6a4beaa5c38e14733caa3)
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+(cherry-picked from commit 76ce2313709f13a6adbcaa1a43a8539c8f509f6a linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gpu_scheduler.h   |  5 +++--
+ drivers/gpu/drm/xe/xe_guc_submit.c      | 25 ++++++++++++++-----------
+ drivers/gpu/drm/xe/xe_sched_job_types.h |  4 ++--
+ 3 files changed, 19 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gpu_scheduler.h b/drivers/gpu/drm/xe/xe_gpu_scheduler.h
+index 9955397aaaa9..c7a77a3a9681 100644
+--- a/drivers/gpu/drm/xe/xe_gpu_scheduler.h
++++ b/drivers/gpu/drm/xe/xe_gpu_scheduler.h
+@@ -54,13 +54,14 @@ static inline void xe_sched_tdr_queue_imm(struct xe_gpu_scheduler *sched)
+ static inline void xe_sched_resubmit_jobs(struct xe_gpu_scheduler *sched)
+ {
+ 	struct drm_sched_job *s_job;
++	bool restore_replay = false;
+ 
+ 	list_for_each_entry(s_job, &sched->base.pending_list, list) {
+ 		struct drm_sched_fence *s_fence = s_job->s_fence;
+ 		struct dma_fence *hw_fence = s_fence->parent;
+ 
+-		if (to_xe_sched_job(s_job)->skip_emit ||
+-		    (hw_fence && !dma_fence_is_signaled(hw_fence)))
++		restore_replay |= to_xe_sched_job(s_job)->restore_replay;
++		if (restore_replay || (hw_fence && !dma_fence_is_signaled(hw_fence)))
+ 			sched->base.ops->run_job(s_job);
+ 	}
+ }
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index d4ffdb71ef3d..c56fd44641f6 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -822,7 +822,7 @@ static void submit_exec_queue(struct xe_exec_queue *q, struct xe_sched_job *job)
+ 
+ 	xe_gt_assert(guc_to_gt(guc), exec_queue_registered(q));
+ 
+-	if (!job->skip_emit || job->last_replay) {
++	if (!job->restore_replay || job->last_replay) {
+ 		if (xe_exec_queue_is_parallel(q))
+ 			wq_item_append(q);
+ 		else
+@@ -881,10 +881,10 @@ guc_exec_queue_run_job(struct drm_sched_job *drm_job)
+ 	if (!killed_or_banned_or_wedged && !xe_sched_job_is_error(job)) {
+ 		if (!exec_queue_registered(q))
+ 			register_exec_queue(q, GUC_CONTEXT_NORMAL);
+-		if (!job->skip_emit)
++		if (!job->restore_replay)
+ 			q->ring_ops->emit_job(job);
+ 		submit_exec_queue(q, job);
+-		job->skip_emit = false;
++		job->restore_replay = false;
+ 	}
+ 
+ 	/*
+@@ -2152,6 +2152,8 @@ static void guc_exec_queue_pause(struct xe_guc *guc, struct xe_exec_queue *q)
+ 
+ 	job = xe_sched_first_pending_job(sched);
+ 	if (job) {
++		job->restore_replay = true;
++
+ 		/*
+ 		 * Adjust software tail so jobs submitted overwrite previous
+ 		 * position in ring buffer with new GGTT addresses.
+@@ -2241,17 +2243,18 @@ static void guc_exec_queue_unpause_prepare(struct xe_guc *guc,
+ 					   struct xe_exec_queue *q)
+ {
+ 	struct xe_gpu_scheduler *sched = &q->guc->sched;
+-	struct drm_sched_job *s_job;
+ 	struct xe_sched_job *job = NULL;
++	bool restore_replay = false;
+ 
+-	list_for_each_entry(s_job, &sched->base.pending_list, list) {
+-		job = to_xe_sched_job(s_job);
+-
+-		xe_gt_dbg(guc_to_gt(guc), "Replay JOB - guc_id=%d, seqno=%d",
+-			  q->guc->id, xe_sched_job_seqno(job));
++	list_for_each_entry(job, &sched->base.pending_list, drm.list) {
++		restore_replay |= job->restore_replay;
++		if (restore_replay) {
++			xe_gt_dbg(guc_to_gt(guc), "Replay JOB - guc_id=%d, seqno=%d",
++				  q->guc->id, xe_sched_job_seqno(job));
+ 
+-		q->ring_ops->emit_job(job);
+-		job->skip_emit = true;
++			q->ring_ops->emit_job(job);
++			job->restore_replay = true;
++		}
+ 	}
+ 
+ 	if (job)
+diff --git a/drivers/gpu/drm/xe/xe_sched_job_types.h b/drivers/gpu/drm/xe/xe_sched_job_types.h
+index d26612abb4ca..7c4c54fe920a 100644
+--- a/drivers/gpu/drm/xe/xe_sched_job_types.h
++++ b/drivers/gpu/drm/xe/xe_sched_job_types.h
+@@ -63,8 +63,8 @@ struct xe_sched_job {
+ 	bool ring_ops_flush_tlb;
+ 	/** @ggtt: mapped in ggtt. */
+ 	bool ggtt;
+-	/** @skip_emit: skip emitting the job */
+-	bool skip_emit;
++	/** @restore_replay: job being replayed for restore */
++	bool restore_replay;
+ 	/** @last_replay: last job being replayed */
+ 	bool last_replay;
+ 	/** @ptrs: per instance pointers. */
+-- 
+2.34.1
+

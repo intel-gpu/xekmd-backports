@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Pravalika Gurram <pravalika.gurram@intel.com>
+Date: Thu, 11 Dec 2025 16:12:21 +0530
+Subject: drm/xe: Fix IOCTL property conflict between PXP and eudebug
+
+The DRM_XE_EXEC_QUEUE_SET_PROPERTY_PXP_TYPE and
+PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG properties were both
+assigned the same IOCTL number (2), causing incorrect routing of
+property set calls.
+
+When PXP tests attempted to set DRM_XE_EXEC_QUEUE_SET_PROPERTY_PXP_TYPE,
+the kernel misinterpreted it as PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG
+and routed the call to exec_queue_set_eudebug(). This function then
+failed the long-running queue check with:
+  "Ioctl argument check failed: !xe_exec_queue_is_lr(q)"
+returning -EINVAL and causing PXP tests to fail.
+
+Fix by changing PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG to use
+property number 3 instead of 2, ensuring distinct IOCTL numbers for
+each property type.
+
+Property assignment after fix:
+- DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY: 0
+- DRM_XE_EXEC_QUEUE_SET_PROPERTY_TIMESLICE: 1
+- DRM_XE_EXEC_QUEUE_SET_PROPERTY_PXP_TYPE: 2
+- PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG: 3
+
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ include/uapi/drm/xe_drm_prelim.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/include/uapi/drm/xe_drm_prelim.h b/include/uapi/drm/xe_drm_prelim.h
+index b3e9ddcbc..542b71bd9 100644
+--- a/include/uapi/drm/xe_drm_prelim.h
++++ b/include/uapi/drm/xe_drm_prelim.h
+@@ -102,7 +102,7 @@ struct prelim_drm_xe_vm_bind_op_ext_attach_debug {
+ 
+ #define PRELIM_XE_VM_BIND_OP_EXTENSIONS_ATTACH_DEBUG 0
+ 
+-#define   PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG		2
++#define   PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG		3
+ #define     PRELIM_DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE		(1 << 0)
+ 
+ /*
+-- 
+2.34.1
+

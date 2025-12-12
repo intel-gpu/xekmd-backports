@@ -1,0 +1,39 @@
+From 9c39ffbf60ddea2da115f0bea462a9374adb0899 Mon Sep 17 00:00:00 2001
+From: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Date: Tue, 3 Feb 2026 22:48:34 +0530
+Subject: [PATCH] Fix module symbols import issue
+
+xe-vfio-pci driver use the symbols which are exported by xe driver.
+Since symbols are not imported from xe driver, observing below errors.
+To fix these errors, imported xe-vfio-pci symbols from xe driver.
+
+Errors:
+-----------------------------------------------------------------------------
+ERROR: modpost: module xe-vfio-pci uses symbol xe_sriov_vfio_stop_copy_enter
+from namespace module:xe-vfio-pci, but does not import it.
+ERROR: modpost: module xe-vfio-pci uses symbol xe_sriov_vfio_stop_copy_exit
+from namespace module:xe-vfio-pci, but does not import it.
+ERROR: modpost: module xe-vfio-pci uses symbol xe_sriov_vfio_suspend_device
+from namespace module:xe-vfio-pci, but does not import it.
+----------------------------------------------------------------------------
+
+Reviewed-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+---
+ drivers/vfio/pci/xe/main.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/vfio/pci/xe/main.c b/drivers/vfio/pci/xe/main.c
+index 115de55..0e3f1aa 100644
+--- a/drivers/vfio/pci/xe/main.c
++++ b/drivers/vfio/pci/xe/main.c
+@@ -568,3 +568,6 @@ module_pci_driver(xe_vfio_pci_driver);
+ MODULE_LICENSE("GPL");
+ MODULE_AUTHOR("Michał Winiarski <michal.winiarski@intel.com>");
+ MODULE_DESCRIPTION("VFIO PCI driver with migration support for Intel Graphics");
++#ifdef BPM_EXPORT_SYMBOL_FOR_MODULES_NOT_PRESENT
++MODULE_IMPORT_NS(xe-vfio-pci);
++#endif
+-- 
+2.43.0
+

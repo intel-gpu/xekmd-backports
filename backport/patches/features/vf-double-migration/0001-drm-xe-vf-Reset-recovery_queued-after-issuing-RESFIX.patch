@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Date: Wed, 10 Dec 2025 05:25:49 +0000
+Subject: drm/xe/vf: Reset recovery_queued after issuing RESFIX_START
+
+During VF_RESTORE or VF_RESUME, the GuC sends a migration interrupt and
+clears the RESFIX_START marker. If migration or resume occurs before the
+VF issues its own RESFIX_START, VF KMD may receive two back-to-back
+migration interrupts. VF then sends RESFIX_START to indicate the beginning
+of fixups and RESFIX_DONE to mark completion. However, the second
+RESFIX_START fails because the GuC is already in the RUNNING state.
+
+Clear the recovery_queued flag after sending a RESFIX_START message to
+ignore duplicated IRQs seen before we start actual recovery.
+
+This ensures the state is reset only after the fixup process begins,
+avoiding redundant work item queuing.
+
+Fixes: b5fbb94341a2 ("drm/xe/vf: Introduce RESFIX start marker support")
+Signed-off-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Tomasz Lis <tomasz.lis@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://patch.msgid.link/20251210052546.622809-6-satyanarayana.k.v.p@intel.com
+(backported from commit db7dde99049f04b99cbf518be3a189b3e9f5c1d8 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index 9f96c2d42..bac7818a0 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -1172,10 +1172,6 @@ static bool vf_post_migration_shutdown(struct xe_gt *gt)
+ 			return true;
+ 	}
+ 
+-	spin_lock_irq(&gt->sriov.vf.migration.lock);
+-	gt->sriov.vf.migration.recovery_queued = false;
+-	spin_unlock_irq(&gt->sriov.vf.migration.lock);
+-
+ 	xe_guc_ct_flush_and_stop(&gt->uc.guc.ct);
+ 	xe_guc_submit_pause(&gt->uc.guc);
+ 	xe_tlb_inval_reset(&gt->tlb_inval);
+@@ -1259,7 +1255,14 @@ static int vf_post_migration_resfix_done(struct xe_gt *gt, u16 marker)
+ 
+ static int vf_post_migration_resfix_start(struct xe_gt *gt, u16 marker)
+ {
+-	return vf_resfix_start(gt, marker);
++	int err;
++
++	err = vf_resfix_start(gt, marker);
++
++	guard(spinlock_irq) (&gt->sriov.vf.migration.lock);
++	gt->sriov.vf.migration.recovery_queued = false;
++
++	return err;
+ }
+ 
+ static u16 vf_post_migration_next_resfix_marker(struct xe_gt *gt)
+-- 
+2.34.1
+

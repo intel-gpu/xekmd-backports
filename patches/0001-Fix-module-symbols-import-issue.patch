@@ -1,0 +1,41 @@
+From 79f86246b51d13c1a956555192dfc66e7c7632f3 Mon Sep 17 00:00:00 2001
+From: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Date: Fri, 12 Dec 2025 14:11:12 +0530
+Subject: [PATCH] Fix module symbols import issue
+
+xe-vfio-pci driver needs symbols from xe gpu driver but it's not import
+them. Hence observing below errors.
+To fix these errors, imported xe-vfio-pci symbols.
+
+Errors:
+-----------------------------------------------------------------------------
+ERROR: modpost: module xe-vfio-pci uses symbol xe_sriov_vfio_stop_copy_enter
+from namespace module:xe-vfio-pci, but does not import it.
+ERROR: modpost: module xe-vfio-pci uses symbol xe_sriov_vfio_stop_copy_exit
+from namespace module:xe-vfio-pci, but does not import it.
+ERROR: modpost: module xe-vfio-pci uses symbol xe_sriov_vfio_suspend_device
+from namespace module:xe-vfio-pci, but does not import it.
+----------------------------------------------------------------------------
+
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+---
+ drivers/vfio/pci/xe/main.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/vfio/pci/xe/main.c b/drivers/vfio/pci/xe/main.c
+index ce0ed82..48436ba 100644
+--- a/drivers/vfio/pci/xe/main.c
++++ b/drivers/vfio/pci/xe/main.c
+@@ -16,6 +16,9 @@
+ #include <drm/intel/xe_sriov_vfio.h>
+ #include <drm/intel/pciids.h>
+ 
++MODULE_IMPORT_NS("module:xe-vfio-pci");
++MODULE_INFO(import_ns, "module:xe-vfio-pci");
++
+ struct xe_vfio_pci_migration_file {
+ 	struct file *filp;
+ 	/* serializes accesses to migration data */
+-- 
+2.43.0
+

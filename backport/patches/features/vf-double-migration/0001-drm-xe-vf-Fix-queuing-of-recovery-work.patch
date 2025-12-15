@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Date: Wed, 10 Dec 2025 05:25:48 +0000
+Subject: drm/xe/vf: Fix queuing of recovery work
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Ensure VF migration recovery work is only queued when no recovery is
+already queued and teardown is not in progress.
+
+Fixes: b47c0c07c350 ("drm/xe/vf: Teardown VF post migration worker on driver unload")
+Signed-off-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Tomasz Lis <tomasz.lis@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://patch.msgid.link/20251210052546.622809-5-satyanarayana.k.v.p@intel.com
+(cherry picked from commit 8d8cf42b03f149dcb545b547906306f3b474565e linux-next)
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index 46518e629..7062018ad 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -734,7 +734,7 @@ static void vf_start_migration_recovery(struct xe_gt *gt)
+ 
+ 	spin_lock(&gt->sriov.vf.migration.lock);
+ 
+-	if (!gt->sriov.vf.migration.recovery_queued ||
++	if (!gt->sriov.vf.migration.recovery_queued &&
+ 	    !gt->sriov.vf.migration.recovery_teardown) {
+ 		gt->sriov.vf.migration.recovery_queued = true;
+ 		WRITE_ONCE(gt->sriov.vf.migration.recovery_inprogress, true);
+-- 
+2.43.0
+

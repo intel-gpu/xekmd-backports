@@ -1,0 +1,252 @@
+name: Review Checks
+
+on:
+  pull_request:
+    branches: [ "kernel-backport/main", "kernel-backport/main_6.14"]
+
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    name: Validate Changes
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Validate Patch Files
+        run: |
+          echo "::group::Finding patch files to validate"
+          
+          # Get list of changed patch files
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+          PATCH_FILES=$(git diff --name-only origin/${{ github.event.pull_request.base.ref }}..HEAD | grep '\.patch$' || true)
+          
+          if [ -z "$PATCH_FILES" ]; then
+            echo "No patch files found in this PR"
+            echo "::endgroup::"
+            exit 0
+          fi
+          
+          echo "Patch files to validate:"
+          echo "$PATCH_FILES"
+          echo "::endgroup::"
+          
+          # Initialize summary tracking
+          VALIDATION_PASSED=1
+          
+          # Check 1: Cherry-pick/Backport Information
+          echo "::group::Check 1: Cherry-pick/Backport Information"
+          MISSING_INFO=0
+          for patch_file in $PATCH_FILES; do
+            if [ ! -f "$patch_file" ]; then
+              echo "Patch file $patch_file not found, skipping..."
+              continue
+            fi
+            
+            echo "Checking $patch_file for backport information"
+            
+            # Check if patch contains backport information
+            if grep -iE "(cherry.picked|backport|pick.*from|from commit|upstream commit)" "$patch_file" > /dev/null; then
+              echo "✅ $patch_file contains backport/cherry-pick information"
+            else
+              echo "❌ $patch_file is missing backport/cherry-pick information"
+              MISSING_INFO=1
+            fi
+          done
+          
+          if [ $MISSING_INFO -eq 1 ]; then
+            echo "::error::Check 1 FAILED: Some patch files are missing cherry-pick/backport information"
+            VALIDATION_PASSED=0
+          else
+            echo "Check 1 PASSED: All patch files contain backport information"
+          fi
+          echo "::endgroup::"
+          
+          # Check 2: Zero Commit Hash
+          echo "::group::Check 2: Zero Commit Hash"
+          INVALID_PATCHES=0
+          for patch_file in $PATCH_FILES; do
+            if [ ! -f "$patch_file" ]; then
+              echo "Patch file $patch_file not found, skipping..."
+              continue
+            fi
+            
+            echo "Checking $patch_file for zero commit hash"
+            
+            # Check if patch has zero commit hash
+            if grep -q "^From 0000000000000000000000000000000000000000" "$patch_file"; then
+              echo "✅ $patch_file has zero commit hash"
+            else
+              echo "❌ $patch_file does not have zero commit hash"
+              echo "Expected: From 0000000000000000000000000000000000000000"
+              echo "Found:"
+              head -1 "$patch_file"
+              INVALID_PATCHES=1
+            fi
+          done
+          
+          if [ $INVALID_PATCHES -eq 1 ]; then
+            echo "::error::Check 2 FAILED: Some patch files do not have zero commit hash"
+            VALIDATION_PASSED=0
+          else
+            echo "Check 2 PASSED: All patch files have zero commit hash"
+          fi
+          echo "::endgroup::"
+          
+          # Check 3: Source Name After Commit SHA
+          echo "::group::Check 3: Source Name After Commit SHA"
+          MISSING_SOURCE=0
+          for patch_file in $PATCH_FILES; do
+            if [ ! -f "$patch_file" ]; then
+              echo "Patch file $patch_file not found, skipping..."
+              continue
+            fi
+            
+            echo "Checking $patch_file for source name after commit SHA"
+            
+            # Find lines with cherry-pick/backport information
+            BACKPORT_LINES=$(grep -iE "(cherry.picked|backport|pick.*from|from commit|upstream commit)" "$patch_file" || true)
+            
+            if [ -z "$BACKPORT_LINES" ]; then
+              echo "⚠️  No backport lines found in $patch_file (already checked in Check 1)"
+              continue
+            fi
+            
+            # Check each backport line for commit SHA followed by source name
+            HAS_VALID_SOURCE=0
+            while IFS= read -r line; do
+              echo "  Analyzing line: $line"
+              
+              # Look for commit SHA pattern followed by source
+              if echo "$line" | grep -qE "[0-9a-f]{40}.*[a-zA-Z]"; then
+                # Extract everything after the 40-character SHA
+                SOURCE_PART=$(echo "$line" | sed -E 's/.*[0-9a-f]{40}[^a-zA-Z]*([a-zA-Z].*)$/\1/' | head -c 100)
+                if [ -n "$SOURCE_PART" ] && [ "$SOURCE_PART" != "$line" ]; then
+                  echo "  ✅ Found source: $SOURCE_PART"
+                  HAS_VALID_SOURCE=1
+                else
+                  echo "  ❌ No source name found after commit SHA"
+                fi
+              else
+                # Check for other patterns like "from commit" without explicit SHA
+                if echo "$line" | grep -iE "(upstream|linux-next|mainline|kernel)" > /dev/null; then
+                  echo "  ✅ Found valid source reference"
+                  HAS_VALID_SOURCE=1
+                else
+                  echo "  ⚠️  No commit SHA pattern found, but may have other valid reference"
+                fi
+              fi
+            done <<< "$BACKPORT_LINES"
+            
+            if [ $HAS_VALID_SOURCE -eq 0 ]; then
+              echo "❌ $patch_file is missing source name after commit SHA"
+              MISSING_SOURCE=1
+            else
+              echo "✅ $patch_file has valid source information"
+            fi
+          done
+          
+          if [ $MISSING_SOURCE -eq 1 ]; then
+            echo "::error::Check 3 FAILED: Some patch files are missing source name after commit SHA"
+            VALIDATION_PASSED=0
+          else
+            echo "Check 3 PASSED: All patch files have valid source information"
+          fi
+          echo "::endgroup::"
+          
+          # Check 4: No Patch Series Notation Should NOT Be Present
+          echo "::group::Check 4: No Patch Series Notation"
+          UNWANTED_PATCH_NOTATION=0
+          for patch_file in $PATCH_FILES; do
+            if [ ! -f "$patch_file" ]; then
+              echo "Patch file $patch_file not found, skipping..."
+              continue
+            fi
+            
+            echo "Checking $patch_file for unwanted patch series notation"
+            
+            # Get the complete subject line (can span multiple lines)
+            SUBJECT_CONTENT=$(sed -n '/^Subject:/,/^$/p' "$patch_file" | head -20 | tr '\n' ' ' | sed 's/Subject: *//')
+            
+            if [ -z "$SUBJECT_CONTENT" ]; then
+              echo "⚠️  No Subject line found in $patch_file"
+              continue
+            fi
+            
+            echo "  Subject: $SUBJECT_CONTENT"
+            
+            # Check for patch notation patterns that should NOT be present
+            if echo "$SUBJECT_CONTENT" | grep -qiE "\[PATCH.*\]"; then
+              # Extract the patch notation
+              PATCH_NOTATION=$(echo "$SUBJECT_CONTENT" | grep -oiE "\[PATCH[^\]]*\]")
+              echo "  ❌ Found unwanted patch notation: $PATCH_NOTATION"
+              echo "  ❌ Backport patches should not contain original patch series notation"
+              UNWANTED_PATCH_NOTATION=1
+            else
+              echo "  ✅ No patch series notation found (correct for backport patches)"
+            fi
+          done
+          
+          if [ $UNWANTED_PATCH_NOTATION -eq 1 ]; then
+            echo "::error::Check 4 FAILED: Some patch files contain unwanted patch series notation"
+            VALIDATION_PASSED=0
+          else
+            echo "Check 4 PASSED: All patch files have clean subjects without patch series notation"
+          fi
+          echo "::endgroup::"
+          
+          # Validation Summary
+          echo "::group::Validation Summary"
+          echo "======================================"
+          echo "        PATCH VALIDATION RESULTS"
+          echo "======================================"
+          echo
+          
+          if [ $CHECK1_FAILED -eq 1 ]; then
+            echo "❌ Check 1: Cherry-pick/Backport Information - FAILED"
+            echo "   → Some patch files are missing cherry-pick/backport information"
+            echo "   → Please ensure all patch files include information about their origin"
+            echo "   → Examples: 'cherry picked from commit', 'backported from', etc."
+          else
+            echo "✅ Check 1: Cherry-pick/Backport Information - PASSED"
+          fi
+          
+          if [ $CHECK2_FAILED -eq 1 ]; then
+            echo "❌ Check 2: Zero Commit Hash - FAILED"
+            echo "   → Some patch files do not have zero commit hash"
+            echo "   → All patches should start with 'From 0000000000000000000000000000000000000000'"
+          else
+            echo "✅ Check 2: Zero Commit Hash - PASSED"
+          fi
+          
+          if [ $CHECK3_FAILED -eq 1 ]; then
+            echo "❌ Check 3: Source Name After Commit SHA - FAILED"
+            echo "   → Some patch files are missing source name after commit SHA"
+            echo "   → Examples: 'cherry picked from commit abc123... upstream'"
+          else
+            echo "✅ Check 3: Source Name After Commit SHA - PASSED"
+          fi
+          
+          if [ $CHECK4_FAILED -eq 1 ]; then
+            echo "❌ Check 4: No Patch Series Notation - FAILED"
+            echo "   → Some patch files contain unwanted [PATCH] notation"
+            echo "   → Backport patches should not include original patch series notation"
+          else
+            echo "✅ Check 4: No Patch Series Notation - PASSED"
+          fi
+          
+          echo
+          echo "======================================"
+          if [ $VALIDATION_PASSED -eq 1 ]; then
+            echo "🎉 ALL VALIDATION CHECKS PASSED!"
+            echo "Your patch files meet all quality standards."
+            echo "::notice::✅ All patch validation checks passed successfully"
+          else
+            echo "💥 VALIDATION CHECKS FAILED"
+            echo "Please fix the issues above and try again."
+            exit 1
+          fi
+          echo "======================================"
+          echo "::endgroup::"

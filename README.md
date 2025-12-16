@@ -3,7 +3,7 @@
 
 This repo is intended to provide a preview of Intel® Graphics Driver (xe) for the next generation of GPUs, which are yet to be fully available on the mainline kernel.
 
-This repo contains patches that are already merged in [drm-tip](https://gitlab.freedesktop.org/drm/tip) or sent to drm mailing list for review.
+This repo contains only upstream changes that are already merged in [drm-tip](https://gitlab.freedesktop.org/drm/tip) or sent to drm mailing list for review.
 
 Since it is just for showcasing the capabilities of the next-gen GPUs so quality is not guaranteed and any issue needs to be reproduced and reported on [drm-tip](https://drm.pages.freedesktop.org/intel-docs/how-to-file-i915-bugs.html).
 
@@ -19,8 +19,8 @@ Since it is just for showcasing the capabilities of the next-gen GPUs so quality
 Note: 
 1. Patches present in base will be removed once merged in mainline kernel.
 2. Patches present in features are dynamic in nature, they may change frequently and removed once merged in drm-tip.
-3. Patches present in features will use prelim uapi to aviod conflict in updates, once patches are merged in drm-tip, uapi will change from prelim to normal.
-4. prelim uapi will be maintained at [drm-uapi-helper](https://github.com/intel-gpu/drm-uapi-helper/tree/xe).
+3. Patches present in features will use prelim uAPI to avoid conflict in updates, once patches are merged in drm-tip, uAPI will change from prelim to normal.
+4. prelim uAPI will be maintained at [drm-uapi-helper](https://github.com/intel-gpu/drm-uapi-helper/tree/xe).
 
 # Available Branches
 
@@ -68,7 +68,7 @@ Track your changes using git:
 
 ```bash
 git add <modified-files>
-git commit -m "Your change description"
+git commit -m "Your change description" -s
 ```
 # Contributing
 
@@ -78,6 +78,23 @@ git commit -m "Your change description"
 Generate patch files from your generated kernel folder:
 ```bash
 git format-patch -N1 <commit-hash> --zero-commit
+```
+### Add cherry-pick / backported Reference
+In case of changes picked from different development kernel, Ensure you add cherry-pick information
+as part of change for commits picked as it is. Use cherry-pick -x to keep reference.
+
+If there are minor changes done on top of commit, use "backported from"
+
+Add source kernel information to Reference, for example changes which are picked form upstream kernel, linux-next needs to be added.
+
+Examples:
+For Cherry-pick: 
+```bash
+(cherry picked from commit 08b33fa3edcc181381d716ed8f86c3aef9252ba8 drm-tip-eudebug)
+```
+For Backported:  
+``` bash
+(backported from commit 3b56911960b3c938d2eed70526ef4bc496520123 linux-next )
 ```
 
 ### 2. Choose Location

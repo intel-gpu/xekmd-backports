@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
 Date: Tue, 22 Jul 2025 17:35:04 +0530
-Subject: [PATCH 13/62] drm/xe/vf: Create contexts for CCS read write
+Subject: drm/xe/vf: Create contexts for CCS read write
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -42,10 +42,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_sriov_vf_ccs_types.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 07c71a29963d..a6c42485149a 100644
+index c6e9ca7df..b529c00bb 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -149,6 +149,7 @@ xe-y += \
+@@ -151,6 +151,7 @@ xe-y += \
  	xe_memirq.o \
  	xe_sriov.o \
  	xe_sriov_vf.o \
@@ -54,10 +54,10 @@ index 07c71a29963d..a6c42485149a 100644
  
  xe-$(CONFIG_PCI_IOV) += \
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 6ece4defa9df..0ce21ae0dd5d 100644
+index 1541f5677..b99bce692 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -921,6 +921,10 @@ int xe_device_probe(struct xe_device *xe)
+@@ -946,6 +946,10 @@ int xe_device_probe(struct xe_device *xe)
  
  	xe_vsec_init(xe);
  
@@ -69,7 +69,7 @@ index 6ece4defa9df..0ce21ae0dd5d 100644
  
  err_unregister_display:
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 3b1a3dca5596..1cfb758525e5 100644
+index ffe4dfa03..7a5b7b3f4 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -24,6 +24,7 @@
@@ -79,8 +79,8 @@ index 3b1a3dca5596..1cfb758525e5 100644
 +#include "xe_sriov_vf_ccs_types.h"
  #include "xe_step_types.h"
  #include "xe_survivability_mode_types.h"
- #include "xe_ttm_vram_mgr_types.h"
-@@ -238,6 +239,9 @@ struct xe_tile {
+ 
+@@ -183,6 +184,9 @@ struct xe_tile {
  		struct {
  			/** @sriov.vf.ggtt_balloon: GGTT regions excluded from use. */
  			struct xe_ggtt_node *ggtt_balloon[2];
@@ -91,7 +91,7 @@ index 3b1a3dca5596..1cfb758525e5 100644
  	} sriov;
  
 diff --git a/drivers/gpu/drm/xe/xe_gt_debugfs.c b/drivers/gpu/drm/xe/xe_gt_debugfs.c
-index 061a81f82e76..8d4b66ca38b7 100644
+index 061a81f82..8d4b66ca3 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_gt_debugfs.c
 @@ -134,6 +134,33 @@ static int sa_info(struct xe_gt *gt, struct drm_printer *p)
@@ -155,7 +155,7 @@ index 061a81f82e76..8d4b66ca38b7 100644
  	xe_uc_debugfs_register(&gt->uc, root);
  
 diff --git a/drivers/gpu/drm/xe/xe_sriov.c b/drivers/gpu/drm/xe/xe_sriov.c
-index a0eab44c0e76..87911fb4eea7 100644
+index a0eab44c0..87911fb4e 100644
 --- a/drivers/gpu/drm/xe/xe_sriov.c
 +++ b/drivers/gpu/drm/xe/xe_sriov.c
 @@ -15,6 +15,7 @@
@@ -189,7 +189,7 @@ index a0eab44c0e76..87911fb4eea7 100644
 +	return err;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_sriov.h b/drivers/gpu/drm/xe/xe_sriov.h
-index 688fbabf08f1..0e0c1abf2d14 100644
+index 688fbabf0..0e0c1abf2 100644
 --- a/drivers/gpu/drm/xe/xe_sriov.h
 +++ b/drivers/gpu/drm/xe/xe_sriov.h
 @@ -18,6 +18,7 @@ const char *xe_sriov_function_name(unsigned int n, char *buf, size_t len);
@@ -202,7 +202,7 @@ index 688fbabf08f1..0e0c1abf2d14 100644
  {
 diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
 new file mode 100644
-index 000000000000..697eea46659a
+index 000000000..697eea466
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
 @@ -0,0 +1,208 @@
@@ -416,7 +416,7 @@ index 000000000000..697eea46659a
 +}
 diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.h b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.h
 new file mode 100644
-index 000000000000..5df9ba028d14
+index 000000000..5df9ba028
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.h
 @@ -0,0 +1,13 @@
@@ -435,7 +435,7 @@ index 000000000000..5df9ba028d14
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs_types.h b/drivers/gpu/drm/xe/xe_sriov_vf_ccs_types.h
 new file mode 100644
-index 000000000000..6dc279d206ec
+index 000000000..6dc279d20
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_sriov_vf_ccs_types.h
 @@ -0,0 +1,45 @@
@@ -485,7 +485,7 @@ index 000000000000..6dc279d206ec
 +
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_types.h b/drivers/gpu/drm/xe/xe_sriov_vf_types.h
-index 8300416a6226..24a873c50c49 100644
+index 8300416a6..24a873c50 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_vf_types.h
 +++ b/drivers/gpu/drm/xe/xe_sriov_vf_types.h
 @@ -36,6 +36,12 @@ struct xe_device_vf {

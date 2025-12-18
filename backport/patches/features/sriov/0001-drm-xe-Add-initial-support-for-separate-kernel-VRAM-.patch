@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Piotr=20Pi=C3=B3rkowski?= <piotr.piorkowski@intel.com>
 Date: Fri, 3 Oct 2025 18:26:15 +0200
-Subject: [PATCH 08/12] drm/xe: Add initial support for separate kernel VRAM
- region on the tile
+Subject: drm/xe: Add initial support for separate kernel VRAM region
+ on the tile
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -26,7 +26,7 @@ Cc: Matthew Auld <matthew.auld@intel.com>
 Reviewed-by: Matthew Auld <matthew.auld@intel.com>
 Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Link: https://lore.kernel.org/r/20251003162619.1984236-2-piotr.piorkowski@intel.com
-(cherry-picked from commit db7dde99049f04b99cbf518be3a189b3e9f5c1d8 linux-next)
+(backported from commit db7dde99049f04b99cbf518be3a189b3e9f5c1d8 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_bo.c           | 78 ++++++++++++++++++----------
@@ -37,7 +37,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  5 files changed, 75 insertions(+), 29 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
-index a067617b4bb9..e5dd3cca3863 100644
+index 1aceeea02..c227668d5 100644
 --- a/drivers/gpu/drm/xe/xe_bo.c
 +++ b/drivers/gpu/drm/xe/xe_bo.c
 @@ -34,6 +34,7 @@
@@ -135,7 +135,7 @@ index a067617b4bb9..e5dd3cca3863 100644
  }
  
  static void xe_evict_flags(struct ttm_buffer_object *tbo,
-@@ -2158,7 +2187,7 @@ struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
+@@ -2149,7 +2178,7 @@ struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
  
  	xe_validation_assert_exec(xe, exec, &bo->ttm.base);
  	if (!(flags & XE_BO_FLAG_FIXED_PLACEMENT)) {
@@ -144,7 +144,7 @@ index a067617b4bb9..e5dd3cca3863 100644
  		if (WARN_ON(err)) {
  			xe_ttm_bo_destroy(&bo->ttm);
  			return ERR_PTR(err);
-@@ -2216,34 +2245,31 @@ struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
+@@ -2207,34 +2236,31 @@ struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
  }
  
  static int __xe_bo_fixed_placement(struct xe_device *xe,
@@ -191,7 +191,7 @@ index a067617b4bb9..e5dd3cca3863 100644
  
  	bo->placement = (struct ttm_placement) {
  		.num_placement = 1,
-@@ -2272,7 +2298,7 @@ __xe_bo_create_locked(struct xe_device *xe,
+@@ -2263,7 +2289,7 @@ __xe_bo_create_locked(struct xe_device *xe,
  			return bo;
  
  		flags |= XE_BO_FLAG_FIXED_PLACEMENT;
@@ -201,7 +201,7 @@ index a067617b4bb9..e5dd3cca3863 100644
  			xe_bo_free(bo);
  			return ERR_PTR(err);
 diff --git a/drivers/gpu/drm/xe/xe_bo.h b/drivers/gpu/drm/xe/xe_bo.h
-index 33d7c122dcc9..21c8741126c9 100644
+index 33d7c122d..21c874112 100644
 --- a/drivers/gpu/drm/xe/xe_bo.h
 +++ b/drivers/gpu/drm/xe/xe_bo.h
 @@ -121,7 +121,7 @@ struct xe_bo *xe_managed_bo_create_from_data(struct xe_device *xe, struct xe_til
@@ -214,10 +214,10 @@ index 33d7c122dcc9..21c8741126c9 100644
  static inline struct xe_bo *ttm_to_xe_bo(const struct ttm_buffer_object *bo)
  {
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index f743e922829a..d58ffd565693 100644
+index 136fb75f2..789cb79d6 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -157,7 +157,15 @@ struct xe_tile {
+@@ -158,7 +158,15 @@ struct xe_tile {
  	/** @mem: memory management info for tile */
  	struct {
  		/**
@@ -235,11 +235,11 @@ index f743e922829a..d58ffd565693 100644
  		 * Although VRAM is associated with a specific tile, it can
  		 * still be accessed by all tiles' GTs.
 diff --git a/drivers/gpu/drm/xe/xe_tile.c b/drivers/gpu/drm/xe/xe_tile.c
-index 0be0a5c57ef4..a14f549effdd 100644
+index d49ba3401..6edb5062c 100644
 --- a/drivers/gpu/drm/xe/xe_tile.c
 +++ b/drivers/gpu/drm/xe/xe_tile.c
 @@ -124,6 +124,14 @@ int xe_tile_alloc_vram(struct xe_tile *tile)
- 		return PTR_ERR(vram);
+ 		return -ENOMEM;
  	tile->mem.vram = vram;
  
 +	/*
@@ -254,7 +254,7 @@ index 0be0a5c57ef4..a14f549effdd 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_vram.c b/drivers/gpu/drm/xe/xe_vram.c
-index b44ebf50fedb..7adfccf68e4c 100644
+index 652df7a5f..3acdd3f59 100644
 --- a/drivers/gpu/drm/xe/xe_vram.c
 +++ b/drivers/gpu/drm/xe/xe_vram.c
 @@ -13,6 +13,7 @@
@@ -265,7 +265,7 @@ index b44ebf50fedb..7adfccf68e4c 100644
  #include "xe_device.h"
  #include "xe_force_wake.h"
  #include "xe_gt_mcr.h"
-@@ -283,8 +284,11 @@ static void vram_fini(void *arg)
+@@ -301,8 +302,11 @@ static void vram_fini(void *arg)
  
  	xe->mem.vram->mapping = NULL;
  

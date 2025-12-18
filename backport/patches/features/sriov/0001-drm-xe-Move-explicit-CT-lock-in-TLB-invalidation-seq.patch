@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Stuart Summers <stuart.summers@intel.com>
 Date: Tue, 26 Aug 2025 18:29:03 +0000
-Subject: [PATCH] drm/xe: Move explicit CT lock in TLB invalidation sequence
+Subject: drm/xe: Move explicit CT lock in TLB invalidation sequence
 
 Currently the CT lock is used to cover TLB invalidation
 sequence number updates. In an effort to separate the GuC
@@ -24,7 +24,7 @@ Signed-off-by: Stuart Summers <stuart.summers@intel.com>
 Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://lore.kernel.org/r/20250826182911.392550-2-stuart.summers@intel.com
-(cherry-picked from commit ce5059bf851b7286ec27797d786aab28c8a62e5e linux-next)
+(backported from commit ce5059bf851b7286ec27797d786aab28c8a62e5e linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c | 19 +++++++++++++------
@@ -32,7 +32,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  2 files changed, 15 insertions(+), 6 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c b/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c
-index 02f0bb92d6e0..75854b963d66 100644
+index cb9eb9f41..db00c5ade 100644
 --- a/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c
 +++ b/drivers/gpu/drm/xe/xe_gt_tlb_invalidation.c
 @@ -118,6 +118,9 @@ static void xe_gt_tlb_fence_timeout(struct work_struct *work)
@@ -73,8 +73,8 @@ index 02f0bb92d6e0..75854b963d66 100644
 +	mutex_unlock(&gt->tlb_invalidation.seqno_lock);
  }
  
- static bool tlb_invalidation_seqno_past(struct xe_gt *gt, int seqno)
-@@ -211,13 +218,13 @@ static int send_tlb_invalidation(struct xe_guc *guc,
+ /**
+@@ -223,13 +230,13 @@ static int send_tlb_invalidation(struct xe_guc *guc,
  	 * need to be updated.
  	 */
  
@@ -91,7 +91,7 @@ index 02f0bb92d6e0..75854b963d66 100644
  	if (!ret) {
  		spin_lock_irq(&gt->tlb_invalidation.pending_lock);
  		/*
-@@ -248,7 +255,7 @@ static int send_tlb_invalidation(struct xe_guc *guc,
+@@ -260,7 +267,7 @@ static int send_tlb_invalidation(struct xe_guc *guc,
  		if (!gt->tlb_invalidation.seqno)
  			gt->tlb_invalidation.seqno = 1;
  	}
@@ -101,7 +101,7 @@ index 02f0bb92d6e0..75854b963d66 100644
  
  	return ret;
 diff --git a/drivers/gpu/drm/xe/xe_gt_types.h b/drivers/gpu/drm/xe/xe_gt_types.h
-index dfd4a16da5f0..420900ecaa97 100644
+index dfd4a16da..420900eca 100644
 --- a/drivers/gpu/drm/xe/xe_gt_types.h
 +++ b/drivers/gpu/drm/xe/xe_gt_types.h
 @@ -190,6 +190,8 @@ struct xe_gt {

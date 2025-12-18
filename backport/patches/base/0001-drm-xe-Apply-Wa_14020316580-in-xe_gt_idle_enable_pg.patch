@@ -23,7 +23,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  3 files changed, 9 insertions(+), 8 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_idle.c b/drivers/gpu/drm/xe/xe_gt_idle.c
-index ffb210216..26d0dd868 100644
+index 9bd197da6..aa4163267 100644
 --- a/drivers/gpu/drm/xe/xe_gt_idle.c
 +++ b/drivers/gpu/drm/xe/xe_gt_idle.c
 @@ -5,6 +5,7 @@
@@ -42,7 +42,7 @@ index ffb210216..26d0dd868 100644
  
  /**
   * DOC: Xe GT Idle
-@@ -142,6 +144,12 @@ void xe_gt_idle_enable_pg(struct xe_gt *gt)
+@@ -145,6 +147,12 @@ void xe_gt_idle_enable_pg(struct xe_gt *gt)
  		xe_mmio_write32(mmio, RENDER_POWERGATE_IDLE_HYSTERESIS, 25);
  	}
  
@@ -56,7 +56,7 @@ index ffb210216..26d0dd868 100644
  	xe_force_wake_put(gt_to_fw(gt), fw_ref);
  }
 diff --git a/drivers/gpu/drm/xe/xe_wa.c b/drivers/gpu/drm/xe/xe_wa.c
-index 22a98600f..8050024ca 100644
+index c95c22a5c..67d015c14 100644
 --- a/drivers/gpu/drm/xe/xe_wa.c
 +++ b/drivers/gpu/drm/xe/xe_wa.c
 @@ -251,14 +251,6 @@ static const struct xe_rtp_entry_sr gt_was[] = {
@@ -75,14 +75,15 @@ index 22a98600f..8050024ca 100644
  	  XE_RTP_RULES(MEDIA_VERSION(1301), ENGINE_CLASS(VIDEO_DECODE)),
  	  XE_RTP_ACTIONS(SET(VDBOX_CGCTL3F08(0), CG3DDISHRS_CLKGATE_DIS)),
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
-index 710f44237..793aa784c 100644
+index 382719ac4..3646ce768 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
-@@ -73,3 +73,4 @@ no_media_l3	MEDIA_VERSION(3000)
+@@ -73,4 +73,5 @@ no_media_l3	MEDIA_VERSION_RANGE(3000, 3002)
  14022085890	GRAPHICS_VERSION(2001)
  
  15015404425_disable	PLATFORM(PANTHERLAKE), MEDIA_STEP(B0, FOREVER)
-+14020316580    MEDIA_VERSION(1301)
++14020316580	MEDIA_VERSION(1301)
+ 16026007364    MEDIA_VERSION(3000)
 -- 
-2.34.1
+2.43.0
 

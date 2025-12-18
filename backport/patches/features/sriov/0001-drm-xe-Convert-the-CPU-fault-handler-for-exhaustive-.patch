@@ -44,13 +44,13 @@ Link: https://lore.kernel.org/r/20250908101246.65025-7-thomas.hellstrom@linux.in
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/display/xe_fb_pin.c |   2 +-
- drivers/gpu/drm/xe/xe_bo.c             | 244 +++++++++++++++++++++----
+ drivers/gpu/drm/xe/xe_bo.c             | 246 +++++++++++++++++++++----
  drivers/gpu/drm/xe/xe_bo.h             |   3 +-
  drivers/gpu/drm/xe/xe_dma_buf.c        |   6 +-
  drivers/gpu/drm/xe/xe_gt_pagefault.c   |   2 +-
  drivers/gpu/drm/xe/xe_validation.c     |   3 +-
- drivers/gpu/drm/xe/xe_vm.c             |   1 +
- 7 files changed, 223 insertions(+), 38 deletions(-)
+ drivers/gpu/drm/xe/xe_vm.c             |   2 +-
+ 7 files changed, 223 insertions(+), 41 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/display/xe_fb_pin.c b/drivers/gpu/drm/xe/display/xe_fb_pin.c
 index 1c5b4e1f1..3406dca28 100644
@@ -66,17 +66,17 @@ index 1c5b4e1f1..3406dca28 100644
  		ret = xe_bo_validate(bo, NULL, true, exec);
  	if (!ret)
 diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
-index a117f285f..b52e773c9 100644
+index 9901e00ce..2d5d53208 100644
 --- a/drivers/gpu/drm/xe/xe_bo.c
 +++ b/drivers/gpu/drm/xe/xe_bo.c
-@@ -1706,55 +1706,232 @@ static void xe_gem_object_close(struct drm_gem_object *obj,
+@@ -1695,57 +1695,232 @@ static void xe_gem_object_close(struct drm_gem_object *obj,
  	}
  }
  
 -static vm_fault_t xe_gem_fault(struct vm_fault *vmf)
 +/* Populate the bo if swapped out, or migrate if the access mode requires that. */
 +static int xe_bo_fault_migrate(struct xe_bo *bo, struct ttm_operation_ctx *ctx,
-+							struct drm_exec *exec)
++		struct drm_exec *exec)
 +{
 +	struct ttm_buffer_object *tbo = &bo->ttm;
 +	int err = 0;
@@ -99,7 +99,7 @@ index a117f285f..b52e773c9 100644
 +	trace_xe_bo_cpu_fault(bo);
 +
 +	ret = ttm_bo_vm_fault_reserved(vmf, vmf->vma->vm_page_prot,
-+								TTM_BO_VM_NUM_PREFAULT);
++			TTM_BO_VM_NUM_PREFAULT);
 +	/*
 +	* When TTM is actually called to insert PTEs, ensure no blocking conditions
 +	* remain, in which case TTM may drop locks and return VM_FAULT_RETRY.
@@ -140,12 +140,12 @@ index a117f285f..b52e773c9 100644
 +	dma_resv_assert_held(tbo->base.resv);
 +
 +	return tbo->ttm &&
-+		(tbo->ttm->page_flags & (TTM_TT_FLAG_EXTERNAL | TTM_TT_FLAG_EXTERNAL_MAPPABLE)) ==
-+		TTM_TT_FLAG_EXTERNAL;
++			(tbo->ttm->page_flags & (TTM_TT_FLAG_EXTERNAL | TTM_TT_FLAG_EXTERNAL_MAPPABLE)) ==
++			TTM_TT_FLAG_EXTERNAL;
 +}
 +
 +static vm_fault_t xe_bo_cpu_fault_fastpath(struct vm_fault *vmf, struct xe_device *xe,
-+		struct xe_bo *bo, bool needs_rpm)
++		 struct xe_bo *bo, bool needs_rpm)
 +{
 +	struct ttm_buffer_object *tbo = &bo->ttm;
 +	vm_fault_t ret = VM_FAULT_RETRY;
@@ -154,12 +154,11 @@ index a117f285f..b52e773c9 100644
 +		.interruptible = true,
 +		.no_wait_gpu = true,
 +		.gfp_retry_mayfail = true,
-+
 +	};
 +	int err;
 +
 +	if (needs_rpm && !xe_pm_runtime_get_if_active(xe))
-+			return VM_FAULT_RETRY;
++		return VM_FAULT_RETRY;
 +
 +	err = xe_validation_ctx_init(&ctx, &xe->val, NULL,
 +			(struct xe_val_flags) {
@@ -215,46 +214,25 @@ index a117f285f..b52e773c9 100644
 +	int err = 0;
  	int idx;
  
--	if (needs_rpm)
--		xe_pm_runtime_get(xe);
 +	if (!drm_dev_enter(&xe->drm, &idx))
 +		return ttm_bo_vm_dummy_page(vmf, vmf->vma->vm_page_prot);
- 
--	exec = XE_VALIDATION_UNIMPLEMENTED;
--	ret = ttm_bo_vm_reserve(tbo, vmf);
--	if (ret)
++
 +	ret = xe_bo_cpu_fault_fastpath(vmf, xe, bo, needs_rpm);
 +	if (ret != VM_FAULT_RETRY)
- 		goto out;
- 
--	if (drm_dev_enter(ddev, &idx)) {
--		trace_xe_bo_cpu_fault(bo);
--
--		xe_validation_assert_exec(xe, exec, &tbo->base);
--		ret = ttm_bo_vm_fault_reserved(vmf, vmf->vma->vm_page_prot,
--					       TTM_BO_VM_NUM_PREFAULT);
--		drm_dev_exit(idx);
++		goto out;
++
++
 +	if (fault_flag_allow_retry_first(vmf->flags)) {
 +		if (vmf->flags & FAULT_FLAG_RETRY_NOWAIT)
 +			goto out;
 +		retry_after_wait = true;
 +		xe_bo_get(bo);
 +		mmap_read_unlock(vmf->vma->vm_mm);
- 	} else {
--		ret = ttm_bo_vm_dummy_page(vmf, vmf->vma->vm_page_prot);
-+		ret = VM_FAULT_NOPAGE;
- 	}
- 
--	if (ret == VM_FAULT_RETRY && !(vmf->flags & FAULT_FLAG_RETRY_NOWAIT))
--		goto out;
- 	/*
--	 * ttm_bo_vm_reserve() already has dma_resv_lock.
--	 */
--	if (ret == VM_FAULT_NOPAGE && mem_type_is_vram(tbo->resource->mem_type)) {
--		mutex_lock(&xe->mem_access.vram_userfault.lock);
--		if (list_empty(&bo->vram_userfault_link))
--			list_add(&bo->vram_userfault_link, &xe->mem_access.vram_userfault.list);
--		mutex_unlock(&xe->mem_access.vram_userfault.lock);
++	} else {
++		 ret = VM_FAULT_NOPAGE;
++	}
++
++	/*
 +	* The fastpath failed and we were not required to return and retry immediately.
 +	* We're now running in one of two modes:
 +	*
@@ -269,9 +247,13 @@ index a117f285f..b52e773c9 100644
 +	* This construct is recommended to avoid excessive waits under the mmap_lock.
 +	*/
 +
-+	if (needs_rpm)
-+		xe_pm_runtime_get(xe);
-+
+ 	if (needs_rpm)
+ 		xe_pm_runtime_get(xe);
+ 
+-	exec = XE_VALIDATION_UNIMPLEMENTED;
+-	ret = ttm_bo_vm_reserve(tbo, vmf);
+-	if (ret)
+-		goto out;
 +	xe_validation_guard(&ctx, &xe->val, &exec, (struct xe_val_flags) {.interruptible = true},
 +			err) {
 +		struct ttm_operation_ctx tctx = {
@@ -280,41 +262,64 @@ index a117f285f..b52e773c9 100644
 +			.gfp_retry_mayfail = retry_after_wait,
 +		};
 +		long lerr;
-+
+ 
+-	if (drm_dev_enter(ddev, &idx)) {
+-		trace_xe_bo_cpu_fault(bo);
 +		err = drm_exec_lock_obj(&exec, &tbo->base);
 +		drm_exec_retry_on_contention(&exec);
 +		if (err)
 +			break;
-+
+ 
+-		xe_validation_assert_exec(xe, exec, &tbo->base);
+-		ret = ttm_bo_vm_fault_reserved(vmf, vmf->vma->vm_page_prot,
+-					       TTM_BO_VM_NUM_PREFAULT);
+-		drm_dev_exit(idx);
 +		if (xe_ttm_bo_is_imported(tbo)) {
 +			err = -EFAULT;
 +			drm_dbg(&xe->drm, "CPU trying to access an imported buffer object.\n");
 +			break;
 +		}
-+
+ 
+-		if (ret == VM_FAULT_RETRY &&
+-		    !(vmf->flags & FAULT_FLAG_RETRY_NOWAIT))
+-			goto out;
 +		err = xe_bo_fault_migrate(bo, &tctx, &exec);
 +		if (err) {
 +			drm_exec_retry_on_contention(&exec);
 +			xe_validation_retry_on_oom(&ctx, &err);
 +			break;
 +		}
-+
-+		lerr = dma_resv_wait_timeout(tbo->base.resv, DMA_RESV_USAGE_KERNEL,
-+				true, MAX_SCHEDULE_TIMEOUT);
+ 
+-		/*
+-		 * ttm_bo_vm_reserve() already has dma_resv_lock.
+-		 */
+-		if (ret == VM_FAULT_NOPAGE &&
+-		    mem_type_is_vram(tbo->resource->mem_type)) {
+-			mutex_lock(&xe->mem_access.vram_userfault.lock);
+-			if (list_empty(&bo->vram_userfault_link))
+-				list_add(&bo->vram_userfault_link,
+-					 &xe->mem_access.vram_userfault.list);
+-			mutex_unlock(&xe->mem_access.vram_userfault.lock);
++		lerr = dma_resv_wait_timeout(tbo->base.resv
++				DMA_RESV_USAGE_KERNEL, true,
++				MAX_SCHEDULE_TIMEOUT);
 +		if (lerr < 0) {
 +			err = lerr;
-+			break;
-+		}
++			 break;
+ 		}
+-	} else {
+-		ret = ttm_bo_vm_dummy_page(vmf, vmf->vma->vm_page_prot);
 +
 +		if (!retry_after_wait)
 +			ret = __xe_bo_cpu_fault(vmf, xe, bo);
  	}
-+	/* if retry_after_wait == true, we *must* return VM_FAULT_RETRY. */
-+	if (err && !retry_after_wait)
-+		ret = xe_err_to_fault_t(err);
  
 -	dma_resv_unlock(tbo->base.resv);
 -out:
++	/* if retry_after_wait == true, we *must* return VM_FAULT_RETRY. */
++	if (err && !retry_after_wait)
++		ret = xe_err_to_fault_t(err);
++
  	if (needs_rpm)
  		xe_pm_runtime_put(xe);
  
@@ -324,12 +329,9 @@ index a117f285f..b52e773c9 100644
 +	drm_dev_exit(idx);
 +
  	return ret;
--}
-+ }
+ }
  
- static int xe_bo_vm_access(struct vm_area_struct *vma, unsigned long addr,
- 			   void *buf, int len, int write)
-@@ -1796,7 +1973,7 @@ int xe_bo_read(struct xe_bo *bo, u64 offset, void *dst, int size)
+@@ -1789,7 +1964,7 @@ int xe_bo_read(struct xe_bo *bo, u64 offset, void *dst, int size)
  }
  
  static const struct vm_operations_struct xe_gem_vm_ops = {
@@ -338,7 +340,7 @@ index a117f285f..b52e773c9 100644
  	.open = ttm_bo_vm_open,
  	.close = ttm_bo_vm_close,
  	.access = xe_bo_vm_access,
-@@ -3032,6 +3209,8 @@ static void xe_place_from_ttm_type(u32 mem_type, struct ttm_place *place)
+@@ -3025,6 +3200,8 @@ static void xe_place_from_ttm_type(u32 mem_type, struct ttm_place *place)
   * xe_bo_migrate - Migrate an object to the desired region id
   * @bo: The buffer object to migrate.
   * @mem_type: The TTM region type to migrate to.
@@ -347,7 +349,7 @@ index a117f285f..b52e773c9 100644
   * @exec: The drm_exec transaction to use for exhaustive eviction.
   *
   * Attempt to migrate the buffer object to the desired memory region. The
-@@ -3044,7 +3223,8 @@ static void xe_place_from_ttm_type(u32 mem_type, struct ttm_place *place)
+@@ -3037,7 +3214,8 @@ static void xe_place_from_ttm_type(u32 mem_type, struct ttm_place *place)
   * Return: 0 on success. Negative error code on failure. In particular may
   * return -EINTR or -ERESTARTSYS if signal pending.
   */
@@ -357,7 +359,7 @@ index a117f285f..b52e773c9 100644
  {
  	struct xe_device *xe = ttm_to_xe_device(bo->ttm.bdev);
  	struct ttm_operation_ctx ctx = {
-@@ -3056,6 +3236,7 @@ int xe_bo_migrate(struct xe_bo *bo, u32 mem_type, struct drm_exec *exec)
+@@ -3049,6 +3227,7 @@ int xe_bo_migrate(struct xe_bo *bo, u32 mem_type, struct drm_exec *exec)
  	struct ttm_place requested;
  
  	xe_bo_assert_held(bo);
@@ -365,7 +367,7 @@ index a117f285f..b52e773c9 100644
  
  	if (bo->ttm.resource->mem_type == mem_type)
  		return 0;
-@@ -3082,8 +3263,9 @@ int xe_bo_migrate(struct xe_bo *bo, u32 mem_type, struct drm_exec *exec)
+@@ -3075,8 +3254,9 @@ int xe_bo_migrate(struct xe_bo *bo, u32 mem_type, struct drm_exec *exec)
  		add_vram(xe, bo, &requested, bo->flags, mem_type, &c);
  	}
  
@@ -450,17 +452,18 @@ index b90fda3dd..826cd0996 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index e9c842b05..3ab5100cb 100644
+index 95f7f3e1b..20f4a37c5 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -3024,6 +3024,7 @@ static int op_lock_and_prep(struct drm_exec *exec, struct xe_vm *vm,
+@@ -3059,7 +3059,7 @@ static int op_lock_and_prep(struct drm_exec *exec, struct xe_vm *vm,
+ 					    res_evict, false);
  		if (!err && !xe_vma_has_no_bo(vma))
  			err = xe_bo_migrate(xe_vma_bo(vma),
- 					    region_to_mem_type[region],
-+					    NULL,
- 					    exec);
+-					    region_to_mem_type[region], exec);
++					    region_to_mem_type[region], NULL, exec);
  		break;
  	}
+ 	default:
 -- 
 2.43.0
 

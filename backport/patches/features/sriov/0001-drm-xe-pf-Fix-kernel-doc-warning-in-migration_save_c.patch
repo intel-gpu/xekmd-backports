@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Fri, 14 Nov 2025 14:40:30 +0100
+Subject: [PATCH] drm/xe/pf: Fix kernel-doc warning in migration_save_consume
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The kernel-doc for xe_sriov_pf_migration_save_consume() contained
+multiple "Return:" sections, causing a warning.
+Fix it by removing the extra line.
+
+Fixes: 67df4a5cbc583 ("drm/xe/pf: Add data structures and handlers for migration rings")
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://patch.msgid.link/20251114134030.1795947-1-michal.winiarski@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+(cherry picked from commit 562b0f254d8b1515a1c8d2a650f940d4f719300e)
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+(cherry-picked from commit 4bb927139c4c6526bed6618cb4948bb029bc1575 upstream)
+Signed-off-by: Ayaz A Siddiqui <ayaz.siddiqui@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_pf_migration.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+index aefc6d81c255..c10873b6acb3 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+@@ -170,8 +170,6 @@ pf_migration_consume(struct xe_device *xe, unsigned int vfid)
+  * Return: Pointer to &xe_sriov_packet on success,
+  *	   NULL if ring is empty and no more migration data is expected,
+  *	   ERR_PTR value in case of error.
+- *
+- * Return: 0 on success or a negative error code on failure.
+  */
+ struct xe_sriov_packet *
+ xe_sriov_pf_migration_save_consume(struct xe_device *xe, unsigned int vfid)
+-- 
+2.43.0
+

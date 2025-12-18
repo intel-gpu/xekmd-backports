@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Thomas=20Hellstr=C3=B6m?= <thomas.hellstrom@linux.intel.com>
 Date: Mon, 8 Sep 2025 12:12:34 +0200
-Subject: [PATCH 01/16] drm/xe: Pass down drm_exec context to validation
+Subject: drm/xe: Pass down drm_exec context to validation
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -65,10 +65,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_validation.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 878cb523bd07..66da0ff3c6b5 100644
+index 1c2652cd9..f7e14c42e 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -126,6 +126,7 @@ xe-y += xe_bb.o \
+@@ -128,6 +128,7 @@ xe-y += xe_bb.o \
  	xe_tuning.o \
  	xe_uc.o \
  	xe_uc_fw.o \
@@ -77,7 +77,7 @@ index 878cb523bd07..66da0ff3c6b5 100644
  	xe_vram.o \
  	xe_vram_freq.o \
 diff --git a/drivers/gpu/drm/xe/compat-i915-headers/gem/i915_gem_stolen.h b/drivers/gpu/drm/xe/compat-i915-headers/gem/i915_gem_stolen.h
-index 41d39d67817a..1ce1e9da975b 100644
+index 41d39d678..1ce1e9da9 100644
 --- a/drivers/gpu/drm/xe/compat-i915-headers/gem/i915_gem_stolen.h
 +++ b/drivers/gpu/drm/xe/compat-i915-headers/gem/i915_gem_stolen.h
 @@ -8,6 +8,7 @@
@@ -113,7 +113,7 @@ index 41d39d67817a..1ce1e9da975b 100644
  
  	if (err) {
 diff --git a/drivers/gpu/drm/xe/display/xe_fb_pin.c b/drivers/gpu/drm/xe/display/xe_fb_pin.c
-index f2cfba674899..1c5b4e1f1fd8 100644
+index f2cfba674..1c5b4e1f1 100644
 --- a/drivers/gpu/drm/xe/display/xe_fb_pin.c
 +++ b/drivers/gpu/drm/xe/display/xe_fb_pin.c
 @@ -281,6 +281,7 @@ static struct i915_vma *__xe_pin_fb_vma(const struct intel_framebuffer *fb,
@@ -137,7 +137,7 @@ index f2cfba674899..1c5b4e1f1fd8 100644
  		ttm_bo_pin(&bo->ttm);
  	ttm_bo_unreserve(&bo->ttm);
 diff --git a/drivers/gpu/drm/xe/tests/xe_bo.c b/drivers/gpu/drm/xe/tests/xe_bo.c
-index 7b40cc8be1c9..17366b60ee31 100644
+index 7b40cc8be..17366b60e 100644
 --- a/drivers/gpu/drm/xe/tests/xe_bo.c
 +++ b/drivers/gpu/drm/xe/tests/xe_bo.c
 @@ -23,7 +23,7 @@
@@ -233,7 +233,7 @@ index 7b40cc8be1c9..17366b60ee31 100644
  			if (err) {
  				KUNIT_FAIL(test, "external bo valid err=%pe\n",
 diff --git a/drivers/gpu/drm/xe/tests/xe_dma_buf.c b/drivers/gpu/drm/xe/tests/xe_dma_buf.c
-index 121f17c112ec..fc3a1871a1c3 100644
+index 69673c5f0..c6ea88dbb 100644
 --- a/drivers/gpu/drm/xe/tests/xe_dma_buf.c
 +++ b/drivers/gpu/drm/xe/tests/xe_dma_buf.c
 @@ -27,7 +27,8 @@ static bool is_dynamic(struct dma_buf_test_params *params)
@@ -245,8 +245,8 @@ index 121f17c112ec..fc3a1871a1c3 100644
 +			    struct drm_exec *exec)
  {
  	struct dma_buf_test_params *params = to_dma_buf_test_params(test->priv);
- 	u32 mem_type;
-@@ -65,7 +66,7 @@ static void check_residency(struct kunit *test, struct xe_bo *exported,
+ 	struct dma_buf_attachment *attach;
+@@ -66,7 +67,7 @@ static void check_residency(struct kunit *test, struct xe_bo *exported,
  	 * the exporter and the importer should be the same bo.
  	 */
  	swap(exported->ttm.base.dma_buf, dmabuf);
@@ -255,7 +255,7 @@ index 121f17c112ec..fc3a1871a1c3 100644
  	swap(exported->ttm.base.dma_buf, dmabuf);
  	if (ret) {
  		if (ret != -EINTR && ret != -ERESTARTSYS)
-@@ -81,7 +82,7 @@ static void check_residency(struct kunit *test, struct xe_bo *exported,
+@@ -82,7 +83,7 @@ static void check_residency(struct kunit *test, struct xe_bo *exported,
  	}
  
  	/* Re-validate the importer. This should move also exporter in. */
@@ -264,7 +264,7 @@ index 121f17c112ec..fc3a1871a1c3 100644
  	if (ret) {
  		if (ret != -EINTR && ret != -ERESTARTSYS)
  			KUNIT_FAIL(test, "Validating importer failed with err=%d.\n",
-@@ -145,11 +146,12 @@ static void xe_test_dmabuf_import_same_driver(struct xe_device *xe)
+@@ -158,11 +159,12 @@ static void xe_test_dmabuf_import_same_driver(struct xe_device *xe)
  			KUNIT_FAIL(test,
  				   "xe_gem_prime_import() succeeded when it shouldn't have\n");
  		} else {
@@ -276,9 +276,9 @@ index 121f17c112ec..fc3a1871a1c3 100644
 -			err = xe_bo_validate(import_bo, NULL, false);
 +			err = xe_bo_validate(import_bo, NULL, false, exec);
  
- 			/* Pinning in VRAM is not allowed. */
+ 			/* Pinning in VRAM is not allowed for non-dynamic attachments */
  			if (!is_dynamic(params) &&
-@@ -162,7 +164,7 @@ static void xe_test_dmabuf_import_same_driver(struct xe_device *xe)
+@@ -175,7 +177,7 @@ static void xe_test_dmabuf_import_same_driver(struct xe_device *xe)
  						  err == -ERESTARTSYS);
  
  			if (!err)
@@ -288,7 +288,7 @@ index 121f17c112ec..fc3a1871a1c3 100644
  		}
  		drm_gem_object_put(import);
 diff --git a/drivers/gpu/drm/xe/tests/xe_migrate.c b/drivers/gpu/drm/xe/tests/xe_migrate.c
-index edd1e701aa1c..dfb445d09759 100644
+index edd1e701a..dfb445d09 100644
 --- a/drivers/gpu/drm/xe/tests/xe_migrate.c
 +++ b/drivers/gpu/drm/xe/tests/xe_migrate.c
 @@ -70,7 +70,7 @@ static int run_sanity_job(struct xe_migrate *m, struct xe_device *xe,
@@ -462,7 +462,7 @@ index edd1e701aa1c..dfb445d09759 100644
  
  	xe_bo_lock(vram_bo, false);
 diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
-index 037f18c06328..7de097e46540 100644
+index 1c8ce6f43..1cf5d1ce5 100644
 --- a/drivers/gpu/drm/xe/xe_bo.c
 +++ b/drivers/gpu/drm/xe/xe_bo.c
 @@ -1139,6 +1139,7 @@ long xe_bo_shrink(struct ttm_operation_ctx *ctx, struct ttm_buffer_object *bo,
@@ -499,7 +499,7 @@ index 037f18c06328..7de097e46540 100644
  		if (IS_ERR(backup)) {
  			ret = PTR_ERR(backup);
  			goto out_unlock_bo;
-@@ -1718,12 +1720,14 @@ static vm_fault_t xe_gem_fault(struct vm_fault *vmf)
+@@ -1711,12 +1713,14 @@ static vm_fault_t xe_gem_fault(struct vm_fault *vmf)
  	struct xe_device *xe = to_xe_device(ddev);
  	struct xe_bo *bo = ttm_to_xe_bo(tbo);
  	bool needs_rpm = bo->flags & XE_BO_FLAG_VRAM_MASK;
@@ -514,7 +514,7 @@ index 037f18c06328..7de097e46540 100644
  	ret = ttm_bo_vm_reserve(tbo, vmf);
  	if (ret)
  		goto out;
-@@ -1731,6 +1735,7 @@ static vm_fault_t xe_gem_fault(struct vm_fault *vmf)
+@@ -1724,6 +1728,7 @@ static vm_fault_t xe_gem_fault(struct vm_fault *vmf)
  	if (drm_dev_enter(ddev, &idx)) {
  		trace_xe_bo_cpu_fault(bo);
  
@@ -522,7 +522,7 @@ index 037f18c06328..7de097e46540 100644
  		ret = ttm_bo_vm_fault_reserved(vmf, vmf->vma->vm_page_prot,
  					       TTM_BO_VM_NUM_PREFAULT);
  		drm_dev_exit(idx);
-@@ -1846,11 +1851,32 @@ void xe_bo_free(struct xe_bo *bo)
+@@ -1839,11 +1844,32 @@ void xe_bo_free(struct xe_bo *bo)
  	kfree(bo);
  }
  
@@ -556,7 +556,7 @@ index 037f18c06328..7de097e46540 100644
  {
  	struct ttm_operation_ctx ctx = {
  		.interruptible = true,
-@@ -1919,6 +1945,7 @@ struct xe_bo *___xe_bo_create_locked(struct xe_device *xe, struct xe_bo *bo,
+@@ -1912,6 +1938,7 @@ struct xe_bo *___xe_bo_create_locked(struct xe_device *xe, struct xe_bo *bo,
  		ctx.resv = resv;
  	}
  
@@ -564,7 +564,7 @@ index 037f18c06328..7de097e46540 100644
  	if (!(flags & XE_BO_FLAG_FIXED_PLACEMENT)) {
  		err = __xe_bo_placement_for_flags(xe, bo, bo->flags);
  		if (WARN_ON(err)) {
-@@ -2020,7 +2047,7 @@ __xe_bo_create_locked(struct xe_device *xe,
+@@ -2013,7 +2040,7 @@ __xe_bo_create_locked(struct xe_device *xe,
  		      struct xe_tile *tile, struct xe_vm *vm,
  		      size_t size, u64 start, u64 end,
  		      u16 cpu_caching, enum ttm_bo_type type, u32 flags,
@@ -573,7 +573,7 @@ index 037f18c06328..7de097e46540 100644
  {
  	struct xe_bo *bo = NULL;
  	int err;
-@@ -2045,7 +2072,7 @@ __xe_bo_create_locked(struct xe_device *xe,
+@@ -2038,7 +2065,7 @@ __xe_bo_create_locked(struct xe_device *xe,
  				    vm && !xe_vm_in_fault_mode(vm) &&
  				    flags & XE_BO_FLAG_USER ?
  				    &vm->lru_bulk_move : NULL, size,
@@ -582,7 +582,7 @@ index 037f18c06328..7de097e46540 100644
  	if (IS_ERR(bo))
  		return bo;
  
-@@ -2079,9 +2106,10 @@ __xe_bo_create_locked(struct xe_device *xe,
+@@ -2072,9 +2099,10 @@ __xe_bo_create_locked(struct xe_device *xe,
  
  			if (flags & XE_BO_FLAG_FIXED_PLACEMENT) {
  				err = xe_ggtt_insert_bo_at(t->mem.ggtt, bo,
@@ -595,7 +595,7 @@ index 037f18c06328..7de097e46540 100644
  			}
  			if (err)
  				goto err_unlock_put_bo;
-@@ -2098,22 +2126,59 @@ __xe_bo_create_locked(struct xe_device *xe,
+@@ -2091,22 +2119,59 @@ __xe_bo_create_locked(struct xe_device *xe,
  	return ERR_PTR(err);
  }
  
@@ -659,7 +659,7 @@ index 037f18c06328..7de097e46540 100644
  }
  
  struct xe_bo *xe_bo_create_user(struct xe_device *xe, struct xe_tile *tile,
-@@ -2121,9 +2186,10 @@ struct xe_bo *xe_bo_create_user(struct xe_device *xe, struct xe_tile *tile,
+@@ -2114,9 +2179,10 @@ struct xe_bo *xe_bo_create_user(struct xe_device *xe, struct xe_tile *tile,
  				u16 cpu_caching,
  				u32 flags)
  {
@@ -671,7 +671,7 @@ index 037f18c06328..7de097e46540 100644
  	if (!IS_ERR(bo))
  		xe_bo_unlock_vm_held(bo);
  
-@@ -2134,7 +2200,8 @@ struct xe_bo *xe_bo_create(struct xe_device *xe, struct xe_tile *tile,
+@@ -2127,7 +2193,8 @@ struct xe_bo *xe_bo_create(struct xe_device *xe, struct xe_tile *tile,
  			   struct xe_vm *vm, size_t size,
  			   enum ttm_bo_type type, u32 flags)
  {
@@ -681,7 +681,7 @@ index 037f18c06328..7de097e46540 100644
  
  	if (!IS_ERR(bo))
  		xe_bo_unlock_vm_held(bo);
-@@ -2162,6 +2229,7 @@ struct xe_bo *xe_bo_create_pin_map_at_aligned(struct xe_device *xe,
+@@ -2155,6 +2222,7 @@ struct xe_bo *xe_bo_create_pin_map_at_aligned(struct xe_device *xe,
  	int err;
  	u64 start = offset == ~0ull ? 0 : offset;
  	u64 end = offset == ~0ull ? offset : start + size;
@@ -689,7 +689,7 @@ index 037f18c06328..7de097e46540 100644
  
  	if (flags & XE_BO_FLAG_STOLEN &&
  	    xe_ttm_stolen_cpu_access_needs_ggtt(xe))
-@@ -2169,11 +2237,11 @@ struct xe_bo *xe_bo_create_pin_map_at_aligned(struct xe_device *xe,
+@@ -2162,11 +2230,11 @@ struct xe_bo *xe_bo_create_pin_map_at_aligned(struct xe_device *xe,
  
  	bo = xe_bo_create_locked_range(xe, tile, vm, size, start, end, type,
  				       flags | XE_BO_FLAG_NEEDS_CPU_ACCESS | XE_BO_FLAG_PINNED,
@@ -703,7 +703,7 @@ index 037f18c06328..7de097e46540 100644
  	if (err)
  		goto err_put;
  
-@@ -2296,6 +2364,7 @@ uint64_t vram_region_gpu_offset(struct ttm_resource *res)
+@@ -2289,6 +2357,7 @@ uint64_t vram_region_gpu_offset(struct ttm_resource *res)
   * xe_bo_pin_external - pin an external BO
   * @bo: buffer object to be pinned
   * @in_place: Pin in current placement, don't attempt to migrate.
@@ -711,7 +711,7 @@ index 037f18c06328..7de097e46540 100644
   *
   * Pin an external (not tied to a VM, can be exported via dma-buf / prime FD)
   * BO. Unique call compared to xe_bo_pin as this function has it own set of
-@@ -2303,7 +2372,7 @@ uint64_t vram_region_gpu_offset(struct ttm_resource *res)
+@@ -2296,7 +2365,7 @@ uint64_t vram_region_gpu_offset(struct ttm_resource *res)
   *
   * Returns 0 for success, negative error code otherwise.
   */
@@ -720,7 +720,7 @@ index 037f18c06328..7de097e46540 100644
  {
  	struct xe_device *xe = xe_bo_device(bo);
  	int err;
-@@ -2313,7 +2382,7 @@ int xe_bo_pin_external(struct xe_bo *bo, bool in_place)
+@@ -2306,7 +2375,7 @@ int xe_bo_pin_external(struct xe_bo *bo, bool in_place)
  
  	if (!xe_bo_is_pinned(bo)) {
  		if (!in_place) {
@@ -729,7 +729,7 @@ index 037f18c06328..7de097e46540 100644
  			if (err)
  				return err;
  		}
-@@ -2336,7 +2405,17 @@ int xe_bo_pin_external(struct xe_bo *bo, bool in_place)
+@@ -2329,7 +2398,17 @@ int xe_bo_pin_external(struct xe_bo *bo, bool in_place)
  	return 0;
  }
  
@@ -748,7 +748,7 @@ index 037f18c06328..7de097e46540 100644
  {
  	struct ttm_place *place = &bo->placements[0];
  	struct xe_device *xe = xe_bo_device(bo);
-@@ -2358,7 +2437,7 @@ int xe_bo_pin(struct xe_bo *bo)
+@@ -2351,7 +2430,7 @@ int xe_bo_pin(struct xe_bo *bo)
  	/* We only expect at most 1 pin */
  	xe_assert(xe, !xe_bo_is_pinned(bo));
  
@@ -757,7 +757,7 @@ index 037f18c06328..7de097e46540 100644
  	if (err)
  		return err;
  
-@@ -2451,6 +2530,7 @@ void xe_bo_unpin(struct xe_bo *bo)
+@@ -2444,6 +2523,7 @@ void xe_bo_unpin(struct xe_bo *bo)
   *      NULL. Used together with @allow_res_evict.
   * @allow_res_evict: Whether it's allowed to evict bos sharing @vm's
   *                   reservation object.
@@ -765,7 +765,7 @@ index 037f18c06328..7de097e46540 100644
   *
   * Make sure the bo is in allowed placement, migrating it if necessary. If
   * needed, other bos will be evicted. If bos selected for eviction shares
-@@ -2460,7 +2540,8 @@ void xe_bo_unpin(struct xe_bo *bo)
+@@ -2453,7 +2533,8 @@ void xe_bo_unpin(struct xe_bo *bo)
   * Return: 0 on success, negative error code on failure. May return
   * -EINTR or -ERESTARTSYS if internal waits are interrupted by a signal.
   */
@@ -775,7 +775,7 @@ index 037f18c06328..7de097e46540 100644
  {
  	struct ttm_operation_ctx ctx = {
  		.interruptible = true,
-@@ -2482,6 +2563,7 @@ int xe_bo_validate(struct xe_bo *bo, struct xe_vm *vm, bool allow_res_evict)
+@@ -2475,6 +2556,7 @@ int xe_bo_validate(struct xe_bo *bo, struct xe_vm *vm, bool allow_res_evict)
  
  	xe_vm_set_validating(vm, allow_res_evict);
  	trace_xe_bo_validate(bo);
@@ -783,7 +783,7 @@ index 037f18c06328..7de097e46540 100644
  	ret = ttm_bo_validate(&bo->ttm, &bo->placement, &ctx);
  	xe_vm_clear_validating(vm, allow_res_evict);
  
-@@ -2919,6 +3001,7 @@ static void xe_place_from_ttm_type(u32 mem_type, struct ttm_place *place)
+@@ -2912,6 +2994,7 @@ static void xe_place_from_ttm_type(u32 mem_type, struct ttm_place *place)
   * xe_bo_migrate - Migrate an object to the desired region id
   * @bo: The buffer object to migrate.
   * @mem_type: The TTM region type to migrate to.
@@ -791,7 +791,7 @@ index 037f18c06328..7de097e46540 100644
   *
   * Attempt to migrate the buffer object to the desired memory region. The
   * buffer object may not be pinned, and must be locked.
-@@ -2930,7 +3013,7 @@ static void xe_place_from_ttm_type(u32 mem_type, struct ttm_place *place)
+@@ -2923,7 +3006,7 @@ static void xe_place_from_ttm_type(u32 mem_type, struct ttm_place *place)
   * Return: 0 on success. Negative error code on failure. In particular may
   * return -EINTR or -ERESTARTSYS if signal pending.
   */
@@ -800,7 +800,7 @@ index 037f18c06328..7de097e46540 100644
  {
  	struct xe_device *xe = ttm_to_xe_device(bo->ttm.bdev);
  	struct ttm_operation_ctx ctx = {
-@@ -2968,19 +3051,21 @@ int xe_bo_migrate(struct xe_bo *bo, u32 mem_type)
+@@ -2961,19 +3044,21 @@ int xe_bo_migrate(struct xe_bo *bo, u32 mem_type)
  		add_vram(xe, bo, &requested, bo->flags, mem_type, &c);
  	}
  
@@ -824,7 +824,7 @@ index 037f18c06328..7de097e46540 100644
  	struct ttm_operation_ctx ctx = {
  		.interruptible = false,
 diff --git a/drivers/gpu/drm/xe/xe_bo.h b/drivers/gpu/drm/xe/xe_bo.h
-index c7ee9c7605e5..fa6813a7b4bc 100644
+index c7ee9c760..fa6813a7b 100644
 --- a/drivers/gpu/drm/xe/xe_bo.h
 +++ b/drivers/gpu/drm/xe/xe_bo.h
 @@ -10,6 +10,7 @@
@@ -884,36 +884,36 @@ index c7ee9c7605e5..fa6813a7b4bc 100644
  int xe_bo_evict_pinned(struct xe_bo *bo);
  int xe_bo_notifier_prepare_pinned(struct xe_bo *bo);
 diff --git a/drivers/gpu/drm/xe/xe_dma_buf.c b/drivers/gpu/drm/xe/xe_dma_buf.c
-index af64baf872ef..199041bdb882 100644
+index 34a3e0711..254ae1dbf 100644
 --- a/drivers/gpu/drm/xe/xe_dma_buf.c
 +++ b/drivers/gpu/drm/xe/xe_dma_buf.c
-@@ -51,6 +51,7 @@ static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
- 	struct drm_gem_object *obj = attach->dmabuf->priv;
+@@ -52,6 +52,7 @@ static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
+ 	struct drm_gem_object *obj = dmabuf->priv;
  	struct xe_bo *bo = gem_to_xe_bo(obj);
  	struct xe_device *xe = xe_bo_device(bo);
 +	struct drm_exec *exec = XE_VALIDATION_UNSUPPORTED;
+ 	bool allow_vram = true;
  	int ret;
  
- 	/*
-@@ -63,7 +64,7 @@ static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
- 		return -EINVAL;
+@@ -73,7 +74,7 @@ static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
  	}
  
--	ret = xe_bo_migrate(bo, XE_PL_TT);
-+	ret = xe_bo_migrate(bo, XE_PL_TT, exec);
- 	if (ret) {
- 		if (ret != -EINTR && ret != -ERESTARTSYS)
- 			drm_dbg(&xe->drm,
-@@ -72,7 +73,7 @@ static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
- 		return ret;
+ 	if (!allow_vram) {
+-		ret = xe_bo_migrate(bo, XE_PL_TT);
++		ret = xe_bo_migrate(bo, XE_PL_TT, exec);
+ 		if (ret) {
+ 			if (ret != -EINTR && ret != -ERESTARTSYS)
+ 				drm_dbg(&xe->drm,
+@@ -83,7 +84,7 @@ static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
+ 		}
  	}
  
--	ret = xe_bo_pin_external(bo, true);
-+	ret = xe_bo_pin_external(bo, true, exec);
+-	ret = xe_bo_pin_external(bo, !allow_vram);
++	ret = xe_bo_pin_external(bo, !allow_vram, exec);
  	xe_assert(xe, !ret);
  
  	return 0;
-@@ -92,6 +93,7 @@ static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
+@@ -103,6 +104,7 @@ static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
  	struct dma_buf *dma_buf = attach->dmabuf;
  	struct drm_gem_object *obj = dma_buf->priv;
  	struct xe_bo *bo = gem_to_xe_bo(obj);
@@ -921,7 +921,7 @@ index af64baf872ef..199041bdb882 100644
  	struct sg_table *sgt;
  	int r = 0;
  
-@@ -100,9 +102,9 @@ static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
+@@ -111,9 +113,9 @@ static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
  
  	if (!xe_bo_is_pinned(bo)) {
  		if (!attach->peer2peer)
@@ -933,7 +933,7 @@ index af64baf872ef..199041bdb882 100644
  		if (r)
  			return ERR_PTR(r);
  	}
-@@ -161,13 +163,14 @@ static int xe_dma_buf_begin_cpu_access(struct dma_buf *dma_buf,
+@@ -172,13 +174,14 @@ static int xe_dma_buf_begin_cpu_access(struct dma_buf *dma_buf,
  	struct xe_bo *bo = gem_to_xe_bo(obj);
  	bool reads =  (direction == DMA_BIDIRECTIONAL ||
  		       direction == DMA_FROM_DEVICE);
@@ -949,7 +949,7 @@ index af64baf872ef..199041bdb882 100644
  	xe_bo_unlock(bo);
  
  	return 0;
-@@ -208,13 +211,14 @@ xe_dma_buf_init_obj(struct drm_device *dev, struct xe_bo *storage,
+@@ -219,13 +222,14 @@ xe_dma_buf_init_obj(struct drm_device *dev, struct xe_bo *storage,
  {
  	struct dma_resv *resv = dma_buf->resv;
  	struct xe_device *xe = to_xe_device(dev);
@@ -965,7 +965,7 @@ index af64baf872ef..199041bdb882 100644
  	if (IS_ERR(bo)) {
  		ret = PTR_ERR(bo);
  		goto error;
-@@ -232,8 +236,9 @@ static void xe_dma_buf_move_notify(struct dma_buf_attachment *attach)
+@@ -243,8 +247,9 @@ static void xe_dma_buf_move_notify(struct dma_buf_attachment *attach)
  {
  	struct drm_gem_object *obj = attach->importer_priv;
  	struct xe_bo *bo = gem_to_xe_bo(obj);
@@ -977,7 +977,7 @@ index af64baf872ef..199041bdb882 100644
  
  static const struct dma_buf_attach_ops xe_dma_buf_attach_ops = {
 diff --git a/drivers/gpu/drm/xe/xe_exec.c b/drivers/gpu/drm/xe/xe_exec.c
-index 374c831e691b..a07138803f11 100644
+index 374c831e6..a07138803 100644
 --- a/drivers/gpu/drm/xe/xe_exec.c
 +++ b/drivers/gpu/drm/xe/xe_exec.c
 @@ -97,9 +97,13 @@
@@ -996,7 +996,7 @@ index 374c831e691b..a07138803f11 100644
  
  int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index 29d4d3f51da1..0bb002fece30 100644
+index 29d4d3f51..0bb002fec 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
 @@ -732,7 +732,7 @@ void xe_ggtt_map_bo_unlocked(struct xe_ggtt *ggtt, struct xe_bo *bo)
@@ -1051,7 +1051,7 @@ index 29d4d3f51da1..0bb002fece30 100644
  
  /**
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.h b/drivers/gpu/drm/xe/xe_ggtt.h
-index fbe1e397d05d..75fc7a1efea7 100644
+index fbe1e397d..75fc7a1ef 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.h
 +++ b/drivers/gpu/drm/xe/xe_ggtt.h
 @@ -10,6 +10,7 @@
@@ -1075,7 +1075,7 @@ index fbe1e397d05d..75fc7a1efea7 100644
  u64 xe_ggtt_largest_hole(struct xe_ggtt *ggtt, u64 alignment, u64 *spare);
  
 diff --git a/drivers/gpu/drm/xe/xe_gt_pagefault.c b/drivers/gpu/drm/xe/xe_gt_pagefault.c
-index ab43dec52776..4133b9b78f7d 100644
+index ab43dec52..4133b9b78 100644
 --- a/drivers/gpu/drm/xe/xe_gt_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_gt_pagefault.c
 @@ -94,12 +94,12 @@ static int xe_pf_begin(struct drm_exec *exec, struct xe_vma *vma,
@@ -1104,7 +1104,7 @@ index ab43dec52776..4133b9b78f7d 100644
  			err = PTR_ERR(fence);
  			if (xe_vm_validate_should_retry(&exec, err, &end))
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-index 61a357946fe1..4a55dfd935bb 100644
+index 61a357946..4a55dfd93 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 @@ -1449,6 +1449,7 @@ static void pf_release_vf_config_lmem(struct xe_gt *gt, struct xe_gt_sriov_confi
@@ -1131,7 +1131,7 @@ index 61a357946fe1..4a55dfd935bb 100644
  	if (unlikely(err)) {
  		xe_bo_put(bo);
 diff --git a/drivers/gpu/drm/xe/xe_svm.c b/drivers/gpu/drm/xe/xe_svm.c
-index 10c8a1bcb86e..4fc921671003 100644
+index 10c8a1bcb..4fc921671 100644
 --- a/drivers/gpu/drm/xe/xe_svm.c
 +++ b/drivers/gpu/drm/xe/xe_svm.c
 @@ -687,6 +687,7 @@ static int xe_drm_pagemap_populate_mm(struct drm_pagemap *dpagemap,
@@ -1159,7 +1159,7 @@ index 10c8a1bcb86e..4fc921671003 100644
  		if (xe_vm_validate_should_retry(NULL, err, &time_end))
 diff --git a/drivers/gpu/drm/xe/xe_validation.c b/drivers/gpu/drm/xe/xe_validation.c
 new file mode 100644
-index 000000000000..cc0684d24e02
+index 000000000..cc0684d24
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_validation.c
 @@ -0,0 +1,49 @@
@@ -1214,7 +1214,7 @@ index 000000000000..cc0684d24e02
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_validation.h b/drivers/gpu/drm/xe/xe_validation.h
 new file mode 100644
-index 000000000000..db50feacad7a
+index 000000000..db50feaca
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_validation.h
 @@ -0,0 +1,69 @@
@@ -1288,7 +1288,7 @@ index 000000000000..db50feacad7a
 +
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 7cfbdafb760a..75b4f407601d 100644
+index 7cfbdafb7..75b4f4076 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -396,7 +396,7 @@ static int xe_gpuvm_validate(struct drm_gpuvm_bo *vm_bo, struct drm_exec *exec)
@@ -1369,7 +1369,7 @@ index 7cfbdafb760a..75b4f407601d 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index 82b112795807..8dcc2ec64b89 100644
+index 82b112795..8dcc2ec64 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
 @@ -323,7 +323,7 @@ static inline void xe_vm_set_validating(struct xe_vm *vm, bool allow_res_evict)
@@ -1434,7 +1434,7 @@ index 82b112795807..8dcc2ec64b89 100644
   * xe_vm_has_valid_gpu_mapping() - Advisory helper to check if VMA or SVM range has
   * a valid GPU mapping
 diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
-index 6058cf739388..ad5d5e5fb74e 100644
+index 6058cf739..ad5d5e5fb 100644
 --- a/drivers/gpu/drm/xe/xe_vm_types.h
 +++ b/drivers/gpu/drm/xe/xe_vm_types.h
 @@ -317,19 +317,35 @@ struct xe_vm {

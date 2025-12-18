@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Thomas=20Hellstr=C3=B6m?= <thomas.hellstrom@linux.intel.com>
 Date: Mon, 8 Sep 2025 12:12:39 +0200
-Subject: [PATCH 06/16] drm/xe: Convert the CPU fault handler for exhaustive
- eviction
+Subject: drm/xe: Convert the CPU fault handler for exhaustive eviction
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -54,7 +53,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  7 files changed, 223 insertions(+), 38 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/display/xe_fb_pin.c b/drivers/gpu/drm/xe/display/xe_fb_pin.c
-index 1c5b4e1f1fd8..3406dca285bd 100644
+index 1c5b4e1f1..3406dca28 100644
 --- a/drivers/gpu/drm/xe/display/xe_fb_pin.c
 +++ b/drivers/gpu/drm/xe/display/xe_fb_pin.c
 @@ -314,7 +314,7 @@ static struct i915_vma *__xe_pin_fb_vma(const struct intel_framebuffer *fb,
@@ -67,10 +66,10 @@ index 1c5b4e1f1fd8..3406dca285bd 100644
  		ret = xe_bo_validate(bo, NULL, true, exec);
  	if (!ret)
 diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
-index d999a2fcf829..ea999341d0c2 100644
+index a117f285f..b52e773c9 100644
 --- a/drivers/gpu/drm/xe/xe_bo.c
 +++ b/drivers/gpu/drm/xe/xe_bo.c
-@@ -1713,55 +1713,232 @@ static void xe_gem_object_close(struct drm_gem_object *obj,
+@@ -1706,55 +1706,232 @@ static void xe_gem_object_close(struct drm_gem_object *obj,
  	}
  }
  
@@ -330,7 +329,7 @@ index d999a2fcf829..ea999341d0c2 100644
  
  static int xe_bo_vm_access(struct vm_area_struct *vma, unsigned long addr,
  			   void *buf, int len, int write)
-@@ -1803,7 +1980,7 @@ int xe_bo_read(struct xe_bo *bo, u64 offset, void *dst, int size)
+@@ -1796,7 +1973,7 @@ int xe_bo_read(struct xe_bo *bo, u64 offset, void *dst, int size)
  }
  
  static const struct vm_operations_struct xe_gem_vm_ops = {
@@ -339,7 +338,7 @@ index d999a2fcf829..ea999341d0c2 100644
  	.open = ttm_bo_vm_open,
  	.close = ttm_bo_vm_close,
  	.access = xe_bo_vm_access,
-@@ -3039,6 +3216,8 @@ static void xe_place_from_ttm_type(u32 mem_type, struct ttm_place *place)
+@@ -3032,6 +3209,8 @@ static void xe_place_from_ttm_type(u32 mem_type, struct ttm_place *place)
   * xe_bo_migrate - Migrate an object to the desired region id
   * @bo: The buffer object to migrate.
   * @mem_type: The TTM region type to migrate to.
@@ -348,7 +347,7 @@ index d999a2fcf829..ea999341d0c2 100644
   * @exec: The drm_exec transaction to use for exhaustive eviction.
   *
   * Attempt to migrate the buffer object to the desired memory region. The
-@@ -3051,7 +3230,8 @@ static void xe_place_from_ttm_type(u32 mem_type, struct ttm_place *place)
+@@ -3044,7 +3223,8 @@ static void xe_place_from_ttm_type(u32 mem_type, struct ttm_place *place)
   * Return: 0 on success. Negative error code on failure. In particular may
   * return -EINTR or -ERESTARTSYS if signal pending.
   */
@@ -358,7 +357,7 @@ index d999a2fcf829..ea999341d0c2 100644
  {
  	struct xe_device *xe = ttm_to_xe_device(bo->ttm.bdev);
  	struct ttm_operation_ctx ctx = {
-@@ -3063,6 +3243,7 @@ int xe_bo_migrate(struct xe_bo *bo, u32 mem_type, struct drm_exec *exec)
+@@ -3056,6 +3236,7 @@ int xe_bo_migrate(struct xe_bo *bo, u32 mem_type, struct drm_exec *exec)
  	struct ttm_place requested;
  
  	xe_bo_assert_held(bo);
@@ -366,7 +365,7 @@ index d999a2fcf829..ea999341d0c2 100644
  
  	if (bo->ttm.resource->mem_type == mem_type)
  		return 0;
-@@ -3089,8 +3270,9 @@ int xe_bo_migrate(struct xe_bo *bo, u32 mem_type, struct drm_exec *exec)
+@@ -3082,8 +3263,9 @@ int xe_bo_migrate(struct xe_bo *bo, u32 mem_type, struct drm_exec *exec)
  		add_vram(xe, bo, &requested, bo->flags, mem_type, &c);
  	}
  
@@ -379,7 +378,7 @@ index d999a2fcf829..ea999341d0c2 100644
  
  /**
 diff --git a/drivers/gpu/drm/xe/xe_bo.h b/drivers/gpu/drm/xe/xe_bo.h
-index 3878df635b03..096b5c71554a 100644
+index 3878df635..096b5c715 100644
 --- a/drivers/gpu/drm/xe/xe_bo.h
 +++ b/drivers/gpu/drm/xe/xe_bo.h
 @@ -284,7 +284,8 @@ uint64_t vram_region_gpu_offset(struct ttm_resource *res);
@@ -393,19 +392,19 @@ index 3878df635b03..096b5c71554a 100644
  
  int xe_bo_evict_pinned(struct xe_bo *bo);
 diff --git a/drivers/gpu/drm/xe/xe_dma_buf.c b/drivers/gpu/drm/xe/xe_dma_buf.c
-index 199041bdb882..7c2793265561 100644
+index 254ae1dbf..c42fb7624 100644
 --- a/drivers/gpu/drm/xe/xe_dma_buf.c
 +++ b/drivers/gpu/drm/xe/xe_dma_buf.c
-@@ -64,7 +64,7 @@ static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
- 		return -EINVAL;
+@@ -74,7 +74,7 @@ static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
  	}
  
--	ret = xe_bo_migrate(bo, XE_PL_TT, exec);
-+	ret = xe_bo_migrate(bo, XE_PL_TT, NULL, exec);
- 	if (ret) {
- 		if (ret != -EINTR && ret != -ERESTARTSYS)
- 			drm_dbg(&xe->drm,
-@@ -102,7 +102,7 @@ static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
+ 	if (!allow_vram) {
+-		ret = xe_bo_migrate(bo, XE_PL_TT, exec);
++		ret = xe_bo_migrate(bo, XE_PL_TT, NULL, exec);
+ 		if (ret) {
+ 			if (ret != -EINTR && ret != -ERESTARTSYS)
+ 				drm_dbg(&xe->drm,
+@@ -113,7 +113,7 @@ static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
  
  	if (!xe_bo_is_pinned(bo)) {
  		if (!attach->peer2peer)
@@ -414,7 +413,7 @@ index 199041bdb882..7c2793265561 100644
  		else
  			r = xe_bo_validate(bo, NULL, false, exec);
  		if (r)
-@@ -170,7 +170,7 @@ static int xe_dma_buf_begin_cpu_access(struct dma_buf *dma_buf,
+@@ -181,7 +181,7 @@ static int xe_dma_buf_begin_cpu_access(struct dma_buf *dma_buf,
  
  	/* Can we do interruptible lock here? */
  	xe_bo_lock(bo, false);
@@ -424,7 +423,7 @@ index 199041bdb882..7c2793265561 100644
  
  	return 0;
 diff --git a/drivers/gpu/drm/xe/xe_gt_pagefault.c b/drivers/gpu/drm/xe/xe_gt_pagefault.c
-index 6ef448bd331b..57e399d09628 100644
+index 6ef448bd3..57e399d09 100644
 --- a/drivers/gpu/drm/xe/xe_gt_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_gt_pagefault.c
 @@ -94,7 +94,7 @@ static int xe_pf_begin(struct drm_exec *exec, struct xe_vma *vma,
@@ -437,7 +436,7 @@ index 6ef448bd331b..57e399d09628 100644
  			return err;
  	} else if (bo) {
 diff --git a/drivers/gpu/drm/xe/xe_validation.c b/drivers/gpu/drm/xe/xe_validation.c
-index b90fda3dd5f4..826cd09966ef 100644
+index b90fda3dd..826cd0996 100644
 --- a/drivers/gpu/drm/xe/xe_validation.c
 +++ b/drivers/gpu/drm/xe/xe_validation.c
 @@ -241,7 +241,8 @@ int xe_validation_exec_lock(struct xe_validation_ctx *ctx,
@@ -451,7 +450,7 @@ index b90fda3dd5f4..826cd09966ef 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index e9c842b052ae..3ab5100cb6ea 100644
+index e9c842b05..3ab5100cb 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -3024,6 +3024,7 @@ static int op_lock_and_prep(struct drm_exec *exec, struct xe_vm *vm,

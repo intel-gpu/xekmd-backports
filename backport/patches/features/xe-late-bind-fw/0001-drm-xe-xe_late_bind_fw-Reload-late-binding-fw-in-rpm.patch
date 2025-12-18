@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Badal Nilawar <badal.nilawar@intel.com>
 Date: Fri, 5 Sep 2025 21:19:50 +0530
-Subject: drm/xe/xe_late_bind_fw: Reload late binding fw in rpm
- resume
+Subject: drm/xe/xe_late_bind_fw: Reload late binding fw in rpm resume
 
 Reload late binding fw during runtime resume.
 
@@ -20,7 +19,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  3 files changed, 6 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
-index bb161d99602e..d4d64677bf48 100644
+index bb161d996..d4d64677b 100644
 --- a/drivers/gpu/drm/xe/xe_late_bind_fw.c
 +++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
 @@ -82,7 +82,7 @@ static int xe_late_bind_fw_num_fans(struct xe_late_bind *late_bind)
@@ -33,7 +32,7 @@ index bb161d99602e..d4d64677bf48 100644
  	struct xe_device *xe = late_bind_to_xe(late_bind);
  	struct xe_late_bind_fw *lbfw;
 diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.h b/drivers/gpu/drm/xe/xe_late_bind_fw.h
-index 28d56ed2bfdc..07e437390539 100644
+index 28d56ed2b..07e437390 100644
 --- a/drivers/gpu/drm/xe/xe_late_bind_fw.h
 +++ b/drivers/gpu/drm/xe/xe_late_bind_fw.h
 @@ -12,5 +12,6 @@ struct xe_late_bind;
@@ -44,18 +43,18 @@ index 28d56ed2bfdc..07e437390539 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
-index bb9b6ecad2af..95303a92fea7 100644
+index 9fccc7a85..76a5e484e 100644
 --- a/drivers/gpu/drm/xe/xe_pm.c
 +++ b/drivers/gpu/drm/xe/xe_pm.c
 @@ -21,6 +21,7 @@
- #include "xe_guc.h"
+ #include "xe_gt_idle.h"
  #include "xe_i2c.h"
  #include "xe_irq.h"
 +#include "xe_late_bind_fw.h"
  #include "xe_pcode.h"
  #include "xe_pxp.h"
  #include "xe_trace.h"
-@@ -580,6 +581,9 @@ int xe_pm_runtime_resume(struct xe_device *xe)
+@@ -586,6 +587,9 @@ int xe_pm_runtime_resume(struct xe_device *xe)
  
  	xe_pxp_pm_resume(xe->pxp);
  

@@ -106,4 +106,9 @@ static inline bool drm_coredump_printer_is_full(struct drm_printer *p)
 }
 #endif
 
+#ifdef BPM_DRM_PRINT_HEX_DUMP_NOT_PRESENT
+void drm_print_hex_dump(struct drm_printer *p, const char *prefix,
+                        const u8 *buf, size_t len);
+#endif
+
 #endif /* _BACKPORT_DRM_PRINT_H_ */

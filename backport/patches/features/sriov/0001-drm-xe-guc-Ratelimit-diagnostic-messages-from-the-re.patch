@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Sun, 5 Oct 2025 19:39:46 +0200
-Subject: [PATCH 61/62] drm/xe/guc: Ratelimit diagnostic messages from the
+Subject: drm/xe/guc: Ratelimit diagnostic messages from the
  relay
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -15,6 +15,8 @@ Rate limit all relay messages, unless running in DEBUG_SRIOV mode.
 Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
 Link: https://lore.kernel.org/r/20251005173946.2784-1-michal.wajdeczko@intel.com
+(cherry-picked from commit 0faa22e70643211213ba13e7317600da9e96e44b linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_guc_relay.c       | 17 +++++++++++++++--
  drivers/gpu/drm/xe/xe_guc_relay_types.h |  4 ++++

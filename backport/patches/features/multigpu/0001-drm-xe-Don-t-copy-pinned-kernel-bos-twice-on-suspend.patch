@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Thomas=20Hellstr=C3=B6m?= <thomas.hellstrom@linux.intel.com>
+Date: Thu, 18 Sep 2025 11:22:05 +0200
+Subject: drm/xe: Don't copy pinned kernel bos twice on suspend
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We were copying the bo content the bos on the list
+"xe->pinned.late.kernel_bo_present" twice on suspend.
+
+Presumingly the intent is to copy the pinned external bos on
+the first pass.
+
+This is harmless since we (currently) should have no pinned
+external bos needing copy since
+a) exernal system bos don't have compressed content,
+b) We do not (yet) allow pinning of VRAM bos.
+
+Still, fix this up so that we copy pinned external bos on
+the first pass. We're about to allow bos pinned in VRAM.
+
+Fixes: c6a4d46ec1d7 ("drm/xe: evict user memory in PM notifier")
+Cc: Matthew Auld <matthew.auld@intel.com>
+Cc: <stable@vger.kernel.org> # v6.16+
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Link: https://lore.kernel.org/r/20250918092207.54472-2-thomas.hellstrom@linux.intel.com
+(cherry picked from commit 9e69bafece43dcefec864f00b3ec7e088aa7fcbc linux-next)
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_bo_evict.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo_evict.c b/drivers/gpu/drm/xe/xe_bo_evict.c
+index 7484ce55a..d5dbc51e8 100644
+--- a/drivers/gpu/drm/xe/xe_bo_evict.c
++++ b/drivers/gpu/drm/xe/xe_bo_evict.c
+@@ -158,8 +158,8 @@ int xe_bo_evict_all(struct xe_device *xe)
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = xe_bo_apply_to_pinned(xe, &xe->pinned.late.kernel_bo_present,
+-				    &xe->pinned.late.evicted, xe_bo_evict_pinned);
++	ret = xe_bo_apply_to_pinned(xe, &xe->pinned.late.external,
++				    &xe->pinned.late.external, xe_bo_evict_pinned);
+ 
+ 	if (!ret)
+ 		ret = xe_bo_apply_to_pinned(xe, &xe->pinned.late.kernel_bo_present,
+-- 
+2.43.0
+

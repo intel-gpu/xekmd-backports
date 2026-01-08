@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Tue, 2 Dec 2025 17:18:09 -0800
+Subject: drm/xe: Do not reference loop variable directly
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Do not reference the loop variable job after the loop has exited.
+Instead, save the job from the last iteration of the loop.
+
+Fixes: 3d98a7164da6 ("drm/xe/vf: Start re-emission from first unsignaled job during VF migration")
+Reported-by: kernel test robot <lkp@intel.com>
+Reported-by: Dan Carpenter <dan.carpenter@linaro.org>
+Closes: https://lore.kernel.org/r/202511291102.jnnKP6IB-lkp@intel.com/
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Link: https://patch.msgid.link/20251203011809.968893-1-matthew.brost@intel.com
+(cherry picked from commit 76ce2313709f13a6adbcaa1a43a8539c8f509f6a)
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+(cherry-picked from commit 224a6ac0808d0f58e51df2f923332adcb80fd930 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_submit.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index ed7be50b2f72..c0819377ce6e 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -2253,10 +2253,11 @@ static void guc_exec_queue_unpause_prepare(struct xe_guc *guc,
+ 					   struct xe_exec_queue *q)
+ {
+ 	struct xe_gpu_scheduler *sched = &q->guc->sched;
+-	struct xe_sched_job *job = NULL;
++	struct xe_sched_job *job = NULL, *__job;
+ 	bool restore_replay = false;
+ 
+-	list_for_each_entry(job, &sched->base.pending_list, drm.list) {
++	list_for_each_entry(__job, &sched->base.pending_list, drm.list) {
++		job = __job;
+ 		restore_replay |= job->restore_replay;
+ 		if (restore_replay) {
+ 			xe_gt_dbg(guc_to_gt(guc), "Replay JOB - guc_id=%d, seqno=%d",
+-- 
+2.34.1
+

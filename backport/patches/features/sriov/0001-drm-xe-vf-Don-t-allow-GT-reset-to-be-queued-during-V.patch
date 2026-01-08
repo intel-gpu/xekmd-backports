@@ -27,10 +27,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  4 files changed, 5 insertions(+), 56 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index 0a1c2d3d72d9..488ccbe5a448 100644
+index d6f34ac131c5..6765077508ac 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
-@@ -806,11 +806,6 @@ static int do_gt_restart(struct xe_gt *gt)
+@@ -813,11 +813,6 @@ static int do_gt_restart(struct xe_gt *gt)
  	return 0;
  }
  
@@ -39,10 +39,10 @@ index 0a1c2d3d72d9..488ccbe5a448 100644
 -	return xe_guc_wait_reset_unblock(&gt->uc.guc);
 -}
 -
- static int gt_reset(struct xe_gt *gt)
+ static void gt_reset_worker(struct work_struct *w)
  {
- 	unsigned int fw_ref;
-@@ -829,10 +824,6 @@ static int gt_reset(struct xe_gt *gt)
+ 	struct xe_gt *gt = container_of(w, typeof(*gt), reset.worker);
+@@ -833,10 +828,6 @@ static void gt_reset_worker(struct work_struct *w)
  
  	xe_gt_info(gt, "reset started\n");
  
@@ -50,9 +50,9 @@ index 0a1c2d3d72d9..488ccbe5a448 100644
 -	if (!err)
 -		xe_gt_warn(gt, "reset block failed to get lifted");
 -
- 	xe_pm_runtime_get(gt_to_xe(gt));
- 
  	if (xe_fault_inject_gt_reset()) {
+ 		err = -ECANCELED;
+ 		goto err_fail;
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
 index 1aae4e40a366..96c93a64d754 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c

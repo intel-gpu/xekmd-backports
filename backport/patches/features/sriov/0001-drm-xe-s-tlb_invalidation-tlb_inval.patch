@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Tue, 26 Aug 2025 18:29:05 +0000
-Subject: [PATCH] drm/xe: s/tlb_invalidation/tlb_inval
+Subject: drm/xe: s/tlb_invalidation/tlb_inval
 
 tlb_invalidation is a bit verbose leading to ugly wraps in the code,
 shorten to tlb_inval.
@@ -42,7 +42,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_vm_madvise.c
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 66da0ff3c6b5..0c56447ea185 100644
+index f7e14c42ed2a..5ba92ffb50fd 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -61,7 +61,7 @@ xe-y += xe_bb.o \
@@ -55,10 +55,10 @@ index 66da0ff3c6b5..0c56447ea185 100644
  	xe_gt_topology.o \
  	xe_guc.o \
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index d58ffd565693..e803cdb8624a 100644
+index 789cb79d61ff..c2a5ad69faa1 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -293,8 +293,8 @@ struct xe_device {
+@@ -299,8 +299,8 @@ struct xe_device {
  		u8 has_mbx_power_limits:1;
  		/** @info.has_pxp: Device has PXP support */
  		u8 has_pxp:1;
@@ -83,7 +83,7 @@ index 065622cea66d..9b1e70e20565 100644
  #define MAX_TLB_INVAL_JOBS	16	/* Picking a reasonable value */
  		dep_scheduler = xe_dep_scheduler_create(xe, wq, q->name,
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
-index 0bb002fece30..5d7111ac4e34 100644
+index a656a258235b..4e538118987e 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
 @@ -23,7 +23,7 @@
@@ -95,7 +95,7 @@ index 0bb002fece30..5d7111ac4e34 100644
  #include "xe_map.h"
  #include "xe_mmio.h"
  #include "xe_pm.h"
-@@ -438,9 +438,8 @@ static void ggtt_invalidate_gt_tlb(struct xe_gt *gt)
+@@ -441,9 +441,8 @@ static void ggtt_invalidate_gt_tlb(struct xe_gt *gt)
  	if (!gt)
  		return;
  
@@ -108,7 +108,7 @@ index 0bb002fece30..5d7111ac4e34 100644
  
  static void xe_ggtt_invalidate(struct xe_ggtt *ggtt)
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index ad73be9e3086..5444db5386a2 100644
+index 6197d384899e..bb2dfca76fe6 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -37,7 +37,7 @@
@@ -136,9 +136,9 @@ index ad73be9e3086..5444db5386a2 100644
 -	xe_gt_tlb_invalidation_fini(gt);
 +	xe_gt_tlb_inval_fini(gt);
  
- 	for (i = 0; i < XE_ENGINE_CLASS_MAX; ++i)
- 		xe_hw_fence_irq_finish(&gt->fence_irq[i]);
-@@ -842,7 +842,7 @@ static int gt_reset(struct xe_gt *gt)
+ 	if (disable_work_sync(&gt->reset.worker))
+ 		/*
+@@ -849,7 +849,7 @@ static void gt_reset_worker(struct work_struct *w)
  
  	xe_uc_stop(&gt->uc);
  
@@ -147,7 +147,7 @@ index ad73be9e3086..5444db5386a2 100644
  
  	err = do_gt_reset(gt);
  	if (err)
-@@ -1056,5 +1056,5 @@ void xe_gt_declare_wedged(struct xe_gt *gt)
+@@ -1062,5 +1062,5 @@ void xe_gt_declare_wedged(struct xe_gt *gt)
  	xe_gt_assert(gt, gt_to_xe(gt)->wedged.mode);
  
  	xe_uc_declare_wedged(&gt->uc);
@@ -1045,7 +1045,7 @@ index 420900ecaa97..d413326b4b1f 100644
  	/**
  	 * @ccs_mode: Number of compute engines enabled.
 diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
-index 4813fb2e7979..763178f07c98 100644
+index 08f5cd8d6e63..e45c4025e6cb 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ct.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ct.c
 @@ -26,7 +26,7 @@
@@ -1057,7 +1057,7 @@ index 4813fb2e7979..763178f07c98 100644
  #include "xe_guc.h"
  #include "xe_guc_log.h"
  #include "xe_guc_relay.h"
-@@ -1464,8 +1464,7 @@ static int process_g2h_msg(struct xe_guc_ct *ct, u32 *msg, u32 len)
+@@ -1470,8 +1470,7 @@ static int process_g2h_msg(struct xe_guc_ct *ct, u32 *msg, u32 len)
  		ret = xe_guc_pagefault_handler(guc, payload, adj_len);
  		break;
  	case XE_GUC_ACTION_TLB_INVALIDATION_DONE:
@@ -1067,7 +1067,7 @@ index 4813fb2e7979..763178f07c98 100644
  		break;
  	case XE_GUC_ACTION_ACCESS_COUNTER_NOTIFY:
  		ret = xe_guc_access_counter_notify_handler(guc, payload,
-@@ -1666,8 +1665,7 @@ static void g2h_fast_path(struct xe_guc_ct *ct, u32 *msg, u32 len)
+@@ -1672,8 +1671,7 @@ static void g2h_fast_path(struct xe_guc_ct *ct, u32 *msg, u32 len)
  		break;
  	case XE_GUC_ACTION_TLB_INVALIDATION_DONE:
  		__g2h_release_space(ct, len);
@@ -1078,7 +1078,7 @@ index 4813fb2e7979..763178f07c98 100644
  	default:
  		xe_gt_warn(gt, "NOT_POSSIBLE");
 diff --git a/drivers/gpu/drm/xe/xe_lmtt.c b/drivers/gpu/drm/xe/xe_lmtt.c
-index 775d3e0236a8..dfb182e762ef 100644
+index 4ad468574174..df5e617295b7 100644
 --- a/drivers/gpu/drm/xe/xe_lmtt.c
 +++ b/drivers/gpu/drm/xe/xe_lmtt.c
 @@ -11,7 +11,7 @@
@@ -1090,7 +1090,7 @@ index 775d3e0236a8..dfb182e762ef 100644
  #include "xe_lmtt.h"
  #include "xe_map.h"
  #include "xe_mmio.h"
-@@ -225,8 +225,8 @@ void xe_lmtt_init_hw(struct xe_lmtt *lmtt)
+@@ -228,8 +228,8 @@ void xe_lmtt_init_hw(struct xe_lmtt *lmtt)
  
  static int lmtt_invalidate_hw(struct xe_lmtt *lmtt)
  {
@@ -1101,7 +1101,7 @@ index 775d3e0236a8..dfb182e762ef 100644
  	struct xe_tile *tile = lmtt_to_tile(lmtt);
  	struct xe_gt *gt;
  	int result = 0;
-@@ -234,8 +234,8 @@ static int lmtt_invalidate_hw(struct xe_lmtt *lmtt)
+@@ -237,8 +237,8 @@ static int lmtt_invalidate_hw(struct xe_lmtt *lmtt)
  	u8 id;
  
  	for_each_gt_on_tile(gt, tile, id) {
@@ -1112,7 +1112,7 @@ index 775d3e0236a8..dfb182e762ef 100644
  		result = result ?: err;
  		fence++;
  	}
-@@ -249,7 +249,7 @@ static int lmtt_invalidate_hw(struct xe_lmtt *lmtt)
+@@ -252,7 +252,7 @@ static int lmtt_invalidate_hw(struct xe_lmtt *lmtt)
  	 */
  	fence = fences;
  	for_each_gt_on_tile(gt, tile, id)
@@ -1122,7 +1122,7 @@ index 775d3e0236a8..dfb182e762ef 100644
  	return result;
  }
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index f64942737a0b..29ab10a69212 100644
+index 15dfcb27b0a8..50330c2c4696 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
 @@ -55,7 +55,7 @@ static const struct xe_graphics_desc graphics_xelp = {
@@ -1143,7 +1143,7 @@ index f64942737a0b..29ab10a69212 100644
  	.has_usm = 1, \
  	.has_64bit_timestamp = 1, \
  	.va_bits = 48, \
-@@ -668,7 +668,7 @@ static int xe_info_init(struct xe_device *xe,
+@@ -671,7 +671,7 @@ static int xe_info_init(struct xe_device *xe,
  	/* Runtime detection may change this later */
  	xe->info.has_flat_ccs = graphics_desc->has_flat_ccs;
  
@@ -1153,10 +1153,10 @@ index f64942737a0b..29ab10a69212 100644
  	xe->info.has_64bit_timestamp = graphics_desc->has_64bit_timestamp;
  
 diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
-index 4de6f69ed975..b63002fc0f67 100644
+index 51a607d323fb..9b9766a3baa3 100644
 --- a/drivers/gpu/drm/xe/xe_pci_types.h
 +++ b/drivers/gpu/drm/xe/xe_pci_types.h
-@@ -60,7 +60,7 @@ struct xe_graphics_desc {
+@@ -61,7 +61,7 @@ struct xe_graphics_desc {
  	u8 has_atomic_enable_pte_bit:1;
  	u8 has_flat_ccs:1;
  	u8 has_indirect_ring_state:1;
@@ -1250,7 +1250,7 @@ index 21486a6f693a..36538f50d06f 100644
  );
  
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index e60df7baf502..ebb223bb44e0 100644
+index 601dd48677a3..9ee494d2a348 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -28,7 +28,7 @@
@@ -1262,7 +1262,7 @@ index e60df7baf502..ebb223bb44e0 100644
  #include "xe_migrate.h"
  #include "xe_pat.h"
  #include "xe_pm.h"
-@@ -1925,7 +1925,7 @@ static void xe_vm_close(struct xe_vm *vm)
+@@ -1950,7 +1950,7 @@ static void xe_vm_close(struct xe_vm *vm)
  					xe_pt_clear(xe, vm->pt_root[id]);
  
  			for_each_gt(gt, xe, id)
@@ -1271,7 +1271,7 @@ index e60df7baf502..ebb223bb44e0 100644
  		}
  	}
  
-@@ -3916,7 +3916,7 @@ void xe_vm_unlock(struct xe_vm *vm)
+@@ -3952,7 +3952,7 @@ void xe_vm_unlock(struct xe_vm *vm)
  }
  
  /**
@@ -1280,7 +1280,7 @@ index e60df7baf502..ebb223bb44e0 100644
   * address range
   * @vm: The VM
   * @start: start address
-@@ -3927,10 +3927,11 @@ void xe_vm_unlock(struct xe_vm *vm)
+@@ -3963,10 +3963,11 @@ void xe_vm_unlock(struct xe_vm *vm)
   *
   * Returns 0 for success, negative error code otherwise.
   */
@@ -1295,7 +1295,7 @@ index e60df7baf502..ebb223bb44e0 100644
  	struct xe_tile *tile;
  	u32 fence_id = 0;
  	u8 id;
-@@ -3940,39 +3941,34 @@ int xe_vm_range_tilemask_tlb_invalidation(struct xe_vm *vm, u64 start,
+@@ -3976,39 +3977,34 @@ int xe_vm_range_tilemask_tlb_invalidation(struct xe_vm *vm, u64 start,
  		return 0;
  
  	for_each_tile(tile, vm->xe, id) {
@@ -1356,7 +1356,7 @@ index e60df7baf502..ebb223bb44e0 100644
  
  	return err;
  }
-@@ -4031,8 +4027,8 @@ int xe_vm_invalidate_vma(struct xe_vma *vma)
+@@ -4067,8 +4063,8 @@ int xe_vm_invalidate_vma(struct xe_vma *vma)
  
  	xe_device_wmb(xe);
  

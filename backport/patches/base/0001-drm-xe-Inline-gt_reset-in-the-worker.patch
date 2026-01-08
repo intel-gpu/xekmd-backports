@@ -1,0 +1,98 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Lucas De Marchi <lucas.demarchi@intel.com>
+Date: Fri, 31 Oct 2025 15:22:45 -0700
+Subject: drm/xe: Inline gt_reset in the worker
+
+gt_reset() doesn't make sense by itself: it can only be called as part
+of the worker. Inline it there to avoid it being called from elsewhere
+and clarify the gt_reset() vs do_gt_reset() paths. Note that the error
+return from gt_reset() was just being ignored.
+
+Also add a comment to the xe_pm_runtime_put() to make sure the
+get()/put() pair is clear.
+
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20251031222244.37735-2-lucas.demarchi@intel.com
+Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt.c | 29 +++++++++++------------------
+ 1 file changed, 11 insertions(+), 18 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index bdb87883f219..1e135b5854bf 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -808,21 +808,18 @@ static int do_gt_restart(struct xe_gt *gt)
+ 	return 0;
+ }
+ 
+-static int gt_reset(struct xe_gt *gt)
++static void gt_reset_worker(struct work_struct *w)
+ {
++	struct xe_gt *gt = container_of(w, typeof(*gt), reset.worker);
+ 	unsigned int fw_ref;
+ 	int err;
+ 
+-	if (xe_device_wedged(gt_to_xe(gt))) {
+-		err = -ECANCELED;
++	if (xe_device_wedged(gt_to_xe(gt)))
+ 		goto err_pm_put;
+-	}
+ 
+ 	/* We only support GT resets with GuC submission */
+-	if (!xe_device_uc_enabled(gt_to_xe(gt))) {
+-		err = -ENODEV;
++	if (!xe_device_uc_enabled(gt_to_xe(gt)))
+ 		goto err_pm_put;
+-	}
+ 
+ 	xe_gt_info(gt, "reset started\n");
+ 
+@@ -859,30 +856,24 @@ static int gt_reset(struct xe_gt *gt)
+ 		goto err_out;
+ 
+ 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
++
++	/* Pair with get while enqueueing the work in xe_gt_reset_async() */
+ 	xe_pm_runtime_put(gt_to_xe(gt));
+ 
+ 	xe_gt_info(gt, "reset done\n");
+ 
+-	return 0;
++	return;
+ 
+ err_out:
+ 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
+ 	XE_WARN_ON(xe_uc_start(&gt->uc));
++
+ err_fail:
+ 	xe_gt_err(gt, "reset failed (%pe)\n", ERR_PTR(err));
+-
+ 	xe_device_declare_wedged(gt_to_xe(gt));
++
+ err_pm_put:
+ 	xe_pm_runtime_put(gt_to_xe(gt));
+-
+-	return err;
+-}
+-
+-static void gt_reset_worker(struct work_struct *w)
+-{
+-	struct xe_gt *gt = container_of(w, typeof(*gt), reset.worker);
+-
+-	gt_reset(gt);
+ }
+ 
+ void xe_gt_reset_async(struct xe_gt *gt)
+@@ -894,6 +885,8 @@ void xe_gt_reset_async(struct xe_gt *gt)
+ 		return;
+ 
+ 	xe_gt_info(gt, "reset queued\n");
++
++	/* Pair with put in gt_reset_worker() if work is enqueued */
+ 	xe_pm_runtime_get_noresume(gt_to_xe(gt));
+ 	if (!queue_work(gt->ordered_wq, &gt->reset.worker))
+ 		xe_pm_runtime_put(gt_to_xe(gt));
+-- 
+2.43.0
+

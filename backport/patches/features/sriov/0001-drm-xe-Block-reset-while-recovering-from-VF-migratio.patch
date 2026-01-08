@@ -50,10 +50,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  5 files changed, 65 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index d729831ce0e4..a488336e0732 100644
+index 4a7a71eb30f6..fc6940e03f7d 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
-@@ -806,6 +806,11 @@ static int do_gt_restart(struct xe_gt *gt)
+@@ -813,6 +813,11 @@ static int do_gt_restart(struct xe_gt *gt)
  	return 0;
  }
  
@@ -62,10 +62,10 @@ index d729831ce0e4..a488336e0732 100644
 +	return xe_guc_wait_reset_unblock(&gt->uc.guc);
 +}
 +
- static int gt_reset(struct xe_gt *gt)
+ static void gt_reset_worker(struct work_struct *w)
  {
- 	unsigned int fw_ref;
-@@ -824,6 +829,10 @@ static int gt_reset(struct xe_gt *gt)
+ 	struct xe_gt *gt = container_of(w, typeof(*gt), reset.worker);
+@@ -828,6 +833,10 @@ static void gt_reset_worker(struct work_struct *w)
  
  	xe_gt_info(gt, "reset started\n");
  

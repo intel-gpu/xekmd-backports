@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Aradhya Bhatia <aradhya.bhatia@intel.com>
+Date: Wed, 26 Mar 2025 20:49:29 +0530
+Subject: drm/xe/migrate: Switch from drm to dev managed actions
+
+Change the scope of the migrate subsystem to be dev managed instead of
+drm managed.
+
+The parent pci struct &device, that the xe struct &drm_device is a part
+of, gets removed when a hot unplug is triggered, which causes the
+underlying iommu group to get destroyed as well.
+
+The migrate subsystem, which handles the lifetime of the page-table tree
+(pt) BO, doesn't get a chance to keep the BO back during the hot unplug,
+as all the references to DRM haven't been put back.
+When all the references to DRM are indeed put back later, the migrate
+subsystem tries to put back the pt BO. Since the underlying iommu group
+has been already destroyed, a kernel NULL ptr dereference takes place
+while attempting to keep back the pt BO.
+
+Closes: https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/3914
+Suggested-by: Thomas Hellstrom <thomas.hellstrom@intel.com>
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Signed-off-by: Aradhya Bhatia <aradhya.bhatia@intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/20250326151929.1495972-1-aradhya.bhatia@intel.com
+Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+(backported from commit c045e03634ab677ef9351e9b350da78b5c9d7961 linux-next )
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_migrate.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 2e331b383..1f4d811c7 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -88,7 +88,7 @@ struct xe_migrate {
+  */
+ #define MAX_PTE_PER_SDI 0x1FE
+ 
+-static void xe_migrate_fini(struct drm_device *dev, void *arg)
++static void xe_migrate_fini(void *arg)
+ {
+ 	struct xe_migrate *m = arg;
+ 
+@@ -478,7 +478,7 @@ int xe_migrate_init(struct xe_migrate *m)
+ 	might_lock(&m->job_mutex);
+ 	fs_reclaim_release(GFP_KERNEL);
+ 
+-	err = drmm_add_action_or_reset(&xe->drm, xe_migrate_fini, m);
++	err = devm_add_action_or_reset(xe->drm.dev, xe_migrate_fini, m);
+ 	if (err)
+ 		return err;
+ 
+-- 
+2.34.1
+

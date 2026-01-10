@@ -1,13 +1,10 @@
 # base
 backport/patches/base/0001-drm-xe-xe_debugfs-Exposure-of-G-State-and-pcie-link-.patch
 backport/patches/base/0001-drm-xe-debugfs-Don-t-expose-dgfx-residencies-attribu.patch
-backport/patches/base/0001-drm-xe-pcode-Initialize-data0-for-pcode-read-routine.patch
 backport/patches/base/0001-drm-i915-vbt-Add-eDP-Data-rate-overrride-field-in-VB.patch
 backport/patches/base/0001-drm-xe-migrate-don-t-misalign-current-bytes.patch
-backport/patches/base/0001-drm-xe-uapi-loosen-used-tracking-restriction.patch
 backport/patches/base/0001-drm-xe-Add-documentation-for-Xe-Device-Wedging.patch
 backport/patches/base/0001-drm-Add-a-vendor-specific-recovery-method-to-drm-dev.patch
-backport/patches/base/0001-drm-xe-Set-GT-as-wedged-before-sending-wedged-uevent.patch
 backport/patches/base/0001-drm-xe-Add-a-helper-function-to-set-recovery-method.patch
 backport/patches/base/0001-drm-xe-xe_survivability-Refactor-survivability-mode.patch
 backport/patches/base/0001-drm-xe-xe_survivability-Add-support-for-Runtime-surv.patch
@@ -17,12 +14,13 @@ backport/patches/base/0001-drm-xe-xe_hw_error-Handle-CSC-Firmware-reported-Hard.
 backport/patches/base/0001-drm-xe-xe_hw_error-Add-fault-injection-to-trigger-cs.patch
 backport/patches/base/0001-drm-xe-Apply-Wa_14020316580-in-xe_gt_idle_enable_pg.patch
 backport/patches/base/0001-drm-xe-Restore-engine-registers-before-restarting-sc.patch
-backport/patches/base/0001-drm-xe-guc-Fix-stack_depot-usage.patch
 backport/patches/base/0001-drm-xe-Increase-TDF-timeout.patch
 backport/patches/base/0001-drm-xe-Pre-allocate-system-memory-for-pinned-externa.patch
 backport/patches/base/0001-drm-xe-dma-buf-Allow-pinning-of-p2p-dma-buf.patch
 backport/patches/base/0001-drm-xe-Drop-preempt-fences-when-destroying-imported-.patch
 backport/patches/base/0001-drm-xe-migrate-fix-batch-buffer-sizing.patch
+backport/patches/base/0001-drm-xe-Inline-gt_reset-in-the-worker.patch
+backport/patches/base/0001-drm-xe-gt-Synchronize-GT-reset-with-device-unbind.patch
 # features/xe-late-bind-fw
 backport/patches/features/xe-late-bind-fw/0001-mei-bus-add-mei_cldev_mtu-interface.patch
 backport/patches/features/xe-late-bind-fw/0001-mei-late_bind-add-late-binding-component-driver.patch
@@ -36,24 +34,17 @@ backport/patches/features/xe-late-bind-fw/0001-drm-xe-xe_late_bind_fw-Extract-an
 backport/patches/features/xe-late-bind-fw/0001-drm-xe-xe_late_bind_fw-Fix-missing-initialization-of.patch
 backport/patches/features/xe-late-bind-fw/0001-drm-xe-xe_late_bind_fw-Initialize-uval-variable-in-x.patch
 # features/sriov
-backport/patches/features/sriov/0001-drm-xe-guc-Increase-GuC-crash-dump-buffer-size.patch
 backport/patches/features/sriov/0001-drm-xe-guc-Recommend-GUC-v70.49.4-for-PTL-BMG.patch
 backport/patches/features/sriov/0001-drm-xe-guc-Add-SLPC-power-profile-interface.patch
 backport/patches/features/sriov/0001-drm-xe-Fix-circular-locking-dependency.patch
 backport/patches/features/sriov/0001-drm-xe-guc-Update-CSS-header-structures.patch
 backport/patches/features/sriov/0001-drm-xe-guc-Add-firmware-build-type-to-available-info.patch
-backport/patches/features/sriov/0001-drm-xe-guc-Return-an-error-code-if-the-GuC-load-fail.patch
 backport/patches/features/sriov/0001-drm-xe-pm-Disable-RPM-for-SR-IOV-VFs.patch
-backport/patches/features/sriov/0001-drm-xe-guc-Add-devm-release-action-to-safely-tear-do.patch
 backport/patches/features/sriov/0001-drm-xe-Move-debugfs-GT-attributes-under-tile-directo.patch
 backport/patches/features/sriov/0001-drm-xe-vf-Create-contexts-for-CCS-read-write.patch
 backport/patches/features/sriov/0001-drm-xe-vf-Attach-and-detach-CCS-copy-commands-with-B.patch
 backport/patches/features/sriov/0001-drm-xe-vf-Register-CCS-read-write-contexts-with-Guc.patch
-backport/patches/features/sriov/0001-drm-xe-Use-devm_ioremap_wc-for-VRAM-mapping-and-drop.patch
-backport/patches/features/sriov/0001-drm-xe-Use-dynamic-allocation-for-tile-and-device-VR.patch
-backport/patches/features/sriov/0001-drm-xe-Move-struct-xe_vram_region-to-a-dedicated-hea.patch
 backport/patches/features/sriov/0001-drm-xe-Split-xe_migrate-allocation-from-initializati.patch
-backport/patches/features/sriov/0001-drm-xe-Unify-the-initialization-of-VRAM-regions.patch
 backport/patches/features/sriov/0001-drm-xe-vf-Fix-VM-crash-during-VF-driver-release.patch
 backport/patches/features/sriov/0001-drm-xe-vf-Fix-IS_ERR-vs-NULL-check-in-xe_sriov_vf_cc.patch
 backport/patches/features/sriov/0001-drm-xe-sa-Avoid-caching-GGTT-address-within-the-mana.patch
@@ -82,10 +73,8 @@ backport/patches/features/sriov/0001-drm-xe-bo-Add-xe_bo_has_valid_ccs_bb-helper
 backport/patches/features/sriov/0001-drm-xe-vf-Move-VF-CCS-data-to-xe_device.patch
 backport/patches/features/sriov/0001-drm-xe-vf-Move-VF-CCS-debugfs-attribute.patch
 backport/patches/features/sriov/0001-drm-xe-debugfs-Move-sa_info-from-gt-to-tile-director.patch
-backport/patches/features/sriov/0001-drm-xe-guc-Set-upper-limit-of-H2G-retries-over-CTB.patch
 backport/patches/features/sriov/0001-drm-xe-mcr-Make-xe_gt_mcr_get_dss_steering-input-gt-.patch
 backport/patches/features/sriov/0001-drm-xe-xe2hpg-Add-Wa_18041344222-for-Xe2_HPG.patch
-backport/patches/features/sriov/0001-drm-xe-guc-Always-add-CT-disable-action-during-secon.patch
 backport/patches/features/sriov/0001-drm-xe-guc-Don-t-invoke-disable_ct-action-during-rep.patch
 backport/patches/features/sriov/0001-drm-xe-pf-Promote-PF-debugfs-function-to-its-own-fil.patch
 backport/patches/features/sriov/0001-drm-xe-pf-Create-separate-debugfs-tree-for-SR-IOV-fi.patch
@@ -125,7 +114,6 @@ backport/patches/features/sriov/0001-drm-xe-Force-user-context-allocations-in-us
 backport/patches/features/sriov/0001-drm-xe-pf-Force-use-user-VRAM-for-LMEM-provisioning.patch
 backport/patches/features/sriov/0001-drm-xe-Combine-userspace-context-check.patch
 backport/patches/features/sriov/0001-drm-xe-Move-explicit-CT-lock-in-TLB-invalidation-seq.patch
-backport/patches/features/sriov/0001-drm-xe-Cancel-pending-TLB-inval-workers-on-teardown.patch
 backport/patches/features/sriov/0001-drm-xe-s-tlb_invalidation-tlb_inval.patch
 backport/patches/features/sriov/0001-drm-xe-Add-xe_tlb_inval-structure.patch
 backport/patches/features/sriov/0001-drm-xe-Add-xe_gt_tlb_invalidation_done_handler.patch
@@ -170,7 +158,6 @@ backport/patches/features/sriov/0001-drm-xe-guc-Increase-wait-timeout-to-2sec-af
 backport/patches/features/sriov/0001-drm-xe-pf-Make-the-late-initialization-really-late.patch
 backport/patches/features/sriov/0001-drm-xe-xelp-Implement-Wa_16010904313.patch
 backport/patches/features/sriov/0001-drm-xe-xelp-Add-Wa_18022495364.patch
-backport/patches/features/sriov/0001-drm-xe-improve-dma-resv-handling-for-backup-object.patch
 backport/patches/features/sriov/0001-drm-xe-pf-Always-expose-VRAM-provisioning-data-on-di.patch
 backport/patches/features/sriov/0001-drm-xe-pf-Add-top-level-functions-to-control-VFs.patch
 backport/patches/features/sriov/0001-drm-xe-pf-Log-only-top-level-VF-state-changes.patch
@@ -201,7 +188,6 @@ backport/patches/features/sriov/0001-drm-xe-pf-Allow-to-stop-the-VF-using-sysfs.
 backport/patches/features/sriov/0001-drm-xe-pf-Add-documentation-for-sriov_admin-attribut.patch
 backport/patches/features/sriov/0001-drm-xe-Don-t-force-DRM_XE_DEBUG_MEMIRQ-for-SR-IOV-de.patch
 backport/patches/features/sriov/0001-drm-xe-pf-Fix-VF-FLR-synchronization-between-all-GTs.patch
-backport/patches/features/sriov/0001-drm-xe-guc-Add-more-GuC-load-error-status-codes.patch
 backport/patches/features/sriov/0001-drm-xe-device-Use-poll_timeout_us-to-wait-for-lmem.patch
 backport/patches/features/sriov/0001-drm-xe-guc_pc-Use-poll_timeout_us-for-waiting.patch
 backport/patches/features/sriov/0001-drm-xe-guc-Drop-helper-to-read-freq.patch
@@ -225,9 +211,6 @@ backport/patches/features/sriov/0001-drm-xe-Add-tile-based-SRIOV-printk-macros.p
 backport/patches/features/sriov/0001-drm-xe-pf-Update-LMTT-to-use-tile-based-messages.patch
 backport/patches/features/sriov/0001-drm-xe-Update-MEMIRQ-to-use-tile-based-printk-macros.patch
 backport/patches/features/sriov/0001-drm-xe-pf-Improve-reading-VF-config-blob-from-debugf.patch
-backport/patches/features/sriov/0001-drm-pcids-Split-PTL-pciids-group-to-make-wcl-subplat.patch
-backport/patches/features/sriov/0001-drm-i915-display-Add-definition-for-wcl-as-subplatfo.patch
-backport/patches/features/sriov/0001-drm-i915-xe3-Restrict-PTL-intel_encoder_is_c10phy-to.patch
 backport/patches/features/sriov/0001-drm-xe-pf-Access-VF-s-register-using-dedicated-MMIO-.patch
 backport/patches/features/sriov/0001-drm-xe-Handle-Wa_22010954014-and-Wa_14022085890-as-d.patch
 backport/patches/features/sriov/0001-drm-xe-pf-Remove-GuC-version-check-for-migration-sup.patch

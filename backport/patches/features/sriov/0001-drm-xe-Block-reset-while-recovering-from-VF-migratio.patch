@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Tomasz Lis <tomasz.lis@intel.com>
 Date: Sat, 2 Aug 2025 05:10:40 +0200
-Subject: [PATCH 25/62] drm/xe: Block reset while recovering from VF migration
+Subject: drm/xe: Block reset while recovering from VF migration
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -39,7 +39,7 @@ Cc: Michal Winiarski <michal.winiarski@intel.com>
 Reviewed-by: Michal Winiarski <michal.winiarski@intel.com>
 Link: https://lore.kernel.org/r/20250802031045.1127138-4-tomasz.lis@intel.com
 Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
-(cherry-picked from commit a0840b1ce95e37a1a870a3e794ed25c69080cecf linux-next)
+(backported from commit a0840b1ce95e37a1a870a3e794ed25c69080cecf linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_gt.c         |  9 ++++++++
@@ -50,10 +50,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  5 files changed, 65 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index bc55a6e043b7..5d46126fb298 100644
+index 4a7a71eb30f6..fc6940e03f7d 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
-@@ -803,6 +803,11 @@ static int do_gt_restart(struct xe_gt *gt)
+@@ -813,6 +813,11 @@ static int do_gt_restart(struct xe_gt *gt)
  	return 0;
  }
  
@@ -62,10 +62,10 @@ index bc55a6e043b7..5d46126fb298 100644
 +	return xe_guc_wait_reset_unblock(&gt->uc.guc);
 +}
 +
- static int gt_reset(struct xe_gt *gt)
+ static void gt_reset_worker(struct work_struct *w)
  {
- 	unsigned int fw_ref;
-@@ -817,6 +822,10 @@ static int gt_reset(struct xe_gt *gt)
+ 	struct xe_gt *gt = container_of(w, typeof(*gt), reset.worker);
+@@ -828,6 +833,10 @@ static void gt_reset_worker(struct work_struct *w)
  
  	xe_gt_info(gt, "reset started\n");
  
@@ -73,14 +73,14 @@ index bc55a6e043b7..5d46126fb298 100644
 +	if (!err)
 +		xe_gt_warn(gt, "reset block failed to get lifted");
 +
- 	xe_pm_runtime_get(gt_to_xe(gt));
- 
  	if (xe_fault_inject_gt_reset()) {
+ 		err = -ECANCELED;
+ 		goto err_fail;
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 5c0e6a94d230..0a11e72c568a 100644
+index ba1bc9837a65..f5cde7359e97 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -1853,6 +1853,43 @@ static void guc_exec_queue_stop(struct xe_guc *guc, struct xe_exec_queue *q)
+@@ -1864,6 +1864,43 @@ static void guc_exec_queue_stop(struct xe_guc *guc, struct xe_exec_queue *q)
  	}
  }
  

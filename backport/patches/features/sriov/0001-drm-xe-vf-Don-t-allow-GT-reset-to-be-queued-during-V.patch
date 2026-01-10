@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Wed, 8 Oct 2025 14:45:14 -0700
-Subject: [PATCH] drm/xe/vf: Don't allow GT reset to be queued during VF post
+Subject: drm/xe/vf: Don't allow GT reset to be queued during VF post
  migration recovery
 
 With well-behaved software, a GT reset should never occur, nor should it
@@ -27,10 +27,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  4 files changed, 5 insertions(+), 56 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index b1e71455140b..591077c99f63 100644
+index d6f34ac131c5..6765077508ac 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
-@@ -805,11 +805,6 @@ static int do_gt_restart(struct xe_gt *gt)
+@@ -813,11 +813,6 @@ static int do_gt_restart(struct xe_gt *gt)
  	return 0;
  }
  
@@ -39,10 +39,10 @@ index b1e71455140b..591077c99f63 100644
 -	return xe_guc_wait_reset_unblock(&gt->uc.guc);
 -}
 -
- static int gt_reset(struct xe_gt *gt)
+ static void gt_reset_worker(struct work_struct *w)
  {
- 	unsigned int fw_ref;
-@@ -824,10 +819,6 @@ static int gt_reset(struct xe_gt *gt)
+ 	struct xe_gt *gt = container_of(w, typeof(*gt), reset.worker);
+@@ -833,10 +828,6 @@ static void gt_reset_worker(struct work_struct *w)
  
  	xe_gt_info(gt, "reset started\n");
  
@@ -50,9 +50,9 @@ index b1e71455140b..591077c99f63 100644
 -	if (!err)
 -		xe_gt_warn(gt, "reset block failed to get lifted");
 -
- 	xe_pm_runtime_get(gt_to_xe(gt));
- 
  	if (xe_fault_inject_gt_reset()) {
+ 		err = -ECANCELED;
+ 		goto err_fail;
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
 index 1aae4e40a366..96c93a64d754 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
@@ -84,7 +84,7 @@ index 1aae4e40a366..96c93a64d754 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 4ae858ff23ef..6fecb93fb82d 100644
+index 6fcf160c6b67..10d36c594ed6 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
 @@ -27,6 +27,7 @@
@@ -95,7 +95,7 @@ index 4ae858ff23ef..6fecb93fb82d 100644
  #include "xe_guc.h"
  #include "xe_guc_capture.h"
  #include "xe_guc_ct.h"
-@@ -1974,47 +1975,14 @@ static void guc_exec_queue_stop(struct xe_guc *guc, struct xe_exec_queue *q)
+@@ -1985,47 +1986,14 @@ static void guc_exec_queue_stop(struct xe_guc *guc, struct xe_exec_queue *q)
  	}
  }
  

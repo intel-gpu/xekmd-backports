@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Harish Chegondi <harish.chegondi@intel.com>
 Date: Tue, 2 Sep 2025 16:42:00 -0700
-Subject: [PATCH 51/62] drm/xe/xe2hpg: Add Wa_18041344222 for Xe2_HPG
+Subject: drm/xe/xe2hpg: Add Wa_18041344222 for Xe2_HPG
 
 Add Wa_18041344222 for Xe2_HPG that requires disabling
 the perf mode for subslice count for eustall sampling
@@ -26,10 +26,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  6 files changed, 36 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 5cd5ab8529c5..cec9c5ec8d6b 100644
+index 8b115bdc3..d71f42741 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -522,6 +522,7 @@
+@@ -524,6 +524,7 @@
  
  #define TDL_CHICKEN				XE_REG_MCR(0xe5f4, XE_REG_OPTION_MASKED)
  #define   QID_WAIT_FOR_THREAD_NOT_RUN_DISABLE	REG_BIT(12)
@@ -38,7 +38,7 @@ index 5cd5ab8529c5..cec9c5ec8d6b 100644
  #define LSC_CHICKEN_BIT_0			XE_REG_MCR(0xe7c8)
  #define   DISABLE_D8_D16_COASLESCE		REG_BIT(30)
 diff --git a/drivers/gpu/drm/xe/xe_gt_topology.c b/drivers/gpu/drm/xe/xe_gt_topology.c
-index 8c63e3263643..1b34554c2709 100644
+index 8c63e3263..1b34554c2 100644
 --- a/drivers/gpu/drm/xe/xe_gt_topology.c
 +++ b/drivers/gpu/drm/xe/xe_gt_topology.c
 @@ -12,6 +12,7 @@
@@ -70,7 +70,7 @@ index 8c63e3263643..1b34554c2709 100644
 +	return false;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_gt_topology.h b/drivers/gpu/drm/xe/xe_gt_topology.h
-index c8140704ad4c..d95cdd6e45be 100644
+index c8140704a..d95cdd6e4 100644
 --- a/drivers/gpu/drm/xe/xe_gt_topology.h
 +++ b/drivers/gpu/drm/xe/xe_gt_topology.h
 @@ -47,4 +47,6 @@ xe_gt_topology_has_dss_in_quadrant(struct xe_gt *gt, int quad);
@@ -81,7 +81,7 @@ index c8140704ad4c..d95cdd6e45be 100644
 +
  #endif /* _XE_GT_TOPOLOGY_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_rtp.c b/drivers/gpu/drm/xe/xe_rtp.c
-index 95571b87aa73..04400b4889fb 100644
+index 95571b87a..04400b488 100644
 --- a/drivers/gpu/drm/xe/xe_rtp.c
 +++ b/drivers/gpu/drm/xe/xe_rtp.c
 @@ -363,3 +363,9 @@ bool xe_rtp_match_not_sriov_vf(const struct xe_gt *gt,
@@ -95,7 +95,7 @@ index 95571b87aa73..04400b4889fb 100644
 +	return xe_gt_has_discontiguous_dss_groups(gt);
 +}
 diff --git a/drivers/gpu/drm/xe/xe_rtp.h b/drivers/gpu/drm/xe/xe_rtp.h
-index 5ed6c14b9ae3..b3ff568550ae 100644
+index 5ed6c14b9..b3ff56855 100644
 --- a/drivers/gpu/drm/xe/xe_rtp.h
 +++ b/drivers/gpu/drm/xe/xe_rtp.h
 @@ -477,4 +477,7 @@ bool xe_rtp_match_first_render_or_compute(const struct xe_gt *gt,
@@ -107,23 +107,23 @@ index 5ed6c14b9ae3..b3ff568550ae 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_wa.c b/drivers/gpu/drm/xe/xe_wa.c
-index 22a98600fd8f..798a1b3f174b 100644
+index 67d015c14..28bd7c792 100644
 --- a/drivers/gpu/drm/xe/xe_wa.c
 +++ b/drivers/gpu/drm/xe/xe_wa.c
-@@ -602,6 +602,13 @@ static const struct xe_rtp_entry_sr engine_was[] = {
+@@ -599,6 +599,13 @@ static const struct xe_rtp_entry_sr engine_was[] = {
  		       FUNC(xe_rtp_match_first_render_or_compute)),
  	  XE_RTP_ACTIONS(SET(TDL_TSL_CHICKEN, STK_ID_RESTRICT))
  	},
 +	{ XE_RTP_NAME("18041344222"),
-+	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(2001, 2002),
-+		       FUNC(xe_rtp_match_first_render_or_compute),
-+		       FUNC(xe_rtp_match_not_sriov_vf),
-+		       FUNC(xe_rtp_match_gt_has_discontiguous_dss_groups)),
-+	  XE_RTP_ACTIONS(SET(TDL_CHICKEN, EUSTALL_PERF_SAMPLING_DISABLE))
++		XE_RTP_RULES(GRAPHICS_VERSION_RANGE(2001, 2002),
++				FUNC(xe_rtp_match_first_render_or_compute),
++				FUNC(xe_rtp_match_not_sriov_vf),
++				FUNC(xe_rtp_match_gt_has_discontiguous_dss_groups)),
++		XE_RTP_ACTIONS(SET(TDL_CHICKEN, EUSTALL_PERF_SAMPLING_DISABLE))
 +	},
- 
- 	/* Xe2_LPM */
- 
+ 	{ XE_RTP_NAME("13012615864"),
+ 	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(2001, 2002),
+ 		       FUNC(xe_rtp_match_first_render_or_compute)),
 -- 
 2.43.0
 

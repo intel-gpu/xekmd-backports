@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Tue, 26 Aug 2025 18:29:11 +0000
-Subject: [PATCH] drm/xe: Split TLB invalidation code in frontend and backend
+Subject: drm/xe: Split TLB invalidation code in frontend and backend
 
 The frontend exposes an API to the driver to send invalidations, handles
 sequence number assignment, synchronization (fences), and provides a
@@ -33,7 +33,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_guc_tlb_inval.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index f731f418cf19..7d7367d9799f 100644
+index 2353e5fe22df..e57f00d93311 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -75,6 +75,7 @@ xe-y += xe_bb.o \
@@ -45,7 +45,7 @@ index f731f418cf19..7d7367d9799f 100644
  	xe_huc.o \
  	xe_hw_engine.o \
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index 203c91df1f18..034e948bcb8b 100644
+index 96ab8908354b..69bc9e4d71d1 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -593,8 +593,6 @@ static void xe_gt_fini(void *arg)
@@ -54,11 +54,11 @@ index 203c91df1f18..034e948bcb8b 100644
  
 -	xe_gt_tlb_inval_fini(gt);
 -
- 	for (i = 0; i < XE_ENGINE_CLASS_MAX; ++i)
- 		xe_hw_fence_irq_finish(&gt->fence_irq[i]);
- 
+ 	if (disable_work_sync(&gt->reset.worker))
+ 		/*
+ 		 * If gt_reset_worker was halted from executing, take care of
 diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
-index 7b63067ed9af..bb8650fdeb45 100644
+index d67416352b2a..627ca3a5d393 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ct.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ct.c
 @@ -30,9 +30,9 @@

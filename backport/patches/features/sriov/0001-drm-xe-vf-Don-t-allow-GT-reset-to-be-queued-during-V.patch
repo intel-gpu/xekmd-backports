@@ -27,7 +27,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  4 files changed, 5 insertions(+), 56 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index 0a1c2d3d72d9..488ccbe5a448 100644
+index 7c9387c43..fe970c234 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -806,11 +806,6 @@ static int do_gt_restart(struct xe_gt *gt)
@@ -50,11 +50,11 @@ index 0a1c2d3d72d9..488ccbe5a448 100644
 -	if (!err)
 -		xe_gt_warn(gt, "reset block failed to get lifted");
 -
- 	xe_pm_runtime_get(gt_to_xe(gt));
- 
  	if (xe_fault_inject_gt_reset()) {
+ 		err = -ECANCELED;
+ 		goto err_fail;
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
-index 1aae4e40a366..96c93a64d754 100644
+index 1aae4e40a..96c93a64d 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
 @@ -1097,17 +1097,11 @@ void xe_gt_sriov_vf_print_version(struct xe_gt *gt, struct drm_printer *p)
@@ -84,7 +84,7 @@ index 1aae4e40a366..96c93a64d754 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 6fcf160c6b67..10d36c594ed6 100644
+index 6fcf160c6..10d36c594 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
 @@ -27,6 +27,7 @@
@@ -148,7 +148,7 @@ index 6fcf160c6b67..10d36c594ed6 100644
  		return 0;
  
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.h b/drivers/gpu/drm/xe/xe_guc_submit.h
-index 78c3f07e31a0..6cb4242ac74d 100644
+index 78c3f07e3..6cb4242ac 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.h
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.h
 @@ -22,9 +22,6 @@ void xe_guc_submit_stop(struct xe_guc *guc);

@@ -240,6 +240,19 @@ static int resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
 	return 0;
 }
 
+static void restore_vf_vram_bar_size(struct xe_device *xe)
+{
+	int err;
+
+	if (!IS_DGFX(xe))
+		return;
+
+	err = resize_vf_vram_bar(xe, xe->sriov.pf.device_total_vfs);
+	if (err)
+		xe_sriov_info(xe, "Failed to restore VF LMEM BAR size: %pe\n",
+			      ERR_PTR(err));
+}
+
 static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
 {
 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
@@ -294,6 +307,7 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
 	return num_vfs;
 
 failed:
+	restore_vf_vram_bar_size(xe);
 	pf_unprovision_vfs(xe, num_vfs);
 	xe_pm_runtime_put(xe);
 	prelim_xe_eudebug_support_enable(xe);
@@ -318,6 +332,8 @@ static int pf_disable_vfs(struct xe_device *xe)
 	pf_engine_activity_stats(xe, num_vfs, false);
 
 	pci_disable_sriov(pdev);
+
+	restore_vf_vram_bar_size(xe);
 
 	pf_reset_vfs(xe, num_vfs);
 

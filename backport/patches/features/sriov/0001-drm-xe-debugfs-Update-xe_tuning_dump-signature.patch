@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Tue, 23 Sep 2025 23:16:11 +0200
-Subject: [PATCH 05/12] drm/xe/debugfs: Update xe_tuning_dump signature
+Subject: drm/xe/debugfs: Update xe_tuning_dump signature
 
 Our debugfs helper xe_gt_debugfs_show_with_rpm() expects print()
 functions to return int. New signature allows us to drop wrapper.
@@ -22,7 +22,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  3 files changed, 16 insertions(+), 11 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_debugfs.c b/drivers/gpu/drm/xe/xe_gt_debugfs.c
-index 5dc9d4308712..0726810fd364 100644
+index e6a7684d5..bcf234e74 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_gt_debugfs.c
 @@ -167,12 +167,6 @@ static int register_save_restore(struct xe_gt *gt, struct drm_printer *p)
@@ -40,7 +40,7 @@ index 5dc9d4308712..0726810fd364 100644
  	xe_pat_dump(gt, p);
 @@ -231,7 +225,7 @@ static const struct drm_info_list vf_safe_debugfs_list[] = {
  	{ "register-save-restore",
- 			.show = xe_gt_debugfs_show_with_rpm, .data = register_save_restore },
+ 		.show = xe_gt_debugfs_show_with_rpm, .data = register_save_restore },
  	{ "workarounds", .show = xe_gt_debugfs_show_with_rpm, .data = xe_wa_gt_dump },
 -	{ "tunings", .show = xe_gt_debugfs_show_with_rpm, .data = tunings },
 +	{ "tunings", .show = xe_gt_debugfs_show_with_rpm, .data = xe_tuning_dump },
@@ -48,7 +48,7 @@ index 5dc9d4308712..0726810fd364 100644
  	{ "default_lrc_ccs", .show = xe_gt_debugfs_show_with_rpm, .data = ccs_default_lrc },
  	{ "default_lrc_bcs", .show = xe_gt_debugfs_show_with_rpm, .data = bcs_default_lrc },
 diff --git a/drivers/gpu/drm/xe/xe_tuning.c b/drivers/gpu/drm/xe/xe_tuning.c
-index 828b45b24c23..323f65c2b8f0 100644
+index a524170a0..fd58ea5e7 100644
 --- a/drivers/gpu/drm/xe/xe_tuning.c
 +++ b/drivers/gpu/drm/xe/xe_tuning.c
 @@ -214,7 +214,14 @@ void xe_tuning_process_lrc(struct xe_hw_engine *hwe)
@@ -86,7 +86,7 @@ index 828b45b24c23..323f65c2b8f0 100644
 +	return 0;
  }
 diff --git a/drivers/gpu/drm/xe/xe_tuning.h b/drivers/gpu/drm/xe/xe_tuning.h
-index dd0d3ccc9c65..c1cc5927fda7 100644
+index dd0d3ccc9..c1cc5927f 100644
 --- a/drivers/gpu/drm/xe/xe_tuning.h
 +++ b/drivers/gpu/drm/xe/xe_tuning.h
 @@ -14,6 +14,6 @@ int xe_tuning_init(struct xe_gt *gt);

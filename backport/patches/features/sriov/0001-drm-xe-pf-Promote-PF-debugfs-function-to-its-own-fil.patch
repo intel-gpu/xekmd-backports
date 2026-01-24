@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Sun, 28 Sep 2025 16:00:23 +0200
-Subject: [PATCH 54/62] drm/xe/pf: Promote PF debugfs function to its own file
+Subject: drm/xe/pf: Promote PF debugfs function to its own file
 
 In upcoming patches, we will build on the PF separate debugfs
 tree for all SR-IOV related files and this new code will need
@@ -28,10 +28,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_sriov_pf_debugfs.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 5d46c85f2a54..34b53e175d3e 100644
+index d9c6cf0f1..534355c23 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -167,6 +167,7 @@ xe-$(CONFIG_PCI_IOV) += \
+@@ -174,6 +174,7 @@ xe-$(CONFIG_PCI_IOV) += \
  	xe_lmtt_ml.o \
  	xe_pci_sriov.o \
  	xe_sriov_pf.o \
@@ -40,11 +40,11 @@ index 5d46c85f2a54..34b53e175d3e 100644
  
  # include helpers for tests even when XE is built-in
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index ceda36affcf6..e54947be0885 100644
+index cd977dbd1..dba0a9c4a 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
-@@ -22,7 +22,7 @@
- #include "xe_pm.h"
+@@ -23,7 +23,7 @@
+ #include "xe_psmi.h"
  #include "xe_pxp_debugfs.h"
  #include "xe_sriov.h"
 -#include "xe_sriov_pf.h"
@@ -53,7 +53,7 @@ index ceda36affcf6..e54947be0885 100644
  #include "xe_step.h"
  #include "xe_tile_debugfs.h"
 diff --git a/drivers/gpu/drm/xe/xe_sriov_pf.c b/drivers/gpu/drm/xe/xe_sriov_pf.c
-index 27ddf3cc80e9..4698348c010a 100644
+index 27ddf3cc8..4698348c0 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_pf.c
 +++ b/drivers/gpu/drm/xe/xe_sriov_pf.c
 @@ -146,45 +146,3 @@ void xe_sriov_pf_print_vfs_summary(struct xe_device *xe, struct drm_printer *p)
@@ -103,7 +103,7 @@ index 27ddf3cc80e9..4698348c010a 100644
 -	drm_debugfs_create_files(debugfs_list, ARRAY_SIZE(debugfs_list), parent, minor);
 -}
 diff --git a/drivers/gpu/drm/xe/xe_sriov_pf.h b/drivers/gpu/drm/xe/xe_sriov_pf.h
-index e3b34f8f5e04..e6cf930ecde4 100644
+index e3b34f8f5..e6cf930ec 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_pf.h
 +++ b/drivers/gpu/drm/xe/xe_sriov_pf.h
 @@ -16,7 +16,6 @@ struct xe_device;
@@ -127,7 +127,7 @@ index e3b34f8f5e04..e6cf930ecde4 100644
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
 new file mode 100644
-index 000000000000..2a1316048439
+index 000000000..2a1316048
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.c
 @@ -0,0 +1,54 @@
@@ -187,7 +187,7 @@ index 000000000000..2a1316048439
 +}
 diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.h b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.h
 new file mode 100644
-index 000000000000..93db13585b82
+index 000000000..93db13585
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_sriov_pf_debugfs.h
 @@ -0,0 +1,18 @@

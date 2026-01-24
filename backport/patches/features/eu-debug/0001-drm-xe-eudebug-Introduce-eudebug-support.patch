@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Thu, 5 Jan 2023 11:06:00 +0200
-Subject: [PATCH] drm/xe/eudebug: Introduce eudebug support
+Subject: drm/xe/eudebug: Introduce eudebug support
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -65,9 +65,9 @@ Acked-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/Kconfig            |   10 +
- drivers/gpu/drm/xe/Makefile           |    3 +
+ drivers/gpu/drm/xe/Makefile           |    2 +
  drivers/gpu/drm/xe/xe_device.c        |   10 +
- drivers/gpu/drm/xe/xe_device_types.h  |   35 +
+ drivers/gpu/drm/xe/xe_device_types.h  |   36 +
  drivers/gpu/drm/xe/xe_eudebug.c       | 1138 +++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_eudebug.h       |   47 +
  drivers/gpu/drm/xe/xe_eudebug_types.h |  170 ++++
@@ -81,10 +81,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  create mode 100644 include/uapi/drm/xe_drm_eudebug.h
 
 diff --git a/drivers/gpu/drm/xe/Kconfig b/drivers/gpu/drm/xe/Kconfig
-index 714d5702d..fba32c51e 100644
+index 4b288eb3f..05ee0dd60 100644
 --- a/drivers/gpu/drm/xe/Kconfig
 +++ b/drivers/gpu/drm/xe/Kconfig
-@@ -129,6 +129,16 @@ config DRM_XE_FORCE_PROBE
+@@ -128,6 +128,16 @@ config DRM_XE_FORCE_PROBE
  
  	  Use "!*" to block the probe of the driver for all known devices.
  
@@ -102,21 +102,20 @@ index 714d5702d..fba32c51e 100644
  depends on DRM_XE
  depends on EXPERT
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 7d7367d97..3c8c6e658 100644
+index abcda9480..666d7aa40 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -137,6 +137,9 @@ xe-y += xe_bb.o \
- 	xe_wopcm.o
+@@ -145,6 +145,8 @@ xe-$(CONFIG_I2C)	+= xe_i2c.o
+ xe-$(CONFIG_DRM_XE_GPUSVM) += xe_svm.o
+ xe-$(CONFIG_DRM_GPUSVM) += xe_userptr.o
  
- xe-$(CONFIG_I2C)	+= xe_i2c.o
-+
 +xe-$(CONFIG_DRM_XE_EUDEBUG) += xe_eudebug.o
 +
- xe-$(CONFIG_HMM_MIRROR) += xe_hmm.o
- xe-$(CONFIG_DRM_XE_GPUSVM) += xe_svm.o
+ # graphics hardware monitoring (HWMON) support
+ xe-$(CONFIG_HWMON) += xe_hwmon.o
  
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 20cd2c301..01d98e837 100644
+index 0f6075ffe..7df96f67e 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -30,6 +30,7 @@
@@ -127,7 +126,7 @@ index 20cd2c301..01d98e837 100644
  #include "xe_exec.h"
  #include "xe_exec_queue.h"
  #include "xe_force_wake.h"
-@@ -110,6 +111,8 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
+@@ -114,6 +115,8 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
  		put_task_struct(task);
  	}
  
@@ -136,7 +135,7 @@ index 20cd2c301..01d98e837 100644
  	return 0;
  }
  
-@@ -163,6 +166,8 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -167,6 +170,8 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  
  	xe_pm_runtime_get(xe);
  
@@ -145,15 +144,15 @@ index 20cd2c301..01d98e837 100644
  	/*
  	 * No need for exec_queue.lock here as there is no contention for it
  	 * when FD is closing as IOCTLs presumably can't be modifying the
-@@ -201,6 +206,7 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
+@@ -205,6 +210,7 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
  	DRM_IOCTL_DEF_DRV(XE_WAIT_USER_FENCE, xe_wait_user_fence_ioctl,
  			  DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_OBSERVATION, xe_observation_ioctl, DRM_RENDER_ALLOW),
 +	DRM_IOCTL_DEF_DRV(XE_EUDEBUG_CONNECT, xe_eudebug_connect_ioctl, DRM_RENDER_ALLOW),
- };
- 
- static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-@@ -395,6 +401,8 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
+ 	DRM_IOCTL_DEF_DRV(XE_MADVISE, xe_vm_madvise_ioctl, DRM_RENDER_ALLOW),
+ 	DRM_IOCTL_DEF_DRV(XE_VM_QUERY_MEM_RANGE_ATTRS, xe_vm_query_vmas_attrs_ioctl,
+ 			  DRM_RENDER_ALLOW),
+@@ -402,6 +408,8 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
  {
  	struct xe_device *xe = to_xe_device(dev);
  
@@ -162,7 +161,7 @@ index 20cd2c301..01d98e837 100644
  	xe_bo_dev_fini(&xe->bo_device);
  
  	if (xe->preempt_fence_wq)
-@@ -477,6 +485,8 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
+@@ -484,6 +492,8 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
  	if (err)
  		goto err;
  
@@ -172,10 +171,10 @@ index 20cd2c301..01d98e837 100644
  						       WQ_MEM_RECLAIM);
  	xe->ordered_wq = alloc_ordered_workqueue("xe-ordered-wq", 0);
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index b25dba91d..7622641f4 100644
+index 9e3666a22..f6bb9ffcd 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -397,6 +397,17 @@ struct xe_device {
+@@ -403,6 +403,17 @@ struct xe_device {
  		struct workqueue_struct *wq;
  	} sriov;
  
@@ -193,22 +192,23 @@ index b25dba91d..7622641f4 100644
  	/** @usm: unified memory state */
  	struct {
  		/** @usm.asid: convert a ASID to VM */
-@@ -593,6 +604,23 @@ struct xe_device {
+@@ -603,6 +614,24 @@ struct xe_device {
+ 	 */
  	atomic64_t global_total_pages;
  #endif
- 
++
 +#if IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)
 +	/** @debugger connection list and globals for device */
 +	struct {
 +		/** @lock: protects the list of connections */
 +		spinlock_t lock;
-+	
++
 +		/** @list: list of connections, aka debuggers */
 +		struct list_head list;
-+	
++
 +		/** @session_count: session counter to track connections */
 +		u64 session_count;
-+	
++
 +		/** @available: is the debugging functionality available */
 +		bool available;
 +	} eudebug;
@@ -217,7 +217,7 @@ index b25dba91d..7622641f4 100644
  	/** @val: The domain for exhaustive eviction, which is currently per device. */
  	struct xe_validation_device val;
  
-@@ -693,6 +721,13 @@ struct xe_file {
+@@ -717,6 +746,13 @@ struct xe_file {
  
  	/** @refcount: ref count of this xe file */
  	struct kref refcount;
@@ -1605,7 +1605,7 @@ index 000000000..9af1825eb
 +
 +#endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index c8e9b3b83..2a536010d 100644
+index e15fd9bfc..3c2904f82 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -26,6 +26,7 @@
@@ -1616,7 +1616,7 @@ index c8e9b3b83..2a536010d 100644
  #include "xe_exec_queue.h"
  #include "xe_gt_pagefault.h"
  #include "xe_migrate.h"
-@@ -2210,6 +2211,8 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
+@@ -1955,6 +1956,8 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
  
  	args->vm_id = id;
  
@@ -1625,7 +1625,7 @@ index c8e9b3b83..2a536010d 100644
  	return 0;
  
  err_close_and_put:
-@@ -2241,8 +2244,10 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
+@@ -1986,8 +1989,10 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
  		xa_erase(&xef->vm.xa, args->vm_id);
  	mutex_unlock(&xef->vm.lock);
  
@@ -1638,27 +1638,27 @@ index c8e9b3b83..2a536010d 100644
  	return err;
  }
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index e24264134..a7fa437fd 100644
+index 400555a8a..5bd2147e4 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
-@@ -102,6 +102,7 @@ extern "C" {
- #define DRM_XE_EXEC			0x09
- #define DRM_XE_WAIT_USER_FENCE		0x0a
+@@ -106,6 +106,7 @@ extern "C" {
  #define DRM_XE_OBSERVATION		0x0b
+ #define DRM_XE_MADVISE			0x0c
+ #define DRM_XE_VM_QUERY_MEM_RANGE_ATTRS	0x0d
 +#define DRM_XE_EUDEBUG_CONNECT		0x0e
  
  /* Must be kept compact -- no holes */
  
-@@ -117,6 +118,7 @@ extern "C" {
- #define DRM_IOCTL_XE_EXEC			DRM_IOW(DRM_COMMAND_BASE + DRM_XE_EXEC, struct drm_xe_exec)
- #define DRM_IOCTL_XE_WAIT_USER_FENCE		DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_WAIT_USER_FENCE, struct drm_xe_wait_user_fence)
+@@ -123,6 +124,7 @@ extern "C" {
  #define DRM_IOCTL_XE_OBSERVATION		DRM_IOW(DRM_COMMAND_BASE + DRM_XE_OBSERVATION, struct drm_xe_observation_param)
+ #define DRM_IOCTL_XE_MADVISE			DRM_IOW(DRM_COMMAND_BASE + DRM_XE_MADVISE, struct drm_xe_madvise)
+ #define DRM_IOCTL_XE_VM_QUERY_MEM_RANGE_ATTRS	DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_VM_QUERY_MEM_RANGE_ATTRS, struct drm_xe_vm_query_mem_range_attr)
 +#define DRM_IOCTL_XE_EUDEBUG_CONNECT		DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_EUDEBUG_CONNECT, struct drm_xe_eudebug_connect)
  
  /**
   * DOC: Xe IOCTL Extensions
-@@ -1974,6 +1976,25 @@ struct drm_xe_query_eu_stall {
- 	__u64 sampling_rates[];
+@@ -2270,6 +2272,25 @@ struct drm_xe_vm_query_mem_range_attr {
+ 
  };
  
 +/*

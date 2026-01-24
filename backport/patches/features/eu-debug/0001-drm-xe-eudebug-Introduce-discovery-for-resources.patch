@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Tue, 31 Jan 2023 11:40:42 +0200
-Subject: [PATCH] drm/xe/eudebug: Introduce discovery for resources
+Subject: drm/xe/eudebug: Introduce discovery for resources
 
 Debugger connection can happen way after the client has
 created and destroyed arbitrary number of resources.
@@ -34,10 +34,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  5 files changed, 185 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 01d98e837e3f..5f530e50b754 100644
+index 7df96f67e..035e16e57 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -219,8 +219,11 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+@@ -226,8 +226,11 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
  		return -ECANCELED;
  
  	ret = xe_pm_runtime_get_ioctl(xe);
@@ -50,7 +50,7 @@ index 01d98e837e3f..5f530e50b754 100644
  	xe_pm_runtime_put(xe);
  
  	return ret;
-@@ -237,8 +240,11 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
+@@ -244,8 +247,11 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
  		return -ECANCELED;
  
  	ret = xe_pm_runtime_get_ioctl(xe);
@@ -64,7 +64,7 @@ index 01d98e837e3f..5f530e50b754 100644
  
  	return ret;
 diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
-index bc802e066a7d..fbe2b63fbb42 100644
+index 32cc6323b..3d32b48b2 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
 @@ -7,6 +7,7 @@
@@ -75,7 +75,7 @@ index bc802e066a7d..fbe2b63fbb42 100644
  
  #include "xe_device_types.h"
  #include "xe_gt_types.h"
-@@ -208,4 +209,37 @@ int xe_is_injection_active(void);
+@@ -209,4 +210,37 @@ int xe_is_injection_active(void);
  #define LNL_FLUSH_WORK(wrk__) \
  	flush_work(wrk__)
  
@@ -114,11 +114,11 @@ index bc802e066a7d..fbe2b63fbb42 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index d3a59fe9d8e1..929639469c57 100644
+index f6bb9ffcd..a777aa5c4 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -613,6 +613,12 @@ struct xe_device {
- 	
+@@ -629,6 +629,12 @@ struct xe_device {
+ 
  		/** @available: is the debugging functionality available */
  		bool available;
 +
@@ -131,7 +131,7 @@ index d3a59fe9d8e1..929639469c57 100644
  #endif
  
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 79b25f6bb5be..7fb865e3fe7c 100644
+index 79b25f6bb..7fb865e3f 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -311,6 +311,8 @@ static bool xe_eudebug_detach(struct xe_device *xe,
@@ -365,7 +365,7 @@ index 79b25f6bb5be..7fb865e3fe7c 100644
 +	xe_eudebug_put(d);
 +}
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index 9af1825ebfbd..e55e59e598af 100644
+index 9af1825eb..e55e59e59 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
 @@ -20,6 +20,7 @@

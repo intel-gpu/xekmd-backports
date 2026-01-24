@@ -47,7 +47,7 @@ Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
 Acked-by: Simona Vetter <simona.vetter@ffwll.ch>
 Reviewed-by: Maarten Lankhorst <maarten.lankhorst@linux.intel.com>
 Link: https://lore.kernel.org/r/20250918092207.54472-4-thomas.hellstrom@linux.intel.com
-(backported from commit df636bf2836644667c632864e25878bd928154f7 linux-next)
+(cherry-picked from commit df636bf2836644667c632864e25878bd928154f7 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/tests/xe_dma_buf.c | 17 +++++++++--
@@ -55,18 +55,18 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  2 files changed, 41 insertions(+), 17 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/tests/xe_dma_buf.c b/drivers/gpu/drm/xe/tests/xe_dma_buf.c
-index 121f17c11..69673c5f0 100644
+index a7e548a2b..5df98de5b 100644
 --- a/drivers/gpu/drm/xe/tests/xe_dma_buf.c
 +++ b/drivers/gpu/drm/xe/tests/xe_dma_buf.c
-@@ -30,6 +30,7 @@ static void check_residency(struct kunit *test, struct xe_bo *exported,
- 			    struct xe_bo *imported, struct dma_buf *dmabuf)
+@@ -31,6 +31,7 @@ static void check_residency(struct kunit *test, struct xe_bo *exported,
+ 			    struct drm_exec *exec)
  {
  	struct dma_buf_test_params *params = to_dma_buf_test_params(test->priv);
 +	struct dma_buf_attachment *attach;
  	u32 mem_type;
  	int ret;
  
-@@ -45,7 +46,7 @@ static void check_residency(struct kunit *test, struct xe_bo *exported,
+@@ -46,7 +47,7 @@ static void check_residency(struct kunit *test, struct xe_bo *exported,
  		mem_type = XE_PL_TT;
  	else if (params->force_different_devices && !is_dynamic(params) &&
  		 (params->mem_mask & XE_BO_FLAG_SYSTEM))
@@ -75,7 +75,7 @@ index 121f17c11..69673c5f0 100644
  		mem_type = XE_PL_TT;
  
  	if (!xe_bo_is_mem_type(exported, mem_type)) {
-@@ -91,6 +92,18 @@ static void check_residency(struct kunit *test, struct xe_bo *exported,
+@@ -88,6 +89,18 @@ static void check_residency(struct kunit *test, struct xe_bo *exported,
  
  	KUNIT_EXPECT_TRUE(test, xe_bo_is_mem_type(exported, mem_type));
  
@@ -94,9 +94,9 @@ index 121f17c11..69673c5f0 100644
  	if (params->force_different_devices)
  		KUNIT_EXPECT_TRUE(test, xe_bo_is_mem_type(imported, XE_PL_TT));
  	else
-@@ -151,7 +164,7 @@ static void xe_test_dmabuf_import_same_driver(struct xe_device *xe)
+@@ -150,7 +163,7 @@ static void xe_test_dmabuf_import_same_driver(struct xe_device *xe)
  			xe_bo_lock(import_bo, false);
- 			err = xe_bo_validate(import_bo, NULL, false);
+ 			err = xe_bo_validate(import_bo, NULL, false, exec);
  
 -			/* Pinning in VRAM is not allowed. */
 +			/* Pinning in VRAM is not allowed for non-dynamic attachments */
@@ -104,10 +104,10 @@ index 121f17c11..69673c5f0 100644
  			    params->force_different_devices &&
  			    !(params->mem_mask & XE_BO_FLAG_SYSTEM))
 diff --git a/drivers/gpu/drm/xe/xe_dma_buf.c b/drivers/gpu/drm/xe/xe_dma_buf.c
-index af64baf87..34a3e0711 100644
+index 2650c5abb..7c74a31d4 100644
 --- a/drivers/gpu/drm/xe/xe_dma_buf.c
 +++ b/drivers/gpu/drm/xe/xe_dma_buf.c
-@@ -48,31 +48,42 @@ static void xe_dma_buf_detach(struct dma_buf *dmabuf,
+@@ -48,32 +48,43 @@ static void xe_dma_buf_detach(struct dma_buf *dmabuf,
  
  static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
  {
@@ -116,6 +116,7 @@ index af64baf87..34a3e0711 100644
 +	struct drm_gem_object *obj = dmabuf->priv;
  	struct xe_bo *bo = gem_to_xe_bo(obj);
  	struct xe_device *xe = xe_bo_device(bo);
+ 	struct drm_exec *exec = XE_VALIDATION_UNSUPPORTED;
 +	bool allow_vram = true;
  	int ret;
  
@@ -137,12 +138,12 @@ index af64baf87..34a3e0711 100644
 +	}
 +
 +	if (xe_bo_is_pinned(bo) && !xe_bo_is_mem_type(bo, XE_PL_TT) &&
-+			!(xe_bo_is_vram(bo) && allow_vram)) {
++	    !(xe_bo_is_vram(bo) && allow_vram)) {
  		drm_dbg(&xe->drm, "Can't migrate pinned bo for dma-buf pin.\n");
  		return -EINVAL;
  	}
  
--	ret = xe_bo_migrate(bo, XE_PL_TT);
+-	ret = xe_bo_migrate(bo, XE_PL_TT, NULL, exec);
 -	if (ret) {
 -		if (ret != -EINTR && ret != -ERESTARTSYS)
 -			drm_dbg(&xe->drm,
@@ -150,7 +151,7 @@ index af64baf87..34a3e0711 100644
 -				ERR_PTR(ret));
 -		return ret;
 +	if (!allow_vram) {
-+		ret = xe_bo_migrate(bo, XE_PL_TT);
++		ret = xe_bo_migrate(bo, XE_PL_TT, NULL, exec);
 +		if (ret) {
 +			if (ret != -EINTR && ret != -ERESTARTSYS)
 +				drm_dbg(&xe->drm,
@@ -160,8 +161,8 @@ index af64baf87..34a3e0711 100644
 +		}
  	}
  
--	ret = xe_bo_pin_external(bo, true);
-+	ret = xe_bo_pin_external(bo, !allow_vram);
+-	ret = xe_bo_pin_external(bo, true, exec);
++	ret = xe_bo_pin_external(bo, !allow_vram, exec);
  	xe_assert(xe, !ret);
  
  	return 0;

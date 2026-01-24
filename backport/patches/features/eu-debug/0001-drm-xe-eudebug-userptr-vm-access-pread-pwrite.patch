@@ -29,17 +29,25 @@ Cc: Joonas Lahtinen <joonas.lahtinen@linux.intel.com>
 Cc: Simona Vetter <simona@ffwll.ch>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(cherry-picked from commit e359dc85ba77ea6df5d090c2f77f12cc28dc02b3 drm-tip-eudebug)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+(cherry-picked from commit dcc18f42c4c7deebfd56d13a67b5b0cbd63cc958 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>`
 ---
- drivers/gpu/drm/xe/xe_eudebug.c | 21 +++++++++++++++++++++
- 1 file changed, 21 insertions(+)
+ drivers/gpu/drm/xe/xe_eudebug.c | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 678ec275302f..dbbe71624958 100644
+index 678ec2753..906b7f7f8 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -3022,6 +3022,27 @@ static int xe_eudebug_vma_access(struct xe_vma *vma,
+@@ -37,6 +37,7 @@
+ #include "xe_rtp.h"
+ #include "xe_sched_job.h"
+ #include "xe_sync.h"
++#include "xe_svm.h"
+ #include "xe_vm.h"
+ #include "xe_wa.h"
+ 
+@@ -3022,6 +3023,27 @@ static int xe_eudebug_vma_access(struct xe_vma *vma,
  
  		xe_bo_put(bo);
  
@@ -50,10 +58,10 @@ index 678ec275302f..dbbe71624958 100644
 +		struct mm_struct *mm = NULL;
 +		int ret;
 +
-+		down_read(&vm->userptr.notifier_lock);
++		xe_svm_notifier_lock(vm);
 +		if (mmget_not_zero(userptr->notifier.mm))
 +			mm = userptr->notifier.mm;
-+		up_read(&vm->userptr.notifier_lock);
++		xe_svm_notifier_unlock(vm);
 +
 +		if (!mm)
 +			return -EFAULT;

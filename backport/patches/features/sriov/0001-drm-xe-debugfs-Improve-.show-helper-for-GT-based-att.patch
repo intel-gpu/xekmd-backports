@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 19 Sep 2025 18:04:30 +0200
-Subject: [PATCH 02/12] drm/xe/debugfs: Improve .show() helper for GT-based
+Subject: drm/xe/debugfs: Improve .show() helper for GT-based
  attributes
 
 Like we did for tile-based attributes, introduce separate show()
@@ -15,12 +15,12 @@ Link: https://lore.kernel.org/r/20250919160430.573-3-michal.wajdeczko@intel.com
 (backported from commit 0ab7747c2dcea1843dc54533122e577f96ec0223 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
- drivers/gpu/drm/xe/xe_gt_debugfs.c | 117 +++++++++++------------------
+ drivers/gpu/drm/xe/xe_gt_debugfs.c | 116 +++++++++++------------------
  drivers/gpu/drm/xe/xe_gt_debugfs.h |   1 +
- 2 files changed, 46 insertions(+), 72 deletions(-)
+ 2 files changed, 46 insertions(+), 71 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_debugfs.c b/drivers/gpu/drm/xe/xe_gt_debugfs.c
-index ddca876a7553..45a636c1f665 100644
+index e4eba91cb..b9176d439 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_gt_debugfs.c
 @@ -35,6 +35,11 @@
@@ -230,7 +230,7 @@ index ddca876a7553..45a636c1f665 100644
  	return 0;
  }
  
-@@ -266,26 +239,26 @@ static int hwconfig(struct xe_gt *gt, struct drm_printer *p)
+@@ -266,25 +239,26 @@ static int hwconfig(struct xe_gt *gt, struct drm_printer *p)
   * - without access to the PF specific data
   */
  static const struct drm_info_list vf_safe_debugfs_list[] = {
@@ -243,11 +243,10 @@ index ddca876a7553..45a636c1f665 100644
 -	{"default_lrc_bcs", .show = xe_gt_debugfs_simple_show, .data = bcs_default_lrc},
 -	{"default_lrc_vcs", .show = xe_gt_debugfs_simple_show, .data = vcs_default_lrc},
 -	{"default_lrc_vecs", .show = xe_gt_debugfs_simple_show, .data = vecs_default_lrc},
--	{"stats", .show = xe_gt_debugfs_simple_show, .data = xe_gt_stats_print_info},
 -	{"hwconfig", .show = xe_gt_debugfs_simple_show, .data = hwconfig},
 +	{ "topology", .show = xe_gt_debugfs_show_with_rpm, .data = topology },
 +	{ "register-save-restore",
-+			.show = xe_gt_debugfs_show_with_rpm, .data = register_save_restore },
++		.show = xe_gt_debugfs_show_with_rpm, .data = register_save_restore },
 +	{ "workarounds", .show = xe_gt_debugfs_show_with_rpm, .data = workarounds },
 +	{ "tunings", .show = xe_gt_debugfs_show_with_rpm, .data = tunings },
 +	{ "default_lrc_rcs", .show = xe_gt_debugfs_show_with_rpm, .data = rcs_default_lrc },
@@ -274,7 +273,7 @@ index ddca876a7553..45a636c1f665 100644
  
  static ssize_t write_to_gt_call(const char __user *userbuf, size_t count, loff_t *ppos,
 diff --git a/drivers/gpu/drm/xe/xe_gt_debugfs.h b/drivers/gpu/drm/xe/xe_gt_debugfs.h
-index 05a6cc93c78c..32ee3264051b 100644
+index 05a6cc93c..32ee32640 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debugfs.h
 +++ b/drivers/gpu/drm/xe/xe_gt_debugfs.h
 @@ -11,5 +11,6 @@ struct xe_gt;

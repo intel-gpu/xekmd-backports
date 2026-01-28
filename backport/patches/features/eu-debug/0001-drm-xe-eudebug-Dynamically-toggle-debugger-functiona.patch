@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Christoph Manszewski <christoph.manszewski@intel.com>
 Date: Mon, 27 Nov 2023 15:26:52 +0100
-Subject: [PATCH] drm/xe/eudebug: Dynamically toggle debugger functionality
+Subject: drm/xe/eudebug: Dynamically toggle debugger functionality
 
 Make it possible to dynamically enable/disable debugger funtionality,
 including the setting and unsetting of required hw register values via a
@@ -34,10 +34,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  10 files changed, 136 insertions(+), 43 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 153d0a5e4f97..b2bfbcc63dd6 100644
+index b21bf92d3faa..dba8937c8606 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -951,8 +951,6 @@ int xe_device_probe(struct xe_device *xe)
+@@ -960,8 +960,6 @@ int xe_device_probe(struct xe_device *xe)
  
  	xe_debugfs_register(xe);
  
@@ -47,33 +47,34 @@ index 153d0a5e4f97..b2bfbcc63dd6 100644
  	if (err)
  		goto err_unregister_display;
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index d794028a6ea9..f74c30191cbe 100644
+index f78d879e9a0a..56a94db18c27 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -611,15 +611,15 @@ struct xe_device {
+@@ -629,9 +629,6 @@ struct xe_device {
+ 		
  		/** @session_count: session counter to track connections */
  		u64 session_count;
- 	
+-		
 -		/** @available: is the debugging functionality available */
 -		bool available;
--
+ 
  		/** @ordered_wq: used to discovery */
  		struct workqueue_struct *ordered_wq;
- 
+@@ -639,6 +636,9 @@ struct xe_device {
  		/** discovery_lock: used for discovery to block xe ioctls */
  		struct rw_semaphore discovery_lock;
  
 +		/** @enable: is the debugging functionality enabled */
-+		 bool enable;
++		bool enable;
 +
  		/** @attention_scan: attention scan worker */
  		struct delayed_work attention_scan;
  	} eudebug;
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index bd4d252db244..8427a935005c 100644
+index be9ed9280457..a6ca82bc0b58 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -2055,9 +2055,6 @@ xe_eudebug_connect(struct xe_device *xe,
+@@ -2056,9 +2056,6 @@ xe_eudebug_connect(struct xe_device *xe,
  
  	param->version = DRM_XE_EUDEBUG_VERSION;
  
@@ -83,7 +84,7 @@ index bd4d252db244..8427a935005c 100644
  	d = kzalloc(sizeof(*d), GFP_KERNEL);
  	if (!d)
  		return -ENOMEM;
-@@ -2117,56 +2114,142 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
+@@ -2118,56 +2115,142 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
  {
  	struct xe_device *xe = to_xe_device(dev);
  	struct drm_xe_eudebug_connect * const param = data;
@@ -240,7 +241,7 @@ index bd4d252db244..8427a935005c 100644
  	spin_lock_init(&xe->eudebug.lock);
  	INIT_LIST_HEAD(&xe->eudebug.list);
  
-@@ -2176,15 +2259,16 @@ void xe_eudebug_init(struct xe_device *xe)
+@@ -2177,15 +2260,16 @@ void xe_eudebug_init(struct xe_device *xe)
  	INIT_DELAYED_WORK(&xe->eudebug.attention_scan, attention_scan_fn);
  
  	xe->eudebug.ordered_wq = alloc_ordered_workqueue("xe-eudebug-ordered-wq", 0);
@@ -289,10 +290,10 @@ index 3bd729bd0046..a9fa663ff80f 100644
  static inline void xe_eudebug_file_open(struct xe_file *xef) { }
  static inline void xe_eudebug_file_close(struct xe_file *xef) { }
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 3a0af5dfc0a3..a35212d95cfb 100644
+index 7caf44018a1d..2956906f8efc 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -535,6 +535,11 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+@@ -553,6 +553,11 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
  			 !(value & DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)))
  		return -EINVAL;
  

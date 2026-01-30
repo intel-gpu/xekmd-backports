@@ -15,14 +15,14 @@ attention_scan_fn(), ensuring atomic decision making for both event types.
 Signed-off-by: Jan Maslak <jan.maslak@intel.com>
 (cherry-picked from commit ccb563c0d41a76bfce554aefd776475d4c282581 xe-internal)
 ---
- drivers/gpu/drm/xe/prelim/xe_eudebug.c | 37 +++++++++++++++-----------
- 1 file changed, 22 insertions(+), 15 deletions(-)
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c | 38 +++++++++++++++-----------
+ 1 file changed, 22 insertions(+), 16 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
-index e143bf2f6..fea11389b 100644
+index 631e1eb7e..fc1576242 100644
 --- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
-@@ -1753,10 +1753,6 @@ static int xe_eudebug_handle_gt_attention(struct xe_gt *gt)
+@@ -1754,10 +1754,6 @@ static int xe_eudebug_handle_gt_attention(struct xe_gt *gt)
  {
  	int ret;
  
@@ -33,7 +33,7 @@ index e143bf2f6..fea11389b 100644
  	ret = xe_send_gt_attention(gt);
  
  	/* Discovery in progress, fake it */
-@@ -1904,10 +1900,6 @@ static int handle_gt_queued_pagefault(struct xe_gt *gt)
+@@ -1905,10 +1901,6 @@ static int handle_gt_queued_pagefault(struct xe_gt *gt)
  	struct xe_eudebug *d;
  	int ret, lrc_idx;
  
@@ -44,7 +44,7 @@ index e143bf2f6..fea11389b 100644
  	if (list_empty_careful(&gt_to_xe(gt)->eudebug.list))
  		return -ENOTCONN;
  
-@@ -1942,6 +1934,16 @@ static int handle_gt_queued_pagefault(struct xe_gt *gt)
+@@ -1943,6 +1935,16 @@ static int handle_gt_queued_pagefault(struct xe_gt *gt)
  	return ret;
  }
  
@@ -61,7 +61,7 @@ index e143bf2f6..fea11389b 100644
  #define XE_EUDEBUG_ATTENTION_INTERVAL 100
  static void attention_scan_fn(struct work_struct *work)
  {
-@@ -1958,21 +1960,26 @@ static void attention_scan_fn(struct work_struct *work)
+@@ -1959,21 +1961,25 @@ static void attention_scan_fn(struct work_struct *work)
  
  	if (xe_pm_runtime_get_if_active(xe)) {
  		for_each_gt(gt, xe, gt_id) {
@@ -76,7 +76,7 @@ index e143bf2f6..fea11389b 100644
 +			if (!attns_count)
 +				continue;
  
- 			ret = xe_eudebug_handle_gt_attention(gt);
+-			ret = xe_eudebug_handle_gt_attention(gt);
 +			ret = handle_gt_queued_pagefault(gt);
  			if (ret) {
 -				/* TODO: error capture */

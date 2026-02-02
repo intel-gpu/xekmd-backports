@@ -20,10 +20,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  drivers/gpu/drm/xe/regs/xe_gt_regs.h |  1 +
  drivers/gpu/drm/xe/xe_gt_topology.c  | 17 +++++++++++++++++
  drivers/gpu/drm/xe/xe_gt_topology.h  |  2 ++
- drivers/gpu/drm/xe/xe_rtp.c          |  6 ++++++
+ drivers/gpu/drm/xe/xe_rtp.c          |  7 +++++++
  drivers/gpu/drm/xe/xe_rtp.h          |  3 +++
  drivers/gpu/drm/xe/xe_wa.c           |  7 +++++++
- 6 files changed, 36 insertions(+)
+ 6 files changed, 37 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 index 8b115bdc3..d71f42741 100644
@@ -81,33 +81,34 @@ index c8140704a..d95cdd6e4 100644
 +
  #endif /* _XE_GT_TOPOLOGY_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_rtp.c b/drivers/gpu/drm/xe/xe_rtp.c
-index 95571b87a..04400b488 100644
+index 27dff25c7..671275ab3 100644
 --- a/drivers/gpu/drm/xe/xe_rtp.c
 +++ b/drivers/gpu/drm/xe/xe_rtp.c
-@@ -363,3 +363,9 @@ bool xe_rtp_match_not_sriov_vf(const struct xe_gt *gt,
+@@ -363,3 +363,10 @@ bool xe_rtp_match_not_sriov_vf(const struct xe_device *xe,
  {
- 	return !IS_SRIOV_VF(gt_to_xe(gt));
+ 	return !IS_SRIOV_VF(xe);
  }
 +
-+bool xe_rtp_match_gt_has_discontiguous_dss_groups(const struct xe_gt *gt,
++bool xe_rtp_match_gt_has_discontiguous_dss_groups(const struct xe_device *xe,
++						  const struct xe_gt *gt,
 +						  const struct xe_hw_engine *hwe)
 +{
 +	return xe_gt_has_discontiguous_dss_groups(gt);
 +}
 diff --git a/drivers/gpu/drm/xe/xe_rtp.h b/drivers/gpu/drm/xe/xe_rtp.h
-index 5ed6c14b9..b3ff56855 100644
+index 840a22083..14bd7ac79 100644
 --- a/drivers/gpu/drm/xe/xe_rtp.h
 +++ b/drivers/gpu/drm/xe/xe_rtp.h
-@@ -477,4 +477,7 @@ bool xe_rtp_match_first_render_or_compute(const struct xe_gt *gt,
- bool xe_rtp_match_not_sriov_vf(const struct xe_gt *gt,
+@@ -483,4 +483,7 @@ bool xe_rtp_match_not_sriov_vf(const struct xe_device *xe,
+ 			       const struct xe_gt *gt,
  			       const struct xe_hw_engine *hwe);
  
-+bool xe_rtp_match_gt_has_discontiguous_dss_groups(const struct xe_gt *gt,
++bool xe_rtp_match_gt_has_discontiguous_dss_groups(const struct xe_device *xe,
++						  const struct xe_gt *gt,
 +						  const struct xe_hw_engine *hwe);
-+
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_wa.c b/drivers/gpu/drm/xe/xe_wa.c
-index 67d015c14..28bd7c792 100644
+index 943fb7246..8e4318052 100644
 --- a/drivers/gpu/drm/xe/xe_wa.c
 +++ b/drivers/gpu/drm/xe/xe_wa.c
 @@ -599,6 +599,13 @@ static const struct xe_rtp_entry_sr engine_was[] = {

@@ -1,0 +1,141 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:10:04 -0700
+Subject: drm/xe: Break GT setup out of xe_info_init()
+
+xe_info_init() is getting a bit long and hard to follow.  Break the
+allocation and basic initialization of the xe_gt structures out to their
+own functions.
+
+v2:
+ - Rename new functions from init_* to alloc_*.  (Gustavo)
+ - Move early NULL return of media GT before allocation.  (Gustavo)
+
+Cc: Gustavo Sousa <gustavo.sousa@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-46-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit 6675c9e209155fb7a454325760cb5bc5111671f4 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c | 86 ++++++++++++++++++++++---------------
+ 1 file changed, 52 insertions(+), 34 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 452c3efae..6b5719b9b 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -636,6 +636,53 @@ static int xe_info_init_early(struct xe_device *xe,
+ 	return 0;
+ }
+ 
++static struct xe_gt *alloc_primary_gt(struct xe_tile *tile,
++	const struct xe_graphics_desc *graphics_desc,
++	const struct xe_media_desc *media_desc)
++{
++	struct xe_device *xe = tile_to_xe(tile);
++	struct xe_gt *gt;
++
++	gt = xe_gt_alloc(tile);
++	if (IS_ERR(gt))
++		return gt;
++
++	gt->info.type = XE_GT_TYPE_MAIN;
++	gt->info.id = tile->id * xe->info.max_gt_per_tile;
++	gt->info.has_indirect_ring_state = graphics_desc->has_indirect_ring_state;
++	gt->info.engine_mask = graphics_desc->hw_engine_mask;
++
++	/*
++	* Before media version 13, the media IP was part of the primary GT
++	* so we need to add the media engines to the primary GT's engine list.
++	*/
++	if (MEDIA_VER(xe) < 13 && media_desc)
++		gt->info.engine_mask |= media_desc->hw_engine_mask;
++
++	return gt;
++}
++
++static struct xe_gt *alloc_media_gt(struct xe_tile *tile,
++	const struct xe_media_desc *media_desc)
++{
++	struct xe_device *xe = tile_to_xe(tile);
++	struct xe_gt *gt;
++
++	if (MEDIA_VER(xe) < 13 || !media_desc)
++		return NULL;
++
++	gt = xe_gt_alloc(tile);
++	if (IS_ERR(gt))
++		return gt;
++
++	gt->info.type = XE_GT_TYPE_MEDIA;
++	gt->info.id = tile->id * xe->info.max_gt_per_tile + 1;
++	gt->info.has_indirect_ring_state = media_desc->has_indirect_ring_state;
++	gt->info.engine_mask = media_desc->hw_engine_mask;
++
++	return gt;
++}
++
+ /*
+  * Initialize device info content that does require knowledge about
+  * graphics / media IP version.
+@@ -716,50 +763,21 @@ static int xe_info_init(struct xe_device *xe,
+ 			return err;
+ 	}
+ 
+-	/*
+-	 * All platforms have at least one primary GT.  Any platform with media
+-	 * version 13 or higher has an additional dedicated media GT.  And
+-	 * depending on the graphics IP there may be additional "remote tiles."
+-	 * All of these together determine the overall GT count.
+-	 */
++	/* Allocate any GT and VRAM structures necessary for the platform. */
+ 	for_each_tile(tile, xe, id) {
+ 		int err;
+ 
+-		tile->primary_gt = xe_gt_alloc(tile);
+-		if (IS_ERR(tile->primary_gt))
+-			return PTR_ERR(tile->primary_gt);
+-
+-		gt = tile->primary_gt;
+-		gt->info.type = XE_GT_TYPE_MAIN;
+-		gt->info.id = tile->id * xe->info.max_gt_per_tile;
+-		gt->info.has_indirect_ring_state = graphics_desc->has_indirect_ring_state;
+-		gt->info.engine_mask = graphics_desc->hw_engine_mask;
+-		xe->info.gt_count++;
+-
+ 		err = xe_tile_alloc_vram(tile);
+ 		if (err)
+ 			return err;
+ 
+-		if (MEDIA_VER(xe) < 13 && media_desc)
+-			gt->info.engine_mask |= media_desc->hw_engine_mask;
+-
+-		if (MEDIA_VER(xe) < 13 || !media_desc)
+-			continue;
++		tile->primary_gt = alloc_primary_gt(tile, graphics_desc, media_desc);
++		if (IS_ERR(tile->primary_gt))
++			return PTR_ERR(tile->primary_gt);
+ 
+-		/*
+-		 * Allocate and setup media GT for platforms with standalone
+-		 * media.
+-		 */
+-		tile->media_gt = xe_gt_alloc(tile);
++		 tile->media_gt = alloc_media_gt(tile, media_desc);
+ 		if (IS_ERR(tile->media_gt))
+ 			return PTR_ERR(tile->media_gt);
+-
+-		gt = tile->media_gt;
+-		gt->info.type = XE_GT_TYPE_MEDIA;
+-		gt->info.id = tile->id * xe->info.max_gt_per_tile + 1;
+-		gt->info.has_indirect_ring_state = media_desc->has_indirect_ring_state;
+-		gt->info.engine_mask = media_desc->hw_engine_mask;
+-		xe->info.gt_count++;
+ 	}
+ 
+ 	return 0;
+-- 
+2.43.0
+

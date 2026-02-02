@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:09:52 -0700
+Subject: drm/xe: Skip L2 / TDF cache flushes if primary GT is disabled
+
+If the primary GT is disabled via configfs, GT-side L2 and TD cache
+flushes are unnecessary since nothing is using/filling these caches.
+
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-34-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit 082547d8b401f8eef076d18344c267fe1bddb055 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 51a603460..da4ae4392 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -1038,6 +1038,8 @@ void xe_device_l2_flush(struct xe_device *xe)
+ 	unsigned int fw_ref;
+ 
+ 	gt = xe_root_mmio_gt(xe);
++	if (!gt)
++		return;
+ 
+ 	if (!XE_WA(gt, 16023588340))
+ 		return;
+@@ -1083,6 +1085,9 @@ void xe_device_td_flush(struct xe_device *xe)
+ 		return;
+ 
+ 	root_gt = xe_root_mmio_gt(xe);
++	if (!root_gt)
++		return;
++
+ 	if (XE_WA(root_gt, 16023588340)) {
+ 		/* A transient flush is not sufficient: flush the L2 */
+ 		xe_device_l2_flush(xe);
+-- 
+2.43.0
+

@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:10:01 -0700
+Subject: drm/xe: Correct lineage for Wa_22014953428 and only check
+ with valid GT
+
+Wa_22014953428 was incorrectly labelled with a release-specific ID
+number rather than the cross-platform lineage number; fix that.
+Also check that the GT is not NULL before trying to lookup the
+workaround in it.  Since this workaround only applies to DG2 discrete
+GPUs (where the primary GT cannot be disabled), no coverage is lost.
+
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-43-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit 6a913fc86a847f011b22f5d8f8816aabaa48437c linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vm.c         | 3 ++-
+ drivers/gpu/drm/xe/xe_wa_oob.rules | 2 +-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index ed457243e..3d7e9498f 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -2144,6 +2144,7 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
+ 	struct xe_device *xe = to_xe_device(dev);
+ 	struct xe_file *xef = to_xe_file(file);
+ 	struct drm_xe_vm_create *args = data;
++	struct xe_gt *wa_gt = xe_root_mmio_gt(xe);
+ 	struct xe_vm *vm;
+ 	u32 id;
+ 	int err;
+@@ -2152,7 +2153,7 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
+ 	if (XE_IOCTL_DBG(xe, args->extensions))
+ 		return -EINVAL;
+ 
+-	if (XE_WA(xe_root_mmio_gt(xe), 14016763929))
++	if (wa_gt && XE_WA(wa_gt, 22014953428))
+ 		args->flags |= DRM_XE_VM_CREATE_FLAG_SCRATCH_PAGE;
+ 
+ 	if (XE_IOCTL_DBG(xe, args->flags & DRM_XE_VM_CREATE_FLAG_FAULT_MODE &&
+diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
+index fee296d4f..3b6d6797b 100644
+--- a/drivers/gpu/drm/xe/xe_wa_oob.rules
++++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
+@@ -9,7 +9,7 @@
+ 18020744125	PLATFORM(PVC)
+ 1509372804	PLATFORM(PVC), GRAPHICS_STEP(A0, C0)
+ 1409600907	GRAPHICS_VERSION_RANGE(1200, 1250)
+-14016763929	SUBPLATFORM(DG2, G10)
++22014953428	SUBPLATFORM(DG2, G10)
+ 		SUBPLATFORM(DG2, G12)
+ 16017236439	PLATFORM(PVC)
+ 14019821291	MEDIA_VERSION_RANGE(1300, 2000)
+-- 
+2.43.0
+

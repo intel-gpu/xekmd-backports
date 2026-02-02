@@ -81,7 +81,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  1 file changed, 24 insertions(+), 12 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
-index 0caa18a11..3df48b37c 100644
+index d7a680cf6..3df48b37c 100644
 --- a/drivers/gpu/drm/xe/xe_bo.c
 +++ b/drivers/gpu/drm/xe/xe_bo.c
 @@ -1716,6 +1716,24 @@ static void xe_gem_object_close(struct drm_gem_object *obj,
@@ -135,7 +135,7 @@ index 0caa18a11..3df48b37c 100644
  			break;
  		}
  
--		lerr = dma_resv_wait_timeout(tbo->base.resv
+-		lerr = dma_resv_wait_timeout(tbo->base.resv,
 -				DMA_RESV_USAGE_KERNEL, true,
 -				MAX_SCHEDULE_TIMEOUT);
 -		if (lerr < 0) {

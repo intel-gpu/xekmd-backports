@@ -1,0 +1,91 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:09:56 -0700
+Subject: drm/xe: Make display part of Wa_22019338487 a device
+ workaround
+
+The display part of Wa_22019338487 (i.e., avoiding use of stolen memory)
+is using a platform test rather than an graphics/media IP test.  Since
+this workaround is focused on non-GT uses of stolen memory, it makes
+sense that we'd want to still apply the workaround on affected platforms
+even if the GTs themselves are disabled via configfs.
+
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-38-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit 886e5b6e5c96be7202bff2f8032157bd172e0927 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/display/intel_fbdev_fb.c   | 4 ++--
+ drivers/gpu/drm/xe/display/xe_plane_initial.c | 4 ++--
+ drivers/gpu/drm/xe/xe_device_wa_oob.rules     | 1 +
+ drivers/gpu/drm/xe/xe_wa_oob.rules            | 1 -
+ 4 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/display/intel_fbdev_fb.c b/drivers/gpu/drm/xe/display/intel_fbdev_fb.c
+index 96ad1c100..f49e9b928 100644
+--- a/drivers/gpu/drm/xe/display/intel_fbdev_fb.c
++++ b/drivers/gpu/drm/xe/display/intel_fbdev_fb.c
+@@ -13,7 +13,7 @@
+ #include "xe_ttm_stolen_mgr.h"
+ #include "xe_wa.h"
+ 
+-#include <generated/xe_wa_oob.h>
++#include <generated/xe_device_wa_oob.h>
+ 
+ struct intel_framebuffer *intel_fbdev_fb_alloc(struct drm_device *drm,
+ 					       struct drm_mode_fb_cmd2 *mode_cmd)
+@@ -27,7 +27,7 @@ struct intel_framebuffer *intel_fbdev_fb_alloc(struct drm_device *drm,
+ 	size = PAGE_ALIGN(size);
+ 	obj = ERR_PTR(-ENODEV);
+ 
+-	if (!IS_DGFX(xe) && !XE_WA(xe_root_mmio_gt(xe), 22019338487_display)) {
++	if (!IS_DGFX(xe) && !XE_DEVICE_WA(xe, 22019338487_display)) {
+ 		obj = xe_bo_create_pin_map(xe, xe_device_get_root_tile(xe),
+ 					   NULL, size,
+ 					   ttm_bo_type_kernel, XE_BO_FLAG_SCANOUT |
+diff --git a/drivers/gpu/drm/xe/display/xe_plane_initial.c b/drivers/gpu/drm/xe/display/xe_plane_initial.c
+index b2d27458d..8ca210fbc 100644
+--- a/drivers/gpu/drm/xe/display/xe_plane_initial.c
++++ b/drivers/gpu/drm/xe/display/xe_plane_initial.c
+@@ -24,7 +24,7 @@
+ #include "xe_vram_types.h"
+ #include "xe_wa.h"
+ 
+-#include <generated/xe_wa_oob.h>
++#include <generated/xe_device_wa_oob.h>
+ 
+ void intel_plane_initial_vblank_wait(struct intel_crtc *crtc)
+ {
+@@ -122,7 +122,7 @@ initial_plane_bo(struct xe_device *xe,
+ 		phys_base = base;
+ 		flags |= XE_BO_FLAG_STOLEN;
+ 
+-		if (XE_WA(xe_root_mmio_gt(xe), 22019338487_display))
++		if (XE_DEVICE_WA(xe, 22019338487_display))
+ 			return NULL;
+ 
+ 		/*
+diff --git a/drivers/gpu/drm/xe/xe_device_wa_oob.rules b/drivers/gpu/drm/xe/xe_device_wa_oob.rules
+index 3a0c4ccc4..3cc93f0e7 100644
+--- a/drivers/gpu/drm/xe/xe_device_wa_oob.rules
++++ b/drivers/gpu/drm/xe/xe_device_wa_oob.rules
+@@ -1,2 +1,3 @@
+ 15015404425     PLATFORM(LUNARLAKE)
+ 		PLATFORM(PANTHERLAKE)
++22019338487_display	PLATFORM(LUNARLAKE)
+diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
+index 3646ce768..d569b37b4 100644
+--- a/drivers/gpu/drm/xe/xe_wa_oob.rules
++++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
+@@ -43,7 +43,6 @@
+ 22019338487	MEDIA_VERSION(2000)
+ 		GRAPHICS_VERSION(2001), FUNC(xe_rtp_match_not_sriov_vf)
+ 		MEDIA_VERSION(3000), MEDIA_STEP(A0, B0), FUNC(xe_rtp_match_not_sriov_vf)
+-22019338487_display	PLATFORM(LUNARLAKE)
+ 16023588340	GRAPHICS_VERSION(2001), FUNC(xe_rtp_match_not_sriov_vf)
+ 14019789679	GRAPHICS_VERSION(1255)
+ 		GRAPHICS_VERSION_RANGE(1270, 2004)
+-- 
+2.43.0
+

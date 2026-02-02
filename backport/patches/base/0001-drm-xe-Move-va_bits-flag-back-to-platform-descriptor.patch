@@ -1,0 +1,202 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:09:46 -0700
+Subject: drm/xe: Move 'va_bits' flag back to platform descriptor
+
+The number of virtual address bits is something that should be tracked
+at the platform level rather than the IP level.  Even when mixing and
+matching various graphics, media, and display IP blocks, the platform as
+a whole has to have consistent page table handling.  This is also a
+trait that should be tied to the platform even if the graphics IP itself
+is not present (e.g., if we disable the primary GT via configfs).
+
+v2:
+ - Drop the default value of 48 and explicitly set it in each relevant
+   descriptor.  (Lucas, Michal)
+v3:
+ - Drop an outdated comment about default value.  (Michal)
+
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-28-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit a3bcaf11f410583826e6f7769cf07091bbd0888f linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c       | 21 +++++++++++++++------
+ drivers/gpu/drm/xe/xe_pci_types.h |  2 +-
+ 2 files changed, 16 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 87be49c34..4ad7cd4c0 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -50,13 +50,11 @@ __diag_ignore_all("-Woverride-init", "Allow field overrides in table");
+ static const struct xe_graphics_desc graphics_xelp = {
+ 	.hw_engine_mask = BIT(XE_HW_ENGINE_RCS0) | BIT(XE_HW_ENGINE_BCS0),
+ 
+-	.va_bits = 48,
+ 	.vm_max_level = 3,
+ };
+ 
+ #define XE_HP_FEATURES \
+ 	.has_range_tlb_invalidation = true, \
+-	.va_bits = 48, \
+ 	.vm_max_level = 3
+ 
+ static const struct xe_graphics_desc graphics_xehpg = {
+@@ -82,7 +80,6 @@ static const struct xe_graphics_desc graphics_xehpc = {
+ 		BIT(XE_HW_ENGINE_CCS2) | BIT(XE_HW_ENGINE_CCS3),
+ 
+ 	XE_HP_FEATURES,
+-	.va_bits = 57,
+ 	.vm_max_level = 4,
+ 	.vram_flags = XE_VRAM_FLAGS_NEED64K,
+ 
+@@ -106,7 +103,6 @@ static const struct xe_graphics_desc graphics_xelpg = {
+ 	.has_range_tlb_invalidation = 1, \
+ 	.has_usm = 1, \
+ 	.has_64bit_timestamp = 1, \
+-	.va_bits = 48, \
+ 	.vm_max_level = 4, \
+ 	.hw_engine_mask = \
+ 		BIT(XE_HW_ENGINE_RCS0) | \
+@@ -171,6 +167,7 @@ static const struct xe_device_desc tgl_desc = {
+ 	.has_llc = true,
+ 	.max_gt_per_tile = 1,
+ 	.require_force_probe = true,
++	.va_bits = 48,
+ };
+ 
+ static const struct xe_device_desc rkl_desc = {
+@@ -182,6 +179,7 @@ static const struct xe_device_desc rkl_desc = {
+ 	.has_llc = true,
+ 	.max_gt_per_tile = 1,
+ 	.require_force_probe = true,
++	.va_bits = 48,
+ };
+ 
+ static const u16 adls_rpls_ids[] = { INTEL_RPLS_IDS(NOP), 0 };
+@@ -199,6 +197,7 @@ static const struct xe_device_desc adl_s_desc = {
+ 		{ XE_SUBPLATFORM_ALDERLAKE_S_RPLS, "RPLS", adls_rpls_ids },
+ 		{},
+ 	},
++	.va_bits = 48,
+ };
+ 
+ static const u16 adlp_rplu_ids[] = { INTEL_RPLU_IDS(NOP), 0 };
+@@ -216,6 +215,7 @@ static const struct xe_device_desc adl_p_desc = {
+ 		{ XE_SUBPLATFORM_ALDERLAKE_P_RPLU, "RPLU", adlp_rplu_ids },
+ 		{},
+ 	},
++	.va_bits = 48,
+ };
+ 
+ static const struct xe_device_desc adl_n_desc = {
+@@ -227,6 +227,7 @@ static const struct xe_device_desc adl_n_desc = {
+ 	.has_llc = true,
+ 	.max_gt_per_tile = 1,
+ 	.require_force_probe = true,
++	.va_bits = 48,
+ };
+ 
+ #define DGFX_FEATURES \
+@@ -243,6 +244,7 @@ static const struct xe_device_desc dg1_desc = {
+ 	.has_heci_gscfi = 1,
+ 	.max_gt_per_tile = 1,
+ 	.require_force_probe = true,
++	.va_bits = 48,
+ };
+ 
+ static const u16 dg2_g10_ids[] = { INTEL_DG2_G10_IDS(NOP), INTEL_ATS_M150_IDS(NOP), 0 };
+@@ -259,7 +261,8 @@ static const u16 dg2_g12_ids[] = { INTEL_DG2_G12_IDS(NOP), 0 };
+ 		{ XE_SUBPLATFORM_DG2_G11, "G11", dg2_g11_ids }, \
+ 		{ XE_SUBPLATFORM_DG2_G12, "G12", dg2_g12_ids }, \
+ 		{ } \
+-	}
++	}, \
++	.va_bits = 48
+ 
+ static const struct xe_device_desc ats_m_desc = {
+ 	.pre_gmdid_graphics_ip = &graphics_ip_xehpg,
+@@ -296,6 +299,7 @@ static const __maybe_unused struct xe_device_desc pvc_desc = {
+ 	.max_gt_per_tile = 1,
+ 	.max_remote_tiles = 1,
+ 	.require_force_probe = true,
++	.va_bits = 57,
+ 	.has_mbx_power_limits = false,
+ };
+ 
+@@ -307,6 +311,7 @@ static const struct xe_device_desc mtl_desc = {
+ 	.has_display = true,
+ 	.has_pxp = true,
+ 	.max_gt_per_tile = 2,
++	.va_bits = 48,
+ };
+ 
+ static const struct xe_device_desc lnl_desc = {
+@@ -316,6 +321,7 @@ static const struct xe_device_desc lnl_desc = {
+ 	.has_pxp = true,
+ 	.max_gt_per_tile = 2,
+ 	.needs_scratch = true,
++	.va_bits = 48,
+ };
+ 
+ static const struct xe_device_desc bmg_desc = {
+@@ -330,6 +336,7 @@ static const struct xe_device_desc bmg_desc = {
+ 	.has_sriov = true,
+ 	.max_gt_per_tile = 2,
+ 	.needs_scratch = true,
++	.va_bits = 48,
+ };
+ 
+ static const struct xe_device_desc ptl_desc = {
+@@ -339,6 +346,7 @@ static const struct xe_device_desc ptl_desc = {
+ 	.has_sriov = true,
+ 	.max_gt_per_tile = 2,
+ 	.needs_scratch = true,
++	.va_bits = 48,
+ };
+ 
+ #undef PLATFORM
+@@ -569,6 +577,8 @@ static int xe_info_init_early(struct xe_device *xe,
+ 		subplatform_desc->subplatform : XE_SUBPLATFORM_NONE;
+ 
+ 	xe->info.dma_mask_size = desc->dma_mask_size;
++	xe->info.va_bits = desc->va_bits;
++
+ 	xe->info.is_dgfx = desc->is_dgfx;
+ 	xe->info.has_fan_control = desc->has_fan_control;
+ 	xe->info.has_mbx_power_limits = desc->has_mbx_power_limits;
+@@ -659,7 +669,6 @@ static int xe_info_init(struct xe_device *xe,
+ 	}
+ 
+ 	xe->info.vram_flags = graphics_desc->vram_flags;
+-	xe->info.va_bits = graphics_desc->va_bits;
+ 	xe->info.vm_max_level = graphics_desc->vm_max_level;
+ 	xe->info.has_asid = graphics_desc->has_asid;
+ 	xe->info.has_atomic_enable_pte_bit = graphics_desc->has_atomic_enable_pte_bit;
+diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
+index 4de6f69ed..aca165337 100644
+--- a/drivers/gpu/drm/xe/xe_pci_types.h
++++ b/drivers/gpu/drm/xe/xe_pci_types.h
+@@ -30,6 +30,7 @@ struct xe_device_desc {
+ 	u8 dma_mask_size;
+ 	u8 max_remote_tiles:2;
+ 	u8 max_gt_per_tile:2;
++	u8 va_bits;
+ 
+ 	u8 require_force_probe:1;
+ 	u8 is_dgfx:1;
+@@ -50,7 +51,6 @@ struct xe_device_desc {
+ };
+ 
+ struct xe_graphics_desc {
+-	u8 va_bits;
+ 	u8 vm_max_level;
+ 	u8 vram_flags;
+ 
+-- 
+2.43.0
+

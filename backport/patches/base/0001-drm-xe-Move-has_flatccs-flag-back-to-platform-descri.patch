@@ -1,0 +1,117 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:09:49 -0700
+Subject: drm/xe: Move 'has_flatccs' flag back to platform descriptor
+
+FlatCCS presence/absence is a flag that should be tracked at the
+platform level rather than the IP level.  FlatCCS affects the
+device-wide memory initialization and reservations so its effects are
+not confined to a single IP block or GT.  This is also a trait that
+should be tied to the platform even if the graphics IP itself is not
+present (e.g., if we disable the primary GT via configfs).
+
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-31-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit 1a28651c0627add7928c47407d6a9b18a1a81c37 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c       | 12 ++++++------
+ drivers/gpu/drm/xe/xe_pci_types.h |  2 +-
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 475f8da63..0c2ae2ff1 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -61,8 +61,6 @@ static const struct xe_graphics_desc graphics_xehpg = {
+ 		BIT(XE_HW_ENGINE_CCS2) | BIT(XE_HW_ENGINE_CCS3),
+ 
+ 	XE_HP_FEATURES,
+-
+-	.has_flat_ccs = 1,
+ };
+ 
+ static const struct xe_graphics_desc graphics_xehpc = {
+@@ -93,7 +91,6 @@ static const struct xe_graphics_desc graphics_xelpg = {
+ #define XE2_GFX_FEATURES \
+ 	.has_asid = 1, \
+ 	.has_atomic_enable_pte_bit = 1, \
+-	.has_flat_ccs = 1, \
+ 	.has_range_tlb_invalidation = 1, \
+ 	.has_usm = 1, \
+ 	.has_64bit_timestamp = 1, \
+@@ -253,6 +250,7 @@ static const u16 dg2_g12_ids[] = { INTEL_DG2_G12_IDS(NOP), 0 };
+ #define DG2_FEATURES \
+ 	DGFX_FEATURES, \
+ 	PLATFORM(DG2), \
++	.has_flat_ccs = 1, \
+ 	.has_gsc_nvm = 1, \
+ 	.has_heci_gscfi = 1, \
+ 	.subplatforms = (const struct xe_subplatform_desc[]) { \
+@@ -322,6 +320,7 @@ static const struct xe_device_desc lnl_desc = {
+ 	PLATFORM(LUNARLAKE),
+ 	.dma_mask_size = 46,
+ 	.has_display = true,
++	.has_flat_ccs = 1,
+ 	.has_pxp = true,
+ 	.max_gt_per_tile = 2,
+ 	.needs_scratch = true,
+@@ -335,6 +334,7 @@ static const struct xe_device_desc bmg_desc = {
+ 	.dma_mask_size = 46,
+ 	.has_display = true,
+ 	.has_fan_control = true,
++	.has_flat_ccs = 1,
+ 	.has_mbx_power_limits = true,
+ 	.has_gsc_nvm = 1,
+ 	.has_heci_cscfi = 1,
+@@ -349,6 +349,7 @@ static const struct xe_device_desc ptl_desc = {
+ 	PLATFORM(PANTHERLAKE),
+ 	.dma_mask_size = 46,
+ 	.has_display = true,
++	.has_flat_ccs = 1,
+ 	.has_sriov = true,
+ 	.max_gt_per_tile = 2,
+ 	.needs_scratch = true,
+@@ -590,6 +591,8 @@ static int xe_info_init_early(struct xe_device *xe,
+ 
+ 	xe->info.is_dgfx = desc->is_dgfx;
+ 	xe->info.has_fan_control = desc->has_fan_control;
++	/* runtime fusing may force flat_ccs to disabled later */
++	xe->info.has_flat_ccs = desc->has_flat_ccs;
+ 	xe->info.has_mbx_power_limits = desc->has_mbx_power_limits;
+ 	xe->info.has_gsc_nvm = desc->has_gsc_nvm;
+ 	xe->info.has_heci_gscfi = desc->has_heci_gscfi;
+@@ -682,9 +685,6 @@ static int xe_info_init(struct xe_device *xe,
+ 	if (xe->info.platform != XE_PVC)
+ 		xe->info.has_device_atomics_on_smem = 1;
+ 
+-	/* Runtime detection may change this later */
+-	xe->info.has_flat_ccs = graphics_desc->has_flat_ccs;
+-
+ 	xe->info.has_range_tlb_invalidation = graphics_desc->has_range_tlb_invalidation;
+ 	xe->info.has_usm = graphics_desc->has_usm;
+ 	xe->info.has_64bit_timestamp = graphics_desc->has_64bit_timestamp;
+diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
+index 528d75861..8826cfb29 100644
+--- a/drivers/gpu/drm/xe/xe_pci_types.h
++++ b/drivers/gpu/drm/xe/xe_pci_types.h
+@@ -39,6 +39,7 @@ struct xe_device_desc {
+ 
+ 	u8 has_display:1;
+ 	u8 has_fan_control:1;
++	u8 has_flat_ccs:1;
+ 	u8 has_gsc_nvm:1;
+ 	u8 has_heci_gscfi:1;
+ 	u8 has_heci_cscfi:1;
+@@ -57,7 +58,6 @@ struct xe_graphics_desc {
+ 
+ 	u8 has_asid:1;
+ 	u8 has_atomic_enable_pte_bit:1;
+-	u8 has_flat_ccs:1;
+ 	u8 has_indirect_ring_state:1;
+ 	u8 has_range_tlb_invalidation:1;
+ 	u8 has_usm:1;
+-- 
+2.43.0
+

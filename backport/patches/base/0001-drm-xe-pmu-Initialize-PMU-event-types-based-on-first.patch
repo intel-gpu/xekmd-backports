@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:09:54 -0700
+Subject: drm/xe/pmu: Initialize PMU event types based on first
+ available GT
+
+GT ID#0 (primary GT on tile 0) may not always be available if the
+primary GT has been disabled via configfs.  Instead use the first
+available GT when determining which PMU events are supported.  If there
+are no GTs, then don't advertise any GT-related events.
+
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-36-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit 999ef874c1458e54ce221fcf2674eeb7c29508d5 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pmu.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pmu.c b/drivers/gpu/drm/xe/xe_pmu.c
+index cab51d826..c63335eb6 100644
+--- a/drivers/gpu/drm/xe/xe_pmu.c
++++ b/drivers/gpu/drm/xe/xe_pmu.c
+@@ -497,7 +497,12 @@ static const struct attribute_group *pmu_events_attr_update[] = {
+ static void set_supported_events(struct xe_pmu *pmu)
+ {
+ 	struct xe_device *xe = container_of(pmu, typeof(*xe), pmu);
+-	struct xe_gt *gt = xe_device_get_gt(xe, 0);
++	struct xe_gt *gt;
++	int id;
++
++	/* If there are no GTs, don't support any GT-related events */
++	if (xe->info.gt_count == 0)
++		return;
+ 
+ 	if (!xe->info.skip_guc_pc) {
+ 		pmu->supported_events |= BIT_ULL(XE_PMU_EVENT_GT_C6_RESIDENCY);
+@@ -505,6 +510,10 @@ static void set_supported_events(struct xe_pmu *pmu)
+ 		pmu->supported_events |= BIT_ULL(XE_PMU_EVENT_GT_REQUESTED_FREQUENCY);
+ 	}
+ 
++	/* Find the first available GT to query engine event capabilities */
++	for_each_gt(gt, xe, id)
++		break;
++
+ 	if (xe_guc_engine_activity_supported(&gt->uc.guc)) {
+ 		pmu->supported_events |= BIT_ULL(XE_PMU_EVENT_ENGINE_ACTIVE_TICKS);
+ 		pmu->supported_events |= BIT_ULL(XE_PMU_EVENT_ENGINE_TOTAL_TICKS);
+-- 
+2.43.0
+

@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:09:53 -0700
+Subject: drm/xe/query: Report hwconfig size as 0 if primary GT is
+ disabled
+
+The hwconfig table is part of the primary GT's GuC firmware.  If the
+primary GT is disabled, the hwconfig is unavailable and should be
+reported to userspace as having size 0.
+
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-35-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit 090e7fc422a5810b0267d2e83859e05b53007563 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_query.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_query.c b/drivers/gpu/drm/xe/xe_query.c
+index f2a3d4ced..d3a8fe18c 100644
+--- a/drivers/gpu/drm/xe/xe_query.c
++++ b/drivers/gpu/drm/xe/xe_query.c
+@@ -435,7 +435,7 @@ static int query_hwconfig(struct xe_device *xe,
+ 			  struct drm_xe_device_query *query)
+ {
+ 	struct xe_gt *gt = xe_root_mmio_gt(xe);
+-	size_t size = xe_guc_hwconfig_size(&gt->uc.guc);
++	size_t size = gt ? xe_guc_hwconfig_size(&gt->uc.guc) : 0;
+ 	void __user *query_ptr = u64_to_user_ptr(query->data);
+ 	void *hwconfig;
+ 
+-- 
+2.43.0
+

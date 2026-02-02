@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:09:45 -0700
+Subject: drm/xe: Drop GT parameter to xe_display_irq_postinstall()
+
+Display interrupt handling has no relation to GT(s) on the platforms
+supported by the Xe driver.  We only call xe_display_irq_postinstall
+with the first tile's primary GT, so the single condition that uses the
+GT pointer within the function always evaluates to true.  Drop the
+unnecessary parameter and the condition.
+
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-27-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit d41f306cc2e3cc44b1226122d97bf3d451c9c6e6 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/display/xe_display.c | 5 ++---
+ drivers/gpu/drm/xe/display/xe_display.h | 4 ++--
+ drivers/gpu/drm/xe/xe_irq.c             | 2 +-
+ 3 files changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/display/xe_display.c b/drivers/gpu/drm/xe/display/xe_display.c
+index e2e0771cf..95b70c6fb 100644
+--- a/drivers/gpu/drm/xe/display/xe_display.c
++++ b/drivers/gpu/drm/xe/display/xe_display.c
+@@ -229,15 +229,14 @@ void xe_display_irq_reset(struct xe_device *xe)
+ 	gen11_display_irq_reset(display);
+ }
+ 
+-void xe_display_irq_postinstall(struct xe_device *xe, struct xe_gt *gt)
++void xe_display_irq_postinstall(struct xe_device *xe)
+ {
+ 	struct intel_display *display = xe->display;
+ 
+ 	if (!xe->info.probe_display)
+ 		return;
+ 
+-	if (gt->info.id == XE_GT0)
+-		gen11_de_irq_postinstall(display);
++	gen11_de_irq_postinstall(display);
+ }
+ 
+ static bool suspend_to_idle(void)
+diff --git a/drivers/gpu/drm/xe/display/xe_display.h b/drivers/gpu/drm/xe/display/xe_display.h
+index e533aa475..76db95c25 100644
+--- a/drivers/gpu/drm/xe/display/xe_display.h
++++ b/drivers/gpu/drm/xe/display/xe_display.h
+@@ -26,7 +26,7 @@ void xe_display_unregister(struct xe_device *xe);
+ void xe_display_irq_handler(struct xe_device *xe, u32 master_ctl);
+ void xe_display_irq_enable(struct xe_device *xe, u32 gu_misc_iir);
+ void xe_display_irq_reset(struct xe_device *xe);
+-void xe_display_irq_postinstall(struct xe_device *xe, struct xe_gt *gt);
++void xe_display_irq_postinstall(struct xe_device *xe);
+ 
+ void xe_display_pm_suspend(struct xe_device *xe);
+ void xe_display_pm_shutdown(struct xe_device *xe);
+@@ -55,7 +55,7 @@ static inline void xe_display_unregister(struct xe_device *xe) {}
+ static inline void xe_display_irq_handler(struct xe_device *xe, u32 master_ctl) {}
+ static inline void xe_display_irq_enable(struct xe_device *xe, u32 gu_misc_iir) {}
+ static inline void xe_display_irq_reset(struct xe_device *xe) {}
+-static inline void xe_display_irq_postinstall(struct xe_device *xe, struct xe_gt *gt) {}
++static inline void xe_display_irq_postinstall(struct xe_device *xe) {}
+ 
+ static inline void xe_display_pm_suspend(struct xe_device *xe) {}
+ static inline void xe_display_pm_shutdown(struct xe_device *xe) {}
+diff --git a/drivers/gpu/drm/xe/xe_irq.c b/drivers/gpu/drm/xe/xe_irq.c
+index 06976cc77..3dac9ef81 100644
+--- a/drivers/gpu/drm/xe/xe_irq.c
++++ b/drivers/gpu/drm/xe/xe_irq.c
+@@ -656,7 +656,7 @@ static void xe_irq_postinstall(struct xe_device *xe)
+ 			xe_memirq_postinstall(&tile->memirq);
+ 	}
+ 
+-	xe_display_irq_postinstall(xe, xe_root_mmio_gt(xe));
++	xe_display_irq_postinstall(xe);
+ 
+ 	/*
+ 	 * ASLE backlight operations are reported via GUnit GSE interrupts
+-- 
+2.43.0
+

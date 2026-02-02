@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:09:51 -0700
+Subject: drm/xe: Move primary GT allocation from xe_tile_init_early to
+ xe_tile_init
+
+During the early days of the Xe driver, there were cases where we
+accessed some fields in the primary GT's xe_gt structure before the GT
+itself was formally initialized; this required that the structure itself
+be allocated during xe_tile_init_early().  A lot of refactoring of the
+device probe has happened since that time and there's no longer a need
+to allocate the primary GT early.  Move the allocation into
+xe_info_init() where GT initialization happens and where we're doing the
+allocation of the media GT.
+
+v2:
+ - Only make this change after a separate patch to perform VF GMD_ID
+   lookup with a dummy GT instead of xe_root_mmio_gt().
+
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-33-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit 9c52402f6bd0b82f150236bb9b5895af00bb1188 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c  | 4 ++++
+ drivers/gpu/drm/xe/xe_tile.c | 4 ----
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index ae72516af..8dde77f4f 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -719,6 +719,10 @@ static int xe_info_init(struct xe_device *xe,
+ 	for_each_tile(tile, xe, id) {
+ 		int err;
+ 
++		tile->primary_gt = xe_gt_alloc(tile);
++		if (IS_ERR(tile->primary_gt))
++			return PTR_ERR(tile->primary_gt);
++
+ 		gt = tile->primary_gt;
+ 		gt->info.type = XE_GT_TYPE_MAIN;
+ 		gt->info.id = tile->id * xe->info.max_gt_per_tile;
+diff --git a/drivers/gpu/drm/xe/xe_tile.c b/drivers/gpu/drm/xe/xe_tile.c
+index e34edff0e..3aecd6d6a 100644
+--- a/drivers/gpu/drm/xe/xe_tile.c
++++ b/drivers/gpu/drm/xe/xe_tile.c
+@@ -145,10 +145,6 @@ int xe_tile_init_early(struct xe_tile *tile, struct xe_device *xe, u8 id)
+ 	if (err)
+ 		return err;
+ 
+-	tile->primary_gt = xe_gt_alloc(tile);
+-	if (IS_ERR(tile->primary_gt))
+-		return PTR_ERR(tile->primary_gt);
+-
+ 	xe_pcode_init(tile);
+ 
+ 	return 0;
+-- 
+2.43.0
+

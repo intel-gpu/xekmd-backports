@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:10:00 -0700
+Subject: drm/xe: Bypass Wa_14018094691 when primary GT is disabled
+
+Don't try to lookup Wa_14018094691 on a NULL GT when the primary GT is
+disabled.  Since this whole workaround centers around mid-thread
+preemption behavior, the workaround isn't relevant if the primary GT
+(where the engines that can do MTP live) is disabled.
+
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-42-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit 4f3ecdb6ea2cde339148c7b200e50ef061bea0e2 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gsc.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gsc.c b/drivers/gpu/drm/xe/xe_gsc.c
+index 1d84bf2f2..596a9443f 100644
+--- a/drivers/gpu/drm/xe/xe_gsc.c
++++ b/drivers/gpu/drm/xe/xe_gsc.c
+@@ -266,7 +266,7 @@ static int gsc_upload_and_init(struct xe_gsc *gsc)
+ 	unsigned int fw_ref;
+ 	int ret;
+ 
+-	if (XE_WA(tile->primary_gt, 14018094691)) {
++	if (tile->primary_gt && XE_WA(tile->primary_gt, 14018094691)) {
+ 		fw_ref = xe_force_wake_get(gt_to_fw(tile->primary_gt), XE_FORCEWAKE_ALL);
+ 
+ 		/*
+@@ -281,7 +281,7 @@ static int gsc_upload_and_init(struct xe_gsc *gsc)
+ 
+ 	ret = gsc_upload(gsc);
+ 
+-	if (XE_WA(tile->primary_gt, 14018094691))
++	if (tile->primary_gt && XE_WA(tile->primary_gt, 14018094691))
+ 		xe_force_wake_put(gt_to_fw(tile->primary_gt), fw_ref);
+ 
+ 	if (ret)
+-- 
+2.43.0
+

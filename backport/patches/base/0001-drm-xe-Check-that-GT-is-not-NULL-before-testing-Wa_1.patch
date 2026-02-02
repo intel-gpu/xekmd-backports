@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:10:02 -0700
+Subject: drm/xe: Check that GT is not NULL before testing
+ Wa_16023588340
+
+If the primary GT is disabled, skip the check for this workaround (which
+only applies to dgpu platforms where the primary GT cannot be NULL).
+
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-44-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit 5dfc8989694001aff99348eef3c69c3294ea8e09 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/display/xe_display_wa.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/display/xe_display_wa.c b/drivers/gpu/drm/xe/display/xe_display_wa.c
+index 68d1387d8..a0387125e 100644
+--- a/drivers/gpu/drm/xe/display/xe_display_wa.c
++++ b/drivers/gpu/drm/xe/display/xe_display_wa.c
+@@ -13,6 +13,7 @@
+ bool intel_display_needs_wa_16023588340(struct intel_display *display)
+ {
+ 	struct xe_device *xe = to_xe_device(display->drm);
++	struct xe_gt *wa_gt = xe_root_mmio_gt(xe);
+ 
+-	return XE_WA(xe_root_mmio_gt(xe), 16023588340);
++	return wa_gt && XE_WA(wa_gt, 16023588340);
+ }
+-- 
+2.43.0
+

@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shuicheng Lin <shuicheng.lin@intel.com>
+Date: Wed, 21 Jan 2026 17:37:51 +0000
+Subject: drm/xe/configfs: Fix is_bound() pci_dev lifetime
+
+Move pci_dev_put() after pci_dbg() to avoid using pdev after dropping its
+reference.
+
+Fixes: 2674f1ef29f46 ("drm/xe/configfs: Block runtime attribute changes")
+Signed-off-by: Shuicheng Lin <shuicheng.lin@intel.com>
+Reviewed-by: Ashutosh Dixit <ashutosh.dixit@intel.com>
+Signed-off-by: Ashutosh Dixit <ashutosh.dixit@intel.com>
+Link: https://patch.msgid.link/20260121173750.3090907-2-shuicheng.lin@intel.com
+(cherry picked from commit 63b33604365bdca43dee41bab809da2230491036 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_configfs.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_configfs.c b/drivers/gpu/drm/xe/xe_configfs.c
+index 48e4ae4b9..49447c3df 100644
+--- a/drivers/gpu/drm/xe/xe_configfs.c
++++ b/drivers/gpu/drm/xe/xe_configfs.c
+@@ -189,11 +189,10 @@ static bool is_bound(struct xe_config_device *dev)
+ 		return false;
+ 
+ 	ret = pci_get_drvdata(pdev);
+-	pci_dev_put(pdev);
+-
+ 	if (ret)
+ 		pci_dbg(pdev, "Already bound to driver\n");
+ 
++	pci_dev_put(pdev);
+ 	return ret;
+ }
+ 
+-- 
+2.43.0
+

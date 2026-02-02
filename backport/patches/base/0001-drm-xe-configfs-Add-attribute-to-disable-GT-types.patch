@@ -1,0 +1,353 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:10:05 -0700
+Subject: drm/xe/configfs: Add attribute to disable GT types
+
+Preventing the driver from initializing GTs of specific type(s) can be
+useful for debugging and early hardware bringup.  Add a configfs
+attribute to allow this kind of control for debugging.
+
+With today's platforms and software design, this configuration setting
+is only effective for disabling the media GT since the driver currently
+requires that there always be a primary GT to probe the device.  However
+this might change in the future ---  in theory it should be possible
+(with some additional driver work) to allow an igpu device to come up
+with only the media GT and no primary GT.  Or to allow an igpu device to
+come up with no GTs at all (for display-only usage).  A primary GT will
+likely always be required on dgpu platforms because we rely on the BCS
+engines inside the primary GT for various vram operations.
+
+v2:
+ - Expand/clarify kerneldoc for configfs attribute.  (Gustavo)
+ - Tighten type usage in gt_types[] structure.  (Gustavo)
+ - Adjust string parsing/name matching to match exact GT names and not
+   accept partial names.  (Gustavo)
+
+v3:
+ - Switch to scope-based cleanup in gt_types_allowed_store() to fix a
+   leak if the device is already bound.  (Gustavo)
+ - Switch configfs lookup interface to two boolean functions that
+   specify whether primary/media are supported rather than one function
+   that returns a mask.  This is simpler to use and understand.
+
+v4:
+ - Rename xe_configfs_*_gt_supported to xe_configfs_*_gt_allowed for
+   consistency with configfs interface and other functions.  (Gustavo)
+ - Simplify boolean check in xe_configfs_*_gt_allowed.  (Michal)
+ - Use xe_info() for message printing.  (Michal)
+ - Use guard() instead of scoped_guard().  (Michal)
+ - Make new functions take 'struct pci_dev' for consistency with other
+   configfs lookup functions.  (Michal)
+
+Cc: Gustavo Sousa <gustavo.sousa@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-47-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit 7abd69278bb53ab6b43f9650daba550cc7624858 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_configfs.c | 141 +++++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_configfs.h |   4 +
+ drivers/gpu/drm/xe/xe_pci.c      |  24 +++++-
+ 3 files changed, 168 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_configfs.c b/drivers/gpu/drm/xe/xe_configfs.c
+index 797508cc6..671d41b92 100644
+--- a/drivers/gpu/drm/xe/xe_configfs.c
++++ b/drivers/gpu/drm/xe/xe_configfs.c
+@@ -5,6 +5,7 @@
+ 
+ #include <linux/bitops.h>
+ #include <linux/configfs.h>
++#include "xe_gt_types.h"
+ #include <linux/find.h>
+ #include <linux/init.h>
+ #include <linux/module.h>
+@@ -53,6 +54,44 @@
+  *	# echo 1 > /sys/kernel/config/xe/0000:03:00.0/survivability_mode
+  *	# echo 0000:03:00.0 > /sys/bus/pci/drivers/xe/bind  (Enters survivability mode if supported)
+  *
++ * Allowed GT types:
++ * -----------------
++ *
++ * Allow only specific types of GTs to be detected and initialized by the
++ * driver.  Any combination of GT types can be enabled/disabled, although
++ * some settings will cause the device to fail to probe.
++ *
++ * Writes support both comma- and newline-separated input format. Reads
++ * will always return one GT type per line. "primary" and "media" are the
++ * GT type names supported by this interface.
++ *
++ * This attribute can only be set before binding to the device.
++ *
++ * Examples:
++ *
++ * Allow both primary and media GTs to be initialized and used.  This matches
++ * the driver's default behavior::
++ *
++ *     # echo 'primary,media' > /sys/kernel/config/xe/0000:03:00.0/gt_types_allowed
++ *
++ * Allow only the primary GT of each tile to be initialized and used,
++ * effectively disabling the media GT if it exists on the platform::
++ *
++ *     # echo 'primary' > /sys/kernel/config/xe/0000:03:00.0/gt_types_allowed
++ *
++ * Allow only the media GT of each tile to be initialized and used,
++ * effectively disabling the primary GT.  **This configuration will cause
++ * device probe failure on all current platforms, but may be allowed on
++ * igpu platforms in the future**::
++ *
++ *     # echo 'media' > /sys/kernel/config/xe/0000:03:00.0/gt_types_allowed
++ *
++ * Disable all GTs.  Only other GPU IP (such as display) is potentially usable.
++ * **This configuration will cause device probe failure on all current
++ * platforms, but may be allowed on igpu platforms in the future**::
++ *
++ *     # echo '' > /sys/kernel/config/xe/0000:03:00.0/gt_types_allowed
++ *
+  * Allowed engines:
+  * ----------------
+  *
+@@ -89,6 +128,7 @@ struct xe_config_device {
+ 	struct config_group group;
+ 
+ 	bool survivability_mode;
++	u64 gt_types_allowed;
+ 	u64 engines_allowed;
+ 
+ 	/* protects attributes */
+@@ -103,6 +143,7 @@ struct engine_info {
+ /* Some helpful macros to aid on the sizing of buffer allocation when parsing */
+ #define MAX_ENGINE_CLASS_CHARS 5
+ #define MAX_ENGINE_INSTANCE_CHARS 2
++#define MAX_GT_TYPE_CHARS 7
+ 
+ static const struct engine_info engine_info[] = {
+ 	{ .cls = "rcs", .mask = XE_HW_ENGINE_RCS_MASK },
+@@ -113,6 +154,14 @@ static const struct engine_info engine_info[] = {
+ 	{ .cls = "gsccs", .mask = XE_HW_ENGINE_GSCCS_MASK },
+ };
+ 
++static const struct {
++	const char name[MAX_GT_TYPE_CHARS + 1];
++	enum xe_gt_type type;
++} gt_types[] = {
++	{ .name = "primary", .type = XE_GT_TYPE_MAIN },
++	{ .name = "media", .type = XE_GT_TYPE_MEDIA },
++};
++
+ static struct xe_config_device *to_xe_config_device(struct config_item *item)
+ {
+ 	return container_of(to_config_group(item), struct xe_config_device, group);
+@@ -142,6 +191,57 @@ static ssize_t survivability_mode_store(struct config_item *item, const char *pa
+ 	return len;
+ }
+ 
++static ssize_t gt_types_allowed_show(struct config_item *item, char *page)
++{
++	struct xe_config_device *dev = to_xe_config_device(item);
++	char *p = page;
++
++	for (size_t i = 0; i < ARRAY_SIZE(gt_types); i++)
++		if (dev->gt_types_allowed & BIT_ULL(gt_types[i].type))
++			p += sprintf(p, "%s\n", gt_types[i].name);
++
++	return p - page;
++}
++
++static ssize_t gt_types_allowed_store(struct config_item *item, const char *page,
++				      size_t len)
++{
++	struct xe_config_device *dev = to_xe_config_device(item);
++	char *buf __free(kfree) = kstrdup(page, GFP_KERNEL);
++	char *p = buf;
++	u64 typemask = 0;
++
++	if (!buf)
++		return -ENOMEM;
++
++	while (p) {
++		char *typename = strsep(&p, ",\n");
++		bool matched = false;
++
++		if (typename[0] == '\0')
++			continue;
++
++		for (size_t i = 0; i < ARRAY_SIZE(gt_types); i++) {
++			if (strcmp(typename, gt_types[i].name) == 0) {
++				typemask |= BIT(gt_types[i].type);
++				matched = true;
++				break;
++			}
++		}
++
++		if (!matched)
++			return -EINVAL;
++	}
++
++	guard(mutex)(&dev->lock);
++	if (is_bound(dev))
++		return -EBUSY;
++
++	dev->gt_types_allowed = typemask;
++
++	return len;
++}
++
+ static ssize_t engines_allowed_show(struct config_item *item, char *page)
+ {
+ 	struct xe_config_device *dev = to_xe_config_device(item);
+@@ -227,10 +327,12 @@ static ssize_t engines_allowed_store(struct config_item *item, const char *page,
+ }
+ 
+ CONFIGFS_ATTR(, survivability_mode);
++CONFIGFS_ATTR(, gt_types_allowed);
+ CONFIGFS_ATTR(, engines_allowed);
+ 
+ static struct configfs_attribute *xe_config_device_attrs[] = {
+ 	&attr_survivability_mode,
++	&attr_gt_types_allowed,
+ 	&attr_engines_allowed,
+ 	NULL,
+ };
+@@ -283,6 +385,7 @@ static struct config_group *xe_config_make_device_group(struct config_group *gro
+ 
+ 	/* Default values */
+ 	dev->engines_allowed = U64_MAX;
++	dev->gt_types_allowed = U64_MAX;
+ 
+ 	config_group_init_type_name(&dev->group, name, &xe_config_device_type);
+ 
+@@ -371,6 +474,44 @@ void xe_configfs_clear_survivability_mode(struct pci_dev *pdev)
+ 	config_item_put(&dev->group.cg_item);
+ }
+ 
++static u64 get_gt_types_allowed(struct pci_dev *pdev)
++{
++	struct xe_config_device *dev = configfs_find_group(pdev);
++	u64 mask;
++
++	if (!dev)
++		return U64_MAX;
++
++	mask = dev->gt_types_allowed;
++	config_item_put(&dev->group.cg_item);
++
++	return mask;
++}
++
++/**
++ * xe_configfs_primary_gt_allowed - determine whether primary GTs are supported
++ * @pdev: pci device
++ *
++ * Return: True if primary GTs are enabled, false if they have been disabled via
++ *     configfs.
++ */
++bool xe_configfs_primary_gt_allowed(struct pci_dev *pdev)
++{
++	return get_gt_types_allowed(pdev) & BIT_ULL(XE_GT_TYPE_MAIN);
++}
++
++/**
++ * xe_configfs_media_gt_allowed - determine whether media GTs are supported
++ * @pdev: pci device
++ *
++ * Return: True if the media GTs are enabled, false if they have been disabled
++ *     via configfs.
++ */
++bool xe_configfs_media_gt_allowed(struct pci_dev *pdev)
++{
++	return get_gt_types_allowed(pdev) & BIT_ULL(XE_GT_TYPE_MEDIA);
++}
++
+ /**
+  * xe_configfs_get_engines_allowed - get engine allowed mask from configfs
+  * @pdev: pci device
+diff --git a/drivers/gpu/drm/xe/xe_configfs.h b/drivers/gpu/drm/xe/xe_configfs.h
+index fb8764008..7cce94713 100644
+--- a/drivers/gpu/drm/xe/xe_configfs.h
++++ b/drivers/gpu/drm/xe/xe_configfs.h
+@@ -15,12 +15,16 @@ int xe_configfs_init(void);
+ void xe_configfs_exit(void);
+ bool xe_configfs_get_survivability_mode(struct pci_dev *pdev);
+ void xe_configfs_clear_survivability_mode(struct pci_dev *pdev);
++bool xe_configfs_primary_gt_allowed(struct pci_dev *pdev);
++bool xe_configfs_media_gt_allowed(struct pci_dev *pdev);
+ u64 xe_configfs_get_engines_allowed(struct pci_dev *pdev);
+ #else
+ static inline int xe_configfs_init(void) { return 0; }
+ static inline void xe_configfs_exit(void) { }
+ static inline bool xe_configfs_get_survivability_mode(struct pci_dev *pdev) { return false; }
+ static inline void xe_configfs_clear_survivability_mode(struct pci_dev *pdev) { }
++static inline bool xe_configfs_primary_gt_allowed(struct pci_dev *pdev) { return true; }
++static inline bool xe_configfs_media_gt_allowed(struct pci_dev *pdev) { return true; }
+ static inline u64 xe_configfs_get_engines_allowed(struct pci_dev *pdev) { return U64_MAX; }
+ #endif
+ 
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 6b5719b9b..036c00860 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -17,6 +17,7 @@
+ 
+ #include "display/xe_display.h"
+ #include "regs/xe_gt_regs.h"
++#include "xe_configfs.h"
+ #include "xe_device.h"
+ #include "xe_drv.h"
+ #include "xe_gt.h"
+@@ -643,6 +644,11 @@ static struct xe_gt *alloc_primary_gt(struct xe_tile *tile,
+ 	struct xe_device *xe = tile_to_xe(tile);
+ 	struct xe_gt *gt;
+ 
++	if (!xe_configfs_primary_gt_allowed(to_pci_dev(xe->drm.dev))) {
++		dev_info(xe->drm.dev, "Primary GT disabled via configfs\n");
++		return NULL;
++	}
++
+ 	gt = xe_gt_alloc(tile);
+ 	if (IS_ERR(gt))
+ 		return gt;
+@@ -668,6 +674,11 @@ static struct xe_gt *alloc_media_gt(struct xe_tile *tile,
+ 	struct xe_device *xe = tile_to_xe(tile);
+ 	struct xe_gt *gt;
+ 
++	if (!xe_configfs_media_gt_allowed(to_pci_dev(xe->drm.dev))) {
++		dev_info(xe->drm.dev, "Media GT disabled via configfs\n");
++		return NULL;
++	}
++
+ 	if (MEDIA_VER(xe) < 13 || !media_desc)
+ 		return NULL;
+ 
+@@ -698,7 +709,6 @@ static int xe_info_init(struct xe_device *xe,
+ 	const struct xe_graphics_desc *graphics_desc;
+ 	const struct xe_media_desc *media_desc;
+ 	struct xe_tile *tile;
+-	struct xe_gt *gt;
+ 	int ret;
+ 	u8 id;
+ 
+@@ -775,6 +785,18 @@ static int xe_info_init(struct xe_device *xe,
+ 		if (IS_ERR(tile->primary_gt))
+ 			return PTR_ERR(tile->primary_gt);
+ 
++		/*
++		* It's not currently possible to probe a device with the
++		* primary GT disabled.  With some work, this may be future in
++		* the possible for igpu platforms (although probably not for
++		* dgpu's since access to the primary GT's BCS engines is
++		* required for VRAM management).
++		*/
++		if (!tile->primary_gt) {
++			drm_err(&xe->drm, "Cannot probe device with without a primary GT\n");
++			return -ENODEV;
++		}
++
+ 		 tile->media_gt = alloc_media_gt(tile, media_desc);
+ 		if (IS_ERR(tile->media_gt))
+ 			return PTR_ERR(tile->media_gt);
+-- 
+2.43.0
+

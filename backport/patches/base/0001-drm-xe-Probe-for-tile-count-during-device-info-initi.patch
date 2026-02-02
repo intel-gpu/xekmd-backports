@@ -1,0 +1,189 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Gustavo Sousa <gustavo.sousa@intel.com>
+Date: Mon, 18 Aug 2025 15:15:46 -0300
+Subject: drm/xe: Probe for tile count during device info
+ initialization
+
+The function mmio_multi_tile_setup() does not look like the proper
+location for probing for the number of existing tiles in the hardware.
+It should not be that function's responsibility and such information
+should instead be already available when it gets called.
+
+The fact that we need to adjust gt_count is a symptom of that.
+
+Move probing of available tile count to a dedicated function named
+xe_info_probe_tile_count() and call it from xe_info_init(), which seems
+like a more appropriate place for that.
+
+With that move, we no longer need to (and shouldn't) adjust gt_count as
+a part of xe_info_probe_tile_count(), as that field will be initialized
+later in xe_info_init().
+
+v4:
+  - Only probe for tile count if the default tile_count != 1 (just like
+    was done in mmio_multi_tile_setup()). (CI)
+v3:
+  - Unchanged.
+v2:
+  - Use KUnit static stub so that we do not try to query hardware when
+    running KUnit tests. (CI)
+  - Tweak last paragraph of commit message to make it clearer.
+    (Jonathan)
+
+Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250818-gt_count-improvements-v4-1-ee12870c6f57@intel.com
+Signed-off-by: Gustavo Sousa <gustavo.sousa@intel.com>
+(backported from commit 97a18f8349423371650996fc506dfd6cc4d3e1ad linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/tests/xe_pci.c |  7 ++++++
+ drivers/gpu/drm/xe/xe_mmio.c      | 33 -------------------------
+ drivers/gpu/drm/xe/xe_pci.c       | 41 +++++++++++++++++++++++++++++++
+ 3 files changed, 48 insertions(+), 33 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/tests/xe_pci.c b/drivers/gpu/drm/xe/tests/xe_pci.c
+index afedb2afc..41648aa96 100644
+--- a/drivers/gpu/drm/xe/tests/xe_pci.c
++++ b/drivers/gpu/drm/xe/tests/xe_pci.c
+@@ -103,6 +103,11 @@ static int fake_read_gmdid(struct xe_device *xe, enum xe_gmdid_type type,
+ 	return 0;
+ }
+ 
++static void fake_xe_info_probe_tile_count(struct xe_device *xe)
++{
++	/* Nothing to do, just use the statically defined value. */
++}
++
+ int xe_pci_fake_device_init(struct xe_device *xe)
+ {
+ 	struct kunit *test = kunit_get_current_test();
+@@ -140,6 +145,8 @@ int xe_pci_fake_device_init(struct xe_device *xe)
+ 			   data->sriov_mode : XE_SRIOV_MODE_NONE;
+ 
+ 	kunit_activate_static_stub(test, read_gmdid, fake_read_gmdid);
++	kunit_activate_static_stub(test, xe_info_probe_tile_count,
++				   fake_xe_info_probe_tile_count);
+ 
+ 	xe_info_init_early(xe, desc, subplatform_desc);
+ 	xe_info_init(xe, desc);
+diff --git a/drivers/gpu/drm/xe/xe_mmio.c b/drivers/gpu/drm/xe/xe_mmio.c
+index e4db8d58e..ef6f3ea57 100644
+--- a/drivers/gpu/drm/xe/xe_mmio.c
++++ b/drivers/gpu/drm/xe/xe_mmio.c
+@@ -58,7 +58,6 @@ static void tiles_fini(void *arg)
+ static void mmio_multi_tile_setup(struct xe_device *xe, size_t tile_mmio_size)
+ {
+ 	struct xe_tile *tile;
+-	struct xe_gt *gt;
+ 	u8 id;
+ 
+ 	/*
+@@ -68,38 +67,6 @@ static void mmio_multi_tile_setup(struct xe_device *xe, size_t tile_mmio_size)
+ 	if (xe->info.tile_count == 1)
+ 		return;
+ 
+-	/* Possibly override number of tile based on configuration register */
+-	if (!xe->info.skip_mtcfg) {
+-		struct xe_mmio *mmio = xe_root_tile_mmio(xe);
+-		u8 tile_count, gt_count;
+-		u32 mtcfg;
+-
+-		/*
+-		 * Although the per-tile mmio regs are not yet initialized, this
+-		 * is fine as it's going to the root tile's mmio, that's
+-		 * guaranteed to be initialized earlier in xe_mmio_probe_early()
+-		 */
+-		mtcfg = xe_mmio_read32(mmio, XEHP_MTCFG_ADDR);
+-		tile_count = REG_FIELD_GET(TILE_COUNT, mtcfg) + 1;
+-
+-		if (tile_count < xe->info.tile_count) {
+-			drm_info(&xe->drm, "tile_count: %d, reduced_tile_count %d\n",
+-				 xe->info.tile_count, tile_count);
+-			xe->info.tile_count = tile_count;
+-
+-			/*
+-			 * We've already setup gt_count according to the full
+-			 * tile count.  Re-calculate it to only include the GTs
+-			 * that belong to the remaining tile(s).
+-			 */
+-			gt_count = 0;
+-			for_each_gt(gt, xe, id)
+-				if (gt->info.id < tile_count * xe->info.max_gt_per_tile)
+-					gt_count++;
+-			xe->info.gt_count = gt_count;
+-		}
+-	}
+-
+ 	for_each_remote_tile(tile, xe, id)
+ 		xe_mmio_init(&tile->mmio, tile, xe->mmio.regs + id * tile_mmio_size, SZ_4M);
+ }
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index aca2eb210..3cd818dc9 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -17,6 +17,7 @@
+ 
+ #include "display/xe_display.h"
+ #include "regs/xe_gt_regs.h"
++#include "regs/xe_regs.h"
+ #include "xe_configfs.h"
+ #include "xe_device.h"
+ #include "xe_drv.h"
+@@ -695,6 +696,44 @@ static struct xe_gt *alloc_media_gt(struct xe_tile *tile,
+ 	return gt;
+ }
+ 
++/*
++ * Possibly override number of tile based on configuration register.
++ */
++static void xe_info_probe_tile_count(struct xe_device *xe)
++{
++	struct xe_mmio *mmio;
++	u8 tile_count;
++	u32 mtcfg;
++
++	KUNIT_STATIC_STUB_REDIRECT(xe_info_probe_tile_count, xe);
++
++	/*
++	* Probe for tile count only for platforms that support multiple
++	* tiles.
++	*/
++	if (xe->info.tile_count == 1)
++		return;
++
++	if (xe->info.skip_mtcfg)
++		return;
++
++	mmio = xe_root_tile_mmio(xe);
++
++	/*
++	* Although the per-tile mmio regs are not yet initialized, this
++	* is fine as it's going to the root tile's mmio, that's
++	* guaranteed to be initialized earlier in xe_mmio_probe_early()
++	*/
++	mtcfg = xe_mmio_read32(mmio, XEHP_MTCFG_ADDR);
++	tile_count = REG_FIELD_GET(TILE_COUNT, mtcfg) + 1;
++
++	if (tile_count < xe->info.tile_count) {
++		drm_info(&xe->drm, "tile_count: %d, reduced_tile_count %d\n",
++				xe->info.tile_count, tile_count);
++		xe->info.tile_count = tile_count;
++	}
++}
++
+ /*
+  * Initialize device info content that does require knowledge about
+  * graphics / media IP version.
+@@ -766,6 +805,8 @@ static int xe_info_init(struct xe_device *xe,
+ 	xe->info.has_usm = graphics_desc->has_usm;
+ 	xe->info.has_64bit_timestamp = graphics_desc->has_64bit_timestamp;
+ 
++	xe_info_probe_tile_count(xe);
++
+ 	for_each_remote_tile(tile, xe, id) {
+ 		int err;
+ 
+-- 
+2.43.0
+

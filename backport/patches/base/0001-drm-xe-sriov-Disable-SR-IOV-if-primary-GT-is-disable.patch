@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:10:06 -0700
+Subject: drm/xe/sriov: Disable SR-IOV if primary GT is disabled via
+ configfs
+
+SR-IOV operation relies on the primary GT's GuC to operate (in both PF
+and VF mode).  Don't enable the .has_sriov flag if the primary-GT was
+disabled by configfs.
+
+v2:
+ - Move handling to xe_info_init().  (Michal)
+
+v3:
+ - Just update the .has_sriov flag in xe_info_init_early().  (Michal)
+
+v4:
+ - Drop unnecessary comment.  (Michal)
+ - Flip condition order for consistency with other checks.  (Michal)
+
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-48-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit 961a7582b159586aafee3cf2e81dec1d493d1715 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index b816da5b0..5b688a624 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -615,7 +615,8 @@ static int xe_info_init_early(struct xe_device *xe,
+ 	xe->info.has_heci_cscfi = desc->has_heci_cscfi;
+ 	xe->info.has_llc = desc->has_llc;
+ 	xe->info.has_pxp = desc->has_pxp;
+-	xe->info.has_sriov = desc->has_sriov;
++	xe->info.has_sriov = xe_configfs_primary_gt_allowed(to_pci_dev(xe->drm.dev)) &&
++		desc->has_sriov;
+ 	xe->info.skip_guc_pc = desc->skip_guc_pc;
+ 	xe->info.skip_mtcfg = desc->skip_mtcfg;
+ 	xe->info.skip_pcode = desc->skip_pcode;
+-- 
+2.43.0
+

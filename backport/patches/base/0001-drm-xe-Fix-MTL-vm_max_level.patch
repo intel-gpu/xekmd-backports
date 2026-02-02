@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Date: Fri, 7 Nov 2025 23:06:35 -0500
+Subject: drm/xe: Fix MTL vm_max_level
+
+MTL was broken after the vm_max_level movement. Get it back to a
+working value.
+
+[   37.722413] xe 0000:00:02.0: [drm] Tile0: GT0: VM job timed out on non-killed execqueue
+[   37.722465] WARNING: CPU: 0 PID: 12 at drivers/gpu/drm/xe/xe_guc_submit.c:1379 guc_exec_queue_timedout_job+0x2f3/0xe00 [xe]
+[   37.722559] Modules linked in: xt_REDIRECT nft_compat nf_conntrack_netbios_ns nf_conntrack_broadcast nft_fib_inet nft_fib_ipv4 nft_fib_ipv6 nft_fib nft_reject_inet nf_reject_ipv4 nf_reject_ipv6 nft_reject nft_ct nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 nf_tables qrtr sunrpc bnep snd_ctl_led snd_soc_s\
+of_sdw snd_soc_intel_hda_dsp_common snd_soc_sdw_utils snd_sof_probes snd_soc_rt712_sdca regmap_sdw_mbq snd_hda_codec_intelhdmi regmap_sdw snd_soc_dmic snd_hda_intel snd_sof_pci_intel_mtl iwlmvm snd_sof_intel_hda_generic soundwire_intel snd_sof_intel_hda_sdw_bpt snd_sof_intel_hda_common snd_soc_hdac_hda snd_sof_intel_hda_mlink\
+ snd_sof_intel_hda snd_hda_codec_hdmi soundwire_cadence snd_sof_pci snd_sof_xtensa_dsp binfmt_misc snd_sof mac80211 vfat snd_sof_utils fat snd_hda_ext_core snd_hda_codec snd_hda_core snd_intel_dspcfg snd_intel_sdw_acpi snd_soc_acpi_intel_match snd_soc_acpi_intel_sdca_quirks soundwire_generic_allocation snd_soc_acpi snd_hwdep \
+crc8 soundwire_bus libarc4 snd_soc_sdca snd_soc_core
+[   37.722584]  snd_compress ac97_bus uvcvideo snd_pcm_dmaengine iwlwifi snd_seq uvc videobuf2_vmalloc snd_seq_device videobuf2_memops videobuf2_v4l2 snd_pcm processor_thermal_device_pci videobuf2_common processor_thermal_device btusb intel_uncore_frequency processor_thermal_wt_hint intel_uncore_frequency_common platform_temp\
+erature_control videodev btmtk spi_nor processor_thermal_soc_slider x86_pkg_temp_thermal btrtl snd_timer iTCO_wdt processor_thermal_rfim intel_powerclamp btbcm intel_pmc_bxt snd intel_rapl_msr processor_thermal_rapl coretemp iTCO_vendor_support mei_gsc_proxy btintel intel_rapl_common rapl intel_cstate cfg80211 bluetooth mc in\
+tel_pmc_core mtd soundcore acer_wmi mei_me intel_uncore processor_thermal_wt_req i2c_i801 spi_intel_pci pmt_telemetry platform_profile mei processor_thermal_power_floor spi_intel i2c_smbus pmt_discovery igen6_edac pcspkr rfkill wmi_bmof idma64 processor_thermal_mbox intel_hid pmt_class int3403_thermal int3400_thermal joydev i\
+nt340x_thermal_zone acpi_pad sparse_keymap
+[   37.722611]  intel_pmc_ssram_telemetry acpi_thermal_rel acer_wireless loop nfnetlink zram lz4hc_compress lz4_compress dm_crypt xe drm_ttm_helper drm_suballoc_helper gpu_sched drm_gpuvm drm_exec drm_gpusvm_helper i915 nvme i2c_algo_bit nvme_core drm_buddy ucsi_acpi ttm typec_ucsi typec nvme_keyring nvme_auth hkdf drm_displa\
+y_helper hid_multitouch polyval_clmulni thunderbolt intel_vpu ghash_clmulni_intel cec vmd i2c_hid_acpi video intel_vsec i2c_hid wmi pinctrl_meteorlake serio_raw i2c_dev fuse
+[   37.722638] CPU: 0 UID: 0 PID: 12 Comm: kworker/u88:0 Not tainted 6.18.0-rc2+ #37 PREEMPT(voluntary)
+[   37.722641] Hardware name: Acer Swift SFG14-72/Coral_MTH, BIOS V1.01 11/06/2023
+[   37.722643] Workqueue: gt-ordered-wq drm_sched_job_timedout [gpu_sched]
+[   37.722649] RIP: 0010:guc_exec_queue_timedout_job+0x2f3/0xe00 [xe]
+[   37.722722] Code: 4c 24 10 44 89 44 24 08 e8 5a 95 f1 d4 44 8b 44 24 08 8b 4c 24 10 48 c7 c7 00 b7 25 c1 48 8b 54 24 18 48 89 c6 e8 4d 59 37 d4 <0f> 0b 80 3c 24 00 0f 85 55 03 00 00 49 8b 47 58 a8 01 75 1a 49 8b
+[   37.722723] RSP: 0018:ffffd468000f7d80 EFLAGS: 00010246
+[   37.722725] RAX: 0000000000000000 RBX: ffff8e3d4e215c00 RCX: 0000000000000027
+[   37.722726] RDX: ffff8e40ae61cfc8 RSI: 0000000000000001 RDI: ffff8e40ae61cfc0
+[   37.722727] RBP: 00000000fffffffb R08: 0000000000000000 R09: ffffd468000f7c20
+[   37.722727] R10: ffff8e40c09fffa8 R11: 00000000fffbffff R12: ffff8e3d44c00028
+[   37.722728] R13: ffff8e3d807d4000 R14: ffff8e3d807d4018 R15: ffff8e3d95c9d600
+[   37.722729] FS:  0000000000000000(0000) GS:ffff8e4116110000(0000) knlGS:0000000000000000
+[   37.722729] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+[   37.722730] CR2: 00007ff1f3e02720 CR3: 0000000113c8d005 CR4: 0000000000f70ef0
+[   37.722731] PKRU: 55555554
+[   37.722731] Call Trace:
+[   37.722734]  <TASK>
+[   37.722735]  ? __pfx_autoremove_wake_function+0x10/0x10
+[   37.722740]  drm_sched_job_timedout+0x81/0x170 [gpu_sched]
+
+Fixes: 50292f9af8ec ("drm/xe: Move 'vm_max_level' flag back to platform descriptor")
+Cc: Lucas De Marchi <lucas.demarchi@intel.com>
+Cc: Gustavo Sousa <gustavo.sousa@intel.com>
+Cc: Matt Roper <matthew.d.roper@intel.com>
+Reviewed-by: Lucas De Marchi <lucas.demarchi@intel.com>
+Link: https://patch.msgid.link/20251108040634.6376-2-rodrigo.vivi@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 4361e1d913095fa5833fcc38914a6e55360d90f3 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 1377130af..ae890dafd 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -315,7 +315,7 @@ static const struct xe_device_desc mtl_desc = {
+ 	.has_pxp = true,
+ 	.max_gt_per_tile = 2,
+ 	.va_bits = 48,
+-	.vm_max_level = 4,
++	.vm_max_level = 3,
+ };
+ 
+ static const struct xe_device_desc lnl_desc = {
+-- 
+2.43.0
+

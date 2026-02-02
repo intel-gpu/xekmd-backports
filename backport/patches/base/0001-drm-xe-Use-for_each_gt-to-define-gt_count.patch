@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Gustavo Sousa <gustavo.sousa@intel.com>
+Date: Mon, 18 Aug 2025 15:15:47 -0300
+Subject: drm/xe: Use for_each_gt to define gt_count
+
+We are currently bumping gt_count as we define GTs for each tile. While
+that works with our current code, there are reasons to improve that:
+
+* That section of the code is dedicated to define each tile's set of GTs
+  and their respective info. The gt_count can be seen as a device level
+  property. While it is fair to bump it as we define each GT, we can
+  also focus on the GT themselves and count after we are done with the
+  definitions.
+
+* More *importantly*, gt_count should reflect the number of GTs that we
+  would get when looping over them with for_each_gt(). Bumping gt_count
+  the way we are currently doing makes that value not really connected
+  to for_each_gt(). This could bite us in the future if in the loop gets
+  extra checks that are not accounted for in each existing "gt_count++".
+
+As such, let's use for_each_gt() and extract the calculation of gt_count
+into a separate block, just after we define the set of GTs for each
+tile.
+
+Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://lore.kernel.org/r/20250818-gt_count-improvements-v4-2-ee12870c6f57@intel.com
+Signed-off-by: Gustavo Sousa <gustavo.sousa@intel.com>
+(backported from commit 1046be1db620d00eb390a94ac7b67109e0beeff5 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 3cd818dc9..1377130af 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -749,6 +749,7 @@ static int xe_info_init(struct xe_device *xe,
+ 	const struct xe_graphics_desc *graphics_desc;
+ 	const struct xe_media_desc *media_desc;
+ 	struct xe_tile *tile;
++	struct xe_gt *gt;
+ 	int ret;
+ 	u8 id;
+ 
+@@ -844,6 +845,13 @@ static int xe_info_init(struct xe_device *xe,
+ 			return PTR_ERR(tile->media_gt);
+ 	}
+ 
++	/*
++	 * Now that we have tiles and GTs defined, let's loop over valid GTs
++	 * in order to define gt_count.
++	 */
++	for_each_gt(gt, xe, id)
++		xe->info.gt_count++;
++
+ 	return 0;
+ }
+ 
+-- 
+2.43.0
+

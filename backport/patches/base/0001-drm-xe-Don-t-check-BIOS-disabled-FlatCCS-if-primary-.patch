@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:10:03 -0700
+Subject: drm/xe: Don't check BIOS-disabled FlatCCS if primary GT is
+ disabled
+
+If the primary is GT is disabled via configfs, we can't read the GT
+registers that would tell us whether the BIOS has disabled FlatCCS on a
+platform that would otherwise have it; we'll just proceed as if the
+FlatCCS is still enabled.  This is similar to the situation seen by
+SRIOV VFs and doesn't cause any functional problems since the hardware
+will simply drop writes to the CCS region and reads will always come
+back as 0 (indicating uncompressed data).  We'll simply miss out on the
+chance to avoid some unnecessary overhead during BO creation and
+migration.
+
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-45-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index da4ae4392..7e3517ccd 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -770,6 +770,8 @@ static int probe_has_flat_ccs(struct xe_device *xe)
+ 		return 0;
+ 
+ 	gt = xe_root_mmio_gt(xe);
++	if (!gt)
++		return 0;
+ 
+ 	fw_ref = xe_force_wake_get(gt_to_fw(gt), XE_FW_GT);
+ 	if (!fw_ref)
+-- 
+2.43.0
+

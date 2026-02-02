@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:09:44 -0700
+Subject: drm/xe/huc: Adjust HuC check on primary GT
+
+The HuC initialization code determines whether a platform can have a HuC
+on the primary GT by checking whether tile->media_gt is NULL; old Xe1
+platforms that combined render+media into a single GT will always have a
+NULL media_gt pointer.  However once we allow media to be disabled via
+configfs, there will also be cases where tile->media_gt is NULL on more
+modern platforms, causing this condition to behave incorrectly.
+
+To handle cases where media gets disabled via configfs (or theoretical
+cases where media is truly fused off in hardware), change the condition
+to consider the graphics version of the primary GT; only the old Xe1
+platforms with graphics versions 12.55 or earlier should try to
+initialize a HuC on the primary GT.
+
+Cc: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-26-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit 2816905e1403ccc2ff9db12b5bbc89d11187c942 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_huc.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_huc.c b/drivers/gpu/drm/xe/xe_huc.c
+index 7e43b2dd6..0a70c8924 100644
+--- a/drivers/gpu/drm/xe/xe_huc.c
++++ b/drivers/gpu/drm/xe/xe_huc.c
+@@ -66,14 +66,18 @@ static int huc_alloc_gsc_pkt(struct xe_huc *huc)
+ int xe_huc_init(struct xe_huc *huc)
+ {
+ 	struct xe_gt *gt = huc_to_gt(huc);
+-	struct xe_tile *tile = gt_to_tile(gt);
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	int ret;
+ 
+ 	huc->fw.type = XE_UC_FW_TYPE_HUC;
+ 
+-	/* On platforms with a media GT the HuC is only available there */
+-	if (tile->media_gt && (gt != tile->media_gt)) {
++	/*
++	 * The HuC is only available on the media GT on most platforms.  The
++	 * exception to that rule are the old Xe1 platforms where there was
++	 * no separate GT for media IP, so the HuC was part of the primary
++	 * GT.  Such platforms have graphics versions 12.55 and earlier.
++	 */
++	if (!xe_gt_is_media_type(gt) && GRAPHICS_VERx100(xe) > 1255) {
+ 		xe_uc_fw_change_status(&huc->fw, XE_UC_FIRMWARE_NOT_SUPPORTED);
+ 		return 0;
+ 	}
+-- 
+2.43.0
+

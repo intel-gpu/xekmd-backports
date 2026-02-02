@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 13 Oct 2025 13:09:57 -0700
+Subject: drm/xe/irq: Don't try to lookup engine masks for non-existent
+ primary GT
+
+If the primary GT is disabled via configfs, we shouldn't try to access
+it to lookup BCS/CCS engine masks.  For the purposes of IRQ reset (which
+masks & disables interrupts in an sgunit register), assume all possible
+instances are present.
+
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Link: https://lore.kernel.org/r/20251013200944.2499947-39-matthew.d.roper@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit 4d292406823b505bd14bd7e02d2cae7f5fb0a97a linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_irq.c | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_irq.c b/drivers/gpu/drm/xe/xe_irq.c
+index 3dac9ef81..d79a2b73c 100644
+--- a/drivers/gpu/drm/xe/xe_irq.c
++++ b/drivers/gpu/drm/xe/xe_irq.c
+@@ -494,11 +494,15 @@ static irqreturn_t dg1_irq_handler(int irq, void *arg)
+ static void gt_irq_reset(struct xe_tile *tile)
+ {
+ 	struct xe_mmio *mmio = &tile->mmio;
+-
+-	u32 ccs_mask = xe_hw_engine_mask_per_class(tile->primary_gt,
+-						   XE_ENGINE_CLASS_COMPUTE);
+-	u32 bcs_mask = xe_hw_engine_mask_per_class(tile->primary_gt,
+-						   XE_ENGINE_CLASS_COPY);
++	u32 ccs_mask = ~0;
++	u32 bcs_mask = ~0;
++
++	if (tile->primary_gt) {
++		ccs_mask = xe_hw_engine_mask_per_class(tile->primary_gt,
++						       XE_ENGINE_CLASS_COMPUTE);
++		bcs_mask = xe_hw_engine_mask_per_class(tile->primary_gt,
++						       XE_ENGINE_CLASS_COPY);
++	}
+ 
+ 	/* Disable RCS, BCS, VCS and VECS class engines. */
+ 	xe_mmio_write32(mmio, RENDER_COPY_INTR_ENABLE, 0);
+-- 
+2.43.0
+

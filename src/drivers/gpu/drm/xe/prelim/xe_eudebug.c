@@ -41,6 +41,7 @@
 #include "xe_reg_sr.h"
 #include "xe_rtp.h"
 #include "xe_sched_job.h"
+#include "xe_sriov_pf.h"
 #include "xe_sync.h"
 #include "xe_vm.h"
 #include "xe_wa.h"
@@ -1753,10 +1754,6 @@ static int xe_eudebug_handle_gt_attention(struct xe_gt *gt)
 {
 	int ret;
 
-	ret = prelim_xe_gt_eu_threads_needing_attention(gt);
-	if (ret <= 0)
-		return ret;
-
 	ret = xe_send_gt_attention(gt);
 
 	/* Discovery in progress, fake it */
@@ -1904,10 +1901,6 @@ static int handle_gt_queued_pagefault(struct xe_gt *gt)
 	struct xe_eudebug *d;
 	int ret, lrc_idx;
 
-	ret = prelim_xe_gt_eu_threads_needing_attention(gt);
-	if (ret <= 0)
-		return ret;
-
 	if (list_empty_careful(&gt_to_xe(gt)->eudebug.list))
 		return -ENOTCONN;
 
@@ -1942,6 +1935,16 @@ out_exec_queue_put:
 	return ret;
 }
 
+static void _handle_attention_fail(struct xe_gt *gt, u8 gt_id, int ret)
+{
+	/* TODO: error capture */
+	drm_info(&gt_to_xe(gt)->drm,
+		 "gt:%d unable to handle eu attention ret=%d\n",
+		 gt_id, ret);
+
+	xe_gt_reset_async(gt);
+}
+
 #define XE_EUDEBUG_ATTENTION_INTERVAL 100
 static void attention_scan_fn(struct work_struct *work)
 {
@@ -1958,21 +1961,26 @@ static void attention_scan_fn(struct work_struct *work)
 
 	if (xe_pm_runtime_get_if_active(xe)) {
 		for_each_gt(gt, xe, gt_id) {
-			int ret;
+			int ret, attns_count;
 
 			if (gt->info.type != XE_GT_TYPE_MAIN)
 				continue;
 
-			handle_gt_queued_pagefault(gt);
+			attns_count = prelim_xe_gt_eu_threads_needing_attention(gt);
+			if (!attns_count)
+				continue;
+
+			ret = xe_eudebug_handle_gt_attention(gt);
+			ret = handle_gt_queued_pagefault(gt);
+			if (ret) {
+				_handle_attention_fail(gt, gt_id, ret);
+				continue;
+			}
 
 			ret = xe_eudebug_handle_gt_attention(gt);
 			if (ret) {
-				/* TODO: error capture */
-				drm_info(&gt_to_xe(gt)->drm,
-					 "gt:%d unable to handle eu attention ret=%d\n",
-					 gt_id, ret);
-
-				xe_gt_reset_async(gt);
+				_handle_attention_fail(gt, gt_id, ret);
+				continue;
 			}
 		}
 
@@ -2354,36 +2362,6 @@ bool prelim_xe_eudebug_is_enabled(struct xe_device *xe)
 	return xe->eudebug.state == XE_EUDEBUG_ENABLED;
 }
 
-static int __xe_eudebug_toggle_support(struct xe_device *xe, bool enable)
-{
-	down_write(&xe->eudebug.discovery_lock);
-	if (XE_WARN_ON(xe->eudebug.state <= XE_EUDEBUG_NOT_AVAILABLE)) {
-		up_write(&xe->eudebug.discovery_lock);
-		return -EINVAL;
-	}
-
-	if (!enable && prelim_xe_eudebug_is_enabled(xe)) {
-		up_write(&xe->eudebug.discovery_lock);
-		return -EPERM;
-	}
-
-	xe->eudebug.state = enable ? XE_EUDEBUG_SUPPORTED : XE_EUDEBUG_NOT_SUPPORTED;
-
-	up_write(&xe->eudebug.discovery_lock);
-
-	return 0;
-}
-
-void prelim_xe_eudebug_support_enable(struct xe_device *xe)
-{
-	__xe_eudebug_toggle_support(xe, true);
-}
-
-int prelim_xe_eudebug_support_disable(struct xe_device *xe)
-{
-	return __xe_eudebug_toggle_support(xe, false);
-}
-
 static void add_sr_entry(struct xe_hw_engine *hwe,
 			 struct xe_reg_mcr mcr_reg,
 			 u32 mask, bool enable)
@@ -2430,6 +2408,7 @@ static void xe_eudebug_reinit_hw_engine(struct xe_hw_engine *hwe, bool enable)
 static int xe_eudebug_enable(struct xe_device *xe, bool enable)
 {
 	struct xe_gt *gt;
+	int ret;
 	int i;
 	u8 id;
 
@@ -2454,6 +2433,16 @@ static int xe_eudebug_enable(struct xe_device *xe, bool enable)
 		return 0;
 	}
 
+	if (enable && IS_SRIOV_PF(xe)) {
+		ret = xe_sriov_pf_lockdown(xe);
+		if (ret) {
+			up_write(&xe->eudebug.discovery_lock);
+			return 0;
+		}
+	}
+
+	xe_pm_runtime_get(xe);
+
 	for_each_gt(gt, xe, id) {
 		for (i = 0; i < ARRAY_SIZE(gt->hw_engines); i++) {
 			if (!(gt->info.engine_mask & BIT(i)))
@@ -2466,13 +2455,18 @@ static int xe_eudebug_enable(struct xe_device *xe, bool enable)
 		flush_work(&gt->reset.worker);
 	}
 
+	xe_pm_runtime_put(xe);
+
 	xe->eudebug.state = enable ? XE_EUDEBUG_ENABLED : XE_EUDEBUG_SUPPORTED;
 	up_write(&xe->eudebug.discovery_lock);
 
-	if (enable)
+	if (enable) {
 		attention_scan_flush(xe);
-	else
+	} else {
 		attention_scan_cancel(xe);
+		if (IS_SRIOV_PF(xe))
+			xe_sriov_pf_end_lockdown(xe);
+	}
 
 	return 0;
 }
@@ -2504,16 +2498,27 @@ static ssize_t prelim_enable_eudebug_store(struct device *dev, struct device_att
 
 static DEVICE_ATTR_RW(prelim_enable_eudebug);
 
-static void xe_eudebug_sysfs_fini(void *arg)
+static void prelim_xe_eudebug_sysfs_fini(struct drm_device *dev, void *__unused)
 {
-	struct xe_device *xe = arg;
+	struct xe_device *xe = to_xe_device(dev);
 
 	sysfs_remove_file(&xe->drm.dev->kobj, &dev_attr_prelim_enable_eudebug.attr);
 }
 
+static void prelim_xe_eudebug_fini(struct drm_device *dev, void *__unused)
+{
+	struct xe_device *xe = to_xe_device(dev);
+
+	attention_scan_cancel(xe);
+	xe_assert(xe, list_empty_careful(&xe->eudebug.list));
+
+	if (xe->eudebug.ordered_wq)
+		destroy_workqueue(xe->eudebug.ordered_wq);
+}
+
+
 void prelim_xe_eudebug_init(struct xe_device *xe)
 {
-	struct device *dev = xe->drm.dev;
 	int ret;
 
 	spin_lock_init(&xe->eudebug.lock);
@@ -2523,7 +2528,7 @@ void prelim_xe_eudebug_init(struct xe_device *xe)
 	INIT_LIST_HEAD(&xe->clients.list);
 	init_rwsem(&xe->eudebug.discovery_lock);
 	INIT_DELAYED_WORK(&xe->eudebug.attention_scan, attention_scan_fn);
-	xe->eudebug.state = XE_EUDEBUG_NOT_AVAILABLE;
+	xe->eudebug.state = XE_EUDEBUG_NOT_SUPPORTED;
 
 	if (IS_SRIOV_VF(xe)) {
 		drm_info(&xe->drm, "eudebug not available in SR-IOV VF mode\n");
@@ -2536,23 +2541,26 @@ void prelim_xe_eudebug_init(struct xe_device *xe)
 		return;
 	}
 
+	ret = drmm_add_action_or_reset(&xe->drm, prelim_xe_eudebug_fini, NULL);
+	if (ret) {
+		drm_warn(&xe->drm, "eudebug initialization failed: %d, debugger unavailable\n", ret);
+		return;
+	}
+
+
 	ret = sysfs_create_file(&xe->drm.dev->kobj, &dev_attr_prelim_enable_eudebug.attr);
 	if (ret) {
 		drm_warn(&xe->drm, "eudebug sysfs init failed: %d, debugger unavailable\n", ret);
 		return;
 	}
 
-	devm_add_action_or_reset(dev, xe_eudebug_sysfs_fini, xe);
+	ret = drmm_add_action_or_reset(&xe->drm, prelim_xe_eudebug_sysfs_fini, NULL);
+	if (ret) {
+		drm_warn(&xe->drm, "eudebug sysfs post-init failed: %d, debugger unavailable\n", ret);
+		return;
+	}
+
 	xe->eudebug.state = XE_EUDEBUG_SUPPORTED;
-}
-
-void prelim_xe_eudebug_fini(struct xe_device *xe)
-{
-	attention_scan_cancel(xe);
-	xe_assert(xe, list_empty_careful(&xe->eudebug.list));
-
-	if (xe->eudebug.ordered_wq)
-		destroy_workqueue(xe->eudebug.ordered_wq);
 }
 
 static int send_open_event(struct xe_eudebug *d, u32 flags, const u64 handle,

@@ -69,3 +69,23 @@ AC_DEFUN([AC_DRM_DBG_RATELIMITED_NOT_PRESENT], [
                 ])
         ])
 ])
+
+dnl #
+dnl #
+dnl # v6.17-3050c1811387
+dnl # drm/print: add drm_print_hex_dump()
+dnl #
+AC_DEFUN([AC_DRM_PRINT_HEX_DUMP_NOT_PRESENT], [
+        AC_KERNEL_DO_BACKGROUND([
+                AC_KERNEL_TRY_COMPILE([
+                        #include <drm/drm_print.h>
+                ],[
+                        drm_print_hex_dump(NULL,NULL,NULL,0);
+			
+                ],[
+                ],[
+                        AC_DEFINE(BPM_DRM_PRINT_HEX_DUMP_NOT_PRESENT, 1,
+                                [drm_print_hex_dump() not available])
+                ])
+        ])
+])

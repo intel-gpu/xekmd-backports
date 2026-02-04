@@ -228,8 +228,8 @@ struct dma_fence *xe_vm_range_rebind(struct xe_vm *vm,
 struct dma_fence *xe_vm_range_unbind(struct xe_vm *vm,
 				     struct xe_svm_range *range);
 
-int xe_vm_range_tilemask_tlb_invalidation(struct xe_vm *vm, u64 start,
-					  u64 end, u8 tile_mask);
+int xe_vm_range_tilemask_tlb_inval(struct xe_vm *vm, u64 start,
+				   u64 end, u8 tile_mask);
 
 int xe_vm_invalidate_vma(struct xe_vma *vma);
 
@@ -262,8 +262,6 @@ int xe_vma_userptr_pin_pages(struct xe_userptr_vma *uvma);
 
 int xe_vma_userptr_check_repin(struct xe_userptr_vma *uvma);
 
-bool xe_vm_validate_should_retry(struct drm_exec *exec, int err, ktime_t *end);
-
 int xe_vm_lock_vma(struct drm_exec *exec, struct xe_vma *vma);
 
 int xe_vm_validate_rebind(struct xe_vm *vm, struct drm_exec *exec,
@@ -294,6 +292,8 @@ void xe_vm_kill(struct xe_vm *vm, bool unlocked);
  */
 #define xe_vm_assert_held(vm) dma_resv_assert_held(xe_vm_resv(vm))
 
+int xe_vm_drm_exec_lock(struct xe_vm *vm, struct drm_exec *exec);
+
 #if IS_ENABLED(CPTCFG_DRM_XE_DEBUG_VM)
 #define vm_dbg drm_dbg
 #else
@@ -323,7 +323,7 @@ static inline void xe_vm_set_validating(struct xe_vm *vm, bool allow_res_evict)
 	if (vm && !allow_res_evict) {
 		xe_vm_assert_held(vm);
 		/* Pairs with READ_ONCE in xe_vm_is_validating() */
-		WRITE_ONCE(vm->validating, current);
+		WRITE_ONCE(vm->validation.validating, current);
 	}
 }
 
@@ -341,7 +341,7 @@ static inline void xe_vm_clear_validating(struct xe_vm *vm, bool allow_res_evict
 {
 	if (vm && !allow_res_evict) {
 		/* Pairs with READ_ONCE in xe_vm_is_validating() */
-		WRITE_ONCE(vm->validating, NULL);
+		WRITE_ONCE(vm->validation.validating, NULL);
 	}
 }
 
@@ -359,11 +359,39 @@ static inline void xe_vm_clear_validating(struct xe_vm *vm, bool allow_res_evict
 static inline bool xe_vm_is_validating(struct xe_vm *vm)
 {
 	/* Pairs with WRITE_ONCE in xe_vm_is_validating() */
-	if (READ_ONCE(vm->validating) == current) {
+	if (READ_ONCE(vm->validation.validating) == current) {
 		xe_vm_assert_held(vm);
 		return true;
 	}
 	return false;
+}
+
+/**
+ * xe_vm_set_validation_exec() - Accessor to set the drm_exec object
+ * @vm: The vm we want to register a drm_exec object with.
+ * @exec: The exec object we want to register.
+ *
+ * Set the drm_exec object used to lock the vm's resv.
+ */
+static inline void xe_vm_set_validation_exec(struct xe_vm *vm, struct drm_exec *exec)
+{
+	xe_vm_assert_held(vm);
+	xe_assert(vm->xe, !!exec ^ !!vm->validation._exec);
+	vm->validation._exec = exec;
+}
+
+/**
+ * xe_vm_set_validation_exec() - Accessor to read the drm_exec object
+ * @vm: The vm we want to register a drm_exec object with.
+ *
+ * Return: The drm_exec object used to lock the vm's resv. The value
+ * is a valid pointer, %NULL, or one of the special values defined in
+ * xe_validation.h.
+ */
+static inline struct drm_exec *xe_vm_validation_exec(struct xe_vm *vm)
+{
+	xe_vm_assert_held(vm);
+	return vm->validation._exec;
 }
 
 /**

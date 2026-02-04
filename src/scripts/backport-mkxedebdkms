@@ -79,6 +79,10 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
 	BUILT_MODULE_LOCATION[9]="src"
 	DEST_MODULE_LOCATION[9]="/updates"
 
+	BUILT_MODULE_NAME[10]="xe-vfio-pci"
+	BUILT_MODULE_LOCATION[10]="src/drivers/vfio/pci/xe"
+	DEST_MODULE_LOCATION[10]="/updates"
+
 	select_drm_gpuvm() {
 		if [ -z "\$kernelver" ]; then
 			echo "false"
@@ -92,9 +96,9 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
 	}
 
 	if [ "\$(select_drm_gpuvm)" = "true" ]; then
-		BUILT_MODULE_NAME[10]="drm_gpuvm"
-		BUILT_MODULE_LOCATION[10]="src"
-		DEST_MODULE_LOCATION[10]="/updates"
+		BUILT_MODULE_NAME[11]="drm_gpuvm"
+		BUILT_MODULE_LOCATION[11]="src"
+		DEST_MODULE_LOCATION[11]="/updates"
 	fi
 
 	# Find out how many CPU cores can be use if we pass appropriate -j option to make.

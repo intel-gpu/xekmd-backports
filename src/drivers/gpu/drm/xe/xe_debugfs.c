@@ -22,8 +22,10 @@
 #include "xe_pm.h"
 #include "xe_pxp_debugfs.h"
 #include "xe_sriov.h"
-#include "xe_sriov_pf.h"
+#include "xe_sriov_pf_debugfs.h"
+#include "xe_sriov_vf.h"
 #include "xe_step.h"
+#include "xe_tile_debugfs.h"
 #include "xe_wa.h"
 #include "xe_vsec.h"
 
@@ -34,9 +36,10 @@
 #endif
 
 DECLARE_FAULT_ATTR(gt_reset_failure);
+DECLARE_FAULT_ATTR(inject_csc_hw_error);
 
 static void read_residency_counter(struct xe_device *xe, struct xe_mmio *mmio,
-				   u32 offset, char *name, struct drm_printer *p)
+				   u32 offset, const char *name, struct drm_printer *p)
 {
 	u64 residency = 0;
 	int ret;
@@ -51,6 +54,52 @@ static void read_residency_counter(struct xe_device *xe, struct xe_mmio *mmio,
 
 	drm_printf(p, "%s : %llu\n", name, residency);
 }
+
+#ifdef BPM_DRM_MINOR_DEBUGFS_SYMLINK_NOT_PRESENT
+static int xe_debugfs_create_compat_structure(struct xe_device *xe)
+{
+       struct drm_device *drm = &xe->drm;
+       struct drm_minor *minor = drm->primary;
+       struct dentry *drm_root, *symlink;
+       char minor_name[16];
+       char *buf, *path_ptr;
+
+       drm_root = minor->debugfs_root->d_parent;
+       if (!drm_root)
+               return -EINVAL;
+
+       symlink = debugfs_lookup(drm->unique, drm_root);
+       if (symlink) {
+               debugfs_remove(symlink);
+               dput(symlink);
+       }
+
+       snprintf(minor_name, sizeof(minor_name), "%d", minor->index);
+       debugfs_create_symlink(drm->unique, drm_root, minor_name);
+
+       return 0;
+}
+
+void xe_debugfs_cleanup_compat_structure(struct xe_device *xe)
+{
+        struct drm_device *drm = &xe->drm;
+        struct drm_minor *minor = drm->primary;
+        struct dentry *drm_root, *symlink;
+
+        if (!minor || !minor->debugfs_root)
+                return;
+
+        drm_root = minor->debugfs_root->d_parent;
+        if (!drm_root)
+                return;
+
+        symlink = debugfs_lookup(drm->unique, drm_root);
+        if (symlink) {
+                debugfs_remove(symlink);
+                dput(symlink);
+        }
+}
+#endif
 
 static struct xe_device *node_to_xe(struct drm_info_node *node)
 {
@@ -132,9 +181,9 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
 	p = drm_seq_file_printer(m);
 	xe_pm_runtime_get(xe);
 	mmio = xe_root_tile_mmio(xe);
-	struct {
+	static const struct {
 		u32 offset;
-		char *name;
+		const char *name;
 	} residencies[] = {
 		{BMG_G2_RESIDENCY_OFFSET, "Package G2"},
 		{BMG_G6_RESIDENCY_OFFSET, "Package G6"},
@@ -161,9 +210,9 @@ static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
 	xe_pm_runtime_get(xe);
 	mmio = xe_root_tile_mmio(xe);
 
-	struct {
+	static const struct {
 		u32 offset;
-		char *name;
+		const char *name;
 	} residencies[] = {
 		{BMG_PCIE_LINK_L0_RESIDENCY_OFFSET, "PCIE LINK L0 RESIDENCY"},
 		{BMG_PCIE_LINK_L1_RESIDENCY_OFFSET, "PCIE LINK L1 RESIDENCY"},
@@ -327,24 +376,66 @@ static const struct file_operations atomic_svm_timeslice_ms_fops = {
 	.write = atomic_svm_timeslice_ms_set,
 };
 
+static ssize_t disable_late_binding_show(struct file *f, char __user *ubuf,
+					 size_t size, loff_t *pos)
+{
+	struct xe_device *xe = file_inode(f)->i_private;
+	struct xe_late_bind *late_bind = &xe->late_bind;
+	char buf[32];
+	int len;
+
+	len = scnprintf(buf, sizeof(buf), "%d\n", late_bind->disable);
+
+	return simple_read_from_buffer(ubuf, size, pos, buf, len);
+}
+
+static ssize_t disable_late_binding_set(struct file *f, const char __user *ubuf,
+					size_t size, loff_t *pos)
+{
+	struct xe_device *xe = file_inode(f)->i_private;
+	struct xe_late_bind *late_bind = &xe->late_bind;
+	u32 uval;
+	ssize_t ret;
+
+	ret = kstrtouint_from_user(ubuf, size, sizeof(uval), &uval);
+	if (ret)
+		return ret;
+
+	if (uval > 1)
+		return -EINVAL;
+
+	late_bind->disable = !!uval;
+	return size;
+}
+
+static const struct file_operations disable_late_binding_fops = {
+	.owner = THIS_MODULE,
+	.read = disable_late_binding_show,
+	.write = disable_late_binding_set,
+};
+
 void xe_debugfs_register(struct xe_device *xe)
 {
 	struct ttm_device *bdev = &xe->ttm;
 	struct drm_minor *minor = xe->drm.primary;
 	struct dentry *root = minor->debugfs_root;
 	struct ttm_resource_manager *man;
+	struct xe_tile *tile;
 	struct xe_gt *gt;
-	u32 mem_type;
+	u8 tile_id;
 	u8 id;
 
 	drm_debugfs_create_files(debugfs_list,
 				 ARRAY_SIZE(debugfs_list),
 				 root, minor);
 
-	if (xe->info.platform == XE_BATTLEMAGE && !IS_SRIOV_VF(xe))
+	if (xe->info.platform == XE_BATTLEMAGE && !IS_SRIOV_VF(xe)) {
 		drm_debugfs_create_files(debugfs_residencies,
 					 ARRAY_SIZE(debugfs_residencies),
 					 root, minor);
+		fault_create_debugfs_attr("inject_csc_hw_error", root,
+					 &inject_csc_hw_error);
+	}
 
 	debugfs_create_file("forcewake_all", 0400, root, xe,
 			    &forcewake_all_fops);
@@ -355,16 +446,8 @@ void xe_debugfs_register(struct xe_device *xe)
 	debugfs_create_file("atomic_svm_timeslice_ms", 0600, root, xe,
 			    &atomic_svm_timeslice_ms_fops);
 
-	for (mem_type = XE_PL_VRAM0; mem_type <= XE_PL_VRAM1; ++mem_type) {
-		man = ttm_manager_type(bdev, mem_type);
-
-		if (man) {
-			char name[16];
-
-			snprintf(name, sizeof(name), "vram%d_mm", mem_type - XE_PL_VRAM0);
-			ttm_resource_manager_create_debugfs(man, root, name);
-		}
-	}
+	debugfs_create_file("disable_late_binding", 0600, root, xe,
+			    &disable_late_binding_fops);
 
 	man = ttm_manager_type(bdev, XE_PL_TT);
 	ttm_resource_manager_create_debugfs(man, root, "gtt_mm");
@@ -372,6 +455,9 @@ void xe_debugfs_register(struct xe_device *xe)
 	man = ttm_manager_type(bdev, XE_PL_STOLEN);
 	if (man)
 		ttm_resource_manager_create_debugfs(man, root, "stolen_mm");
+
+	for_each_tile(tile, xe, tile_id)
+		xe_tile_debugfs_register(tile);
 
 	for_each_gt(gt, xe, id)
 		xe_gt_debugfs_register(gt);
@@ -382,4 +468,10 @@ void xe_debugfs_register(struct xe_device *xe)
 
 	if (IS_SRIOV_PF(xe))
 		xe_sriov_pf_debugfs_register(xe, root);
+	else if (IS_SRIOV_VF(xe))
+		xe_sriov_vf_debugfs_register(xe, root);
+
+#ifdef BPM_DRM_MINOR_DEBUGFS_SYMLINK_NOT_PRESENT
+        xe_debugfs_create_compat_structure(xe);
+#endif
 }

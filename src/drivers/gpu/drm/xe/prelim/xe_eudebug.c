@@ -1970,7 +1970,6 @@ static void attention_scan_fn(struct work_struct *work)
 			if (!attns_count)
 				continue;
 
-			ret = xe_eudebug_handle_gt_attention(gt);
 			ret = handle_gt_queued_pagefault(gt);
 			if (ret) {
 				_handle_attention_fail(gt, gt_id, ret);

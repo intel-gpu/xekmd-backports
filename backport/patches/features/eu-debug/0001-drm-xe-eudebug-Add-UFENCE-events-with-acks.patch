@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Fri, 8 Mar 2024 14:34:01 +0200
-Subject: drm/xe/eudebug: Add UFENCE events with acks
+Subject: [PATCH] drm/xe/eudebug: Add UFENCE events with acks
 
 When vma is in place, debugger needs to intercept before
 userspace proceeds with the workload. For example to install
@@ -38,7 +38,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  10 files changed, 386 insertions(+), 30 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 2ae819a21a68..42343cd00861 100644
+index b9fe9ae85785..2a7d4433cc04 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -32,6 +32,7 @@
@@ -480,34 +480,34 @@ index d9c9ec73df42..d3098311dfd8 100644
 +
  #endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_exec.c b/drivers/gpu/drm/xe/xe_exec.c
-index 44364c042ad7..d638bd13d17c 100644
+index 3b9da4dc2dd2..2896c512a55b 100644
 --- a/drivers/gpu/drm/xe/xe_exec.c
 +++ b/drivers/gpu/drm/xe/xe_exec.c
-@@ -159,7 +159,7 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -164,7 +164,7 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  	vm = q->vm;
  
  	for (num_syncs = 0; num_syncs < args->num_syncs; num_syncs++) {
 -		err = xe_sync_entry_parse(xe, xef, &syncs[num_syncs],
 +		err = xe_sync_entry_parse(xe, xef, vm, &syncs[num_syncs],
- 					  &syncs_user[num_syncs], SYNC_PARSE_FLAG_EXEC |
+ 					  &syncs_user[num_syncs], NULL, 0,
+ 					  SYNC_PARSE_FLAG_EXEC |
  					  (xe_vm_in_lr_mode(vm) ?
- 					   SYNC_PARSE_FLAG_LR_MODE : 0));
 diff --git a/drivers/gpu/drm/xe/xe_oa.c b/drivers/gpu/drm/xe/xe_oa.c
-index 5729e7d3e335..4474518eab3e 100644
+index 6b19ada25589..8026bf658c10 100644
 --- a/drivers/gpu/drm/xe/xe_oa.c
 +++ b/drivers/gpu/drm/xe/xe_oa.c
-@@ -1408,7 +1408,8 @@ static int xe_oa_parse_syncs(struct xe_oa *oa, struct xe_oa_open_param *param)
+@@ -1415,7 +1415,8 @@ static int xe_oa_parse_syncs(struct xe_oa *oa,
  	}
  
  	for (num_syncs = 0; num_syncs < param->num_syncs; num_syncs++) {
 -		ret = xe_sync_entry_parse(oa->xe, param->xef, &param->syncs[num_syncs],
 +		ret = xe_sync_entry_parse(oa->xe, param->xef, NULL,
 +					  &param->syncs[num_syncs],
- 					  &param->syncs_user[num_syncs], 0);
- 		if (ret)
- 			goto err_syncs;
+ 					  &param->syncs_user[num_syncs],
+ 					  stream->ufence_syncobj,
+ 					  ++stream->ufence_timeline_value, 0);
 diff --git a/drivers/gpu/drm/xe/xe_sync.c b/drivers/gpu/drm/xe/xe_sync.c
-index 82872a51f098..f11ad6367d85 100644
+index d48ab7b32ca5..335a8f709529 100644
 --- a/drivers/gpu/drm/xe/xe_sync.c
 +++ b/drivers/gpu/drm/xe/xe_sync.c
 @@ -15,27 +15,20 @@
@@ -605,11 +605,11 @@ index 82872a51f098..f11ad6367d85 100644
 +			struct xe_vm *vm,
  			struct xe_sync_entry *sync,
  			struct drm_xe_sync __user *sync_user,
- 			unsigned int flags)
-@@ -192,7 +205,8 @@ int xe_sync_entry_parse(struct xe_device *xe, struct xe_file *xef,
- 		if (exec) {
+ 			struct drm_syncobj *ufence_syncobj,
+@@ -195,7 +208,8 @@ int xe_sync_entry_parse(struct xe_device *xe, struct xe_file *xef,
  			sync->addr = sync_in.addr;
  		} else {
+ 			sync->ufence_timeline_value = ufence_timeline_value;
 -			sync->ufence = user_fence_create(xe, sync_in.addr,
 +			sync->ufence = user_fence_create(xe, xef, vm,
 +							 sync_in.addr,
@@ -617,32 +617,33 @@ index 82872a51f098..f11ad6367d85 100644
  			if (XE_IOCTL_DBG(xe, IS_ERR(sync->ufence)))
  				return PTR_ERR(sync->ufence);
 diff --git a/drivers/gpu/drm/xe/xe_sync.h b/drivers/gpu/drm/xe/xe_sync.h
-index 256ffc1e54dc..f5bec2b1b4f6 100644
+index 51f2d803e977..9f1ce939c2b1 100644
 --- a/drivers/gpu/drm/xe/xe_sync.h
 +++ b/drivers/gpu/drm/xe/xe_sync.h
-@@ -9,8 +9,12 @@
- #include "xe_sync_types.h"
+@@ -10,16 +10,21 @@
  
+ struct drm_syncobj;
  struct xe_device;
 -struct xe_exec_queue;
  struct xe_file;
+ struct xe_sched_job;
+ struct xe_vm;
 +struct xe_exec_queue;
 +struct drm_syncobj;
 +struct dma_fence;
 +struct dma_fence_chain;
 +struct drm_xe_sync;
- struct xe_sched_job;
- struct xe_vm;
  
-@@ -19,6 +23,7 @@ struct xe_vm;
+ #define SYNC_PARSE_FLAG_EXEC			BIT(0)
+ #define SYNC_PARSE_FLAG_LR_MODE			BIT(1)
  #define SYNC_PARSE_FLAG_DISALLOW_USER_FENCE	BIT(2)
  
  int xe_sync_entry_parse(struct xe_device *xe, struct xe_file *xef,
 +			struct xe_vm *vm,
  			struct xe_sync_entry *sync,
  			struct drm_xe_sync __user *sync_user,
- 			unsigned int flags);
-@@ -40,5 +45,6 @@ struct xe_user_fence *__xe_sync_ufence_get(struct xe_user_fence *ufence);
+ 			struct drm_syncobj *ufence_syncobj,
+@@ -43,5 +48,6 @@ struct xe_user_fence *__xe_sync_ufence_get(struct xe_user_fence *ufence);
  struct xe_user_fence *xe_sync_ufence_get(struct xe_sync_entry *sync);
  void xe_sync_ufence_put(struct xe_user_fence *ufence);
  int xe_sync_ufence_get_status(struct xe_user_fence *ufence);
@@ -650,7 +651,7 @@ index 256ffc1e54dc..f5bec2b1b4f6 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_sync_types.h b/drivers/gpu/drm/xe/xe_sync_types.h
-index 30ac3f51993b..dcd3165e66a7 100644
+index b88f1833e28c..33a93a0faa72 100644
 --- a/drivers/gpu/drm/xe/xe_sync_types.h
 +++ b/drivers/gpu/drm/xe/xe_sync_types.h
 @@ -6,13 +6,31 @@
@@ -691,10 +692,10 @@ index 30ac3f51993b..dcd3165e66a7 100644
  struct xe_sync_entry {
  	struct drm_syncobj *syncobj;
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 1f6f9a78c554..f5d2a9f32cbd 100644
+index df50c7c4f001..4f7046b98762 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -3644,9 +3644,11 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -3781,11 +3781,13 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		}
  	}
  
@@ -702,11 +703,13 @@ index 1f6f9a78c554..f5d2a9f32cbd 100644
 +
  	syncs_user = u64_to_user_ptr(args->syncs);
  	for (num_syncs = 0; num_syncs < args->num_syncs; num_syncs++) {
+ 		struct xe_exec_queue *__q = q ?: vm->q[0];
+ 
 -		err = xe_sync_entry_parse(xe, xef, &syncs[num_syncs],
 +		err = xe_sync_entry_parse(xe, xef, vm, &syncs[num_syncs],
  					  &syncs_user[num_syncs],
- 					  (xe_vm_in_lr_mode(vm) ?
- 					   SYNC_PARSE_FLAG_LR_MODE : 0) |
+ 					  __q->ufence_syncobj,
+ 					  ++__q->ufence_timeline_value,
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
 index cacad4ccfca5..821d9dac4f16 100644
 --- a/include/uapi/drm/xe_drm_eudebug.h

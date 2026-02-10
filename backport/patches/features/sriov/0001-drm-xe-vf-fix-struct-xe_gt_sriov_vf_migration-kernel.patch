@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jani Nikula <jani.nikula@intel.com>
+Date: Wed, 7 Jan 2026 17:53:58 +0200
+Subject: drm/xe/vf: fix struct xe_gt_sriov_vf_migration kernel-doc
+
+Fix kernel-doc warnings on struct xe_gt_sriov_vf_migration:
+
+Warning: ../drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h:47 cannot
+  understand function prototype: 'struct xe_gt_sriov_vf_migration'
+
+Fixes: e1d2e2d878bf ("drm/xe/vf: Add xe_gt_recovery_pending helper")
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Tomasz Lis <tomasz.lis@intel.com>
+Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
+Link: https://patch.msgid.link/20260107155401.2379127-2-jani.nikula@intel.com
+Signed-off-by: Jani Nikula <jani.nikula@intel.com>
+(cherry-picked from commit 44393331c79f5df14c1ff25f4a355f439a2dc8a2 drm-xe-next)
+Signed-off-by: Bommu Krishnaiah <bommu.krishnaiah@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
+index 510c33116fbd..2b728bbb7697 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
+@@ -41,10 +41,10 @@ struct xe_gt_sriov_vf_runtime {
+ };
+ 
+ /**
+- * xe_gt_sriov_vf_migration - VF migration data.
++ * struct xe_gt_sriov_vf_migration - VF migration data.
+  */
+ struct xe_gt_sriov_vf_migration {
+-	/** @migration: VF migration recovery worker */
++	/** @worker: VF migration recovery worker */
+ 	struct work_struct worker;
+ 	/** @lock: Protects recovery_queued, teardown */
+ 	spinlock_t lock;
+-- 
+2.43.0
+

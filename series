@@ -20,6 +20,36 @@ backport/patches/base/0001-drm-xe-dma-buf-Allow-pinning-of-p2p-dma-buf.patch
 backport/patches/base/0001-drm-xe-Drop-preempt-fences-when-destroying-imported-.patch
 backport/patches/base/0001-drm-xe-migrate-fix-batch-buffer-sizing.patch
 backport/patches/base/0001-drm-xe-make-xe_gt_idle_disable_c6-handle-the-forcewa.patch
+backport/patches/base/0001-drm-xe-mmio-Avoid-double-adjust-in-64-bit-reads.patch
+backport/patches/base/0001-drm-xe-pm-Disable-D3Cold-for-BMG-only-on-specific-pl.patch
+backport/patches/base/0001-drm-xe-query-Fix-topology-query-pointer-advance.patch
+backport/patches/base/0001-drm-xe-Unregister-drm-device-on-probe-error.patch
+backport/patches/base/0001-drm-xe-Skip-address-copy-for-sync-only-execs.patch
+backport/patches/base/0001-drm-xe-Disable-timestamp-WA-on-VFs.patch
+backport/patches/base/0001-drm-xe-fix-WQ_MEM_RECLAIM-passed-as-max_active-to-al.patch
+backport/patches/base/0001-drm-xe-Adjust-page-count-tracepoints-in-shrinker.patch
+backport/patches/base/0001-drm-xe-guc-READ-WRITE_ONCE-g2h_fence-done.patch
+backport/patches/base/0001-drm-xe-Use-usleep_range-for-accurate-long-running-wo.patch
+backport/patches/base/0001-drm-xe-eustall-Disallow-0-EU-stall-property-values.patch
+backport/patches/base/0001-drm-xe-oa-Disallow-0-OA-property-values.patch
+backport/patches/base/0001-drm-xe-oa-Always-set-OAG_OAGLBCTXCTRL_COUNTER_RESUME.patch
+backport/patches/base/0001-drm-xe-Adjust-long-running-workload-timeslices-to-re.patch
+backport/patches/base/0001-drm-xe-oa-Limit-num_syncs-to-prevent-oversized-alloc.patch
+backport/patches/base/0001-drm-xe-Limit-num_syncs-to-prevent-oversized-allocati.patch
+backport/patches/base/0001-drm-me-gsc-mei-interrupt-top-half-should-be-in-irq-d.patch
+backport/patches/base/0001-drm-xe-bo-Don-t-include-the-CCS-metadata-in-the-dma-.patch
+backport/patches/base/0001-drm-xe-Fix-freq-kobject-leak-on-sysfs_create_files-f.patch
+backport/patches/base/0001-drm-xe-guc-Fix-resource-leak-in-xe_guc_ct_init_noall.patch
+backport/patches/base/0001-drm-xe-oa-Fix-potential-UAF-in-xe_oa_add_config_ioct.patch
+backport/patches/base/0001-drm-xe-Remove-duplicate-DRM_EXEC-selection-from-Kcon.patch
+backport/patches/base/0001-drm-xe-nvm-Manage-nvm-aux-cleanup-with-devres.patch
+backport/patches/base/0001-drm-xe-guc-Fix-CFI-violation-in-debugfs-access.patch
+backport/patches/base/0001-drm-xe-ptl-Disable-DCC-on-PTL.patch
+backport/patches/base/0001-drm-xe-Update-wedged.mode-only-after-successful-rese.patch
+backport/patches/base/0001-drm-pagemap-drm-xe-Ensure-that-the-devmem-allocation.patch
+backport/patches/base/0001-drm-xe-svm-Fix-a-debug-printout.patch
+backport/patches/base/0001-drm-xe-Enforce-correct-user-fence-signaling-order-us.patch
+backport/patches/base/0001-drm-xe-Handle-mixed-mappings-and-existing-VRAM-on-at.patch
 # features/xe-late-bind-fw
 backport/patches/features/xe-late-bind-fw/0001-mei-bus-add-mei_cldev_mtu-interface.patch
 backport/patches/features/xe-late-bind-fw/0001-mei-late_bind-add-late-binding-component-driver.patch
@@ -32,6 +62,7 @@ backport/patches/features/xe-late-bind-fw/0001-drm-xe-xe_late_bind_fw-Introduce-
 backport/patches/features/xe-late-bind-fw/0001-drm-xe-xe_late_bind_fw-Extract-and-print-version-inf.patch
 backport/patches/features/xe-late-bind-fw/0001-drm-xe-xe_late_bind_fw-Fix-missing-initialization-of.patch
 backport/patches/features/xe-late-bind-fw/0001-drm-xe-xe_late_bind_fw-Initialize-uval-variable-in-x.patch
+backport/patches/features/xe-late-bind-fw/0001-drm-xe-xe_late_bind_fw-fix-enum-xe_late_bind_fw_id-k.patch
 # features/sriov
 backport/patches/features/sriov/0001-drm-xe-guc-Recommend-GUC-v70.49.4-for-PTL-BMG.patch
 backport/patches/features/sriov/0001-drm-xe-guc-Add-SLPC-power-profile-interface.patch
@@ -253,6 +284,12 @@ backport/patches/features/sriov/0001-drm-xe-pf-Allow-to-lockdown-the-PF-using-cu
 backport/patches/features/sriov/0001-drm-xe-Move-VRAM-MM-debugfs-creation-to-tile-level.patch
 backport/patches/features/sriov/0001-drm-xe-migrate-fix-job-lock-assert.patch
 backport/patches/features/sriov/0001-drm-xe-uapi-disallow-bind-queue-sharing.patch
+backport/patches/features/sriov/0001-drm-xe-pf-Fix-sysfs-initialization.patch
+backport/patches/features/sriov/0001-drm-xe-xelp-Fix-Wa_18022495364.patch
+backport/patches/features/sriov/0001-drm-xe-vm-fix-xe_vm_validation_exec-kernel-doc.patch
+backport/patches/features/sriov/0001-drm-xe-vf-fix-struct-xe_gt_sriov_vf_migration-kernel.patch
+backport/patches/features/sriov/0001-drm-xe-Fix-uninitialized-return-value-from-xe_valida.patch
+backport/patches/features/sriov/0001-drm-xe-migrate-Fix-an-error-path.patch
 # features/vf-double-migration
 backport/patches/features/vf-double-migration/0001-drm-xe-vf-Enable-VF-migration-only-on-supported-GuC-.patch
 backport/patches/features/vf-double-migration/0001-drm-xe-vf-Introduce-RESFIX-start-marker-support.patch
@@ -260,6 +297,7 @@ backport/patches/features/vf-double-migration/0001-drm-xe-vf-Requeue-recovery-on
 backport/patches/features/vf-double-migration/0001-drm-xe-vf-Add-debugfs-entries-to-test-VF-double-migr.patch
 backport/patches/features/vf-double-migration/0001-drm-xe-vf-Fix-queuing-of-recovery-work.patch
 backport/patches/features/vf-double-migration/0001-drm-xe-vf-Reset-recovery_queued-after-issuing-RESFIX.patch
+backport/patches/features/vf-double-migration/0001-drm-xe-vf-fix-return-type-in-vf_migration_init_late.patch
 # features/eu-debug
 backport/patches/features/eu-debug/0001-ptrace-export-ptrace_may_access.patch
 backport/patches/features/eu-debug/0001-drm-xe-eudebug-Introduce-eudebug-support.patch

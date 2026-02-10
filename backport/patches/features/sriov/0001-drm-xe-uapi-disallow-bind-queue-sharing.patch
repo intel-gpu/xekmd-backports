@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Auld <matthew.auld@intel.com>
 Date: Tue, 20 Jan 2026 11:06:10 +0000
-Subject: drm/xe/uapi: disallow bind queue sharing
+Subject: [PATCH] drm/xe/uapi: disallow bind queue sharing
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -51,10 +51,10 @@ Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
  5 files changed, 48 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 27d0bade8..17ccab961 100644
+index da9924973..bfad1f7b7 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -308,6 +308,7 @@ struct xe_exec_queue *xe_exec_queue_create_class(struct xe_device *xe, struct xe
+@@ -305,6 +305,7 @@ struct xe_exec_queue *xe_exec_queue_create_class(struct xe_device *xe, struct xe
   * @xe: Xe device.
   * @tile: tile which bind exec queue belongs to.
   * @flags: exec queue creation flags
@@ -62,7 +62,7 @@ index 27d0bade8..17ccab961 100644
   * @extensions: exec queue creation extensions
   *
   * Normalize bind exec queue creation. Bind exec queue is tied to migration VM
-@@ -321,6 +322,7 @@ struct xe_exec_queue *xe_exec_queue_create_class(struct xe_device *xe, struct xe
+@@ -318,6 +319,7 @@ struct xe_exec_queue *xe_exec_queue_create_class(struct xe_device *xe, struct xe
   */
  struct xe_exec_queue *xe_exec_queue_create_bind(struct xe_device *xe,
  						struct xe_tile *tile,
@@ -70,9 +70,9 @@ index 27d0bade8..17ccab961 100644
  						u32 flags, u64 extensions)
  {
  	struct xe_gt *gt = tile->primary_gt;
-@@ -349,6 +351,11 @@ struct xe_exec_queue *xe_exec_queue_create_bind(struct xe_device *xe,
+@@ -356,6 +358,11 @@ struct xe_exec_queue *xe_exec_queue_create_bind(struct xe_device *xe,
+ 		}
  	}
- 	xe_vm_put(migrate_vm);
  
 +	if (!IS_ERR(q)) {
 +		if (user_vm)
@@ -82,7 +82,7 @@ index 27d0bade8..17ccab961 100644
  	return q;
  }
  ALLOW_ERROR_INJECTION(xe_exec_queue_create_bind, ERRNO);
-@@ -368,6 +375,11 @@ void xe_exec_queue_destroy(struct kref *ref)
+@@ -378,6 +385,11 @@ void xe_exec_queue_destroy(struct kref *ref)
  			xe_exec_queue_put(eq);
  	}
  
@@ -94,7 +94,7 @@ index 27d0bade8..17ccab961 100644
  	q->ops->destroy(q);
  }
  
-@@ -492,6 +504,7 @@ xe_exec_queue_get_prop_minmax(struct xe_hw_engine_class_intf *eclass,
+@@ -502,6 +514,7 @@ xe_exec_queue_get_prop_minmax(struct xe_hw_engine_class_intf *eclass,
  		default:
  			break;
  		}
@@ -102,7 +102,7 @@ index 27d0bade8..17ccab961 100644
  	}
  #endif
  }
-@@ -744,6 +757,22 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
+@@ -713,6 +726,22 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
  		    XE_IOCTL_DBG(xe, eci[0].engine_instance != 0))
  			return -EINVAL;
  
@@ -125,7 +125,7 @@ index 27d0bade8..17ccab961 100644
  		for_each_tile(tile, xe, id) {
  			struct xe_exec_queue *new;
  
-@@ -751,9 +780,11 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
+@@ -720,9 +749,11 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
  			if (id)
  				flags |= EXEC_QUEUE_FLAG_BIND_ENGINE_CHILD;
  
@@ -138,7 +138,7 @@ index 27d0bade8..17ccab961 100644
  				err = PTR_ERR(new);
  				if (q)
  					goto put_exec_queue;
-@@ -765,6 +796,8 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
+@@ -734,6 +765,8 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
  				list_add_tail(&new->multi_gt_list,
  					      &q->multi_gt_link);
  		}
@@ -148,7 +148,7 @@ index 27d0bade8..17ccab961 100644
  		logical_mask = calc_validate_logical_mask(xe, eci,
  							  args->width,
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
-index 9aa6a9e80..8d49a5f30 100644
+index a4dfbe858..9e73b7eff 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.h
 @@ -24,6 +24,7 @@ struct xe_exec_queue *xe_exec_queue_create_class(struct xe_device *xe, struct xe
@@ -160,10 +160,10 @@ index 9aa6a9e80..8d49a5f30 100644
  
  void xe_exec_queue_fini(struct xe_exec_queue *q);
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index a509520c6..c016dd610 100644
+index 838266c39..b29ce5688 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-@@ -53,6 +53,12 @@ struct xe_exec_queue {
+@@ -54,6 +54,12 @@ struct xe_exec_queue {
  	struct kref refcount;
  	/** @vm: VM (address space) for this exec queue */
  	struct xe_vm *vm;
@@ -190,10 +190,10 @@ index 797a4b866..d963231b5 100644
  			err = PTR_ERR(q);
  			goto err_ret;
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 36fa9f5bc..48fcb4fe9 100644
+index fef8ea856..8a43f7358 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -1900,7 +1900,7 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags, struct xe_file *xef)
+@@ -1895,7 +1895,7 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags, struct xe_file *xef)
  			if (!vm->pt_root[id])
  				continue;
  
@@ -202,7 +202,7 @@ index 36fa9f5bc..48fcb4fe9 100644
  			if (IS_ERR(q)) {
  				err = PTR_ERR(q);
  				goto err_close;
-@@ -3782,6 +3782,11 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -3688,6 +3688,11 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		}
  	}
  

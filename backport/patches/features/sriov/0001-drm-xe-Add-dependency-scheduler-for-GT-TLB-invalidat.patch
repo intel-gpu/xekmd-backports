@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
 Date: Thu, 24 Jul 2025 12:12:13 -0700
-Subject: [PATCH 34/62] drm/xe: Add dependency scheduler for GT TLB
- invalidations to bind queues
+Subject: [PATCH] drm/xe: Add dependency scheduler for GT TLB invalidations to
+ bind queues
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -28,18 +28,18 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  2 files changed, 61 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index a85125109698..828cd48df26a 100644
+index 19ee174da..31bfd5c6a 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -12,6 +12,7 @@
- #include <drm/drm_file.h>
+@@ -13,6 +13,7 @@
  #include <uapi/drm/xe_drm.h>
+ #include <drm/drm_syncobj.h>
  
 +#include "xe_dep_scheduler.h"
  #include "xe_device.h"
  #include "xe_gt.h"
  #include "xe_hw_engine_class_sysfs.h"
-@@ -39,6 +40,12 @@ static int exec_queue_user_extensions(struct xe_device *xe, struct xe_exec_queue
+@@ -40,6 +41,12 @@ static int exec_queue_user_extensions(struct xe_device *xe, struct xe_exec_queue
  
  static void __xe_exec_queue_free(struct xe_exec_queue *q)
  {
@@ -52,7 +52,7 @@ index a85125109698..828cd48df26a 100644
  	if (xe_exec_queue_uses_pxp(q))
  		xe_pxp_exec_queue_remove(gt_to_xe(q->gt)->pxp, q);
  	if (q->vm)
-@@ -50,6 +57,39 @@ static void __xe_exec_queue_free(struct xe_exec_queue *q)
+@@ -51,6 +58,39 @@ static void __xe_exec_queue_free(struct xe_exec_queue *q)
  	kfree(q);
  }
  
@@ -92,7 +92,7 @@ index a85125109698..828cd48df26a 100644
  static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
  						   struct xe_vm *vm,
  						   u32 logical_mask,
-@@ -94,6 +134,14 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
+@@ -95,6 +135,14 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
  	else
  		q->sched_props.priority = XE_EXEC_QUEUE_PRIORITY_NORMAL;
  
@@ -108,10 +108,10 @@ index a85125109698..828cd48df26a 100644
  		q->vm = xe_vm_get(vm);
  
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index 95ea179189d2..27b76cf9da89 100644
+index a4e0bea0f..df1c69dc8 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-@@ -134,6 +134,19 @@ struct xe_exec_queue {
+@@ -135,6 +135,19 @@ struct xe_exec_queue {
  		struct list_head link;
  	} lr;
  

@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jan Maslak <jan.maslak@intel.com>
+Date: Fri, 13 Feb 2026 11:11:12 +0100
+Subject: drm/xe/eudebug: use devm cleanup for prelim_enable_eudebug sysfs
+
+drmm_add_action_or_reset() ties cleanup to DRM lifetime, which is too late for
+hot unbind/rebind paths. The sysfs file can survive unbind and then probe hits
+duplicate sysfs entry warnings (-EEXIST). Switching to
+devm_add_action_or_reset() ties cleanup to device lifetime, so the sysfs node
+is removed on unbind and rebind is clean.
+
+Fixes: 5ac85708cfba ("drm/xe/eudebug: add eudebug drm managed finalize")
+Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com>
+Reviewed-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+(backported from commit f8dade377b7f9d5790a2a07447d2d85df62263db drm-tip-eudebug)
+Signed-off-by: Jan Maslak <jan.maslak@intel.com>
+
+---
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+index fc1576242..ab902cab8 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+@@ -2497,9 +2497,9 @@ static ssize_t prelim_enable_eudebug_store(struct device *dev, struct device_att
+ 
+ static DEVICE_ATTR_RW(prelim_enable_eudebug);
+ 
+-static void prelim_xe_eudebug_sysfs_fini(struct drm_device *dev, void *__unused)
++static void prelim_xe_eudebug_sysfs_fini(void *arg)
+ {
+-	struct xe_device *xe = to_xe_device(dev);
++	struct xe_device *xe = arg;
+ 
+ 	sysfs_remove_file(&xe->drm.dev->kobj, &dev_attr_prelim_enable_eudebug.attr);
+ }
+@@ -2553,7 +2553,7 @@ void prelim_xe_eudebug_init(struct xe_device *xe)
+ 		return;
+ 	}
+ 
+-	ret = drmm_add_action_or_reset(&xe->drm, prelim_xe_eudebug_sysfs_fini, NULL);
++	ret = devm_add_action_or_reset(xe->drm.dev, prelim_xe_eudebug_sysfs_fini, xe);
+ 	if (ret) {
+ 		drm_warn(&xe->drm, "eudebug sysfs post-init failed: %d, debugger unavailable\n", ret);
+ 		return;
+-- 
+2.34.1
+

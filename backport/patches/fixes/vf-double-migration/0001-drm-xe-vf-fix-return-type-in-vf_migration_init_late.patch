@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dan Carpenter <dan.carpenter@linaro.org>
+Date: Fri, 5 Dec 2025 14:10:31 +0300
+Subject: drm/xe/vf: fix return type in vf_migration_init_late()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The vf_migration_init_late() function is supposed to return zero on
+success and negative error codes on failure.  The error code
+eventually gets propagated back to the probe() function and returned.
+The problem is it's declared as type bool so it returns true on
+error.  Change it to type int instead.
+
+Fixes: 2e2dab20dd66 ("drm/xe/vf: Enable VF migration only on supported GuC versions")
+Signed-off-by: Dan Carpenter <dan.carpenter@linaro.org>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://patch.msgid.link/aTK9pwJ_roc8vpDi@stanley.mountain
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+(cherry-picked from commit 5ae6cb153abc0448d28e6969f72fa5f7578048c1 linux-next)
+Signed-off-by: Bommu Krishnaiah <bommu.krishnaiah@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_vf.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_vf.c b/drivers/gpu/drm/xe/xe_sriov_vf.c
+index 86423a799d57..1b75405b8d02 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_sriov_vf.c
+@@ -226,7 +226,7 @@ void xe_sriov_vf_init_early(struct xe_device *xe)
+ 	vf_migration_init_early(xe);
+ }
+ 
+-static bool vf_migration_init_late(struct xe_device *xe)
++static int vf_migration_init_late(struct xe_device *xe)
+ {
+ 	struct xe_gt *gt = xe_root_mmio_gt(xe);
+ 	struct xe_uc_fw_version guc_version;
+-- 
+2.43.0
+

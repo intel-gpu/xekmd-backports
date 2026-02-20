@@ -62,7 +62,6 @@ static int xe_debugfs_create_compat_structure(struct xe_device *xe)
        struct drm_minor *minor = drm->primary;
        struct dentry *drm_root, *symlink;
        char minor_name[16];
-       char *buf, *path_ptr;
 
        drm_root = minor->debugfs_root->d_parent;
        if (!drm_root)

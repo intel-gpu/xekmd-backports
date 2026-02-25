@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Date: Wed, 25 Feb 2026 09:42:44 +0530
+Subject: drm/xe/eudebug: return lockdown error when enable fails
+
+When enabling eu-debug on SR-IOV PF, a failure from xe_sriov_pf_lockdown()
+was incorrectly treated as success by returning 0.
+
+Propagate the actual error code so userspace gets a proper failure and the
+driver does not report eu-debug enablement as successful when lockdown failed.
+
+Fixes: 867cf96c08f1 ("drm/xe: Implement SR-IOV and eudebug exclusivity")
+
+Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com>
+(backported from commit 5480b3da20d6e1efd49be0eb1bb3057ec2f9f7eb eudebug-dev-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+index ab902cab84963..5c7cbd28cea16 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+@@ -2436,7 +2436,7 @@ static int xe_eudebug_enable(struct xe_device *xe, bool enable)
+ 		ret = xe_sriov_pf_lockdown(xe);
+ 		if (ret) {
+ 			up_write(&xe->eudebug.discovery_lock);
+-			return 0;
++			return ret;
+ 		}
+ 	}
+ 
+-- 
+2.43.0
+

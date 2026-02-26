@@ -8,7 +8,11 @@ Below are list of patches to enable the features , based on feature requirement 
 
 | Feature | Subsystem | Commit | Kernel Version | Patch File |
 |---------|-----------|--------|----------------|------------|
-|         |           |        |                |            |
+| PCIe – RAS AER Error handling | PCI | [PCI/AER: Allow drivers to opt in to Bus Reset on Non-Fatal errors](https://patch.msgid.link/28fd805043bb57af390168d05abb30898cf4fc58.1755008151.git.lukas@wunner.de) | v6.18 | [0001-PCI-AER-Allow-drivers-to-opt-in-to-Bus-Reset-on-Non-.patch]( https://github.com/intel-gpu/xekmd-backports/blob/target-kernel/v5.15/backport/patches/base/0001-PCI-AER-Allow-drivers-to-opt-in-to-Bus-Reset-on-Non-.patch) |
+| PCIe – RAS AER Error handling | PCI | [PCI/ERR: Ensure error recoverability at all times](https://patch.msgid.link/9e34ce61c5404e99ffdd29205122c6fb334b38aa.1763483367.git.lukas@wunner.de) | v6.19 | [0001-PCI-ERR-Ensure-error-recoverability-at-all-times.patch]( https://github.com/intel-gpu/xekmd-backports/blob/target-kernel/v5.15/backport/patches/base/0001-PCI-ERR-Ensure-error-recoverability-at-all-times.patch) |
+| PCIe – RAS AER Error handling | PCI | [PCI: Update saved_config_space upon resource assignment](https://lore.kernel.org/all/febc3f354e0c1f5a9f5b3ee9ffddaa44caccf651.1775.158054.git.lukas@wunner.de/) | v7.1 | [0001-PCI-Update-saved_config_space-upon-resource-assignme.patch]( https://github.com/intel-gpu/xekmd-backports/blob/target-kernel/v5.15/backport/patches/base/0001-PCI-Update-saved_config_space-upon-resource-assignme.patch) |
+
+# Patch Integration
 
 # Patch Integration
 

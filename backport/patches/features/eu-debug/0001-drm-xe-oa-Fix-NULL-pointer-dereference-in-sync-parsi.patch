@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bommu Krishnaiah <bommu.krishnaiah@intel.com>
+Date: Tue, 3 Mar 2026 14:39:11 +0530
+Subject: drm/xe/oa: Fix NULL pointer dereference in sync parsing
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fix a NULL pointer dereference in xe_oa_parse_syncs() caused by calling
+xe_sync_entry_parse() without a valid VM.
+
+Ensure the OA path handles sync parsing correctly and avoid the crash
+when opening OA streams.
+
+This failure was introduced during rebase.
+
+Fixes: 8330c57b10 (“drm/xe: Avoid serialization during unbind bursts”)
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>i
+(backported from commit adda4e855ab6409a3edaa585293f1f2069ab7299 linux-next)
+Signed-off-by: Bommu Krishnaiah <bommu.krishnaiah@intel.com>
+---
+ drivers/gpu/drm/xe/xe_oa.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_oa.c b/drivers/gpu/drm/xe/xe_oa.c
+index ff168a792..8026bf658 100644
+--- a/drivers/gpu/drm/xe/xe_oa.c
++++ b/drivers/gpu/drm/xe/xe_oa.c
+@@ -1415,7 +1415,7 @@ static int xe_oa_parse_syncs(struct xe_oa *oa,
+ 	}
+ 
+ 	for (num_syncs = 0; num_syncs < param->num_syncs; num_syncs++) {
+-		ret = xe_sync_entry_parse(oa->xe, param->xef, stream->exec_q->vm,
++		ret = xe_sync_entry_parse(oa->xe, param->xef, NULL,
+ 					  &param->syncs[num_syncs],
+ 					  &param->syncs_user[num_syncs],
+ 					  stream->ufence_syncobj,
+-- 
+2.43.0
+

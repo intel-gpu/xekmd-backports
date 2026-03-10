@@ -82,7 +82,6 @@ static void pf_engine_activity_stats(struct xe_device *xe, unsigned int num_vfs,
 	}
 }
 
-#ifndef BPM_PCI_IOV_VF_BAR_FUNCTIONS_NOT_PRESENT
 static int resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
 {
 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
@@ -94,105 +93,6 @@ static int resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
 
 	return pci_iov_vf_bar_set_size(pdev, VF_LMEM_BAR, __fls(sizes));
 }
-#else
-/*
- * Backport-only fallback: program VF REBAR directly when PCI-core helpers
- * are not available.
- */
-
-#ifndef PCI_EXT_CAP_ID_VF_REBAR
-#define PCI_EXT_CAP_ID_VF_REBAR 0x24 /* VF Resizable BAR */
-#endif
-
-static inline resource_size_t pci_rebar_size_to_bytes(int size)
-{
-	return 1ULL << (size + ilog2((resource_size_t)SZ_1M));
-}
-
-/*
- * The real 'struct pci_sriov' is PCI-core internal (drivers/pci/pci.h).
- * This local copy is used only to update pdev->sriov->barsz[].
- */
-struct pci_sriov {
-	int		pos;			/* Capability position */
-	int		nres;			/* Number of resources */
-	u32		cap;			/* SR-IOV Capabilities */
-	u16		ctrl;			/* SR-IOV Control */
-	u16		total_VFs;		/* Total VFs associated with the PF */
-	u16		initial_VFs;		/* Initial VFs associated with the PF */
-	u16		num_VFs;			/* Number of VFs available */
-	u16		offset;			/* First VF Routing ID offset */
-	u16		stride;			/* Following VF stride */
-	u16		vf_device;		/* VF device ID */
-	u32		pgsz;			/* Page size for BAR alignment */
-	u8		link;			/* Function Dependency Link */
-	u8		max_VF_buses;		/* Max buses consumed by VFs */
-	u16		driver_max_VFs;		/* Max num VFs driver supports */
-	struct pci_dev	*dev;			/* Lowest numbered PF */
-	struct pci_dev	*self;			/* This PF */
-	u32		class;			/* VF device */
-	u8		hdr_type;		/* VF header type */
-	u16		subsystem_vendor;	/* VF subsystem vendor */
-	u16		subsystem_device;	/* VF subsystem device */
-	resource_size_t	barsz[PCI_SRIOV_NUM_BARS]; /* VF BAR size */
-	bool		drivers_autoprobe;	/* Auto probing of VFs by driver */
-};
-
-static int resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
-{
-	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
-	resource_size_t size, total;
-	int pos, i, vf_bar_idx = VF_LMEM_BAR - PCI_IOV_RESOURCES;
-	u32 rebar, ctrl;
-	int err;
-
-	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_VF_REBAR);
-	if (!pos)
-		return 0;
-
-	/* Expecting a single VF resizable BAR, and it to be BAR2. */
-	err = pci_read_config_dword(pdev, pos + PCI_REBAR_CTRL, &ctrl);
-	if (err)
-		return err;
-
-	if (FIELD_GET(PCI_REBAR_CTRL_NBAR_MASK, ctrl) != 1 ||
-	    FIELD_GET(PCI_REBAR_CTRL_BAR_IDX, ctrl) != vf_bar_idx) {
-		xe_sriov_warn(xe, "Unexpected resource in VF resizable BAR, skipping resize\\n");
-		return 0;
-	}
-
-	err = pci_read_config_dword(pdev, pos + PCI_REBAR_CAP, &rebar);
-	if (err)
-		return err;
-
-	rebar = FIELD_GET(PCI_REBAR_CAP_SIZES, rebar);
-	total = pci_resource_len(pdev, VF_LMEM_BAR);
-
-	while (rebar) {
-		i = __fls(rebar);
-		size = pci_rebar_size_to_bytes(i);
-
-		if (num_vfs && size <= div_u64(total, num_vfs)) {
-			ctrl &= ~PCI_REBAR_CTRL_BAR_SIZE;
-			ctrl |= i << PCI_REBAR_CTRL_BAR_SHIFT;
-
-			err = pci_write_config_dword(pdev, pos + PCI_REBAR_CTRL, ctrl);
-			if (err)
-				return err;
-
-			((struct pci_sriov *)pdev->sriov)->barsz[vf_bar_idx] = size;
-
-			xe_sriov_info(xe, "VF BAR%d resized to %llu MiB\\n",
-				      vf_bar_idx, (unsigned long long)(size >> 20));
-			break;
-		}
-
-		rebar &= ~BIT(i);
-	}
-
-	return 0;
-}
-#endif
 
 static int pf_prepare_vfs_enabling(struct xe_device *xe)
 {

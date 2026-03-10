@@ -1,6 +1,6 @@
 dnl #
-dnl # v6.17-84f890414a12
-dnl # PCI/IOV: Allow drivers to control VF BAR size
+dnl # v6.17-c42d50aefd17
+dnl # mm: shrinker: add infrastructure for dynamically allocating shrinker
 dnl #
 AC_DEFUN([AC_PCI_IOV_VF_BAR_FUNCTIONS_NOT_PRESENT], [
 	AC_KERNEL_DO_BACKGROUND([

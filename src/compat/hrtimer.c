@@ -43,6 +43,7 @@ void hrtimer_setup(struct hrtimer *timer, enum hrtimer_restart (*function)(struc
                    clockid_t clock_id, enum hrtimer_mode mode)
 {
         hrtimer_init(timer, clock_id, mode);
+        timer->function = function;
 }
 EXPORT_SYMBOL_GPL(hrtimer_setup);
 

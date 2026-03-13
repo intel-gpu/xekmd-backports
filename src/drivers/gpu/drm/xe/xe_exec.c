@@ -129,7 +129,8 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 
 	if (XE_IOCTL_DBG(xe, args->extensions) ||
 	    XE_IOCTL_DBG(xe, args->pad[0] || args->pad[1] || args->pad[2]) ||
-	    XE_IOCTL_DBG(xe, args->reserved[0] || args->reserved[1]))
+	    XE_IOCTL_DBG(xe, args->reserved[0] || args->reserved[1]) ||
+	    XE_IOCTL_DBG(xe, args->num_syncs > DRM_XE_MAX_SYNCS))
 		return -EINVAL;
 
 	q = xe_exec_queue_lookup(xef, args->exec_queue_id);
@@ -164,7 +165,8 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 
 	for (num_syncs = 0; num_syncs < args->num_syncs; num_syncs++) {
 		err = xe_sync_entry_parse(xe, xef, vm, &syncs[num_syncs],
-					  &syncs_user[num_syncs], SYNC_PARSE_FLAG_EXEC |
+					  &syncs_user[num_syncs], NULL, 0,
+					  SYNC_PARSE_FLAG_EXEC |
 					  (xe_vm_in_lr_mode(vm) ?
 					   SYNC_PARSE_FLAG_LR_MODE : 0));
 		if (err)
@@ -179,9 +181,9 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 		goto err_syncs;
 	}
 
-	if (xe_exec_queue_is_parallel(q)) {
-		err = copy_from_user(addresses, addresses_user, sizeof(u64) *
-				     q->width);
+	if (args->num_batch_buffer && xe_exec_queue_is_parallel(q)) {
+		err = copy_from_user(addresses, addresses_user,
+				     sizeof(u64) * q->width);
 		if (err) {
 			err = -EFAULT;
 			goto err_syncs;
@@ -292,10 +294,6 @@ retry:
 		goto err_put_job;
 
 	if (!xe_vm_in_lr_mode(vm)) {
-		err = xe_sched_job_last_fence_add_dep(job, vm);
-		if (err)
-			goto err_put_job;
-
 		err = down_read_interruptible(&vm->userptr.notifier_lock);
 		if (err)
 			goto err_put_job;

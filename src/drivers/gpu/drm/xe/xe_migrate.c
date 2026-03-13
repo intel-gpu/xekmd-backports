@@ -434,7 +434,7 @@ int xe_migrate_init(struct xe_migrate *m)
 
 	err = xe_migrate_lock_prepare_vm(tile, m, vm);
 	if (err)
-		return err;
+		goto err_out;
 
 	if (xe->info.has_usm) {
 		struct xe_hw_engine *hwe = xe_gt_hw_engine(primary_gt,
@@ -1928,6 +1928,7 @@ static struct dma_fence *xe_migrate_vram(struct xe_migrate *m,
 					 unsigned long len,
 					 unsigned long sram_offset,
 					 dma_addr_t *sram_addr, u64 vram_addr,
+					 struct dma_fence *deps,
 					 const enum xe_migrate_copy_dir dir)
 {
 	struct xe_gt *gt = m->tile->primary_gt;
@@ -1986,6 +1987,14 @@ static struct dma_fence *xe_migrate_vram(struct xe_migrate *m,
 
 	xe_sched_job_add_migrate_flush(job, 0);
 
+	if (deps && !dma_fence_is_signaled(deps)) {
+		dma_fence_get(deps);
+		err = drm_sched_job_add_dependency(&job->drm, deps);
+		if (err)
+			dma_fence_wait(deps, false);
+		err = 0;
+	}
+
 	mutex_lock(&m->job_mutex);
 	xe_sched_job_arm(job);
 	fence = dma_fence_get(&job->drm.s_fence->finished);
@@ -2011,6 +2020,8 @@ err:
  * @npages: Number of pages to migrate.
  * @src_addr: Array of dma addresses (source of migrate)
  * @dst_addr: Device physical address of VRAM (destination of migrate)
+ * @deps: struct dma_fence representing the dependencies that need
+ * to be signaled before migration.
  *
  * Copy from an array dma addresses to a VRAM device physical address
  *
@@ -2020,10 +2031,11 @@ err:
 struct dma_fence *xe_migrate_to_vram(struct xe_migrate *m,
 				     unsigned long npages,
 				     dma_addr_t *src_addr,
-				     u64 dst_addr)
+				     u64 dst_addr,
+				     struct dma_fence *deps)
 {
 	return xe_migrate_vram(m, npages * PAGE_SIZE, 0, src_addr, dst_addr,
-			       XE_MIGRATE_COPY_TO_VRAM);
+			       deps, XE_MIGRATE_COPY_TO_VRAM);
 }
 
 /**
@@ -2032,6 +2044,8 @@ struct dma_fence *xe_migrate_to_vram(struct xe_migrate *m,
  * @npages: Number of pages to migrate.
  * @src_addr: Device physical address of VRAM (source of migrate)
  * @dst_addr: Array of dma addresses (destination of migrate)
+ * @deps: struct dma_fence representing the dependencies that need
+ * to be signaled before migration.
  *
  * Copy from a VRAM device physical address to an array dma addresses
  *
@@ -2041,10 +2055,11 @@ struct dma_fence *xe_migrate_to_vram(struct xe_migrate *m,
 struct dma_fence *xe_migrate_from_vram(struct xe_migrate *m,
 				       unsigned long npages,
 				       u64 src_addr,
-				       dma_addr_t *dst_addr)
+				       dma_addr_t *dst_addr,
+				       struct dma_fence *deps)
 {
 	return xe_migrate_vram(m, npages * PAGE_SIZE, 0, dst_addr, src_addr,
-			       XE_MIGRATE_COPY_TO_SRAM);
+			       deps, XE_MIGRATE_COPY_TO_SRAM);
 }
 
 static void xe_migrate_dma_unmap(struct xe_device *xe, dma_addr_t *dma_addr,
@@ -2213,7 +2228,7 @@ int xe_migrate_access_memory(struct xe_migrate *m, struct xe_bo *bo,
 		__fence = xe_migrate_vram(m, current_bytes,
 					  (unsigned long)buf & ~PAGE_MASK,
 					  dma_addr + current_page,
-					  vram_addr, write ?
+					  vram_addr, NULL, write ?
 					  XE_MIGRATE_COPY_TO_VRAM :
 					  XE_MIGRATE_COPY_TO_SRAM);
 		if (IS_ERR(__fence)) {
@@ -2279,6 +2294,20 @@ void xe_migrate_job_unlock(struct xe_migrate *m, struct xe_exec_queue *q)
 	else
 		xe_vm_assert_held(q->user_vm);	/* User queues VM's should be locked */
 }
+
+#if IS_ENABLED(CONFIG_PROVE_LOCKING)
+/**
+ * xe_migrate_job_lock_assert() - Assert migrate job lock held of queue
+ * @q: Migrate queue
+ */
+void xe_migrate_job_lock_assert(struct xe_exec_queue *q)
+{
+	struct xe_migrate *m = gt_to_tile(q->gt)->migrate;
+
+	xe_gt_assert(q->gt, q == m->q);
+	lockdep_assert_held(&m->job_mutex);
+}
+#endif
 
 #if IS_ENABLED(CPTCFG_DRM_XE_KUNIT_TEST)
 #include "tests/xe_migrate.c"

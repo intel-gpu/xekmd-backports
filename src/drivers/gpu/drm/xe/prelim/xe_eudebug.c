@@ -2497,9 +2497,9 @@ static ssize_t prelim_enable_eudebug_store(struct device *dev, struct device_att
 
 static DEVICE_ATTR_RW(prelim_enable_eudebug);
 
-static void prelim_xe_eudebug_sysfs_fini(struct drm_device *dev, void *__unused)
+static void prelim_xe_eudebug_sysfs_fini(void *arg)
 {
-	struct xe_device *xe = to_xe_device(dev);
+	struct xe_device *xe = arg;
 
 	sysfs_remove_file(&xe->drm.dev->kobj, &dev_attr_prelim_enable_eudebug.attr);
 }
@@ -2553,7 +2553,7 @@ void prelim_xe_eudebug_init(struct xe_device *xe)
 		return;
 	}
 
-	ret = drmm_add_action_or_reset(&xe->drm, prelim_xe_eudebug_sysfs_fini, NULL);
+	ret = devm_add_action_or_reset(xe->drm.dev, prelim_xe_eudebug_sysfs_fini, xe);
 	if (ret) {
 		drm_warn(&xe->drm, "eudebug sysfs post-init failed: %d, debugger unavailable\n", ret);
 		return;

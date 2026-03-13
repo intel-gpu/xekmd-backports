@@ -15,6 +15,7 @@
 #include "xe_hw_fence_types.h"
 #include "xe_lrc_types.h"
 
+struct drm_syncobj;
 struct xe_execlist_exec_queue;
 struct xe_gt;
 struct xe_guc_exec_queue;
@@ -158,6 +159,11 @@ struct xe_exec_queue {
 		 * dependency scheduler
 		 */
 		struct xe_dep_scheduler *dep_scheduler;
+		/**
+		 * @last_fence: last fence for tlb invalidation, protected by
+		 * vm->lock in write mode
+		 */
+		struct dma_fence *last_fence;
 	} tlb_inval[XE_EXEC_QUEUE_TLB_INVAL_COUNT];
 
 	/** @pxp: PXP info tracking */
@@ -167,6 +173,12 @@ struct xe_exec_queue {
 		/** @pxp.link: link into the list of PXP exec queues */
 		struct list_head link;
 	} pxp;
+
+	/** @ufence_syncobj: User fence syncobj */
+	struct drm_syncobj *ufence_syncobj;
+
+	/** @ufence_timeline_value: User fence timeline value */
+	u64 ufence_timeline_value;
 
 	/** @ops: submission backend exec queue operations */
 	const struct xe_exec_queue_ops *ops;

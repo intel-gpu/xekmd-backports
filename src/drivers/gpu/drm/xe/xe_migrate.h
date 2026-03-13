@@ -115,12 +115,14 @@ int xe_migrate_init(struct xe_migrate *m);
 struct dma_fence *xe_migrate_to_vram(struct xe_migrate *m,
 				     unsigned long npages,
 				     dma_addr_t *src_addr,
-				     u64 dst_addr);
+				     u64 dst_addr,
+				     struct dma_fence *deps);
 
 struct dma_fence *xe_migrate_from_vram(struct xe_migrate *m,
 				       unsigned long npages,
 				       u64 src_addr,
-				       dma_addr_t *dst_addr);
+				       dma_addr_t *dst_addr,
+				       struct dma_fence *deps);
 
 struct dma_fence *xe_migrate_copy(struct xe_migrate *m,
 				  struct xe_bo *src_bo,
@@ -158,6 +160,14 @@ xe_migrate_update_pgtables(struct xe_migrate *m,
 			   struct xe_migrate_pt_update *pt_update);
 
 void xe_migrate_wait(struct xe_migrate *m);
+
+#if IS_ENABLED(CONFIG_PROVE_LOCKING)
+void xe_migrate_job_lock_assert(struct xe_exec_queue *q);
+#else
+static inline void xe_migrate_job_lock_assert(struct xe_exec_queue *q)
+{
+}
+#endif
 
 void xe_migrate_job_lock(struct xe_migrate *m, struct xe_exec_queue *q);
 void xe_migrate_job_unlock(struct xe_migrate *m, struct xe_exec_queue *q);

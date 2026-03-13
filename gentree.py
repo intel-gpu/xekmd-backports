@@ -858,7 +858,7 @@ def process(kerneldir, copy_list_file, git_revision=None,
         'Makefile.am',
         'Makefile',
         'NEWS',
-        'README',
+        'README.md',
         'debian/',
         'compile.sh',
     ]]

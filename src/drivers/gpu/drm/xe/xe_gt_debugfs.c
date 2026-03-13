@@ -219,6 +219,7 @@ static const struct drm_info_list vf_safe_debugfs_list[] = {
 	{ "default_lrc_bcs", .show = xe_gt_debugfs_show_with_rpm, .data = bcs_default_lrc },
 	{ "default_lrc_vcs", .show = xe_gt_debugfs_show_with_rpm, .data = vcs_default_lrc },
 	{ "default_lrc_vecs", .show = xe_gt_debugfs_show_with_rpm, .data = vecs_default_lrc },
+	{ "stats", .show = xe_gt_debugfs_simple_show, .data = xe_gt_stats_print_info },
 	{ "hwconfig", .show = xe_gt_debugfs_show_with_rpm, .data = hwconfig },
 };
 

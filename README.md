@@ -26,8 +26,9 @@ Note:
 
 | Branch Name | Kernel Version | Status |
 |-------------|----------------|--------|
-| kernel-backport/main | 6.17 | Active |
-| kernel-backport/main_6.14 | 6.14 | Active |
+| kernel-backport/main | 7.0 | Active |
+| kernel-backport/v6.17 | 6.17 | Active |
+| kernel-backport/main_6.14 | 6.14 | Frozen |
 | kernel-backport/main_6.11 | 6.11 | Frozen |
 
 **Note:** Choose the appropriate branch based on your target kernel version. Frozen branches are no longer actively maintained.

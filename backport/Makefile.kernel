@@ -61,5 +61,13 @@ obj-$(CPTCFG_MFD_INTEL_PMT) += drivers/platform/x86/intel/
 #mtd
 mtd_intel_dg-y := drivers/mtd/devices/mtd_intel_dg.o
 obj-$(CPTCFG_MTD_INTEL_DG)      += mtd_intel_dg.o
+
 #vfio
+# On v5.15 - v6.1: compile full VFIO framework (VFIO core + pci-core + xe-vfio-pci)
+# On 6.2+: only compile xe-vfio-pci against in-kernel VFIO
+ifdef CPTCFG_BUILD_FULL_VFIO
+NOSTDINC_FLAGS += -I$(M)/include/vfio
+obj-$(CPTCFG_VFIO) += drivers/vfio/
+else
 obj-$(CPTCFG_XE_VFIO_PCI) += drivers/vfio/pci/xe/
+endif

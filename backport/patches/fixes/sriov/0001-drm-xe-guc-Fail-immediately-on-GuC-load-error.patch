@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Date: Mon, 2 Mar 2026 16:17:33 -0800
+Subject: drm/xe/guc: Fail immediately on GuC load error
+
+By using the same variable for both the return of poll_timeout_us and
+the return of the polled function guc_wait_ucode, the return value of
+the latter is overwritten and lost after exiting the polling loop. Since
+guc_wait_ucode returns -1 on GuC load failure, we lose that information
+and always continue as if the GuC had been loaded correctly.
+
+This is fixed by simply using 2 separate variables.
+
+Fixes: a4916b4da448 ("drm/xe/guc: Refactor GuC load to use poll_timeout_us()")
+Signed-off-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Vinay Belgaumkar <vinay.belgaumkar@intel.com>
+Link: https://patch.msgid.link/20260303001732.2540493-2-daniele.ceraolospurio@intel.com
+(cherry-picked from commit c85ec5c5753a46b5c2aea1292536487be9470ffe linux-next)
+Signed-off-by: Bommu Krishnaiah <bommu.krishnaiah@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
+index 23c693898d67..d2d2eb6d2e6d 100644
+--- a/drivers/gpu/drm/xe/xe_guc.c
++++ b/drivers/gpu/drm/xe/xe_guc.c
+@@ -1119,14 +1119,14 @@ static int guc_wait_ucode(struct xe_guc *guc)
+ 	struct xe_guc_pc *guc_pc = &gt->uc.guc.pc;
+ 	u32 before_freq, act_freq, cur_freq;
+ 	u32 status = 0, tries = 0;
++	int load_result, ret;
+ 	ktime_t before;
+ 	u64 delta_ms;
+-	int ret;
+ 
+ 	before_freq = xe_guc_pc_get_act_freq(guc_pc);
+ 	before = ktime_get();
+ 
+-	ret = poll_timeout_us(ret = guc_load_done(gt, &status, &tries), ret,
++	ret = poll_timeout_us(load_result = guc_load_done(gt, &status, &tries), load_result,
+ 			      10 * USEC_PER_MSEC,
+ 			      GUC_LOAD_TIMEOUT_SEC * USEC_PER_SEC, false);
+ 
+@@ -1134,7 +1134,7 @@ static int guc_wait_ucode(struct xe_guc *guc)
+ 	act_freq = xe_guc_pc_get_act_freq(guc_pc);
+ 	cur_freq = xe_guc_pc_get_cur_freq_fw(guc_pc);
+ 
+-	if (ret) {
++	if (ret || load_result <= 0) {
+ 		xe_gt_err(gt, "load failed: status = 0x%08X, time = %lldms, freq = %dMHz (req %dMHz)\n",
+ 			  status, delta_ms, xe_guc_pc_get_act_freq(guc_pc),
+ 			  xe_guc_pc_get_cur_freq_fw(guc_pc));
+-- 
+2.43.0
+

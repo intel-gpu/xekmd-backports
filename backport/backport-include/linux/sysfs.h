@@ -41,7 +41,9 @@ static inline int sysfs_emit_at(char *buf, int at, const char *fmt, ...)
 #endif
 
 #ifdef BPM_DEFINE_SYSFS_GROUP_VISIBLE_NOT_PRESENT
+#ifndef SYSFS_GROUP_INVISIBLE
 #define SYSFS_GROUP_INVISIBLE   020000
+#endif
 
 /*
  * DEFINE_SYSFS_GROUP_VISIBLE(name):
@@ -83,6 +85,7 @@ static inline int sysfs_emit_at(char *buf, int at, const char *fmt, ...)
  * separate visibility consideration, only entire group visibility at
  * once, see DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE().
  */
+#ifndef DEFINE_SYSFS_GROUP_VISIBLE
 #define DEFINE_SYSFS_GROUP_VISIBLE(name)                             \
         static inline umode_t sysfs_group_visible_##name(            \
                 struct kobject *kobj, struct attribute *attr, int n) \
@@ -91,6 +94,7 @@ static inline int sysfs_emit_at(char *buf, int at, const char *fmt, ...)
                         return SYSFS_GROUP_INVISIBLE;                \
                 return name##_attr_visible(kobj, attr, n);           \
         }
+#endif
 
 /*
  * DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(name):
@@ -115,6 +119,7 @@ static inline int sysfs_emit_at(char *buf, int at, const char *fmt, ...)
  *       .attrs = &example_attrs,
  * };
  */
+#ifndef DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE
 #define DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(name)                   \
         static inline umode_t sysfs_group_visible_##name(         \
                 struct kobject *kobj, struct attribute *a, int n) \
@@ -123,6 +128,7 @@ static inline int sysfs_emit_at(char *buf, int at, const char *fmt, ...)
                         return SYSFS_GROUP_INVISIBLE;             \
                 return a->mode;                                   \
         }
+#endif
 
 /*
  * Same as DEFINE_SYSFS_GROUP_VISIBLE, but for groups with only binary
@@ -130,6 +136,7 @@ static inline int sysfs_emit_at(char *buf, int at, const char *fmt, ...)
  * attributes, the group visibility is determined by the function
  * specified to is_visible() not is_bin_visible()
  */
+#ifndef DEFINE_SYSFS_BIN_GROUP_VISIBLE
 #define DEFINE_SYSFS_BIN_GROUP_VISIBLE(name)                             \
         static inline umode_t sysfs_group_visible_##name(                \
                 struct kobject *kobj, struct bin_attribute *attr, int n) \
@@ -138,7 +145,9 @@ static inline int sysfs_emit_at(char *buf, int at, const char *fmt, ...)
                         return SYSFS_GROUP_INVISIBLE;                    \
                 return name##_attr_visible(kobj, attr, n);               \
         }
+#endif
 
+#ifndef DEFINE_SIMPLE_SYSFS_BIN_GROUP_VISIBLE
 #define DEFINE_SIMPLE_SYSFS_BIN_GROUP_VISIBLE(name)                   \
         static inline umode_t sysfs_group_visible_##name(             \
                 struct kobject *kobj, struct bin_attribute *a, int n) \
@@ -147,8 +156,11 @@ static inline int sysfs_emit_at(char *buf, int at, const char *fmt, ...)
                         return SYSFS_GROUP_INVISIBLE;                 \
                 return a->mode;                                       \
         }
+#endif
 
+#ifndef SYSFS_GROUP_VISIBLE
 #define SYSFS_GROUP_VISIBLE(fn) sysfs_group_visible_##fn
+#endif
 #endif
 
 #endif /* __BACKPORT_LINUX_SYSFS_H */

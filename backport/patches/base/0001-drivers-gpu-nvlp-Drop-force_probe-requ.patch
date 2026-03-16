@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Date: Mon, 2 Mar 2026 12:36:35 +0530
+Subject: drivers/gpu/nvlp: Drop force_probe requirement
+
+Remove the force_probe requirement to enable the platform
+-support by default for Xe KMD Backport Kernel.
+
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index bd5356c62..c0c371e58 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -457,7 +457,6 @@ static const struct xe_device_desc nvlp_desc = {
+ 	.has_page_reclaim_hw_assist = true,
+ 	.has_pre_prod_wa = true,
+ 	.max_gt_per_tile = 2,
+-	.require_force_probe = true,
+ 	.va_bits = 48,
+ 	.vm_max_level = 4,
+ };
+-- 
+2.34.1
+

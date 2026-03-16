@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Fri, 6 Feb 2026 15:36:05 -0300
+Subject: drm/xe/xe3p_lpg: Extend 'group ID' mask size
+
+Xe3p_LPG extends the 'group ID' register mask by one bit.  Since the new
+upper bit (12) was unused on previous platforms, we can safely extend
+the existing mask size without worrying about adding conditional version
+checks to the register programming.
+
+Bspec: 67175
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+Reviewed-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Link: https://patch.msgid.link/20260206-nvl-p-upstreaming-v3-9-636e1ad32688@intel.com
+Signed-off-by: Gustavo Sousa <gustavo.sousa@intel.com>
+(cherry picked from commit 60fcdf645c47699c04e421382d5b36130b476262 linux-next)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_gt_regs.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+index 55f5be7283db..f626cc584bd9 100644
+--- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+@@ -58,7 +58,7 @@
+ #define   MCR_SLICE(slice)			REG_FIELD_PREP(MCR_SLICE_MASK, slice)
+ #define   MCR_SUBSLICE_MASK			REG_GENMASK(26, 24)
+ #define   MCR_SUBSLICE(subslice)		REG_FIELD_PREP(MCR_SUBSLICE_MASK, subslice)
+-#define   MTL_MCR_GROUPID			REG_GENMASK(11, 8)
++#define   MTL_MCR_GROUPID			REG_GENMASK(12, 8)
+ #define   MTL_MCR_INSTANCEID			REG_GENMASK(3, 0)
+ 
+ #define PS_INVOCATION_COUNT			XE_REG(0x2348)
+-- 
+2.34.1
+

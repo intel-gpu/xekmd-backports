@@ -123,3 +123,21 @@ config BUILD_XE_DRM_SUBALLOC_HELPER
        help
        Enable building of XE drm_suballoc backport module
        Enabled for kernel 5.15 where drm_suballoc is not available.
+
+config BUILD_FULL_VFIO
+        def_bool y
+        depends on KERNEL_6_2
+        help
+          Enable building of the full VFIO framework (vfio core, pci core, etc.)
+          for kernels that lack VFIO migration v2 implementation.
+          Migration v2 (struct vfio_migration_ops with migration_set_state/
+          migration_get_state) was fully stabilized in kernel 6.2.
+          On 6.2+ kernels, only xe-vfio-pci is built against the in-kernel VFIO.
+
+config VFIO_PCI_CORE
+        tristate
+        default m if !BUILD_FULL_VFIO && XE_VFIO_PCI
+        help
+          Stub for VFIO_PCI_CORE on 6.2+ kernels where the base kernel
+          already provides vfio-pci-core. This satisfies the select from
+          XE_VFIO_PCI without actually building anything.

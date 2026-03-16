@@ -85,6 +85,12 @@ drivers/mtd/devices/mtd_intel_dg.c
 drivers/mtd/devices/Makefile
 drivers/mtd/devices/Kconfig
 
-#vfio-pci
-drivers/vfio/pci/xe/
+#vfio
+drivers/vfio/
 include/drm/intel/xe_sriov_vfio.h
+include/linux/vfio.h -> include/vfio/linux/vfio.h
+include/uapi/linux/vfio.h -> include/vfio/uapi/linux/vfio.h
+include/linux/vfio_pci_core.h -> include/vfio/linux/vfio_pci_core.h
+include/linux/iova_bitmap.h -> include/vfio/linux/iova_bitmap.h
+include/linux/iommufd.h -> include/vfio/linux/iommufd.h
+include/uapi/linux/iommufd.h -> include/vfio/uapi/linux/iommufd.h

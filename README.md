@@ -89,10 +89,18 @@ Place the patch in the appropriate directory based on patch type:
 ```
 backport/patches/
 ├── base/           # All fixes and patches merged in drm-tip
-└── features/       # Feature patches under review
-    ├── eu-debug/
-    ├── sriov/
-    └── xe-late-bind-fw/
+├── features/       # Feature patches under review or part of upstream
+│   ├── <feature 1>
+│   ├── <feature 2>
+│   ├── .
+│   ├── .
+│   └── <feature N>
+└── fixes           # Fixes which are related to features
+    ├── <feature 1>
+    ├── <feature 2>
+    ├── .
+    ├── .
+    └── <feature N>
 ```
 
 #### Placement Rules:
@@ -100,6 +108,7 @@ backport/patches/
 - **`backport/patches/features/<feature-name>/`** - For new feature patches under review
   - Place feature patches in the appropriate feature subdirectory
   - If the feature directory doesn't exist, create one with a descriptive name
+- **`backport/patches/fixes/<feature-name>/`** Fixes related to feature
 
 **Examples:**
 - Bug fix → `backport/patches/base/0001-fix-memory-leak.patch`
@@ -113,6 +122,9 @@ cp <your-patch>.patch backport/patches/base/
 
 # For feature patches
 cp <your-patch>.patch backport/patches/features/<feature-name>
+
+# For Feature Fixes patches
+cp <your-patch>.patch backport/patches/fixes/<feature-name>
 ```
 
 ### 4. Update Series File
@@ -120,10 +132,13 @@ Add your created patch to the "series" file in the repo folder.
 
 * For base patches - add to the end of base section "# base"
 * For feature patches - add to the feature section denoted by "# < feature-name > "; For example: "# sriov"
+* For feature fix patches - if fixes, add to the feature section under fixes denoted by "# < feature-name > "; For example: "# sriov"
+
 
 **Important Notes:**
 - **Patch numbering**: All patches must start with `0001-` prefix (not sequential numbering)
 - **Patch order matters**: Place patches according to their dependencies in the series file
+- **Fix Ordering**:  Fixes should be added in series as per the sequence of landing on upstream kernel.
 - **Manual editing**: You can also manually edit the series file to insert patches at specific positions
 
 **Example series file:**

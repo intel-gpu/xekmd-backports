@@ -10,7 +10,7 @@ AC_DEFUN([AC_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT], [
 			#include <drm/drm_drv.h>
 		],[
 			struct drm_device *dev = NULL;
-			struct drm_cgroup_state *cg;
+			struct dmem_cgroup_region *cg;
 			cg = drmm_cgroup_register_region(dev, "test", 1024);
 			(void)cg;
 		],[

@@ -6,7 +6,11 @@
 #include <linux/ktime.h>
 
 #ifdef BPM_SECS_TO_JIFFIES_NOT_PRESENT
+
+#ifndef secs_to_jiffies
 #define secs_to_jiffies(_secs) msecs_to_jiffies((_secs) * 1000)
+#endif
+
 #endif
 
 #endif /* __BACKPORT_LINUX_JIFFIES_H */

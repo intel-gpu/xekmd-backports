@@ -14,6 +14,10 @@
 #define DRM_WEDGE_RECOVERY_REBIND       BIT(1)  /* unbind + bind driver */
 #define DRM_WEDGE_RECOVERY_BUS_RESET    BIT(2)  /* unbind + reset bus device + bind */
 
+#endif
+
+#if defined(BPM_DRM_DEV_WEDGED_EVENT_NOT_PRESENT) || \
+        defined(BPM_DRM_DEV_WEDGED_EVENT_ARG3_NOT_PRESENT)
 /**
  * struct drm_wedge_task_info - information about the guilty task of a wedge dev
  */

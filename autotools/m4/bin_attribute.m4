@@ -7,13 +7,13 @@ AC_DEFUN([AC_CONST_STRUCT_BIN_ATTRIBUTE_IS_NOT_PRESENT], [
 		AC_KERNEL_TRY_COMPILE([
 			#include <linux/sysfs.h>
 		],[
-			int test_mmap(struct file *filp, struct kobject *kobj,
-				      const struct bin_attribute *attr,
-				      struct vm_area_struct *vma) { return 0; }
-			
+			int (*test_mmap)(struct file *filp, struct kobject *kobj,
+                                         const struct bin_attribute *attr,
+                                         struct vm_area_struct *vma) = NULL;
 			struct bin_attribute test_attr = {
 				.mmap = test_mmap,
 			};
+			(void)test_attr;
 		],[
 		],[
 			AC_DEFINE(BPM_CONST_STRUCT_BIN_ATTRIBUTE_IS_NOT_PRESENT, 1,

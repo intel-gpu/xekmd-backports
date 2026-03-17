@@ -1,0 +1,105 @@
+name: Auto Tag on Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - kernel-backport/main
+      - kernel-backport/v6.17
+
+jobs:
+  auto-tag:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine Version Type
+        id: version-type
+        run: |
+          # All configured branches use kernel-backport versioning with 'v' prefix
+          echo "type=kernel-backport" >> $GITHUB_OUTPUT
+          echo "prefix=v" >> $GITHUB_OUTPUT
+
+      - name: Extract Kernel Version
+        id: kernel-version
+        run: |
+          # Extract BASELINE value from config file (e.g., BASELINE=v7.0-rc1)
+          if [ -f "config" ]; then
+            BASELINE=$(grep "^BASELINE=" config | cut -d'=' -f2)
+            echo "Found BASELINE: $BASELINE"
+            
+            # Remove 'v' prefix but preserve -rcX suffix (e.g., v7.0-rc1 -> 7.0-rc1)
+            KERNEL_VERSION=$(echo "$BASELINE" | sed 's/^v//')
+            
+            echo "kernel_version=$KERNEL_VERSION" >> $GITHUB_OUTPUT
+            echo "Detected kernel version from config: $KERNEL_VERSION"
+          else
+            echo "Error: config file not found"
+            exit 1
+          fi
+
+      - name: Get Latest Tag and Increment
+        id: increment
+        run: |
+          PREFIX="${{ steps.version-type.outputs.prefix }}"
+          KERNEL_VERSION="${{ steps.kernel-version.outputs.kernel_version }}"
+          
+          # Kernel Backport versioning: v6.11.9.0, v7.0-rc1.0, etc.
+          LATEST_TAG=$(git tag -l "${PREFIX}${KERNEL_VERSION}.*" | sort -V | tail -1)
+          
+          if [[ -z "$LATEST_TAG" ]]; then
+            # First tag for this kernel version
+            NEW_TAG="${PREFIX}${KERNEL_VERSION}.0"
+            echo "Creating first tag for kernel $KERNEL_VERSION"
+          else
+            # Extract and increment revision number
+            REVISION=$(echo "$LATEST_TAG" | awk -F'.' '{print $NF}')
+            NEW_REVISION=$((REVISION + 1))
+            NEW_TAG="${PREFIX}${KERNEL_VERSION}.${NEW_REVISION}"
+            echo "Incrementing from $LATEST_TAG to $NEW_TAG"
+          fi
+          
+          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          echo "Generated tag: $NEW_TAG"
+
+      - name: Create and Push Tag
+        env:
+          NEW_TAG: ${{ steps.increment.outputs.new_tag }}
+        run: |
+          BRANCH_NAME="${{ github.event.pull_request.base.ref }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          COMMIT_SHA=$(git rev-parse HEAD)
+          
+          # Check if tag already exists (safety check)
+          if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
+            echo "Tag $NEW_TAG already exists, skipping"
+            exit 0
+          fi
+          
+          echo "Creating annotated tag: $NEW_TAG"
+          
+          # Create annotated tag with detailed message
+          git tag -a "$NEW_TAG" \
+            -m "Auto-generated tag for $BRANCH_NAME" \
+            -m "PR #$PR_NUMBER: $PR_TITLE" \
+            -m "Commit: $COMMIT_SHA"
+          
+          # Push the tag
+          git push origin "$NEW_TAG"
+          
+          echo "Successfully created and pushed tag: $NEW_TAG"

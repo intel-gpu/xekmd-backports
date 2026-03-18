@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 5 Nov 2025 19:32:51 +0100
+Subject: drm/xe/pf: Use migration-friendly doorbells auto-provisioning
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Instead of trying very hard to find the largest fair number of GuC
+doorbell IDs that could be allocated for VFs on the current GT, pick
+some smaller rounded down to power-of-two value that is more likely
+to be provisioned in the same manner by the other PF instance:
+
+  num VFs | num doorbells
+  --------+--------------
+   63..32 | 4
+   31..16 | 8
+   15..8  | 16
+    7..4  | 32
+    3..2  | 64
+       1  | 128 (regular PF)
+       1  | 240 (admin only PF)
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20251105183253.863-3-michal.wajdeczko@intel.com
+(cherry-picked from commit bfbcf66186b535382f090fa2e55bcaea2123c8a0 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index 033548675d72b..b44eed2ebe97a 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -1306,6 +1306,17 @@ int xe_gt_sriov_pf_config_bulk_set_dbs(struct xe_gt *gt, unsigned int vfid,
+ 					   "GuC doorbell IDs", no_unit, n, err);
+ }
+ 
++static u32 pf_profile_fair_dbs(struct xe_gt *gt, unsigned int num_vfs)
++{
++	bool admin_only_pf = xe_sriov_pf_admin_only(gt_to_xe(gt));
++
++	/* XXX: preliminary */
++	if (admin_only_pf && num_vfs == 1)
++		return GUC_NUM_DOORBELLS - SZ_16;
++
++	return rounddown_pow_of_two(GUC_NUM_DOORBELLS / (num_vfs + 1));
++}
++
+ static u32 pf_estimate_fair_dbs(struct xe_gt *gt, unsigned int num_vfs)
+ {
+ 	struct xe_guc_db_mgr *dbm = &gt->uc.guc.dbm;
+@@ -1338,6 +1349,7 @@ static u32 pf_estimate_fair_dbs(struct xe_gt *gt, unsigned int num_vfs)
+ int xe_gt_sriov_pf_config_set_fair_dbs(struct xe_gt *gt, unsigned int vfid,
+ 				       unsigned int num_vfs)
+ {
++	u32 profile = pf_profile_fair_dbs(gt, num_vfs);
+ 	u32 fair;
+ 
+ 	xe_gt_assert(gt, vfid);
+@@ -1350,6 +1362,11 @@ int xe_gt_sriov_pf_config_set_fair_dbs(struct xe_gt *gt, unsigned int vfid,
+ 	if (!fair)
+ 		return -ENOSPC;
+ 
++	fair = min(fair, profile);
++	if (fair < profile)
++		xe_gt_sriov_info(gt, "Using non-profile provisioning (%s %u vs %u)\n",
++				 "GuC doorbell IDs", fair, profile);
++
+ 	return xe_gt_sriov_pf_config_bulk_set_dbs(gt, vfid, num_vfs, fair);
+ }
+ 
+-- 
+2.43.0
+

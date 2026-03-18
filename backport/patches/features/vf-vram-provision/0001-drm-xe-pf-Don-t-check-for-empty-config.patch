@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 18 Feb 2026 21:55:49 +0100
+Subject: drm/xe/pf: Don't check for empty config
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We already turn off VFs auto-provisioning once we detect manual VFs
+provisioning over the debugfs, so we can skip additional check for
+all VFs configs being still empty.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260218205553.3561-8-michal.wajdeczko@intel.com
+(cherry-picked from commit 62acbb1dd5c281ad708f7985031230b0268ddc61 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_pf_provision.c | 13 -------------
+ 1 file changed, 13 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+index f22ff65c59aa0..abe3677d33edf 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+@@ -33,17 +33,6 @@ static bool pf_auto_provisioning_mode(struct xe_device *xe)
+ 	return xe->sriov.pf.provision.mode == XE_SRIOV_PROVISIONING_MODE_AUTO;
+ }
+ 
+-static bool pf_needs_provisioning(struct xe_gt *gt, unsigned int num_vfs)
+-{
+-	unsigned int n;
+-
+-	for (n = 1; n <= num_vfs; n++)
+-		if (!xe_gt_sriov_pf_config_is_empty(gt, n))
+-			return false;
+-
+-	return true;
+-}
+-
+ static int pf_provision_vfs(struct xe_device *xe, unsigned int num_vfs)
+ {
+ 	struct xe_gt *gt;
+@@ -52,8 +41,6 @@ static int pf_provision_vfs(struct xe_device *xe, unsigned int num_vfs)
+ 	int err;
+ 
+ 	for_each_gt(gt, xe, id) {
+-		if (!pf_needs_provisioning(gt, num_vfs))
+-			return -EUCLEAN;
+ 		err = xe_gt_sriov_pf_config_set_fair(gt, VFID(1), num_vfs);
+ 		result = result ?: err;
+ 	}
+-- 
+2.43.0
+

@@ -141,7 +141,7 @@ index 0b28659d9..d9f21202e 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
-index 46518e629..7db1aeddc 100644
+index 47394118e..9914e6f8d 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
 @@ -300,12 +300,13 @@ void xe_gt_sriov_vf_guc_versions(struct xe_gt *gt,
@@ -218,7 +218,7 @@ index 46518e629..7db1aeddc 100644
  }
  
  static int guc_action_query_single_klv(struct xe_guc *guc, u32 key,
-@@ -1163,6 +1177,13 @@ static int vf_post_migration_fixups(struct xe_gt *gt)
+@@ -1166,6 +1180,13 @@ static int vf_post_migration_fixups(struct xe_gt *gt)
  
  static void vf_post_migration_rearm(struct xe_gt *gt)
  {
@@ -232,7 +232,7 @@ index 46518e629..7db1aeddc 100644
  	xe_guc_ct_restart(&gt->uc.guc.ct);
  	xe_guc_submit_unpause_prepare(&gt->uc.guc);
  }
-@@ -1184,37 +1205,40 @@ static void vf_post_migration_abort(struct xe_gt *gt)
+@@ -1187,37 +1208,40 @@ static void vf_post_migration_abort(struct xe_gt *gt)
  	xe_guc_submit_pause_abort(&gt->uc.guc);
  }
  
@@ -291,7 +291,7 @@ index 46518e629..7db1aeddc 100644
  
  	xe_gt_sriov_dbg(gt, "migration recovery in progress\n");
  
-@@ -1229,15 +1253,27 @@ static void vf_post_migration_recovery(struct xe_gt *gt)
+@@ -1232,6 +1256,15 @@ static void vf_post_migration_recovery(struct xe_gt *gt)
  		goto fail;
  	}
  
@@ -307,7 +307,8 @@ index 46518e629..7db1aeddc 100644
  	err = vf_post_migration_fixups(gt);
  	if (err)
  		goto fail;
- 
+@@ -1239,9 +1272,12 @@ static void vf_post_migration_recovery(struct xe_gt *gt)
+ 	vf_post_migration_mark_fixups_done(gt);
  	vf_post_migration_rearm(gt);
  
 -	err = vf_post_migration_notify_resfix_done(gt);
@@ -322,13 +323,13 @@ index 46518e629..7db1aeddc 100644
  	vf_post_migration_kickstart(gt);
  
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
-index fcb5de72e..b2e324b41 100644
+index f72f2edd2..931012676 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
-@@ -51,6 +51,11 @@ struct xe_gt_sriov_vf_migration {
- 	wait_queue_head_t wq;
- 	/** @scratch: Scratch memory for VF recovery */
+@@ -54,6 +54,11 @@ struct xe_gt_sriov_vf_migration {
  	void *scratch;
+ 	/** @fixups_complete_count: Counts completed fixups stages */
+ 	atomic_t fixups_complete_count;
 +	/**
 +	 * @resfix_marker: Marker sent on start and on end of post-migration
 +	 * steps.
@@ -433,5 +434,5 @@ index d56b8cfea..86423a799 100644
  
  /**
 -- 
-2.34.1
+2.43.0
 

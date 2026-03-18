@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
 Date: Mon, 1 Dec 2025 15:20:16 +0530
-Subject: drm/xe/vf: Add debugfs entries to test VF double
- migration
+Subject: drm/xe/vf: Add debugfs entries to test VF double migration
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -43,7 +42,7 @@ Acked-by: Adam Miszczak <adam.miszczak@linux.intel.com>
 Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Link: https://patch.msgid.link/20251201095011.21453-10-satyanarayana.k.v.p@intel.com
-(cherry-picked from commit 4c2768704710a5d4585941288e6a8159dd6dd33d linux-next )
+(backported from commit 4c2768704710a5d4585941288e6a8159dd6dd33d linux-next )
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_gt_sriov_vf.c         | 40 +++++++++++++++++++++
@@ -52,7 +51,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  3 files changed, 60 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
-index 0b3ecb000ff7..3c806c8e5f3e 100644
+index c4e88aa35..007a624a5 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
 @@ -5,6 +5,7 @@
@@ -63,7 +62,7 @@ index 0b3ecb000ff7..3c806c8e5f3e 100644
  
  #include <drm/drm_managed.h>
  #include <drm/drm_print.h>
-@@ -41,6 +42,37 @@
+@@ -42,6 +43,37 @@
  
  #define make_u64_from_u32(hi, lo) ((u64)((u64)(u32)(hi) << 32 | (u32)(lo)))
  
@@ -101,7 +100,7 @@ index 0b3ecb000ff7..3c806c8e5f3e 100644
  static int guc_action_vf_reset(struct xe_guc *guc)
  {
  	u32 request[GUC_HXG_REQUEST_MSG_MIN_LEN] = {
-@@ -320,6 +352,8 @@ static int vf_resfix_start(struct xe_gt *gt, u16 marker)
+@@ -321,6 +353,8 @@ static int vf_resfix_start(struct xe_gt *gt, u16 marker)
  
  	xe_gt_assert(gt, IS_SRIOV_VF(gt_to_xe(gt)));
  
@@ -110,7 +109,7 @@ index 0b3ecb000ff7..3c806c8e5f3e 100644
  	xe_gt_sriov_dbg_verbose(gt, "Sending resfix start marker %u\n", marker);
  
  	return guc_action_vf_resfix_start(guc, marker);
-@@ -1158,6 +1192,8 @@ static int vf_post_migration_fixups(struct xe_gt *gt)
+@@ -1160,6 +1194,8 @@ static int vf_post_migration_fixups(struct xe_gt *gt)
  	void *buf = gt->sriov.vf.migration.scratch;
  	int err;
  
@@ -119,7 +118,7 @@ index 0b3ecb000ff7..3c806c8e5f3e 100644
  	/* xe_gt_sriov_vf_query_config will fixup the GGTT addresses */
  	err = xe_gt_sriov_vf_query_config(gt);
  	if (err)
-@@ -1176,6 +1212,8 @@ static int vf_post_migration_fixups(struct xe_gt *gt)
+@@ -1180,6 +1216,8 @@ static int vf_post_migration_fixups(struct xe_gt *gt)
  
  static void vf_post_migration_rearm(struct xe_gt *gt)
  {
@@ -128,7 +127,7 @@ index 0b3ecb000ff7..3c806c8e5f3e 100644
  	/*
  	 * Make sure interrupts on the new HW are properly set. The GuC IRQ
  	 * must be working at this point, since the recovery did started,
-@@ -1206,6 +1244,8 @@ static void vf_post_migration_abort(struct xe_gt *gt)
+@@ -1210,6 +1248,8 @@ static void vf_post_migration_abort(struct xe_gt *gt)
  
  static int vf_post_migration_resfix_done(struct xe_gt *gt, u16 marker)
  {
@@ -138,7 +137,7 @@ index 0b3ecb000ff7..3c806c8e5f3e 100644
  	if (gt->sriov.vf.migration.recovery_queued)
  		xe_gt_sriov_dbg(gt, "another recovery imminent\n");
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf_debugfs.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf_debugfs.c
-index 2ed5b6780d30..507718326e1f 100644
+index 2ed5b6780..507718326 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_vf_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf_debugfs.c
 @@ -69,4 +69,16 @@ void xe_gt_sriov_vf_debugfs_register(struct xe_gt *gt, struct dentry *root)
@@ -159,7 +158,7 @@ index 2ed5b6780d30..507718326e1f 100644
 +	}
  }
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
-index db2f8b3ed3e9..510c33116fbd 100644
+index 931012676..bfa54f0f9 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
 @@ -52,6 +52,14 @@ struct xe_gt_sriov_vf_migration {
@@ -174,9 +173,9 @@ index db2f8b3ed3e9..510c33116fbd 100644
 +		 */
 +		u8 resfix_stoppers;
 +	} debug;
+ 	/** @fixups_complete_count: Counts completed fixups stages */
+ 	atomic_t fixups_complete_count;
  	/**
- 	 * @resfix_marker: Marker sent on start and on end of post-migration
- 	 * steps.
 -- 
-2.34.1
+2.43.0
 

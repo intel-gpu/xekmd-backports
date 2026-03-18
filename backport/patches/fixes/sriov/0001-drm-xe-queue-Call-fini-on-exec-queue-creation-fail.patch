@@ -24,19 +24,19 @@ Signed-off-by: Tomasz Lis <tomasz.lis@intel.com>
 Reviewed-by: Matthew Brost <matthew.brost@intel.com> (v1)
 Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Link: https://patch.msgid.link/20260226212701.2937065-2-tomasz.lis@intel.com
-(cherry-picked from commit 393e5fea6f7d7054abc2c3d97a4cfe8306cd6079 linux-next)
+(backported from commit 393e5fea6f7d7054abc2c3d97a4cfe8306cd6079 linux-next)
 Signed-off-by: Bommu Krishnaiah <bommu.krishnaiah@intel.com>
 ---
- drivers/gpu/drm/xe/xe_exec_queue.c | 23 +++++++++++------------
+ drivers/gpu/drm/xe/xe_exec_queue.c | 22 ++++++++++------------
  drivers/gpu/drm/xe/xe_lrc.h        |  3 ++-
- 2 files changed, 13 insertions(+), 13 deletions(-)
+ 2 files changed, 12 insertions(+), 13 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 8b472ff65833..bb03e2358f44 100644
+index 6024485c3..9cd87d860 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -163,6 +163,16 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
- 	return q;
+@@ -213,6 +213,15 @@ struct xe_lrc *xe_exec_queue_lrc(struct xe_exec_queue *q)
+ 	return q->lrc[0];
  }
  
 +static void __xe_exec_queue_fini(struct xe_exec_queue *q)
@@ -44,7 +44,6 @@ index 8b472ff65833..bb03e2358f44 100644
 +	int i;
 +
 +	q->ops->fini(q);
-+
 +	for (i = 0; i < q->width; ++i)
 +		xe_lrc_put(q->lrc[i]);
 +}
@@ -52,7 +51,7 @@ index 8b472ff65833..bb03e2358f44 100644
  static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
  {
  	int i, err;
-@@ -220,21 +230,10 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
+@@ -276,21 +285,10 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
  	return 0;
  
  err_lrc:
@@ -76,7 +75,7 @@ index 8b472ff65833..bb03e2358f44 100644
  					   u32 logical_mask, u16 width,
  					   struct xe_hw_engine *hwe, u32 flags,
 diff --git a/drivers/gpu/drm/xe/xe_lrc.h b/drivers/gpu/drm/xe/xe_lrc.h
-index 2fb628da5c43..96ae31df3359 100644
+index 2fb628da5..96ae31df3 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.h
 +++ b/drivers/gpu/drm/xe/xe_lrc.h
 @@ -73,7 +73,8 @@ static inline struct xe_lrc *xe_lrc_get(struct xe_lrc *lrc)

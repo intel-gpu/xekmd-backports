@@ -1,0 +1,93 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tomasz Lis <tomasz.lis@intel.com>
+Date: Thu, 26 Feb 2026 22:27:00 +0100
+Subject: drm/xe/vf: Wait for all fixups before using default LRCs
+
+When a context is being created during save/restore, the LRC creation
+needs to wait for GGTT address space to be shifted. But it also needs
+to have fixed default LRCs. This is mandatory to avoid the situation
+where LRC will be created based on data from before the fixups, but
+reference within exec queue will be set too late for fixups.
+
+This fixes an issue where contexts created during save/restore have
+a large chance of having one unfixed LRC, due to the xe_lrc_create()
+being synced for equal start to race with default LRC fixups.
+
+v2: Move the fixups confirmation further, behind all fixups.
+  Revert some renames.
+
+Signed-off-by: Tomasz Lis <tomasz.lis@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://patch.msgid.link/20260226212701.2937065-4-tomasz.lis@intel.com
+(backported from commit f3fb5f1ebbf39e685dd2885c9dbc8bb0a80be7c6 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c       | 16 +++++++++-------
+ drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h |  2 +-
+ 2 files changed, 10 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index 46518e629..bbdd672ff 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -483,12 +483,6 @@ static int vf_get_ggtt_info(struct xe_gt *gt)
+ 		xe_tile_sriov_vf_fixup_ggtt_nodes_locked(gt_to_tile(gt), shift);
+ 	}
+ 
+-	if (xe_sriov_vf_migration_supported(gt_to_xe(gt))) {
+-		WRITE_ONCE(gt->sriov.vf.migration.ggtt_need_fixes, false);
+-		smp_wmb();	/* Ensure above write visible before wake */
+-		wake_up_all(&gt->sriov.vf.migration.wq);
+-	}
+-
+ 	return 0;
+ }
+ 
+@@ -726,6 +720,13 @@ static void xe_gt_sriov_vf_default_lrcs_hwsp_rebase(struct xe_gt *gt)
+ 		xe_default_lrc_update_memirq_regs_with_address(hwe);
+ }
+ 
++static void vf_post_migration_mark_fixups_done(struct xe_gt *gt)
++{
++	WRITE_ONCE(gt->sriov.vf.migration.ggtt_need_fixes, false);
++	smp_wmb();	/* Ensure above write visible before wake */
++	wake_up_all(&gt->sriov.vf.migration.wq);
++}
++
+ static void vf_start_migration_recovery(struct xe_gt *gt)
+ {
+ 	bool started;
+@@ -1233,6 +1234,7 @@ static void vf_post_migration_recovery(struct xe_gt *gt)
+ 	if (err)
+ 		goto fail;
+ 
++	vf_post_migration_mark_fixups_done(gt);
+ 	vf_post_migration_rearm(gt);
+ 
+ 	err = vf_post_migration_notify_resfix_done(gt);
+@@ -1364,7 +1366,7 @@ static bool vf_valid_ggtt(struct xe_gt *gt)
+ }
+ 
+ /**
+- * xe_gt_sriov_vf_wait_valid_ggtt() - VF wait for valid GGTT addresses
++ * xe_gt_sriov_vf_wait_valid_ggtt() - wait for valid GGTT nodes and address refs
+  * @gt: the &xe_gt
+  */
+ void xe_gt_sriov_vf_wait_valid_ggtt(struct xe_gt *gt)
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
+index 420b0e608..6b9e10862 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
+@@ -58,7 +58,7 @@ struct xe_gt_sriov_vf_migration {
+ 	bool recovery_queued;
+ 	/** @recovery_inprogress: VF post migration recovery in progress */
+ 	bool recovery_inprogress;
+-	/** @ggtt_need_fixes: VF GGTT needs fixes */
++	/** @ggtt_need_fixes: VF GGTT and references to it need fixes */
+ 	bool ggtt_need_fixes;
+ };
+ 
+-- 
+2.43.0
+

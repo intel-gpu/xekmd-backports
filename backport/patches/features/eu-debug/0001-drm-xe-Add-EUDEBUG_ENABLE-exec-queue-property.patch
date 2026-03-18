@@ -56,10 +56,10 @@ index 5378432f9..b921ca8bd 100644
  
  	h_c = find_handle(d->res, XE_EUDEBUG_RES_TYPE_CLIENT, xef);
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 2614ce94c..7caf44018 100644
+index e1bb2f39f..ff2daddbd 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -181,6 +181,9 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
+@@ -242,6 +242,9 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
  			flags |= XE_LRC_CREATE_RUNALONE;
  	}
  
@@ -69,7 +69,7 @@ index 2614ce94c..7caf44018 100644
  	if (!(exec_queue_flags & EXEC_QUEUE_FLAG_KERNEL))
  		flags |= XE_LRC_CREATE_USER_CTX;
  
-@@ -525,6 +528,42 @@ exec_queue_set_pxp_type(struct xe_device *xe, struct xe_exec_queue *q, u64 value
+@@ -611,6 +614,42 @@ exec_queue_set_pxp_type(struct xe_device *xe, struct xe_exec_queue *q, u64 value
  	return xe_pxp_exec_queue_set_type(xe->pxp, q, DRM_XE_PXP_TYPE_HWDRM);
  }
  
@@ -112,7 +112,7 @@ index 2614ce94c..7caf44018 100644
  typedef int (*xe_exec_queue_set_property_fn)(struct xe_device *xe,
  					     struct xe_exec_queue *q,
  					     u64 value);
-@@ -533,6 +572,7 @@ static const xe_exec_queue_set_property_fn exec_queue_set_property_funcs[] = {
+@@ -619,6 +658,7 @@ static const xe_exec_queue_set_property_fn exec_queue_set_property_funcs[] = {
  	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY] = exec_queue_set_priority,
  	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_TIMESLICE] = exec_queue_set_timeslice,
  	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_PXP_TYPE] = exec_queue_set_pxp_type,
@@ -120,7 +120,7 @@ index 2614ce94c..7caf44018 100644
  };
  
  static int exec_queue_user_ext_set_property(struct xe_device *xe,
-@@ -553,7 +593,8 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
+@@ -639,7 +679,8 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
  	    XE_IOCTL_DBG(xe, ext.pad) ||
  	    XE_IOCTL_DBG(xe, ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY &&
  			 ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_TIMESLICE &&
@@ -131,21 +131,21 @@ index 2614ce94c..7caf44018 100644
  
  	idx = array_index_nospec(ext.property, ARRAY_SIZE(exec_queue_set_property_funcs));
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
-index a4dfbe858..9aa6a9e80 100644
+index 3c472c827..b02e2d8c3 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.h
-@@ -92,4 +92,6 @@ int xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch);
- 
+@@ -113,4 +113,6 @@ int xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch);
  struct xe_lrc *xe_exec_queue_lrc(struct xe_exec_queue *q);
+ struct xe_lrc *xe_exec_queue_get_lrc(struct xe_exec_queue *q, u16 idx);
  
 +int xe_exec_queue_is_debuggable(struct xe_exec_queue *q);
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index 282505fa1..a509520c6 100644
+index 67c19eacc..79bd58aba 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-@@ -96,6 +96,13 @@ struct xe_exec_queue {
+@@ -103,6 +103,13 @@ struct xe_exec_queue {
  	 */
  	unsigned long flags;
  
@@ -160,10 +160,10 @@ index 282505fa1..a509520c6 100644
  		/** @multi_gt_list: list head for VM bind engines if multi-GT */
  		struct list_head multi_gt_list;
 diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
-index b7a6be5b4..6c7ca5875 100644
+index bdfec1c9b..cf59a50a7 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.c
 +++ b/drivers/gpu/drm/xe/xe_lrc.c
-@@ -1464,6 +1464,16 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+@@ -1467,6 +1467,16 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
  	if (err)
  		goto err_lrc_finish;
  
@@ -181,7 +181,7 @@ index b7a6be5b4..6c7ca5875 100644
  
  err_lrc_finish:
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index a7fa437fd..250f9e4a0 100644
+index 69b71b17e..e92683f70 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -1260,6 +1260,8 @@ struct drm_xe_exec_queue_create {

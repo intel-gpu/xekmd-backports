@@ -1,0 +1,181 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tomasz Lis <tomasz.lis@intel.com>
+Date: Thu, 26 Feb 2026 22:26:59 +0100
+Subject: drm/xe: Wrappers for setting and getting LRC references
+
+There is a small but non-zero chance that VF post migration fixups
+are running on an exec queue during teardown. The chances are
+decreased by starting the teardown by releasing guc_id, but remain
+non-zero. On the other hand the sync between fixups and EQ creation
+(wait_valid_ggtt) drastically increases the chance for such parallel
+teardown if queue creation error path is entered (err_lrc label).
+
+The exec queue itself is not going to cause an issue, but LRCs have
+a small chance of getting freed during the fixups.
+
+Creating a setter and a getter makes it easier to protect the fixup
+operations with a lock. For other driver activities, the original
+access method (without any protection) can still be used.
+
+v2: Separate lock, only for LRCs. Kerneldoc fixes. Subject tag fix.
+
+Signed-off-by: Tomasz Lis <tomasz.lis@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://patch.msgid.link/20260226212701.2937065-3-tomasz.lis@intel.com
+(backported from commit ec172c7befc4a48ea7d6afe6f0fa23c533222233 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c       | 73 ++++++++++++++++++------
+ drivers/gpu/drm/xe/xe_exec_queue.h       |  1 +
+ drivers/gpu/drm/xe/xe_exec_queue_types.h |  5 ++
+ 3 files changed, 60 insertions(+), 19 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index 137d6db5c..fdbeb8dae 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -124,6 +124,7 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
+ 	INIT_LIST_HEAD(&q->multi_gt_link);
+ 	INIT_LIST_HEAD(&q->hw_engine_group_link);
+ 	INIT_LIST_HEAD(&q->pxp.link);
++	spin_lock_init(&q->lrc_lookup_lock);
+ 
+ 	q->sched_props.timeslice_us = hwe->eclass->sched_props.timeslice_us;
+ 	q->sched_props.preempt_timeout_us =
+@@ -162,6 +163,56 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
+ 	return q;
+ }
+ 
++static void xe_exec_queue_set_lrc(struct xe_exec_queue *q, struct xe_lrc *lrc, u16 idx)
++{
++	xe_assert(gt_to_xe(q->gt), idx < q->width);
++
++	scoped_guard(spinlock, &q->lrc_lookup_lock)
++		q->lrc[idx] = lrc;
++}
++
++/**
++ * xe_exec_queue_get_lrc() - Get the LRC from exec queue.
++ * @q: The exec queue instance.
++ * @idx: Index within multi-LRC array.
++ *
++ * Retrieves LRC of given index for the exec queue under lock
++ * and takes reference.
++ *
++ * Return: Pointer to LRC on success, error on failure, NULL on
++ * lookup failure.
++ */
++struct xe_lrc *xe_exec_queue_get_lrc(struct xe_exec_queue *q, u16 idx)
++{
++	struct xe_lrc *lrc;
++
++	xe_assert(gt_to_xe(q->gt), idx < q->width);
++
++	scoped_guard(spinlock, &q->lrc_lookup_lock) {
++		lrc = q->lrc[idx];
++		if (lrc)
++			xe_lrc_get(lrc);
++	}
++
++	return lrc;
++}
++
++/**
++ * xe_exec_queue_lrc() - Get the LRC from exec queue.
++ * @q: The exec queue instance.
++ *
++ * Retrieves the primary LRC for the exec queue. Note that this function
++ * returns only the first LRC instance, even when multiple parallel LRCs
++ * are configured. This function does not increment reference count,
++ * so the reference can be just forgotten after use.
++ *
++ * Return: Pointer to LRC on success, error on failure
++ */
++struct xe_lrc *xe_exec_queue_lrc(struct xe_exec_queue *q)
++{
++	return q->lrc[0];
++}
++
+ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
+ {
+ 	int i, err;
+@@ -209,8 +260,7 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
+ 			goto err_lrc;
+ 		}
+ 
+-		/* Pairs with READ_ONCE to xe_exec_queue_contexts_hwsp_rebase */
+-		WRITE_ONCE(q->lrc[i], lrc);
++		xe_exec_queue_set_lrc(q, lrc, i);
+ 	}
+ 
+ 	return 0;
+@@ -866,21 +916,6 @@ int xe_exec_queue_get_property_ioctl(struct drm_device *dev, void *data,
+ 	return ret;
+ }
+ 
+-/**
+- * xe_exec_queue_lrc() - Get the LRC from exec queue.
+- * @q: The exec_queue.
+- *
+- * Retrieves the primary LRC for the exec queue. Note that this function
+- * returns only the first LRC instance, even when multiple parallel LRCs
+- * are configured.
+- *
+- * Return: Pointer to LRC on success, error on failure
+- */
+-struct xe_lrc *xe_exec_queue_lrc(struct xe_exec_queue *q)
+-{
+-	return q->lrc[0];
+-}
+-
+ /**
+  * xe_exec_queue_is_lr() - Whether an exec_queue is long-running
+  * @q: The exec_queue
+@@ -1240,14 +1275,14 @@ int xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch)
+ 	for (i = 0; i < q->width; ++i) {
+ 		struct xe_lrc *lrc;
+ 
+-		/* Pairs with WRITE_ONCE in __xe_exec_queue_init  */
+-		lrc = READ_ONCE(q->lrc[i]);
++		lrc = xe_exec_queue_get_lrc(q, i);
+ 		if (!lrc)
+ 			continue;
+ 
+ 		xe_lrc_update_memirq_regs_with_address(lrc, q->hwe, scratch);
+ 		xe_lrc_update_hwctx_regs_with_address(lrc);
+ 		err = xe_lrc_setup_wa_bb_with_scratch(lrc, q->hwe, scratch);
++		xe_lrc_put(lrc);
+ 		if (err)
+ 			break;
+ 	}
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
+index 37a9da22f..3c472c827 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue.h
+@@ -111,5 +111,6 @@ void xe_exec_queue_update_run_ticks(struct xe_exec_queue *q);
+ int xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch);
+ 
+ struct xe_lrc *xe_exec_queue_lrc(struct xe_exec_queue *q);
++struct xe_lrc *xe_exec_queue_get_lrc(struct xe_exec_queue *q, u16 idx);
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
+index 5278ba30d..67c19eacc 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
+@@ -187,6 +187,11 @@ struct xe_exec_queue {
+ 	u64 tlb_flush_seqno;
+ 	/** @hw_engine_group_link: link into exec queues in the same hw engine group */
+ 	struct list_head hw_engine_group_link;
++	/**
++	 * @lrc_lookup_lock: Lock for protecting lrc array access. Only used when
++	 * running in parallel to queue creation is possible.
++	 */
++	spinlock_t lrc_lookup_lock;
+ 	/** @lrc: logical ring context for this exec queue */
+ 	struct xe_lrc *lrc[] __counted_by(width);
+ };
+-- 
+2.43.0
+

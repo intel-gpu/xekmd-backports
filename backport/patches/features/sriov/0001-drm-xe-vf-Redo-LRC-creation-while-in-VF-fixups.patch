@@ -1,0 +1,190 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tomasz Lis <tomasz.lis@intel.com>
+Date: Thu, 26 Feb 2026 22:27:01 +0100
+Subject: drm/xe/vf: Redo LRC creation while in VF fixups
+
+If the xe module within a VM was creating a new LRC during save/
+restore, this LRC will be invalid. The fixups procedure may not
+be able to reach it, as there will be a race to add the new LRC
+reference to an exec queue.
+
+Even if the new LRC which was being created during VM migration is
+added to EQ in time for fixups, said LRC may still remain damaged.
+In a small percentage of specially crafted test cases, the resulting
+LRC was still damaged and caused GPU hang.
+
+Any LRC which could be created in such a situation, have to be
+re-created.
+
+Due to VM having arbitrarily set amount of CPU cores, it is possible
+to limit the amount to 1. In such case, there is a possibility that
+kernel will switch CPU contexts in a way which allows to miss
+VF migration recovery running in parallel (by simply not switching
+to the LRC creation thread during recovery). Therefore checking
+if the migration is in progress just after LRC creation, is not
+enough to ensure detection.
+
+Free the incorrectly created LRC, and trigger a re-run of the
+creation, but only after waiting for default LRC to get fixups.
+Use additional atomic value increased after fixups, to ensure any VF
+migration that avoided detection by just checking for recovery in
+progress, will be caught.
+
+v2: Merge marker and wait for default LRC, reducing amount of calls
+  within xe_init_eq(). Alter the LRC creation loop to remove a race
+  with post-migration fixups worker.
+v3: Kerneldoc fixes. Rename fixups_complete_count.
+
+Signed-off-by: Tomasz Lis <tomasz.lis@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://patch.msgid.link/20260226212701.2937065-5-tomasz.lis@intel.com
+(backported from commit c692ae39e9fd33d0e58ac24bf3d98b352b5064da linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c        | 30 ++++++++++++------
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c       | 38 +++++++++++++++++++++--
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.h       |  3 +-
+ drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h |  2 ++
+ 4 files changed, 59 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index fdbeb8dae..6024485c3 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -250,19 +250,29 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
+ 	 * from the moment vCPU resumes execution.
+ 	 */
+ 	for (i = 0; i < q->width; ++i) {
+-		struct xe_lrc *lrc;
++                struct xe_lrc *__lrc = NULL;
++                int marker;
+ 
+-		xe_gt_sriov_vf_wait_valid_ggtt(q->gt);
+-		lrc = xe_lrc_create(q->hwe, q->vm, xe_lrc_ring_size(),
+-				    q->msix_vec, flags);
+-		if (IS_ERR(lrc)) {
+-			err = PTR_ERR(lrc);
+-			goto err_lrc;
+-		}
++                do {
++                        struct xe_lrc *lrc;
+ 
+-		xe_exec_queue_set_lrc(q, lrc, i);
+-	}
++                        marker = xe_gt_sriov_vf_wait_valid_ggtt(q->gt);
++
++                        lrc = xe_lrc_create(q->hwe, q->vm, xe_lrc_ring_size(),
++                                            q->msix_vec, flags);
++                        if (IS_ERR(lrc)) {
++                                err = PTR_ERR(lrc);
++                                goto err_lrc;
++                        }
+ 
++                        xe_exec_queue_set_lrc(q, lrc, i);
++
++                        if (__lrc)
++                                xe_lrc_put(__lrc);
++                        __lrc = lrc;
++
++                } while (marker != xe_vf_migration_fixups_complete_count(q->gt));
++        }
+ 	return 0;
+ 
+ err_lrc:
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index bbdd672ff..47394118e 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -1159,6 +1159,8 @@ static int vf_post_migration_fixups(struct xe_gt *gt)
+ 	if (err)
+ 		return err;
+ 
++	atomic_inc(&gt->sriov.vf.migration.fixups_complete_count);
++
+ 	return 0;
+ }
+ 
+@@ -1365,20 +1367,50 @@ static bool vf_valid_ggtt(struct xe_gt *gt)
+ 	return true;
+ }
+ 
++/**
++ * xe_vf_migration_fixups_complete_count() - Get count of VF fixups completions.
++ * @gt: the &xe_gt instance which contains affected Global GTT
++ *
++ * Return: number of times VF fixups were completed since driver
++ * probe, or 0 if migration is not available, or -1 if fixups are
++ * pending or being applied right now.
++ */
++int xe_vf_migration_fixups_complete_count(struct xe_gt *gt)
++{
++	if (!IS_SRIOV_VF(gt_to_xe(gt)) ||
++	    !xe_sriov_vf_migration_supported(gt_to_xe(gt)))
++		return 0;
++
++	/* should never match fixups_complete_count value */
++	if (!vf_valid_ggtt(gt))
++		return -1;
++
++	return atomic_read(&gt->sriov.vf.migration.fixups_complete_count);
++}
++
+ /**
+  * xe_gt_sriov_vf_wait_valid_ggtt() - wait for valid GGTT nodes and address refs
+- * @gt: the &xe_gt
++ * @gt: the &xe_gt instance which contains affected Global GTT
++ *
++ * Return: number of times VF fixups were completed since driver
++ * probe, or 0 if migration is not available.
+  */
+-void xe_gt_sriov_vf_wait_valid_ggtt(struct xe_gt *gt)
++int xe_gt_sriov_vf_wait_valid_ggtt(struct xe_gt *gt)
+ {
+ 	int ret;
+ 
++	/*
++	 * this condition needs to be identical to one in
++	 * xe_vf_migration_fixups_complete_count()
++	 */
+ 	if (!IS_SRIOV_VF(gt_to_xe(gt)) ||
+ 	    !xe_sriov_vf_migration_supported(gt_to_xe(gt)))
+-		return;
++		return 0;
+ 
+ 	ret = wait_event_interruptible_timeout(gt->sriov.vf.migration.wq,
+ 					       vf_valid_ggtt(gt),
+ 					       HZ * 5);
+ 	xe_gt_WARN_ON(gt, !ret);
++
++	return atomic_read(&gt->sriov.vf.migration.fixups_complete_count);
+ }
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.h b/drivers/gpu/drm/xe/xe_gt_sriov_vf.h
+index af4027679..bf569c587 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.h
+@@ -38,6 +38,7 @@ void xe_gt_sriov_vf_print_config(struct xe_gt *gt, struct drm_printer *p);
+ void xe_gt_sriov_vf_print_runtime(struct xe_gt *gt, struct drm_printer *p);
+ void xe_gt_sriov_vf_print_version(struct xe_gt *gt, struct drm_printer *p);
+ 
+-void xe_gt_sriov_vf_wait_valid_ggtt(struct xe_gt *gt);
++int xe_gt_sriov_vf_wait_valid_ggtt(struct xe_gt *gt);
++int xe_vf_migration_fixups_complete_count(struct xe_gt *gt);
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
+index 6b9e10862..f72f2edd2 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf_types.h
+@@ -52,6 +52,8 @@ struct xe_gt_sriov_vf_migration {
+ 	wait_queue_head_t wq;
+ 	/** @scratch: Scratch memory for VF recovery */
+ 	void *scratch;
++	/** @fixups_complete_count: Counts completed fixups stages */
++	atomic_t fixups_complete_count;
+ 	/** @recovery_teardown: VF post migration recovery is being torn down */
+ 	bool recovery_teardown;
+ 	/** @recovery_queued: VF post migration recovery in queued */
+-- 
+2.43.0
+

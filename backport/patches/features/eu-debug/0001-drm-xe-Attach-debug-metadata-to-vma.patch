@@ -25,7 +25,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  5 files changed, 315 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_debug_metadata.c b/drivers/gpu/drm/xe/xe_debug_metadata.c
-index 1dfed9aed285..b045bdd77235 100644
+index 1dfed9aed2853..b045bdd772353 100644
 --- a/drivers/gpu/drm/xe/xe_debug_metadata.c
 +++ b/drivers/gpu/drm/xe/xe_debug_metadata.c
 @@ -10,6 +10,113 @@
@@ -163,7 +163,7 @@ index 1dfed9aed285..b045bdd77235 100644
  				   void *data,
  				   struct drm_file *file)
 diff --git a/drivers/gpu/drm/xe/xe_debug_metadata.h b/drivers/gpu/drm/xe/xe_debug_metadata.h
-index a02f02bb75da..c7624ac30ac0 100644
+index a02f02bb75dae..c7624ac30ac07 100644
 --- a/drivers/gpu/drm/xe/xe_debug_metadata.h
 +++ b/drivers/gpu/drm/xe/xe_debug_metadata.h
 @@ -6,13 +6,18 @@
@@ -252,7 +252,7 @@ index a02f02bb75da..c7624ac30ac0 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index f5d2a9f32cbd..a85c42ad978d 100644
+index 7a29ea268ef70..fdcf5f65e3585 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -24,6 +24,7 @@
@@ -263,7 +263,7 @@ index f5d2a9f32cbd..a85c42ad978d 100644
  #include "xe_device.h"
  #include "xe_drm_client.h"
  #include "xe_eudebug.h"
-@@ -1207,6 +1208,9 @@ static struct xe_vma *xe_vma_create(struct xe_vm *vm,
+@@ -1254,6 +1255,9 @@ static struct xe_vma *xe_vma_create(struct xe_vm *vm,
  			vma->gpuva.gem.obj = &bo->ttm.base;
  	}
  
@@ -273,7 +273,7 @@ index f5d2a9f32cbd..a85c42ad978d 100644
  	INIT_LIST_HEAD(&vma->combined_links.rebind);
  
  	INIT_LIST_HEAD(&vma->gpuva.gem.entry);
-@@ -1301,6 +1305,7 @@ static void xe_vma_destroy_late(struct xe_vma *vma)
+@@ -1348,6 +1352,7 @@ static void xe_vma_destroy_late(struct xe_vma *vma)
  		xe_bo_put(xe_vma_bo(vma));
  	}
  
@@ -281,7 +281,7 @@ index f5d2a9f32cbd..a85c42ad978d 100644
  	xe_vma_free(vma);
  }
  
-@@ -2375,6 +2380,10 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
+@@ -2483,6 +2488,10 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
  			op->map.pat_index = pat_index;
  			op->map.invalidate_on_bind =
  				__xe_vm_needs_clear_scratch_pages(vm, flags);
@@ -292,7 +292,7 @@ index f5d2a9f32cbd..a85c42ad978d 100644
  		} else if (__op->op == DRM_GPUVA_OP_PREFETCH) {
  			struct xe_vma *vma = gpuva_to_vma(op->base.prefetch.va);
  			struct xe_svm_range *svm_range;
-@@ -2639,6 +2648,9 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
+@@ -2758,6 +2767,9 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
  			if (IS_ERR(vma))
  				return PTR_ERR(vma);
  
@@ -302,7 +302,7 @@ index f5d2a9f32cbd..a85c42ad978d 100644
  			op->map.vma = vma;
  			if (((op->map.immediate || !xe_vm_in_fault_mode(vm)) &&
  			     !op->map.is_cpu_addr_mirror) ||
-@@ -2686,6 +2698,9 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
+@@ -2805,6 +2817,9 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
  				if (IS_ERR(vma))
  					return PTR_ERR(vma);
  
@@ -312,7 +312,7 @@ index f5d2a9f32cbd..a85c42ad978d 100644
  				op->remap.prev = vma;
  
  				/*
-@@ -2716,6 +2731,16 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
+@@ -2835,6 +2850,16 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
  				if (IS_ERR(vma))
  					return PTR_ERR(vma);
  
@@ -329,7 +329,7 @@ index f5d2a9f32cbd..a85c42ad978d 100644
  				op->remap.next = vma;
  
  				/*
-@@ -2792,6 +2817,7 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
+@@ -2911,6 +2936,7 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
  	switch (op->base.op) {
  	case DRM_GPUVA_OP_MAP:
  		if (op->map.vma) {
@@ -337,7 +337,7 @@ index f5d2a9f32cbd..a85c42ad978d 100644
  			prep_vma_destroy(vm, op->map.vma, post_commit);
  			xe_vma_destroy_unlocked(op->map.vma);
  		}
-@@ -3110,6 +3136,58 @@ static int vm_ops_setup_tile_args(struct xe_vm *vm, struct xe_vma_ops *vops)
+@@ -3248,6 +3274,58 @@ static int vm_ops_setup_tile_args(struct xe_vm *vm, struct xe_vma_ops *vops)
  	}
  
  	return number_tiles;
@@ -396,7 +396,7 @@ index f5d2a9f32cbd..a85c42ad978d 100644
  }
  
  static struct dma_fence *ops_execute(struct xe_vm *vm,
-@@ -3312,7 +3390,9 @@ ALLOW_ERROR_INJECTION(vm_bind_ioctl_ops_execute, ERRNO);
+@@ -3466,7 +3544,9 @@ ALLOW_ERROR_INJECTION(vm_bind_ioctl_ops_execute, ERRNO);
  #define XE_64K_PAGE_MASK 0xffffull
  #define ALL_DRM_XE_SYNCS_FLAGS (DRM_XE_SYNCS_FLAG_WAIT_FOR_OP)
  
@@ -407,16 +407,16 @@ index f5d2a9f32cbd..a85c42ad978d 100644
  				    struct drm_xe_vm_bind *args,
  				    struct drm_xe_vm_bind_op **bind_ops)
  {
-@@ -3359,6 +3439,7 @@ static int vm_bind_ioctl_check_args(struct xe_device *xe, struct xe_vm *vm,
- 		bool is_null = flags & DRM_XE_VM_BIND_FLAG_NULL;
+@@ -3517,6 +3597,7 @@ static int vm_bind_ioctl_check_args(struct xe_device *xe, struct xe_vm *vm,
  		bool is_cpu_addr_mirror = flags &
  			DRM_XE_VM_BIND_FLAG_CPU_ADDR_MIRROR;
+ 		bool is_decompress = flags & DRM_XE_VM_BIND_FLAG_DECOMPRESS;
 +		u64 extensions = (*bind_ops)[i].extensions;
  		u16 pat_index = (*bind_ops)[i].pat_index;
  		u16 coh_mode;
  
-@@ -3427,6 +3508,13 @@ static int vm_bind_ioctl_check_args(struct xe_device *xe, struct xe_vm *vm,
- 			err = -EINVAL;
+@@ -3594,6 +3675,13 @@ static int vm_bind_ioctl_check_args(struct xe_device *xe, struct xe_vm *vm,
+ 			err = -EOPNOTSUPP;
  			goto free_bind_ops;
  		}
 +
@@ -429,7 +429,7 @@ index f5d2a9f32cbd..a85c42ad978d 100644
  	}
  
  	return 0;
-@@ -3551,7 +3639,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -3718,7 +3806,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  	if (XE_IOCTL_DBG(xe, !vm))
  		return -EINVAL;
  
@@ -438,7 +438,7 @@ index f5d2a9f32cbd..a85c42ad978d 100644
  	if (err)
  		goto put_vm;
  
-@@ -3680,11 +3768,17 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -3858,11 +3946,17 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		u64 obj_offset = bind_ops[i].obj_offset;
  		u32 prefetch_region = bind_ops[i].prefetch_mem_region_instance;
  		u16 pat_index = bind_ops[i].pat_index;
@@ -458,7 +458,7 @@ index f5d2a9f32cbd..a85c42ad978d 100644
  			ops[i] = NULL;
  			goto unwind_ops;
 diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
-index cc53ea5de669..79bb9b0bf113 100644
+index b1b37d3f9a995..083782d99b3f4 100644
 --- a/drivers/gpu/drm/xe/xe_vm_types.h
 +++ b/drivers/gpu/drm/xe/xe_vm_types.h
 @@ -77,6 +77,15 @@ struct xe_userptr {
@@ -489,8 +489,8 @@ index cc53ea5de669..79bb9b0bf113 100644
  };
  
  /**
-@@ -362,6 +376,10 @@ struct xe_vma_op_map {
- 	bool invalidate_on_bind;
+@@ -380,6 +394,10 @@ struct xe_vma_op_map {
+ 	bool request_decompress;
  	/** @pat_index: The pat index to use for this operation. */
  	u16 pat_index;
 +	struct  {
@@ -500,7 +500,7 @@ index cc53ea5de669..79bb9b0bf113 100644
  };
  
  /** struct xe_vma_op_remap - VMA remap operation */
-@@ -482,4 +500,14 @@ struct xe_vma_ops {
+@@ -503,4 +521,14 @@ struct xe_vma_ops {
  #endif
  };
  
@@ -516,7 +516,7 @@ index cc53ea5de669..79bb9b0bf113 100644
 +
  #endif
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index e8a04073b2cc..5abba79e8056 100644
+index 3c0269180c0cd..c02ec368d4c5e 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -976,6 +976,23 @@ struct drm_xe_vm_destroy {
@@ -543,11 +543,11 @@ index e8a04073b2cc..5abba79e8056 100644
  /**
   * struct drm_xe_vm_bind_op - run bind operations
   *
-@@ -1010,6 +1027,7 @@ struct drm_xe_vm_destroy {
-  *    handle MBZ, and the BO offset MBZ.
+@@ -1017,6 +1034,7 @@ struct drm_xe_vm_destroy {
+  *    support Flat CCS and the required HW generation XE2+.
   */
  struct drm_xe_vm_bind_op {
-+#define XE_VM_BIND_OP_EXTENSIONS_ATTACH_DEBUG 0
++#define XE_VM_BIND_OP_EXTENSIONS_ATTACH_DEBUG	0
  	/** @extensions: Pointer to the first extension struct, if any */
  	__u64 extensions;
  

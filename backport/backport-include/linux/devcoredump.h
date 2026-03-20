@@ -30,7 +30,56 @@
 #endif
 
 #ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
-static inline void dev_coredump_put(struct device *dev){}
+#include <linux/module.h>
+
+struct devcd_entry {
+	struct device devcd_dev;
+	void *data;
+	size_t datalen;
+	struct mutex mutex;
+	bool delete_work;
+	struct module *owner;
+	ssize_t (*read)(char *buffer, loff_t offset, size_t count,
+			void *data, size_t datalen);
+	void (*free)(void *data);
+	struct delayed_work del_wk;
+	struct device *failing_dev;
+};
+
+static struct devcd_entry *dev_to_devcd(struct device *dev)
+{
+	return container_of(dev, struct devcd_entry, devcd_dev);
+}
+
+
+static int devcd_free(struct device *dev, void *data)
+{
+	struct devcd_entry *devcd = dev_to_devcd(dev);
+
+	mutex_lock(&devcd->mutex);
+	if (!devcd->delete_work)
+		devcd->delete_work = true;
+
+	flush_delayed_work(&devcd->del_wk);
+	mutex_unlock(&devcd->mutex);
+	return 0;
+}
+
+static inline void dev_coredump_put(struct device *dev)
+{
+	struct module *mod = NULL;
+	mod = kmalloc(sizeof(*mod), GFP_KERNEL);
+	
+	/* Use dummy module to avoid new coredump creation in case if its not created at all */
+	mod->state = MODULE_STATE_GOING;
+
+	devcd_free(dev, NULL);
+	
+	/* This will call the devcoredump with exiting device in device class of devcodedump
+	 * and attempts to put_device follwed by freeing of data(in our case its NULL)
+	 * */
+	dev_coredumpm(dev, mod, NULL, 0, GFP_KERNEL, NULL, NULL);
+}
 #endif
 
 #endif /* _BPM_DEVCOREDUMP_H  */

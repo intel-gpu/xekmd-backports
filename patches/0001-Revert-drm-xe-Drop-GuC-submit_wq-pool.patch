@@ -7,7 +7,9 @@ Now that drm sched uses a single lockdep map for all submit_wq, drop the
 GuC submit_wq pool hack.
 
 V1: Rebase to v6.17.1-251107.1
+V2: Rebase to v6.17.13.36 [Akanksha]
 
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
  drivers/gpu/drm/xe/xe_guc_submit.c | 70 ++++++++++++++++++++++++++
@@ -18,7 +20,7 @@ diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_subm
 index acfc6ca..5221d2c 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -269,6 +269,60 @@ static bool exec_queue_killed_or_banned_or_wedged(struct xe_exec_queue *q)
+@@ -272,6 +272,60 @@ static bool exec_queue_killed_or_banned_or_wedged(struct xe_exec_queue *q)
  		 EXEC_QUEUE_STATE_BANNED));
  }
  
@@ -76,10 +78,10 @@ index acfc6ca..5221d2c 100644
 +#endif
 +#endif
 +
- static void guc_submit_fini(struct drm_device *drm, void *arg)
+ static void guc_submit_sw_fini(struct drm_device *drm, void *arg)
  {
  	struct xe_guc *guc = arg;
-@@ -285,6 +339,9 @@ static void guc_submit_fini(struct drm_device *drm, void *arg)
+@@ -288,4 +342,7 @@ static void guc_submit_sw_fini(struct drm_device *drm, void *arg)
  	xe_gt_assert(gt, ret);
  
  	xa_destroy(&guc->submission_state.exec_queue_lookup);
@@ -89,7 +91,7 @@ index acfc6ca..5221d2c 100644
  }
  
  static void guc_submit_wedged_fini(void *arg)
-@@ -346,6 +403,11 @@ int xe_guc_submit_init(struct xe_guc *guc, unsigned int num_ids)
+@@ -419,6 +422,11 @@ int xe_guc_submit_init(struct xe_guc *guc, unsigned int num_ids)
  	if (err)
  		return err;
  
@@ -101,7 +103,7 @@ index acfc6ca..5221d2c 100644
  	gt->exec_queue_ops = &guc_exec_queue_ops;
  
  	xa_init(&guc->submission_state.exec_queue_lookup);
-@@ -1743,10 +1805,18 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
+@@ -1766,10 +1828,18 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
  
  	timeout = (q->vm && xe_vm_in_lr_mode(q->vm)) ? MAX_SCHEDULE_TIMEOUT :
  		  msecs_to_jiffies(q->sched_props.job_timeout_ms);

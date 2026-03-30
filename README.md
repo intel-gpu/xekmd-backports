@@ -13,14 +13,16 @@ Since it is just for showcasing the capabilities of the next-gen GPUs so quality
 |-- |---|-- |
 |1. | Patches from drm-tip.| backport/patches/base | |
 |2. | Feature patches send to public mailing list for review |backport/patches/features |
-|3. | Script to create kernel | backport.sh|
-|4. | File containing list of patches to pick-up and apply on top of kernel | series|
+|3. | Out-of-tree patches for kernel compatibility | backport/patches/oot |
+|4. | Script to create kernel | backport.sh|
+|5. | File containing list of patches to pick-up and apply on top of kernel | series|
 
 Note: 
 1. Patches present in base will be removed once merged in mainline kernel.
 2. Patches present in features are dynamic in nature, they may change frequently and removed once merged in drm-tip.
 3. Patches present in features will use prelim uapi to aviod conflict in updates, once patches are merged in drm-tip, uapi will change from prelim to normal.
-4. prelim uapi will be maintained at [drm-uapi-helper](https://github.com/intel-gpu/drm-uapi-helper/tree/xe).
+4. Patches present in oot directory are applied only when using the `-c -m` option and are excluded by default to maintain standard kernel integration.
+5. prelim uapi will be maintained at [drm-uapi-helper](https://github.com/intel-gpu/drm-uapi-helper/tree/xe).
 
 # Available Branches
 
@@ -35,14 +37,29 @@ Note:
 # Usage
 We download a stable Linux kernel and maintain all custom changes as patch files listed in series files.
 These patches are organized in the base and features directories. When creating a kernel tree, the patches from the series files are applied on top of the downloaded kernel, resulting in a custom kernel tree with all required changes.
-backport.sh < options >
 
-||options |description |
-|-- |--|--| 
-|1. |create-tree| Create kernel tree based on given option <base/features> (default)|
-|2. |delete-tree| Delete the tree|
-|3. |reset-tree| Delete the existing tree and re-create it|
-|4. |override| Overrides existing tree|
+```bash
+./backport.sh [options]
+```
+
+## Options
+
+| Option | Description |
+|--------|-------------|
+| `-c, --create-tree [base\|features]` | Create kernel tree based on given option (default) |
+| `-c -m, --create-tree --out-of-tree` | Create kernel tree and apply all patches including out-of-tree patches |
+| `-d, --delete-tree` | Delete the tree |
+| `-r, --reset-tree` | Delete the existing tree and re-create it |
+| `-o, --override` | Overrides existing tree |
+| `-h, --help` | Display help message |
+
+## Examples
+
+### Create tree with out-of-tree (OOT) patches included
+```bash
+./backport.sh -c -m
+```
+This applies all patches including those in `backport/patches/oot/` directory, allowing full-kernel integration workflows.
 
 # Debugging
 
@@ -88,10 +105,11 @@ Place the patch in the appropriate directory based on patch type:
 ```
 backport/patches/
 ├── base/           # All fixes and patches merged in drm-tip
-└── features/       # Feature patches under review
-    ├── eu-debug/
-    ├── sriov/
-    └── xe-late-bind-fw/
+├── features/       # Feature patches under review
+│   ├── eu-debug/
+│   ├── sriov/
+│   └── xe-late-bind-fw/
+└── oot/            # Out-of-tree patches for kernel compatibility
 ```
 
 #### Placement Rules:
@@ -99,6 +117,7 @@ backport/patches/
 - **`backport/patches/features/<feature-name>/`** - For new feature patches under review
   - Place feature patches in the appropriate feature subdirectory
   - If the feature directory doesn't exist, create one with a descriptive name
+- **`backport/patches/oot/`** - For out-of-tree patches needed for kernel compatibility (applied only with `-c -m` option)
 
 **Examples:**
 - Bug fix → `backport/patches/base/0001-fix-memory-leak.patch`

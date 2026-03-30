@@ -29,17 +29,19 @@ OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 flavor="features"
 is_existing_tree=0
 is_override=0
+is_apply_oot=0
 xkb_tag=""
 
 usage () {
           echo ""
-          echo "Usage: $0 [-c|--create-tree] [-d|--delete-tree] [-r|--reset-tree]"
+          echo "Usage: $0 [-c|--create-tree] [-d|--delete-tree] [-r|--reset-tree] [-c|--create-tree|-m|--out-of-tree] "
           echo ""
           echo "Options:"
           echo "  -c, --create-tree                   	Create kernel tree based on given option <base/features>"
           echo "  -d, --delete-tree    	      		Delete the tree"
           echo "  -r, --reset-tree    	      		Delete the existing tree and re-create it"
           echo "  -o, --override    	      		Overrides the existing tree"
+	  echo "  -c -m, --create-tree --out-of-tree   Create kernel tree (applies all patches including oot)"
           exit 1
 }
 
@@ -48,7 +50,14 @@ apply_patches() {
 	while read p; do
 		case "$p" in \#*)
 			if [ ! -z "$flavor" ]; then
-				echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
+				comment=$(echo $p | tr -d "#" | xargs)
+				if [[ "$comment" == "oot" ]]; then
+					if [ $is_apply_oot -eq 1 ]; then
+						echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
+					fi
+				else
+					echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
+				fi
 				if [[ "$flavor" == "base" ]]; then
 					echo "Only base patches will be  applied"
 					flavor=""
@@ -57,8 +66,15 @@ apply_patches() {
 			else
 				break
 			fi
+			continue
 			;;
 		esac
+		if [[ "$p" == *"/oot/"* ]]; then
+			if [ $is_apply_oot -eq 0 ]; then
+				continue
+			fi
+		fi
+
 		git am -q -s "$WORKING_DIR/$p"
 		if [ $? -ne 0 ]; then
 			echo "Failed to apply patch $p"
@@ -125,8 +141,11 @@ create_kernel_tree () {
 
 	git add  *
 	git commit -s -q -m "base $KERNEL"
-
-	echo "$flavor backport"
+	if [ $is_apply_oot -eq 1 ]; then
+		echo "Applying patches (with oot)"
+	else
+		echo "$flavor backport"
+	fi
 	apply_patches
 }
 
@@ -154,6 +173,19 @@ while [ $# -gt 0 ]; do
 	done
 
         case $1 in
+		-c|--create-tree|-m|--out-of-tree)
+			if [ ! $# -gt 1 ]; then
+				echo "No option provided for creating the tree"
+			else
+				if ([ "$1" == "-c" ] || [ "$1" == "--create-tree" ]) && ([ "$2" == "-m" ] || [ "$2" == "--out-of-tree" ]); then
+					is_apply_oot=1
+	#			else
+	#				flavor=$2
+				fi
+			fi
+			echo "Creating the tree with $flavor"
+			create_kernel_tree
+			exit;;
                 -c|--create-tree|-o|--override)
 			if [ ! $# -gt 1 ]; then
 				echo "No option provided for creating the tree"
@@ -179,4 +211,5 @@ while [ $# -gt 0 ]; do
                         echo "Invalid option: $1"
                         usage
         esac
+	shift
 done

@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akanksha Hotta <akanksha.hotta@intel.com>
+Date: Tue, 31 Mar 2026 19:20:34 +0530
+Subject: [PATCH] drm/xe: Add support for free cleanup attribute detection
+
+Currently, __free(bitmap) attribute is being used for automatic memory
+cleanup. On kernels where this cleanup infrastructure is not available,
+compilation fails as described below:
+
+error: cleanup argument not a function
+1847 |    unsigned long *bitmap __free(bitmap) = bitmap_zalloc(allvfs, GFP_KERNEL);
+
+This occurs because while the kernel may have the __free() macro, the
+specific bitmap cleanup handler is not defined.
+
+In order to solve this issue on target kernel 6.6KV added macro in
+autotools to determine if __free(bitmap) is supported by the target kernel.
+If available, use the automatic cleanup attribute else fall back to standard
+variable declaration.
+
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index 6654ed7..9687445 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -1844,7 +1844,11 @@ static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
+ 					unsigned int num_vfs, bool provisioned)
+ {
+ 	unsigned int allvfs = 1 + xe_gt_sriov_pf_get_totalvfs(gt); /* PF plus VFs */
+-	unsigned long *bitmap __free(bitmap) = bitmap_zalloc(allvfs, GFP_KERNEL);
++	#ifdef BPM_FREE_ATTRIBUTE_NOT_PRESENT
++		unsigned long *bitmap = bitmap_zalloc(allvfs, GFP_KERNEL);
++	#else
++		unsigned long *bitmap __free(bitmap) = bitmap_zalloc(allvfs, GFP_KERNEL);
++	#endif
+ 	unsigned int weight;
+ 	unsigned int n;
+ 
+-- 
+2.43.0
+

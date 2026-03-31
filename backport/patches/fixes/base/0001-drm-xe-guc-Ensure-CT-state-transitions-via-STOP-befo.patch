@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Zhanjun Dong <zhanjun.dong@intel.com>
+Date: Tue, 10 Mar 2026 18:50:37 -0400
+Subject: drm/xe/guc: Ensure CT state transitions via STOP before
+ DISABLED
+
+The GuC CT state transition requires moving to the STOP state before
+entering the DISABLED state. Update the driver teardown sequence to make
+the proper state machine transitions.
+
+Fixes: ee4b32220a6b ("drm/xe/guc: Add devm release action to safely tear down CT")
+Cc: stable@vger.kernel.org
+Signed-off-by: Zhanjun Dong <zhanjun.dong@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260310225039.1320161-6-zhanjun.dong@intel.com
+(cherry-picked from commit 01d3d6a42777295109b248948bf653f953bca80d linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_ct.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
+index d04589140b77..c80082b4c876 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ct.c
++++ b/drivers/gpu/drm/xe/xe_guc_ct.c
+@@ -345,6 +345,7 @@ static void guc_action_disable_ct(void *arg)
+ {
+ 	struct xe_guc_ct *ct = arg;
+ 
++	xe_guc_ct_stop(ct);
+ 	guc_ct_change_state(ct, XE_GUC_CT_STATE_DISABLED);
+ }
+ 
+-- 
+2.43.0
+

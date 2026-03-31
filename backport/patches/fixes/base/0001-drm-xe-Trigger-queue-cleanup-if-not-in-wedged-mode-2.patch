@@ -1,0 +1,78 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Tue, 10 Mar 2026 18:50:35 -0400
+Subject: drm/xe: Trigger queue cleanup if not in wedged mode 2
+
+The intent of wedging a device is to allow queues to continue running
+only in wedged mode 2. In other modes, queues should initiate cleanup
+and signal all remaining fences. Fix xe_guc_submit_wedge to correctly
+clean up queues when wedge mode != 2.
+
+Fixes: 7dbe8af13c18 ("drm/xe: Wedge the entire device")
+Cc: stable@vger.kernel.org
+Reviewed-by: Zhanjun Dong <zhanjun.dong@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260310225039.1320161-4-zhanjun.dong@intel.com
+(cherry-picked from commit 441c30b19a22509f3ed1996b16229cd3b18fe1d5 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_submit.c | 35 +++++++++++++++++++-----------
+ 1 file changed, 22 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index ef4d37b5c73c..fc4f99d46763 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -1271,6 +1271,7 @@ static void disable_scheduling_deregister(struct xe_guc *guc,
+  */
+ void xe_guc_submit_wedge(struct xe_guc *guc)
+ {
++	struct xe_device *xe = guc_to_xe(guc);
+ 	struct xe_gt *gt = guc_to_gt(guc);
+ 	struct xe_exec_queue *q;
+ 	unsigned long index;
+@@ -1285,20 +1286,28 @@ void xe_guc_submit_wedge(struct xe_guc *guc)
+ 	if (!guc->submission_state.initialized)
+ 		return;
+ 
+-	err = devm_add_action_or_reset(guc_to_xe(guc)->drm.dev,
+-				       guc_submit_wedged_fini, guc);
+-	if (err) {
+-		xe_gt_err(gt, "Failed to register clean-up in wedged.mode=%s; "
+-			  "Although device is wedged.\n",
+-			  xe_wedged_mode_to_string(XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET));
+-		return;
+-	}
++	if (xe->wedged.mode == 2) {
++		err = devm_add_action_or_reset(guc_to_xe(guc)->drm.dev,
++					       guc_submit_wedged_fini, guc);
++		if (err) {
++			xe_gt_err(gt, "Failed to register clean-up on wedged.mode=2; "
++				  "Although device is wedged.\n");
++			return;
++		}
+ 
+-	mutex_lock(&guc->submission_state.lock);
+-	xa_for_each(&guc->submission_state.exec_queue_lookup, index, q)
+-		if (xe_exec_queue_get_unless_zero(q))
+-			set_exec_queue_wedged(q);
+-	mutex_unlock(&guc->submission_state.lock);
++		mutex_lock(&guc->submission_state.lock);
++		xa_for_each(&guc->submission_state.exec_queue_lookup, index, q)
++			if (xe_exec_queue_get_unless_zero(q))
++				set_exec_queue_wedged(q);
++		mutex_unlock(&guc->submission_state.lock);
++	} else {
++		/* Forcefully kill any remaining exec queues, signal fences */
++		guc_submit_reset_prepare(guc);
++		xe_guc_submit_stop(guc);
++		xe_guc_softreset(guc);
++		xe_uc_fw_sanitize(&guc->fw);
++		xe_guc_submit_pause_abort(guc);
++	}
+ }
+ 
+ static bool guc_submit_hint_wedged(struct xe_guc *guc)
+-- 
+2.43.0
+

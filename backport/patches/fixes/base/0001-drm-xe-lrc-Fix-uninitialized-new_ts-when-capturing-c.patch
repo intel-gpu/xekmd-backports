@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Date: Thu, 12 Mar 2026 05:53:09 -0700
+Subject: drm/xe/lrc: Fix uninitialized new_ts when capturing context
+ timestamp
+
+Getting engine specific CTX TIMESTAMP register can fail. In that case,
+if the context is active, new_ts is uninitialized. Fix that case by
+initializing new_ts to the last value that was sampled in SW -
+lrc->ctx_timestamp.
+
+Flagged by static analysis.
+
+v2: Fix new_ts initialization (Ashutosh)
+
+Fixes: bb63e7257e63 ("drm/xe: Avoid toggling schedule state to check LRC timestamp in TDR")
+Signed-off-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Reviewed-by: Ashutosh Dixit <ashutosh.dixit@intel.com>
+Link: https://patch.msgid.link/20260312125308.3126607-2-umesh.nerlige.ramappa@intel.com
+(cherry-picked from commit b77a5b01d362e0f62d0bb34f76c54ea3894f96d7 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_lrc.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index 9d4e0468530b..9b37436ef84f 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -2427,14 +2427,14 @@ static int get_ctx_timestamp(struct xe_lrc *lrc, u32 engine_id, u64 *reg_ctx_ts)
+  * @lrc: Pointer to the lrc.
+  *
+  * Return latest ctx timestamp. With support for active contexts, the
+- * calculation may bb slightly racy, so follow a read-again logic to ensure that
++ * calculation may be slightly racy, so follow a read-again logic to ensure that
+  * the context is still active before returning the right timestamp.
+  *
+  * Returns: New ctx timestamp value
+  */
+ u64 xe_lrc_timestamp(struct xe_lrc *lrc)
+ {
+-	u64 lrc_ts, reg_ts, new_ts;
++	u64 lrc_ts, reg_ts, new_ts = lrc->ctx_timestamp;
+ 	u32 engine_id;
+ 
+ 	lrc_ts = xe_lrc_ctx_timestamp(lrc);
+-- 
+2.43.0
+

@@ -1,0 +1,114 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Brian Nguyen <brian3.nguyen@intel.com>
+Date: Thu, 5 Mar 2026 17:15:48 +0000
+Subject: drm/xe: Skip over non leaf pte for PRL generation
+
+The check using xe_child->base.children was insufficient in determining
+if a pte was a leaf node. So explicitly skip over every non-leaf pt and
+conditionally abort if there is a scenario where a non-leaf pt is
+interleaved between leaf pt, which results in the page walker skipping
+over some leaf pt.
+
+Note that the behavior being targeted for abort is
+PD[0] = 2M PTE
+PD[1] = PT -> 512 4K PTEs
+PD[2] = 2M PTE
+
+results in abort, page walker won't descend PD[1].
+
+With new abort, ensuring valid PRL before handling a second abort.
+
+v2:
+ - Revert to previous assert.
+ - Revised non-leaf handling for interleaf child pt and leaf pte.
+ - Update comments to specifications. (Stuart)
+ - Remove unnecessary XE_PTE_PS64. (Matthew B)
+
+v3:
+ - Modify secondary abort to only check non-leaf PTEs. (Matthew B)
+
+Fixes: b912138df299 ("drm/xe: Create page reclaim list on unbind")
+Signed-off-by: Brian Nguyen <brian3.nguyen@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Cc: Stuart Summers <stuart.summers@intel.com>
+Link: https://patch.msgid.link/20260305171546.67691-6-brian3.nguyen@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit 988310c0039ddeb3bc862bacccac6d8e634a08e5 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pt.c | 38 +++++++++++++++++++++++++++++---------
+ 1 file changed, 29 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pt.c b/drivers/gpu/drm/xe/xe_pt.c
+index 13b355fadd58..2d9ce2c4cb4f 100644
+--- a/drivers/gpu/drm/xe/xe_pt.c
++++ b/drivers/gpu/drm/xe/xe_pt.c
+@@ -1655,14 +1655,35 @@ static int xe_pt_stage_unbind_entry(struct xe_ptw *parent, pgoff_t offset,
+ 	XE_WARN_ON(!level);
+ 	/* Check for leaf node */
+ 	if (xe_walk->prl && xe_page_reclaim_list_valid(xe_walk->prl) &&
+-	    (!xe_child->base.children || !xe_child->base.children[first])) {
++	    xe_child->level <= MAX_HUGEPTE_LEVEL) {
+ 		struct iosys_map *leaf_map = &xe_child->bo->vmap;
+ 		pgoff_t count = xe_pt_num_entries(addr, next, xe_child->level, walk);
+ 
+ 		for (pgoff_t i = 0; i < count; i++) {
+-			u64 pte = xe_map_rd(xe, leaf_map, (first + i) * sizeof(u64), u64);
++			u64 pte;
+ 			int ret;
+ 
++			/*
++			 * If not a leaf pt, skip unless non-leaf pt is interleaved between
++			 * leaf ptes which causes the page walk to skip over the child leaves
++			 */
++			if (xe_child->base.children && xe_child->base.children[first + i]) {
++				u64 pt_size = 1ULL << walk->shifts[xe_child->level];
++				bool edge_pt = (i == 0 && !IS_ALIGNED(addr, pt_size)) ||
++					       (i == count - 1 && !IS_ALIGNED(next, pt_size));
++
++				if (!edge_pt) {
++					xe_page_reclaim_list_abort(xe_walk->tile->primary_gt,
++								   xe_walk->prl,
++								   "PT is skipped by walk at level=%u offset=%lu",
++								   xe_child->level, first + i);
++					break;
++				}
++				continue;
++			}
++
++			pte = xe_map_rd(xe, leaf_map, (first + i) * sizeof(u64), u64);
++
+ 			/*
+ 			 * In rare scenarios, pte may not be written yet due to racy conditions.
+ 			 * In such cases, invalidate the PRL and fallback to full PPC invalidation.
+@@ -1674,9 +1695,8 @@ static int xe_pt_stage_unbind_entry(struct xe_ptw *parent, pgoff_t offset,
+ 			}
+ 
+ 			/* Ensure it is a defined page */
+-			xe_tile_assert(xe_walk->tile,
+-				       xe_child->level == 0 ||
+-				       (pte & (XE_PTE_PS64 | XE_PDE_PS_2M | XE_PDPE_PS_1G)));
++			xe_tile_assert(xe_walk->tile, xe_child->level == 0 ||
++				       (pte & (XE_PDE_PS_2M | XE_PDPE_PS_1G)));
+ 
+ 			/* An entry should be added for 64KB but contigious 4K have XE_PTE_PS64 */
+ 			if (pte & XE_PTE_PS64)
+@@ -1701,11 +1721,11 @@ static int xe_pt_stage_unbind_entry(struct xe_ptw *parent, pgoff_t offset,
+ 	killed = xe_pt_check_kill(addr, next, level - 1, xe_child, action, walk);
+ 
+ 	/*
+-	 * Verify PRL is active and if entry is not a leaf pte (base.children conditions),
+-	 * there is a potential need to invalidate the PRL if any PTE (num_live) are dropped.
++	 * Verify if any PTE are potentially dropped at non-leaf levels, either from being
++	 * killed or the page walk covers the region.
+ 	 */
+-	if (xe_walk->prl && level > 1 && xe_child->num_live &&
+-	    xe_child->base.children && xe_child->base.children[first]) {
++	if (xe_walk->prl && xe_page_reclaim_list_valid(xe_walk->prl) &&
++	    xe_child->level > MAX_HUGEPTE_LEVEL && xe_child->num_live) {
+ 		bool covered = xe_pt_covers(addr, next, xe_child->level, &xe_walk->base);
+ 
+ 		/*
+-- 
+2.43.0
+

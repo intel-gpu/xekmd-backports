@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Shekhar Chauhan <shekhar.chauhan@intel.com>
 Date: Fri, 6 Feb 2026 15:35:58 -0300
-Subject: drm/xe/xe3p_lpg: Add initial workarounds for graphics
- version 35.10
+Subject: drm/xe/xe3p_lpg: Add initial workarounds for graphics version
+ 35.10
 
 Add the initial set of workarounds for Xe3p_LPG graphics version 35.10.
 
@@ -30,7 +30,7 @@ Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
  3 files changed, 67 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 24fc64fc832e..55f5be7283db 100644
+index 9d66f168a..ba5ea866e 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 @@ -100,6 +100,9 @@
@@ -72,7 +72,7 @@ index 24fc64fc832e..55f5be7283db 100644
  #define   COMPMEMRD256BOVRFETCHEN		REG_BIT(20)
  
  #define L3SQCREG3				XE_REG_MCR(0xb108)
-@@ -550,11 +561,16 @@
+@@ -550,12 +561,17 @@
  #define   UGM_FRAGMENT_THRESHOLD_TO_3		REG_BIT(58 - 32)
  #define   DIS_CHAIN_2XSIMD8			REG_BIT(55 - 32)
  #define   XE2_ALLOC_DPA_STARVE_FIX_DIS		REG_BIT(47 - 32)
@@ -80,6 +80,7 @@ index 24fc64fc832e..55f5be7283db 100644
  #define   ENABLE_SMP_LD_RENDER_SURFACE_CONTROL	REG_BIT(44 - 32)
  #define   FORCE_SLM_FENCE_SCOPE_TO_TILE		REG_BIT(42 - 32)
  #define   FORCE_UGM_FENCE_SCOPE_TO_TILE		REG_BIT(41 - 32)
+ #define   L3_128B_256B_WRT_DIS			REG_BIT(40 - 32)
  #define   MAXREQS_PER_BANK			REG_GENMASK(39 - 32, 37 - 32)
  #define   DISABLE_128B_EVICTION_COMMAND_UDW	REG_BIT(36 - 32)
 +#define   LSCFE_SAME_ADDRESS_ATOMICS_COALESCING_DISABLE	REG_BIT(35 - 32)
@@ -90,7 +91,7 @@ index 24fc64fc832e..55f5be7283db 100644
  #define SARB_CHICKEN1				XE_REG_MCR(0xe90c)
  #define   COMP_CKN_IN				REG_GENMASK(30, 29)
 diff --git a/drivers/gpu/drm/xe/xe_reg_whitelist.c b/drivers/gpu/drm/xe/xe_reg_whitelist.c
-index 1d36c09681aa..9c513778d370 100644
+index 1d36c0968..9c513778d 100644
 --- a/drivers/gpu/drm/xe/xe_reg_whitelist.c
 +++ b/drivers/gpu/drm/xe/xe_reg_whitelist.c
 @@ -81,6 +81,14 @@ static const struct xe_rtp_entry_sr register_whitelist[] = {
@@ -109,10 +110,10 @@ index 1d36c09681aa..9c513778d370 100644
  #define WHITELIST_OA_MMIO_TRG(trg, status, head) \
  	WHITELIST(trg, RING_FORCE_TO_NONPRIV_ACCESS_RW), \
 diff --git a/drivers/gpu/drm/xe/xe_wa.c b/drivers/gpu/drm/xe/xe_wa.c
-index c7b1bd79ab17..50906e5d59a4 100644
+index d7e309ad9..355bdf27f 100644
 --- a/drivers/gpu/drm/xe/xe_wa.c
 +++ b/drivers/gpu/drm/xe/xe_wa.c
-@@ -306,6 +306,31 @@ static const struct xe_rtp_entry_sr gt_was[] = {
+@@ -308,6 +308,31 @@ static const struct xe_rtp_entry_sr gt_was[] = {
  	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(3000, 3005)),
  	  XE_RTP_ACTIONS(SET(GUC_INTR_CHICKEN, DISABLE_SIGNALING_ENGINES))
  	},
@@ -144,7 +145,7 @@ index c7b1bd79ab17..50906e5d59a4 100644
  };
  
  static const struct xe_rtp_entry_sr engine_was[] = {
-@@ -670,6 +695,24 @@ static const struct xe_rtp_entry_sr engine_was[] = {
+@@ -672,6 +697,24 @@ static const struct xe_rtp_entry_sr engine_was[] = {
  		       FUNC(xe_rtp_match_gt_has_discontiguous_dss_groups)),
  	  XE_RTP_ACTIONS(SET(TDL_CHICKEN, EUSTALL_PERF_SAMPLING_DISABLE))
  	},
@@ -170,5 +171,5 @@ index c7b1bd79ab17..50906e5d59a4 100644
  
  static const struct xe_rtp_entry_sr lrc_was[] = {
 -- 
-2.34.1
+2.43.0
 

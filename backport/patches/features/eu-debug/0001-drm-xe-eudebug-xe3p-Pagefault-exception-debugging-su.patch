@@ -1,0 +1,176 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Date: Thu, 9 May 2024 11:32:51 +0300
+Subject: drm/xe/eudebug/xe3p: Pagefault exception debugging
+ support
+
+Xe3p is the first platform generation introducing the pagefault memory
+exception debugging feature. This feature optionally raises a software
+exception through the EU thread (more precisely, GAM) if a memory
+access made by a EU kernel results in an unhandled page fault.
+This replaces the existing behavior where a catastrophic error is raised
+when an unhandled page fault is encountered, normally resulting
+in an engine reset.
+
+The Pagefault exception debugging feature can be enabled with the
+DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG extension of the
+DRM_IOCTL_XE_EXEC_QUEUE_CREATE ioctl.
+And the extension property value requires to set with
+DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE and
+DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE.
+
+If a Pagefault exception raised from the EU thread, the SIP
+(System Routine) program in the EU thread handles the exception and calls
+the sync.host instruction. When the sync.host of EU thread instruction is
+called, the GuC sends XE_GUC_ACTION_NOTIFY_EU_KERNEL_DEBUG_EVENT to the
+KMD, the same as the EU breakpoint flow. Therefore, when a Pagefault
+exception raises from the EU, the KMD sends the
+DRM_XE_EUDEBUG_EVENT_EU_STOP event to the UMD, the same as the breakpoint
+flow handling. (The KMD does not distinguish between pagefault exception
+and breakpoint cases.)
+
+v2: lrc_create adaptation (Mika)
+
+v3: adapted to eudebug v3 (Maciej)
+
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Reviewed-by: Andrzej Hajda <andrzej.hajda@intel.com>
+(backported from commit 6cc82336ba6d15ad1f08c0fe3c02a9f23e798243 drm-tip-eudebug)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_lrc_layout.h  |  2 ++
+ drivers/gpu/drm/xe/xe_eudebug.c          |  3 +++
+ drivers/gpu/drm/xe/xe_exec_queue.c       | 16 ++++++++++++----
+ drivers/gpu/drm/xe/xe_exec_queue_types.h |  3 ++-
+ drivers/gpu/drm/xe/xe_lrc.c              |  7 +++++--
+ drivers/gpu/drm/xe/xe_lrc.h              |  1 +
+ include/uapi/drm/xe_drm.h                |  1 +
+ 7 files changed, 26 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_lrc_layout.h b/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
+index b5eff3839..9c4897a9c 100644
+--- a/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
++++ b/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
+@@ -40,4 +40,6 @@
+ #define INDIRECT_CTX_RING_START_UDW	(0x08 + 1)
+ #define INDIRECT_CTX_RING_CTL		(0x0a + 1)
+ 
++#define SUP_TRANS_CATERR		BIT(24)
++
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
+index cc1717c1b..94d65d037 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/xe_eudebug.c
+@@ -4348,6 +4348,9 @@ xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm,
+ 	int lrc_idx;
+ 	u32 td_ctl;
+ 
++	if (GRAPHICS_VER(gt_to_xe(gt)) >= 35)
++		return NULL;
++
+ 	down_read(&vm->lock);
+ 	vma = xe_vm_find_vma_by_addr(vm, xe_pf->consumer.page_addr);
+ 	up_read(&vm->lock);
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index d744552c5..e8940f86a 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -290,9 +290,13 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
+ 	if (!(exec_queue_flags & EXEC_QUEUE_FLAG_KERNEL))
+ 		flags |= XE_LRC_CREATE_USER_CTX;
+ 
+-	if (q->eudebug_flags & EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)
+-		flags |= xe_device_eudebug_uses_guc(gt_to_xe(q->gt)) ?
+-			0 : XE_LRC_CREATE_RUNALONE;
++	if (q->eudebug_flags & EXEC_QUEUE_EUDEBUG_FLAG_ENABLE) {
++		if (!xe_device_eudebug_uses_guc(gt_to_xe(q->gt)))
++			flags |= XE_LRC_CREATE_RUNALONE;
++
++		if (q->eudebug_flags & EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE)
++			flags |= XE_LRC_CREATE_SUP_TRANS_CATERR;
++	}
+ 
+ 	err = q->ops->init(q);
+ 	if (err)
+@@ -855,7 +859,8 @@ static int exec_queue_set_multi_queue_priority(struct xe_device *xe, struct xe_e
+ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+ 		u64 value)
+ {
+-	const u64 known_flags = DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE;
++	const u64 known_flags = DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE |
++				DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE;
+ 	struct xe_guc *guc = &q->gt->uc.guc;
+ 
+ 	if (XE_IOCTL_DBG(xe, (q->class != XE_ENGINE_CLASS_RENDER &&
+@@ -887,6 +892,9 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+ 	q->eudebug_flags = EXEC_QUEUE_EUDEBUG_FLAG_ENABLE;
+ 	q->sched_props.preempt_timeout_us = 0;
+ 
++	if (value & DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE)
++		q->eudebug_flags |= EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE;
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
+index e2c4600c4..5793c47bd 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
+@@ -143,7 +143,8 @@ struct xe_exec_queue {
+ 	 * @eudebug_flags: immutable eudebug flags for this exec queue.
+ 	 * Set up with DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG.
+ 	 */
+-#define EXEC_QUEUE_EUDEBUG_FLAG_ENABLE		BIT(0)
++#define EXEC_QUEUE_EUDEBUG_FLAG_ENABLE			BIT(0)
++#define EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE	BIT(1)
+ 	unsigned long eudebug_flags;
+ 
+ 	union {
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index cc293cc23..c35ff246d 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1558,8 +1558,11 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
+ 	if (lrc_to_xe(lrc)->info.has_64bit_timestamp)
+ 		xe_lrc_write_ctx_reg(lrc, CTX_TIMESTAMP_UDW, 0);
+ 
+-	if (xe->info.has_asid && vm)
+-		xe_lrc_write_ctx_reg(lrc, CTX_ASID, vm->usm.asid);
++	if (xe->info.has_asid && vm) {
++		u32 asid = vm->usm.asid;
++		asid |= init_flags & XE_LRC_CREATE_SUP_TRANS_CATERR ? SUP_TRANS_CATERR : 0;
++		xe_lrc_write_ctx_reg(lrc, CTX_ASID, asid);
++	}
+ 
+ 	lrc->desc = LRC_VALID;
+ 	lrc->desc |= FIELD_PREP(LRC_ADDRESSING_MODE, LRC_LEGACY_64B_CONTEXT);
+diff --git a/drivers/gpu/drm/xe/xe_lrc.h b/drivers/gpu/drm/xe/xe_lrc.h
+index c307a3fd9..3fb9bcd9a 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.h
++++ b/drivers/gpu/drm/xe/xe_lrc.h
+@@ -49,6 +49,7 @@ struct xe_lrc_snapshot {
+ #define XE_LRC_CREATE_RUNALONE		BIT(0)
+ #define XE_LRC_CREATE_PXP		BIT(1)
+ #define XE_LRC_CREATE_USER_CTX		BIT(2)
++#define XE_LRC_CREATE_SUP_TRANS_CATERR  BIT(4)
+ 
+ struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
+ 			     void *replay_state, u32 ring_size, u16 msix_vec, u32 flags);
+diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
+index b2384cefe..e670cb475 100644
+--- a/include/uapi/drm/xe_drm.h
++++ b/include/uapi/drm/xe_drm.h
+@@ -1355,6 +1355,7 @@ struct drm_xe_exec_queue_create {
+ #define   DRM_XE_EXEC_QUEUE_SET_PROPERTY_MULTI_QUEUE_PRIORITY	5
+ #define   DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG               7
+ #define     DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE              (1 << 0)
++#define     DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE    (1 << 1)
+ 	/** @extensions: Pointer to the first extension struct, if any */
+ 	__u64 extensions;
+ 
+-- 
+2.34.1
+

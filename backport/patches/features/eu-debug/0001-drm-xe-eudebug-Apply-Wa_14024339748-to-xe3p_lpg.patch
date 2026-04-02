@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Date: Fri, 14 Nov 2025 13:40:58 +0100
+Subject: drm/xe/eudebug: Apply Wa_14024339748 to xe3p_lpg
+
+eudebug's pagefault exception feature requires Wa_14024339748 for xe3p_lpg.
+
+Bspec: 70480
+
+v2(MattR):
+   - Change to use OOB workarounds style
+   - Add missing XE_REG_OPTION_MASKED to GADSS_CHICKEN
+   - Use correct workload number
+
+v3 (Andrzej Hajda)
+   - Remove a spare line
+
+v4 (Gustavo Sousa)
+   - There has been an update to Bspec 74201 that changes the IP
+     version of NVL's variant of Xe3p_LPG from 35.03 to 35.10.
+   - Rebased (Maciej)
+
+Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Signed-off-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(backported from commit e9fe99c9b04921a280b1e396c28b790eb854f79c drm-tip-eudebug)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_gt_regs.h | 3 +++
+ drivers/gpu/drm/xe/xe_eudebug.c      | 4 ++++
+ drivers/gpu/drm/xe/xe_wa_oob.rules   | 1 +
+ 3 files changed, 8 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+index b762e2ff2..01d707433 100644
+--- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+@@ -569,6 +569,9 @@
+ #define   QID_WAIT_FOR_THREAD_NOT_RUN_DISABLE	REG_BIT(12)
+ #define   EUSTALL_PERF_SAMPLING_DISABLE		REG_BIT(5)
+ 
++#define GADSS_CHICKEN				XE_REG_MCR(0xe700, XE_REG_OPTION_MASKED)
++#define   GADSS_RDRTN_BROADCAST_DIS		REG_BIT(7)
++
+ #define LSC_CHICKEN_BIT_0			XE_REG_MCR(0xe7c8)
+ #define   DISABLE_D8_D16_COASLESCE		REG_BIT(30)
+ #define   WR_REQ_CHAINING_DIS			REG_BIT(26)
+diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
+index 1cd79f490..0ab0b7ba8 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/xe_eudebug.c
+@@ -2458,6 +2458,10 @@ static void xe_eudebug_reinit_hw_engine(struct xe_hw_engine *hwe, bool enable)
+ 			     XEHPC_DISABLE_BTB,
+ 			     enable);
+ 
++	if (XE_GT_WA(gt, 14024339748))
++		add_sr_entry(hwe, GADSS_CHICKEN,
++			     GADSS_RDRTN_BROADCAST_DIS, enable);
++
+ 	if (xe->info.graphics_verx100 >= 1200 && xe->info.graphics_verx100 < 3500)
+ 		add_sr_entry(hwe, TD_CTL,
+ 			     TD_CTL_BREAKPOINT_ENABLE |
+diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
+index ba9e57201..c351b51a3 100644
+--- a/drivers/gpu/drm/xe/xe_wa_oob.rules
++++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
+@@ -74,6 +74,7 @@
+ 14015474168    PLATFORM(PVC)
+ 14022766366	GRAPHICS_VERSION_RANGE(2001, 2004)
+ 		GRAPHICS_VERSION_RANGE(3000, 3005)
++14024339748	GRAPHICS_VERSION(3510)
+ 
+ 
+ 15015404425_disable	PLATFORM(PANTHERLAKE), MEDIA_STEP(B0, FOREVER)
+-- 
+2.34.1
+

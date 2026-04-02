@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
+Date: Thu, 22 Feb 2024 14:25:43 +0100
+Subject: drm/xe/guc_actions_abi/xe3: Add GUC EU Debug bits
+
+Adds eu debug related changes in GuC interface.
+
+Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
+Reviewed-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+(backported from commit 530b02bc806ce6a91f8e4712127c35a3af4a131e drm-tip-eudebug)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/abi/guc_actions_abi.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/abi/guc_actions_abi.h b/drivers/gpu/drm/xe/abi/guc_actions_abi.h
+index 805fc5068..4c0587a5b 100644
+--- a/drivers/gpu/drm/xe/abi/guc_actions_abi.h
++++ b/drivers/gpu/drm/xe/abi/guc_actions_abi.h
+@@ -162,6 +162,7 @@ enum xe_guc_action {
+ 	XE_GUC_ACTION_NOTIFY_CRASH_DUMP_POSTED = 0x8004,
+ 	XE_GUC_ACTION_NOTIFY_EXCEPTION = 0x8005,
+ 	XE_GUC_ACTION_EU_KERNEL_DEBUG = 0x8006,
++	XE_GUC_ACTION_NOTIFY_EU_KERNEL_DEBUG_EVENT = 0x8007,
+ 	XE_GUC_ACTION_TEST_G2G_SEND = 0xF001,
+ 	XE_GUC_ACTION_TEST_G2G_RECV = 0xF002,
+ 	XE_GUC_ACTION_LIMIT
+@@ -286,6 +287,9 @@ enum xe_guc_g2g_type {
+ #define XE_GUC_CAT_ERR_TYPE_INVALID 0xdeadbeef
+ 
+ enum  xe_guc_eu_kernel_debug_request_type {
++	XE_GUC_EU_KERNEL_DEBUG_INTERRUPT = 0x0,
++	XE_GUC_EU_KERNEL_DEBUG_INTERRUPT_RESUME = 0x1,
++	XE_GUC_EU_KERNEL_DEBUG_CLEAR_ATTENTION = 0x2,
+ 	XE_GUC_EU_KERNEL_DEBUG_ENABLE = 0x3,
+ };
+ #endif
+-- 
+2.34.1
+

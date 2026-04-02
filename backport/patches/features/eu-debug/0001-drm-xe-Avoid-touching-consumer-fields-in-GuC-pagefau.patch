@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Thu, 12 Feb 2026 12:42:27 -0800
+Subject: drm/xe: Avoid touching consumer fields in GuC pagefault
+ ack
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The GuC pagefault acknowledgment code is designed to extract the fields
+needed for the acknowledgment from the producer-stored message so that
+the consumer fields can be overloaded to return additional information.
+The ASID is stored in the producer message; extract it from there to
+future‑proof this logic.
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Francois Dugast <francois.dugast@intel.com>
+Link: https://patch.msgid.link/20260212204227.2764054-3-matthew.brost@intel.com
+(backported from commit 2405ba53ffe8dad77c530677bfec4c601bd2110a drm-tip-eudebug)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_pagefault.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_pagefault.c b/drivers/gpu/drm/xe/xe_guc_pagefault.c
+index 1166b0a5f..d48f6ed10 100644
+--- a/drivers/gpu/drm/xe/xe_guc_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_guc_pagefault.c
+@@ -17,6 +17,7 @@ static void guc_ack_fault(struct xe_pagefault *pf, int err)
+ 	u32 pdata = FIELD_GET(PFD_PDATA_LO, pf->producer.msg[0]) |
+ 		(FIELD_GET(PFD_PDATA_HI, pf->producer.msg[1]) <<
+ 		 PFD_PDATA_HI_SHIFT);
++	u32 asid = FIELD_GET(PFD_ASID, pf->producer.msg[1]);
+ 	u32 action[] = {
+ 		XE_GUC_ACTION_PAGE_FAULT_RES_DESC,
+ 
+@@ -24,7 +25,7 @@ static void guc_ack_fault(struct xe_pagefault *pf, int err)
+ 		FIELD_PREP(PFR_SUCCESS, !!err) |
+ 		FIELD_PREP(PFR_REPLY, PFR_ACCESS) |
+ 		FIELD_PREP(PFR_DESC_TYPE, FAULT_RESPONSE_DESC) |
+-		FIELD_PREP(PFR_ASID, pf->consumer.asid),
++		FIELD_PREP(PFR_ASID, asid),
+ 
+ 		FIELD_PREP(PFR_VFID, vfid) |
+ 		FIELD_PREP(PFR_ENG_INSTANCE, engine_instance) |
+-- 
+2.34.1
+

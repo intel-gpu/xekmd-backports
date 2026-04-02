@@ -1,0 +1,80 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Date: Thu, 12 Dec 2024 12:59:22 +0200
+Subject: drm/xe/eudebug: userptr vm access pread/pwrite
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Implement debugger vm access for userptrs.
+
+When userptr bind is done, mmu notifier is added by core xe.
+Later when debugger wants to access the target memory, this
+notifier can be used as it carries the struct mm of target.
+
+Implement userptr vm access, for debugger pread/pwrite
+using notifier mm passed to access_remote_vm().
+
+This is based on suggestions from Thomas, Joonas and Simona.
+
+v2: need to add offset into vma (Dominik)
+v3: use exported access_remote_vm (Thomas)
+
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Andrzej Hajda <andrzej.hajda@intel.com>
+Cc: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Cc: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
+Cc: Christian König <christian.koenig@amd.com>
+Cc: Joonas Lahtinen <joonas.lahtinen@linux.intel.com>
+Cc: Simona Vetter <simona@ffwll.ch>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(backported from commit 3e4b26c9d1ad5288aba4cf19606fcaac97e5746e drm-tip-eudebug)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_eudebug.c | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
+index ca8965970..b876e113b 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/xe_eudebug.c
+@@ -37,6 +37,7 @@
+ #include "xe_rtp.h"
+ #include "xe_sched_job.h"
+ #include "xe_sync.h"
++#include "xe_svm.h"
+ #include "xe_vm.h"
+ #include "xe_wa.h"
+ 
+@@ -3015,6 +3016,27 @@ static int xe_eudebug_vma_access(struct xe_vma *vma,
+ 
+ 		xe_bo_put(bo);
+ 
++		return ret;
++	} else if (xe_vma_is_userptr(vma)) {
++		struct xe_userptr *userptr = &to_userptr_vma(vma)->userptr;
++		struct xe_vm *vm = xe_vma_vm(vma);
++		struct mm_struct *mm = NULL;
++		int ret;
++
++		xe_svm_notifier_lock(vm);
++		if (mmget_not_zero(userptr->notifier.mm))
++			mm = userptr->notifier.mm;
++		xe_svm_notifier_unlock(vm);
++
++		if (!mm)
++			return -EFAULT;
++
++		ret = access_remote_vm(mm,
++				       xe_vma_userptr(vma) + offset_in_vma,
++				       buf, bytes,
++				       write ? FOLL_WRITE : 0);
++		mmput(mm);
++
+ 		return ret;
+ 	}
+ 
+-- 
+2.34.1
+

@@ -1,0 +1,91 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Date: Mon, 11 Nov 2024 12:03:47 +0200
+Subject: drm/xe/vm: Support for adding null page VMA to VM on
+ request
+
+The XE2 (and PVC) HW has a limitation that the pagefault due to invalid
+access will halt the corresponding EUs. So, in order to activate the
+debugger, kmd needs to install the temporal page to unhalt the EUs.
+Plan to be used for pagefault handling when the EU debugger is running.
+The idea is to install a null page vma if the pagefault is from an invalid
+access. After installing null page pte, the user debugger can continue to
+run/inspect without causing a fatal failure or reset and stop.
+Based on Bruce's implementation [1].
+
+v2: (Janek)
+Pass in a default memory attributes to xe_vma_create() as opposed
+to NULL.
+
+[1] https://lore.kernel.org/intel-xe/20230829231648.4438-1-yu.bruce.chang@intel.com/
+
+Cc: Oak Zeng <oak.zeng@intel.com>
+Cc: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Cc: Stuart Summers <stuart.summers@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Co-developed-by: Bruce Chang <yu.bruce.chang@intel.com>
+Signed-off-by: Bruce Chang <yu.bruce.chang@intel.com>
+Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Signed-off-by: Jan Maslak <jan.maslak@intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(backported from commit 5e591bba2c7503083008439b2be3ddeba49770ad drm-tip-eudebug)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vm.c | 32 ++++++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_vm.h |  1 +
+ 2 files changed, 33 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index 61c31e100..ca7c35e84 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -4679,3 +4679,35 @@ int xe_vm_alloc_cpu_addr_mirror_vma(struct xe_vm *vm, uint64_t start, uint64_t r
+ 	return xe_vm_alloc_vma(vm, &map_req, false);
+ }
+ 
++struct xe_vma *xe_vm_create_null_vma(struct xe_vm *vm, u64 addr)
++{
++	struct xe_vma *vma;
++	u32 page_size;
++	int err;
++	struct xe_vma_mem_attr default_attr = {
++		.preferred_loc = {
++			.devmem_fd = DRM_XE_PREFERRED_LOC_DEFAULT_DEVICE,
++			.migration_policy = DRM_XE_MIGRATE_ALL_PAGES,
++		},
++		.atomic_access = DRM_XE_ATOMIC_UNDEFINED,
++		.default_pat_index = vm->xe->pat.idx[XE_CACHE_NONE],
++		.pat_index = vm->xe->pat.idx[XE_CACHE_NONE],
++	};
++
++	if (xe_vm_is_closed_or_banned(vm))
++		return ERR_PTR(-ENOENT);
++
++	page_size = vm->flags & XE_VM_FLAG_64K ? SZ_64K : SZ_4K;
++	vma = xe_vma_create(vm, NULL, 0, addr, addr + page_size - 1,
++			&default_attr, DRM_GPUVA_SPARSE);
++	if (IS_ERR_OR_NULL(vma))
++		return vma;
++
++	err = xe_vm_insert_vma(vm, vma);
++	if (err) {
++		xe_vma_destroy_late(vma);
++		return ERR_PTR(err);
++	}
++
++	return vma;
++}
+diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
+index 6cc98df47..f75389253 100644
+--- a/drivers/gpu/drm/xe/xe_vm.h
++++ b/drivers/gpu/drm/xe/xe_vm.h
+@@ -415,4 +415,5 @@ static inline struct drm_exec *xe_vm_validation_exec(struct xe_vm *vm)
+ 	((READ_ONCE(tile_present) & ~READ_ONCE(tile_invalidated)) & BIT((tile)->id))
+ 
+ void xe_vma_mem_attr_copy(struct xe_vma_mem_attr *to, struct xe_vma_mem_attr *from);
++struct xe_vma *xe_vm_create_null_vma(struct xe_vm *vm, u64 addr);
+ #endif
+-- 
+2.34.1
+

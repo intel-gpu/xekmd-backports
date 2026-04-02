@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jan Maslak <jan.maslak@intel.com>
+Date: Fri, 19 Sep 2025 14:43:28 +0000
+Subject: fixup! drm/xe/vma: Modify new_vma to accept struct
+ xe_vma_mem_attr as parameter
+
+Inside xe_vma_create() assert that attr isn't NULL, since it's
+dereferenced later on in the function.
+
+Signed-off-by: Jan Maslak <jan.maslak@intel.com>
+(backported from commit d4bfdaa650acd32c5a8be18c5b01890550ba200a drm-tip-eudebug)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vm.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index ca7c35e84..dce2f45bb 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -1004,6 +1004,7 @@ static struct xe_vma *xe_vma_create(struct xe_vm *vm,
+ 
+ 	xe_assert(vm->xe, start < end);
+ 	xe_assert(vm->xe, end < vm->size);
++	xe_assert(vm->xe, attr);
+ 
+ 	/*
+ 	 * Allocate and ensure that the xe_vma_is_userptr() return
+-- 
+2.34.1
+

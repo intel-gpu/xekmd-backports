@@ -247,6 +247,7 @@ static void __xe_ggtt_init_early(struct xe_ggtt *ggtt, u32 reserved)
 {
 	drm_mm_init(&ggtt->mm, reserved,
 		    ggtt->size - reserved);
+	ggtt->flags |= XE_GGTT_FLAGS_ONLINE;
 }
 
 int xe_ggtt_init_kunit(struct xe_ggtt *ggtt, u32 reserved, u32 size)
@@ -261,6 +262,8 @@ static void dev_fini_ggtt(void *arg)
 {
 	struct xe_ggtt *ggtt = arg;
 
+	scoped_guard(mutex, &ggtt->lock)
+		ggtt->flags &= ~XE_GGTT_FLAGS_ONLINE;
 	drain_workqueue(ggtt->wq);
 }
 
@@ -352,13 +355,10 @@ static void xe_ggtt_initial_clear(struct xe_ggtt *ggtt)
 static void ggtt_node_remove(struct xe_ggtt_node *node)
 {
 	struct xe_ggtt *ggtt = node->ggtt;
-	struct xe_device *xe = tile_to_xe(ggtt->tile);
 	bool bound;
-	int idx;
-
-	bound = drm_dev_enter(&xe->drm, &idx);
 
 	mutex_lock(&ggtt->lock);
+	bound = ggtt->flags & XE_GGTT_FLAGS_ONLINE;
 	if (bound)
 		xe_ggtt_clear(ggtt, node->base.start, node->base.size);
 	drm_mm_remove_node(&node->base);
@@ -370,8 +370,6 @@ static void ggtt_node_remove(struct xe_ggtt_node *node)
 
 	if (node->invalidate_on_remove)
 		xe_ggtt_invalidate(ggtt);
-
-	drm_dev_exit(idx);
 
 free_node:
 	xe_ggtt_node_fini(node);

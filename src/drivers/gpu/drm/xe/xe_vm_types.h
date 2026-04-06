@@ -390,6 +390,8 @@ struct xe_vma_op_map {
 	bool dumpable;
 	/** @invalidate: invalidate the VMA before bind */
 	bool invalidate_on_bind;
+	/** @request_decompress: schedule decompression for GPU map */
+	bool request_decompress;
 	/** @pat_index: The pat index to use for this operation. */
 	u16 pat_index;
 	struct  {

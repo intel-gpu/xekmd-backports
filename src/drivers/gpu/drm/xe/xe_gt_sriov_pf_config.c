@@ -1042,6 +1042,16 @@ int xe_gt_sriov_pf_config_bulk_set_ctxs(struct xe_gt *gt, unsigned int vfid,
 					   "GuC context IDs", no_unit, n, err);
 }
 
+static u32 pf_profile_fair_ctxs(struct xe_gt *gt, unsigned int num_vfs)
+{
+	bool admin_only_pf = xe_sriov_pf_admin_only(gt_to_xe(gt));
+
+	if (admin_only_pf && num_vfs == 1)
+		return ALIGN_DOWN(GUC_ID_MAX, SZ_1K);
+
+	return rounddown_pow_of_two(GUC_ID_MAX / num_vfs);
+}
+
 static u32 pf_estimate_fair_ctxs(struct xe_gt *gt, unsigned int num_vfs)
 {
 	struct xe_guc_id_mgr *idm = &gt->uc.guc.submission_state.idm;
@@ -1074,6 +1084,7 @@ static u32 pf_estimate_fair_ctxs(struct xe_gt *gt, unsigned int num_vfs)
 int xe_gt_sriov_pf_config_set_fair_ctxs(struct xe_gt *gt, unsigned int vfid,
 					unsigned int num_vfs)
 {
+	u32 profile = pf_profile_fair_ctxs(gt, num_vfs);
 	u32 fair;
 
 	xe_gt_assert(gt, vfid);
@@ -1085,6 +1096,11 @@ int xe_gt_sriov_pf_config_set_fair_ctxs(struct xe_gt *gt, unsigned int vfid,
 
 	if (!fair)
 		return -ENOSPC;
+
+	fair = min(fair, profile);
+	if (fair < profile)
+		xe_gt_sriov_info(gt, "Using non-profile provisioning (%s %u vs %u)\n",
+				 "GuC context IDs", fair, profile);
 
 	return xe_gt_sriov_pf_config_bulk_set_ctxs(gt, vfid, num_vfs, fair);
 }
@@ -1290,6 +1306,17 @@ int xe_gt_sriov_pf_config_bulk_set_dbs(struct xe_gt *gt, unsigned int vfid,
 					   "GuC doorbell IDs", no_unit, n, err);
 }
 
+static u32 pf_profile_fair_dbs(struct xe_gt *gt, unsigned int num_vfs)
+{
+	bool admin_only_pf = xe_sriov_pf_admin_only(gt_to_xe(gt));
+
+	/* XXX: preliminary */
+	if (admin_only_pf && num_vfs == 1)
+		return GUC_NUM_DOORBELLS - SZ_16;
+
+	return rounddown_pow_of_two(GUC_NUM_DOORBELLS / (num_vfs + 1));
+}
+
 static u32 pf_estimate_fair_dbs(struct xe_gt *gt, unsigned int num_vfs)
 {
 	struct xe_guc_db_mgr *dbm = &gt->uc.guc.dbm;
@@ -1322,6 +1349,7 @@ static u32 pf_estimate_fair_dbs(struct xe_gt *gt, unsigned int num_vfs)
 int xe_gt_sriov_pf_config_set_fair_dbs(struct xe_gt *gt, unsigned int vfid,
 				       unsigned int num_vfs)
 {
+	u32 profile = pf_profile_fair_dbs(gt, num_vfs);
 	u32 fair;
 
 	xe_gt_assert(gt, vfid);
@@ -1334,13 +1362,17 @@ int xe_gt_sriov_pf_config_set_fair_dbs(struct xe_gt *gt, unsigned int vfid,
 	if (!fair)
 		return -ENOSPC;
 
+	fair = min(fair, profile);
+	if (fair < profile)
+		xe_gt_sriov_info(gt, "Using non-profile provisioning (%s %u vs %u)\n",
+				 "GuC doorbell IDs", fair, profile);
+
 	return xe_gt_sriov_pf_config_bulk_set_dbs(gt, vfid, num_vfs, fair);
 }
 
 static u64 pf_get_lmem_alignment(struct xe_gt *gt)
 {
-	/* this might be platform dependent */
-	return SZ_2M;
+	return xe_lmtt_page_size(&gt->tile->sriov.pf.lmtt);
 }
 
 static u64 pf_get_min_spare_lmem(struct xe_gt *gt)
@@ -1621,7 +1653,44 @@ int xe_gt_sriov_pf_config_set_lmem(struct xe_gt *gt, unsigned int vfid, u64 size
 }
 
 /**
- * xe_gt_sriov_pf_config_bulk_set_lmem - Provision many VFs with LMEM.
+ * xe_gt_sriov_pf_config_bulk_set_lmem_locked() - Provision many VFs with LMEM.
+ * @gt: the &xe_gt (can't be media)
+ * @vfid: starting VF identifier (can't be 0)
+ * @num_vfs: number of VFs to provision
+ * @size: requested LMEM size
+ *
+ * This function can only be called on PF.
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int xe_gt_sriov_pf_config_bulk_set_lmem_locked(struct xe_gt *gt, unsigned int vfid,
+					       unsigned int num_vfs, u64 size)
+{
+	unsigned int n;
+	int err = 0;
+
+	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+	xe_gt_assert(gt, xe_device_has_lmtt(gt_to_xe(gt)));
+	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
+	xe_gt_assert(gt, xe_gt_is_main_type(gt));
+	xe_gt_assert(gt, vfid);
+
+	if (!num_vfs)
+		return 0;
+
+	for (n = vfid; n < vfid + num_vfs; n++) {
+		err = pf_provision_vf_lmem(gt, n, size);
+		if (err)
+			break;
+	}
+
+	return pf_config_bulk_set_u64_done(gt, vfid, num_vfs, size,
+					   pf_get_vf_config_lmem,
+					   "LMEM", n, err);
+}
+
+/**
+ * xe_gt_sriov_pf_config_bulk_set_lmem() - Provision many VFs with LMEM.
  * @gt: the &xe_gt (can't be media)
  * @vfid: starting VF identifier (can't be 0)
  * @num_vfs: number of VFs to provision
@@ -1634,26 +1703,52 @@ int xe_gt_sriov_pf_config_set_lmem(struct xe_gt *gt, unsigned int vfid, u64 size
 int xe_gt_sriov_pf_config_bulk_set_lmem(struct xe_gt *gt, unsigned int vfid,
 					unsigned int num_vfs, u64 size)
 {
-	unsigned int n;
-	int err = 0;
+	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
 
+	return xe_gt_sriov_pf_config_bulk_set_lmem_locked(gt, vfid, num_vfs, size);
+}
+
+/**
+ * xe_gt_sriov_pf_config_get_lmem_locked() - Get VF's LMEM quota.
+ * @gt: the &xe_gt
+ * @vfid: the VF identifier (can't be 0 == PFID)
+ *
+ * This function can only be called on PF.
+ *
+ * Return: VF's LMEM quota.
+ */
+u64 xe_gt_sriov_pf_config_get_lmem_locked(struct xe_gt *gt, unsigned int vfid)
+{
+	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
 	xe_gt_assert(gt, vfid);
+
+	return pf_get_vf_config_lmem(gt, vfid);
+}
+
+/**
+ * xe_gt_sriov_pf_config_set_lmem_locked() - Provision VF with LMEM.
+ * @gt: the &xe_gt (can't be media)
+ * @vfid: the VF identifier (can't be 0 == PFID)
+ * @size: requested LMEM size
+ *
+ * This function can only be called on PF.
+ */
+int xe_gt_sriov_pf_config_set_lmem_locked(struct xe_gt *gt, unsigned int vfid, u64 size)
+{
+	int err;
+
+	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+	xe_gt_assert(gt, xe_device_has_lmtt(gt_to_xe(gt)));
+	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
 	xe_gt_assert(gt, xe_gt_is_main_type(gt));
+	xe_gt_assert(gt, vfid);
 
-	if (!num_vfs)
-		return 0;
+	err = pf_provision_vf_lmem(gt, vfid, size);
 
-	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
-	for (n = vfid; n < vfid + num_vfs; n++) {
-		err = pf_provision_vf_lmem(gt, n, size);
-		if (err)
-			break;
-	}
-	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
-
-	return pf_config_bulk_set_u64_done(gt, vfid, num_vfs, size,
-					   xe_gt_sriov_pf_config_get_lmem,
-					   "LMEM", n, err);
+	return pf_config_set_u64_done(gt, vfid, size,
+				      pf_get_vf_config_lmem(gt, vfid),
+				      "LMEM", err);
 }
 
 static struct xe_bo *pf_get_vf_config_lmem_obj(struct xe_gt *gt, unsigned int vfid)
@@ -1723,6 +1818,85 @@ static u64 pf_estimate_fair_lmem(struct xe_gt *gt, unsigned int num_vfs)
 	return fair;
 }
 
+static u64 pf_profile_fair_lmem(struct xe_gt *gt, unsigned int num_vfs)
+{
+	struct xe_tile *tile = gt_to_tile(gt);
+	bool admin_only_pf = xe_sriov_pf_admin_only(tile->xe);
+	u64 usable = xe_vram_region_usable_size(tile->mem.vram);
+	u64 spare = pf_get_min_spare_lmem(gt);
+	u64 available = usable > spare ? usable - spare : 0;
+	u64 shareable = ALIGN_DOWN(available, SZ_1G);
+	u64 alignment = pf_get_lmem_alignment(gt);
+	u64 fair;
+
+	if (admin_only_pf)
+		fair = div_u64(shareable, num_vfs);
+	else
+		fair = div_u64(shareable, 1 + num_vfs);
+
+	if (!admin_only_pf && fair)
+		fair = rounddown_pow_of_two(fair);
+
+	return ALIGN_DOWN(fair, alignment);
+}
+
+static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
+					unsigned int num_vfs, bool provisioned)
+{
+	unsigned int allvfs = 1 + xe_gt_sriov_pf_get_totalvfs(gt); /* PF plus VFs */
+	#ifdef BPM_FREE_ATTRIBUTE_NOT_PRESENT
+		unsigned long *bitmap = bitmap_zalloc(allvfs, GFP_KERNEL);
+	#else
+		unsigned long *bitmap __free(bitmap) = bitmap_zalloc(allvfs, GFP_KERNEL);
+	#endif
+	unsigned int weight;
+	unsigned int n;
+
+	if (!bitmap)
+		return;
+
+	for (n = first_vf; n < first_vf + num_vfs; n++) {
+		if (!!pf_get_vf_config_lmem(gt, VFID(n)) == provisioned)
+			bitmap_set(bitmap, n, 1);
+	}
+
+	weight = bitmap_weight(bitmap, allvfs);
+	if (!weight)
+		return;
+
+	xe_gt_sriov_info(gt, "VF%s%*pbl %s provisioned with VRAM\n",
+			 weight > 1 ? "s " : "", allvfs, bitmap,
+			 provisioned ? "already" : "not");
+}
+
+static void pf_show_all_provisioned_lmem(struct xe_gt *gt)
+{
+	__pf_show_provisioning_lmem(gt, VFID(1), xe_gt_sriov_pf_get_totalvfs(gt), true);
+}
+
+static void pf_show_unprovisioned_lmem(struct xe_gt *gt, unsigned int first_vf,
+				       unsigned int num_vfs)
+{
+	__pf_show_provisioning_lmem(gt, first_vf, num_vfs, false);
+}
+
+static bool pf_needs_provision_lmem(struct xe_gt *gt, unsigned int first_vf,
+				    unsigned int num_vfs)
+{
+	unsigned int vfid;
+
+	for (vfid = first_vf; vfid < first_vf + num_vfs; vfid++) {
+		if (pf_get_vf_config_lmem(gt, vfid)) {
+			pf_show_all_provisioned_lmem(gt);
+			pf_show_unprovisioned_lmem(gt, first_vf, num_vfs);
+			return false;
+		}
+	}
+
+	pf_show_all_provisioned_lmem(gt);
+	return true;
+}
+
 /**
  * xe_gt_sriov_pf_config_set_fair_lmem - Provision many VFs with fair LMEM.
  * @gt: the &xe_gt (can't be media)
@@ -1736,6 +1910,7 @@ static u64 pf_estimate_fair_lmem(struct xe_gt *gt, unsigned int num_vfs)
 int xe_gt_sriov_pf_config_set_fair_lmem(struct xe_gt *gt, unsigned int vfid,
 					unsigned int num_vfs)
 {
+	u64 profile;
 	u64 fair;
 
 	xe_gt_assert(gt, vfid);
@@ -1745,14 +1920,22 @@ int xe_gt_sriov_pf_config_set_fair_lmem(struct xe_gt *gt, unsigned int vfid,
 	if (!xe_device_has_lmtt(gt_to_xe(gt)))
 		return 0;
 
-	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
-	fair = pf_estimate_fair_lmem(gt, num_vfs);
-	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
+	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
 
+	if (!pf_needs_provision_lmem(gt, vfid, num_vfs))
+		return 0;
+
+	fair = pf_estimate_fair_lmem(gt, num_vfs);
 	if (!fair)
 		return -ENOSPC;
 
-	return xe_gt_sriov_pf_config_bulk_set_lmem(gt, vfid, num_vfs, fair);
+	profile = pf_profile_fair_lmem(gt, num_vfs);
+	fair = min(fair, profile);
+	if (fair < profile)
+		xe_gt_sriov_info(gt, "Using non-profile provisioning (%s %llu vs %llu)\n",
+				 "VRAM", fair, profile);
+
+	return xe_gt_sriov_pf_config_bulk_set_lmem_locked(gt, vfid, num_vfs, fair);
 }
 
 /**

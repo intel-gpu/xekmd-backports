@@ -2436,7 +2436,7 @@ static int xe_eudebug_enable(struct xe_device *xe, bool enable)
 		ret = xe_sriov_pf_lockdown(xe);
 		if (ret) {
 			up_write(&xe->eudebug.discovery_lock);
-			return 0;
+			return ret;
 		}
 	}
 

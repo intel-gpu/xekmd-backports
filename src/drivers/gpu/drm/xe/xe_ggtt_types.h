@@ -13,6 +13,9 @@
 struct xe_bo;
 struct xe_gt;
 
+#define XE_GGTT_FLAGS_64K	BIT(0)
+#define XE_GGTT_FLAGS_ONLINE	BIT(1)
+
 /**
  * struct xe_ggtt - Main GGTT struct
  *
@@ -30,6 +33,8 @@ struct xe_ggtt {
 	 * @flags: Flags for this GGTT
 	 * Acceptable flags:
 	 * - %XE_GGTT_FLAGS_64K - if PTE size is 64K. Otherwise, regular is 4K.
+	 * - %XE_GGTT_FLAGS_ONLINE - is GGTT online, protected by ggtt->lock
+	 * after init
 	 */
 	unsigned int flags;
 	/** @scratch: Internal object allocation used as a scratch page */

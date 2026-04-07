@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Thu, 26 Feb 2026 17:52:25 -0800
+Subject: drm/xe: Disable garbage collector work item on SVM close
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When an SVM is closed, the garbage collector work item must be stopped
+synchronously and any future queuing must be prevented. Replace
+flush_work() with disable_work_sync() to ensure both conditions are
+met.
+
+Fixes: 63f6e480d115 ("drm/xe: Add SVM garbage collector")
+Cc: stable@vger.kernel.org
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Link: https://patch.msgid.link/20260227015225.3081787-1-matthew.brost@intel.com
+(cherry-picked from commit 2247feb9badca5a4774df9a437bfc44fba4f22de linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_svm.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_svm.c b/drivers/gpu/drm/xe/xe_svm.c
+index ca67d0bdbfac5..c6b92d4ea6f43 100644
+--- a/drivers/gpu/drm/xe/xe_svm.c
++++ b/drivers/gpu/drm/xe/xe_svm.c
+@@ -903,7 +903,7 @@ int xe_svm_init(struct xe_vm *vm)
+ void xe_svm_close(struct xe_vm *vm)
+ {
+ 	xe_assert(vm->xe, xe_vm_is_closed(vm));
+-	flush_work(&vm->svm.garbage_collector.work);
++	disable_work_sync(&vm->svm.garbage_collector.work);
+ 	xe_svm_put_pagemaps(vm);
+ 	drm_pagemap_release_owner(&vm->svm.peer);
+ }
+-- 
+2.43.0
+

@@ -1,0 +1,53 @@
+From c61d44c515f6ee898999e8c8404ec6c98acfee18 Mon Sep 17 00:00:00 2001
+From: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Date: Wed, 8 Apr 2026 11:20:10 +0200
+Subject: [PATCH] drm/xe/eudebug: Update prelim vm bind attach debug
+
+Updates on VM BIND extension
+PRELIM_XE_VM_BIND_OP_EXTENSIONS_ATTACH_DEBUG.
+
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry picked from commit e96bc2c5cf5dab6223261c6daa2ce3cc3c5e318c eudebug-v3-xe3p-prelim)
+---
+ drivers/gpu/drm/xe/xe_vm.c | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index 7b40907d4..e9a24c7b5 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -3280,9 +3280,12 @@ typedef int (*xe_vm_bind_op_user_extension_fn)(struct xe_device *xe,
+ 					       struct xe_file *xef,
+ 					       struct drm_gpuva_ops *ops,
+ 					       u32 operation, u64 extension);
++static const __maybe_unused xe_vm_bind_op_user_extension_fn vm_bind_op_extension_funcs[] = {
++#define MAKE_TABLE_IDX(id)[PRELIM_XE_VM_BIND_OP_EXTENSIONS_##id & PRELIM_DRM_XE_VALUE_MASK]
+ 
+-static const xe_vm_bind_op_user_extension_fn vm_bind_op_extension_funcs[] = {
+-	[PRELIM_XE_VM_BIND_OP_EXTENSIONS_ATTACH_DEBUG] = vm_bind_op_ext_attach_debug,
++	MAKE_TABLE_IDX(ATTACH_DEBUG) = vm_bind_op_ext_attach_debug,
++
++#undef MAKE_TABLE_IDX
+ };
+ 
+ #define MAX_USER_EXTENSIONS	16
+@@ -3304,12 +3307,13 @@ static int vm_bind_op_user_extensions(struct xe_device *xe,
+ 		return -EFAULT;
+ 
+ 	if (XE_IOCTL_DBG(xe, ext.pad) ||
+-	    XE_IOCTL_DBG(xe, ext.name >=
++	    XE_IOCTL_DBG(xe, ext.name != PRELIM_XE_VM_BIND_OP_EXTENSIONS_ATTACH_DEBUG) ||
++	    XE_IOCTL_DBG(xe, PRELIM_DRM_XE_VALUE(ext.name) >=
+ 			 ARRAY_SIZE(vm_bind_op_extension_funcs)))
+ 		return -EINVAL;
+ 
+-	err = vm_bind_op_extension_funcs[ext.name](xe, xef, ops,
+-						   operation, extensions);
++	err = vm_bind_op_extension_funcs[PRELIM_DRM_XE_VALUE(ext.name)](xe, xef, ops,
++									operation, extensions);
+ 	if (XE_IOCTL_DBG(xe, err))
+ 		return err;
+ 
+-- 
+2.43.0
+

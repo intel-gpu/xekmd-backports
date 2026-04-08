@@ -1,0 +1,45 @@
+From 59245382e3298767d3c8fe01fcc75b17889be1e1 Mon Sep 17 00:00:00 2001
+From: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Date: Tue, 7 Apr 2026 17:54:05 +0200
+Subject: [PATCH] fixup! drm/xe: Add PRELIM infrastructure
+
+Add prelim universal flag
+
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry picked partially from commit 7462a9fb677ebd93b0008d53c3fd544daa5ffb17 eudebug-v3-xe3p-prelim)
+---
+ include/uapi/drm/xe_drm_prelim.h | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/include/uapi/drm/xe_drm_prelim.h b/include/uapi/drm/xe_drm_prelim.h
+index b3e9ddcbc..8db506b4d 100644
+--- a/include/uapi/drm/xe_drm_prelim.h
++++ b/include/uapi/drm/xe_drm_prelim.h
+@@ -65,6 +65,24 @@
+  * - PRELIM ioctl's: IOCTL numbers go down from 0x5f
+  */
+ 
++/*
++ * Default marker for PRELIM values in shared flags/extensions
++ */
++#define PRELIM_DRM_XE_VALUE_INDICATOR		(1 << 16)
++
++/*
++ * Default mask for PRELIM values created by PRELIM_DRM_XE_VALUE_INDICATOR.
++ * The PRELIM value shall be created by:
++ * PRELIM_DRM_XE_VALUE_INDICATOR | value
++ * and 'value' shall be smaller than MASK value.
++ */
++#define PRELIM_DRM_XE_VALUE_MASK		0xffff
++
++/*
++ * Value of the PRELIM flag/extension without PRELIM INDICATOR
++ */
++#define PRELIM_DRM_XE_VALUE(val)		((val) & PRELIM_DRM_XE_VALUE_MASK)
++
+ /*
+  * IOCTL numbers listed below are reserved, they are taken up by other
+  * components. Please add an unreserved ioctl number here to reserve that
+-- 
+2.43.0
+

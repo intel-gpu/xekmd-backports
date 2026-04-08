@@ -1,0 +1,83 @@
+From c24a468fd00025a2c3d31367bdf6609935646985 Mon Sep 17 00:00:00 2001
+From: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Date: Wed, 8 Apr 2026 11:42:01 +0200
+Subject: [PATCH] drm/xe/eudebug: Eudebug prelim fix for exec queue property
+
+Detach prelim flags/property from non-prelim ones.
+Provides 2 separate namespaces for them.
+
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry picked from commit e026569c30e36207868aa0c9bcce4823c21abd29 eudebug-v3-xe3p-prelim)
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c | 41 ++++++++++++++++++++++++------
+ 1 file changed, 33 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index bb03e2358..0173abb3c 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -602,7 +602,14 @@ static const xe_exec_queue_set_property_fn exec_queue_set_property_funcs[] = {
+ 	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY] = exec_queue_set_priority,
+ 	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_TIMESLICE] = exec_queue_set_timeslice,
+ 	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_PXP_TYPE] = exec_queue_set_pxp_type,
+-	[PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG] = exec_queue_set_eudebug,
++};
++
++static const xe_exec_queue_set_property_fn prelim_exec_queue_set_property_funcs[] = {
++#define MAKE_TABLE_IDX(id)[PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_##id & PRELIM_DRM_XE_VALUE_MASK]
++
++	MAKE_TABLE_IDX(EUDEBUG) = exec_queue_set_eudebug,
++
++#undef MAKE_TABLE_IDX
+ };
+ 
+ static int exec_queue_user_ext_set_property(struct xe_device *xe,
+@@ -618,20 +625,38 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
+ 	if (XE_IOCTL_DBG(xe, err))
+ 		return -EFAULT;
+ 
+-	if (XE_IOCTL_DBG(xe, ext.property >=
+-			 ARRAY_SIZE(exec_queue_set_property_funcs)) ||
+-	    XE_IOCTL_DBG(xe, ext.pad) ||
++	if (XE_IOCTL_DBG(xe, ext.pad) ||
+ 	    XE_IOCTL_DBG(xe, ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY &&
+ 			 ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_TIMESLICE &&
+ 			 ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_PXP_TYPE &&
+ 			 ext.property != PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG))
+ 		return -EINVAL;
+ 
+-	idx = array_index_nospec(ext.property, ARRAY_SIZE(exec_queue_set_property_funcs));
+-	if (!exec_queue_set_property_funcs[idx])
+-		return -EINVAL;
++	if (ext.property &  PRELIM_DRM_XE_VALUE_INDICATOR) {
++		if (XE_IOCTL_DBG(xe, PRELIM_DRM_XE_VALUE(ext.property) >=
++				 ARRAY_SIZE(prelim_exec_queue_set_property_funcs)))
++			return -EINVAL;
+ 
+-	return exec_queue_set_property_funcs[idx](xe, q, ext.value);
++		idx = array_index_nospec(PRELIM_DRM_XE_VALUE(ext.property),
++					 ARRAY_SIZE(prelim_exec_queue_set_property_funcs));
++		if (!prelim_exec_queue_set_property_funcs[idx])
++			return -EINVAL;
++	} else {
++		if (XE_IOCTL_DBG(xe, ext.property >=
++				 ARRAY_SIZE(exec_queue_set_property_funcs)))
++			return -EINVAL;
++
++		idx = array_index_nospec(ext.property, ARRAY_SIZE(exec_queue_set_property_funcs));
++		if (!exec_queue_set_property_funcs[idx])
++			return -EINVAL;
++	}
++
++	if (ext.property &  PRELIM_DRM_XE_VALUE_INDICATOR)
++		err =  prelim_exec_queue_set_property_funcs[idx](xe, q, ext.value);
++	else
++		err =  exec_queue_set_property_funcs[idx](xe, q, ext.value);
++
++	return err;
+ }
+ 
+ typedef int (*xe_exec_queue_user_extension_fn)(struct xe_device *xe,
+-- 
+2.43.0
+

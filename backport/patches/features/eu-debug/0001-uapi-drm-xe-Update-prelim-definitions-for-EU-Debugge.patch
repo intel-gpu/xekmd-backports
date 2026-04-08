@@ -1,0 +1,46 @@
+From de0e271c9f82434b9a617b67e7bdce69f4bde84a Mon Sep 17 00:00:00 2001
+From: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Date: Tue, 7 Apr 2026 18:19:26 +0200
+Subject: [PATCH] uapi/drm/xe: Update prelim definitions for EU Debugger
+
+Adjust the Prelim IOCTL numbers.
+Update on EU Debugger flags and extensions.
+
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry picked partially from commit 84a94585f3dc5d2e4bbe928ca7aa1d4fcf383735 eudebug-v3-xe3p-prelim)
+---
+ include/uapi/drm/xe_drm_prelim.h | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/include/uapi/drm/xe_drm_prelim.h b/include/uapi/drm/xe_drm_prelim.h
+index 8db506b4d..d48139cc6 100644
+--- a/include/uapi/drm/xe_drm_prelim.h
++++ b/include/uapi/drm/xe_drm_prelim.h
+@@ -93,9 +93,9 @@
+  * Copyright © 2023 Intel Corporation
+  */
+ 
+-#define PRELIM_DRM_XE_EUDEBUG_CONNECT 0x5f
+-#define PRELIM_DRM_XE_DEBUG_METADATA_CREATE 0x5e
+-#define PRELIM_DRM_XE_DEBUG_METADATA_DESTROY 0x5d
++#define PRELIM_DRM_XE_EUDEBUG_CONNECT 0x59
++#define PRELIM_DRM_XE_DEBUG_METADATA_CREATE 0x5b
++#define PRELIM_DRM_XE_DEBUG_METADATA_DESTROY 0x5c
+ 
+ #define PRELIM_DRM_IOCTL_XE_EUDEBUG_CONNECT		DRM_IOWR(DRM_COMMAND_BASE + PRELIM_DRM_XE_EUDEBUG_CONNECT, struct prelim_drm_xe_eudebug_connect)
+ #define PRELIM_DRM_IOCTL_XE_DEBUG_METADATA_CREATE	 DRM_IOWR(DRM_COMMAND_BASE + PRELIM_DRM_XE_DEBUG_METADATA_CREATE, struct prelim_drm_xe_debug_metadata_create)
+@@ -118,9 +118,9 @@ struct prelim_drm_xe_vm_bind_op_ext_attach_debug {
+ 	__u64 reserved;
+ };
+ 
+-#define PRELIM_XE_VM_BIND_OP_EXTENSIONS_ATTACH_DEBUG 0
++#define PRELIM_XE_VM_BIND_OP_EXTENSIONS_ATTACH_DEBUG (PRELIM_DRM_XE_VALUE_INDICATOR)
+ 
+-#define   PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG		2
++#define   PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG		(PRELIM_DRM_XE_VALUE_INDICATOR)
+ #define     PRELIM_DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE		(1 << 0)
+ 
+ /*
+-- 
+2.43.0
+

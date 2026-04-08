@@ -60,6 +60,8 @@ struct xe_gt_sriov_vf_migration {
 		 */
 		u8 resfix_stoppers;
 	} debug;
+	/** @fixups_complete_count: Counts completed fixups stages */
+	atomic_t fixups_complete_count;
 	/**
 	 * @resfix_marker: Marker sent on start and on end of post-migration
 	 * steps.
@@ -71,7 +73,7 @@ struct xe_gt_sriov_vf_migration {
 	bool recovery_queued;
 	/** @recovery_inprogress: VF post migration recovery in progress */
 	bool recovery_inprogress;
-	/** @ggtt_need_fixes: VF GGTT needs fixes */
+	/** @ggtt_need_fixes: VF GGTT and references to it need fixes */
 	bool ggtt_need_fixes;
 };
 

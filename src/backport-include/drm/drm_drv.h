@@ -28,6 +28,17 @@ static inline struct dmem_cgroup_region *drmm_cgroup_register_region(
 #ifdef BPM_DRM_DEV_WEDGED_EVENT_NOT_PRESENT
 int drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
 			struct drm_wedge_task_info *info);
+#elif defined(BPM_DRM_DEV_WEDGED_EVENT_ARG3_NOT_PRESENT)
+static inline int backport_drm_dev_wedged_event_arg3(struct drm_device *dev,
+                        unsigned long method,
+                        struct drm_wedge_task_info *info)
+{
+        (void)info;
+        return drm_dev_wedged_event(dev, method);
+}
+
+#define drm_dev_wedged_event(_dev, _method, _info) \
+        backport_drm_dev_wedged_event_arg3((_dev), (_method), (_info))
 #endif
 
 #endif /* __BACKPORT_DRM_DRV_H__ */

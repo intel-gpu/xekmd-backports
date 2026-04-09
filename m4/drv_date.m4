@@ -16,6 +16,7 @@ AC_DEFUN([AC_DRV_DATE_NOT_PRESENT], [
 				.patchlevel = 0,
 			};
 		],[
+		],[
 			AC_DEFINE(BPM_DRV_DATE_NOT_PRESENT, 1,
 				[DRIVER_DATE field is not present or not needed in drm_driver structure])
 		])

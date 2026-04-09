@@ -568,6 +568,10 @@ module_pci_driver(xe_vfio_pci_driver);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Michał Winiarski <michal.winiarski@intel.com>");
 MODULE_DESCRIPTION("VFIO PCI driver with migration support for Intel Graphics");
-#ifdef BPM_EXPORT_SYMBOL_FOR_MODULES_NOT_PRESENT
+#ifdef BPM_MODULE_IMPORT_TO_STRING_LITERAL_PRESENT
 MODULE_IMPORT_NS(xe-vfio-pci);
+#else
+#ifdef BPM_EXPORT_SYMBOL_FOR_MODULES_NOT_PRESENT
+MODULE_IMPORT_NS("xe-vfio-pci");
+#endif
 #endif

@@ -15,6 +15,10 @@
 
 #include_next <linux/dma-buf.h>
 
+#ifdef BPM_MODULE_IMPORT_TO_STRING_LITERAL_PRESENT
 MODULE_IMPORT_NS(DMA_BUF);
-
+#else
+MODULE_IMPORT_NS("DMA_BUF");
 #endif
+
+#endif /*__BACKPORT_DMA_BUF_H__*/

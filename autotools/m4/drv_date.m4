@@ -7,14 +7,8 @@ AC_DEFUN([AC_DRV_DATE_NOT_PRESENT], [
 		AC_KERNEL_TRY_COMPILE([
 			#include <drm/drm_drv.h>
 		],[
-			struct drm_driver driver = {
-				.name = "test",
-				.desc = "test",
-				.date = "20201103",
-				.major = 1,
-				.minor = 1,
-				.patchlevel = 0,
-			};
+			struct drm_driver driver;
+			driver.date = "20201103";
 		],[
 		],[
 			AC_DEFINE(BPM_DRV_DATE_NOT_PRESENT, 1,

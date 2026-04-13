@@ -661,7 +661,14 @@ static const xe_exec_queue_set_property_fn exec_queue_set_property_funcs[] = {
 	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY] = exec_queue_set_priority,
 	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_TIMESLICE] = exec_queue_set_timeslice,
 	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_PXP_TYPE] = exec_queue_set_pxp_type,
-	[PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG] = exec_queue_set_eudebug,
+};
+
+static const xe_exec_queue_set_property_fn prelim_exec_queue_set_property_funcs[] = {
+#define MAKE_TABLE_IDX(id)[PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_##id & PRELIM_DRM_XE_VALUE_MASK]
+
+	MAKE_TABLE_IDX(EUDEBUG) = exec_queue_set_eudebug,
+
+#undef MAKE_TABLE_IDX
 };
 
 static int exec_queue_user_ext_set_property(struct xe_device *xe,
@@ -677,20 +684,38 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
 	if (XE_IOCTL_DBG(xe, err))
 		return -EFAULT;
 
-	if (XE_IOCTL_DBG(xe, ext.property >=
-			 ARRAY_SIZE(exec_queue_set_property_funcs)) ||
-	    XE_IOCTL_DBG(xe, ext.pad) ||
+	if (XE_IOCTL_DBG(xe, ext.pad) ||
 	    XE_IOCTL_DBG(xe, ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY &&
 			 ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_TIMESLICE &&
 			 ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_PXP_TYPE &&
 			 ext.property != PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG))
 		return -EINVAL;
 
-	idx = array_index_nospec(ext.property, ARRAY_SIZE(exec_queue_set_property_funcs));
-	if (!exec_queue_set_property_funcs[idx])
-		return -EINVAL;
+	if (ext.property &  PRELIM_DRM_XE_VALUE_INDICATOR) {
+		if (XE_IOCTL_DBG(xe, PRELIM_DRM_XE_VALUE(ext.property) >=
+				 ARRAY_SIZE(prelim_exec_queue_set_property_funcs)))
+			return -EINVAL;
 
-	return exec_queue_set_property_funcs[idx](xe, q, ext.value);
+		idx = array_index_nospec(PRELIM_DRM_XE_VALUE(ext.property),
+					 ARRAY_SIZE(prelim_exec_queue_set_property_funcs));
+		if (!prelim_exec_queue_set_property_funcs[idx])
+			return -EINVAL;
+	} else {
+		if (XE_IOCTL_DBG(xe, ext.property >=
+				 ARRAY_SIZE(exec_queue_set_property_funcs)))
+			return -EINVAL;
+
+		idx = array_index_nospec(ext.property, ARRAY_SIZE(exec_queue_set_property_funcs));
+		if (!exec_queue_set_property_funcs[idx])
+			return -EINVAL;
+	}
+
+	if (ext.property &  PRELIM_DRM_XE_VALUE_INDICATOR)
+		err =  prelim_exec_queue_set_property_funcs[idx](xe, q, ext.value);
+	else
+		err =  exec_queue_set_property_funcs[idx](xe, q, ext.value);
+
+	return err;
 }
 
 typedef int (*xe_exec_queue_user_extension_fn)(struct xe_device *xe,

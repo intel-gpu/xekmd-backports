@@ -3280,9 +3280,12 @@ typedef int (*xe_vm_bind_op_user_extension_fn)(struct xe_device *xe,
 					       struct xe_file *xef,
 					       struct drm_gpuva_ops *ops,
 					       u32 operation, u64 extension);
+static const __maybe_unused xe_vm_bind_op_user_extension_fn vm_bind_op_extension_funcs[] = {
+#define MAKE_TABLE_IDX(id)[PRELIM_XE_VM_BIND_OP_EXTENSIONS_##id & PRELIM_DRM_XE_VALUE_MASK]
 
-static const xe_vm_bind_op_user_extension_fn vm_bind_op_extension_funcs[] = {
-	[PRELIM_XE_VM_BIND_OP_EXTENSIONS_ATTACH_DEBUG] = vm_bind_op_ext_attach_debug,
+	MAKE_TABLE_IDX(ATTACH_DEBUG) = vm_bind_op_ext_attach_debug,
+
+#undef MAKE_TABLE_IDX
 };
 
 #define MAX_USER_EXTENSIONS	16
@@ -3304,12 +3307,13 @@ static int vm_bind_op_user_extensions(struct xe_device *xe,
 		return -EFAULT;
 
 	if (XE_IOCTL_DBG(xe, ext.pad) ||
-	    XE_IOCTL_DBG(xe, ext.name >=
+	    XE_IOCTL_DBG(xe, ext.name != PRELIM_XE_VM_BIND_OP_EXTENSIONS_ATTACH_DEBUG) ||
+	    XE_IOCTL_DBG(xe, PRELIM_DRM_XE_VALUE(ext.name) >=
 			 ARRAY_SIZE(vm_bind_op_extension_funcs)))
 		return -EINVAL;
 
-	err = vm_bind_op_extension_funcs[ext.name](xe, xef, ops,
-						   operation, extensions);
+	err = vm_bind_op_extension_funcs[PRELIM_DRM_XE_VALUE(ext.name)](xe, xef, ops,
+									operation, extensions);
 	if (XE_IOCTL_DBG(xe, err))
 		return err;
 

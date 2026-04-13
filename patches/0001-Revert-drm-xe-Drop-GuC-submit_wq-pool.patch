@@ -8,16 +8,17 @@ GuC submit_wq pool hack.
 
 V1: Rebase to v6.17.1-251107.1
 V2: Rebase to v6.17.13.36 [Akanksha]
+V3: Restore the missing alloc_submit_wq(guc) call [Raju]
 
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/gpu/drm/xe/xe_guc_submit.c | 70 ++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_guc_submit.c | 63 ++++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_guc_types.h  |  9 ++++
- 2 files changed, 79 insertions(+)
+ 2 files changed, 72 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index acfc6ca..5221d2c 100644
+index fb916dd..ef95cfe 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
 @@ -272,6 +272,60 @@ static bool exec_queue_killed_or_banned_or_wedged(struct xe_exec_queue *q)
@@ -81,7 +82,7 @@ index acfc6ca..5221d2c 100644
  static void guc_submit_sw_fini(struct drm_device *drm, void *arg)
  {
  	struct xe_guc *guc = arg;
-@@ -288,4 +342,7 @@ static void guc_submit_sw_fini(struct drm_device *drm, void *arg)
+@@ -288,6 +342,9 @@ static void guc_submit_sw_fini(struct drm_device *drm, void *arg)
  	xe_gt_assert(gt, ret);
  
  	xa_destroy(&guc->submission_state.exec_queue_lookup);
@@ -90,38 +91,20 @@ index acfc6ca..5221d2c 100644
 +#endif
  }
  
- static void guc_submit_wedged_fini(void *arg)
-@@ -419,6 +422,11 @@ int xe_guc_submit_init(struct xe_guc *guc, unsigned int num_ids)
- 	if (err)
- 		return err;
+ static void guc_submit_fini(void *arg)
+@@ -372,6 +429,12 @@ int xe_guc_submit_init(struct xe_guc *guc, unsigned int num_ids)
+ 
+ 	guc->submission_state.initialized = true;
  
 +#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
 +	err = alloc_submit_wq(guc);
 +	if (err)
 +		return err;
 +#endif
- 	gt->exec_queue_ops = &guc_exec_queue_ops;
- 
- 	xa_init(&guc->submission_state.exec_queue_lookup);
-@@ -1766,10 +1828,18 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
- 
- 	timeout = (q->vm && xe_vm_in_lr_mode(q->vm)) ? MAX_SCHEDULE_TIMEOUT :
- 		  msecs_to_jiffies(q->sched_props.job_timeout_ms);
-+#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
-+	err = xe_sched_init(&ge->sched, &drm_sched_ops, &xe_sched_ops,
-+			    get_submit_wq(guc),
-+			    xe_lrc_ring_size() / MAX_JOB_SIZE_BYTES, 64,
-+			    timeout, guc_to_gt(guc)->ordered_wq, NULL,
-+			    q->name, gt_to_xe(q->gt)->drm.dev);
-+#else
- 	err = xe_sched_init(&ge->sched, &drm_sched_ops, &xe_sched_ops,
- 			    NULL, xe_lrc_ring_size() / MAX_JOB_SIZE_BYTES, 64,
- 			    timeout, guc_to_gt(guc)->ordered_wq, NULL,
- 			    q->name, gt_to_xe(q->gt)->drm.dev);
-+#endif
++
+ 	err = drmm_add_action_or_reset(&xe->drm, guc_submit_sw_fini, guc);
  	if (err)
- 		goto err_free;
- 
+ 		return err;
 diff --git a/drivers/gpu/drm/xe/xe_guc_types.h b/drivers/gpu/drm/xe/xe_guc_types.h
 index c7b9642..74e4c73 100644
 --- a/drivers/gpu/drm/xe/xe_guc_types.h

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Lukasz Laguna <lukasz.laguna@intel.com>
-Date: Wed, 21 Jan 2026 15:33:04 +0100
-Subject: drm/xe: Update wedged.mode only after successful reset policy
+Date: Wed, 7 Jan 2026 18:47:39 +0100
+Subject: [PATCH] drm/xe: Update wedged.mode only after successful reset policy
  change
 
 Previously, the driver's internal wedged.mode state was updated without
@@ -36,16 +36,16 @@ Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_debugfs.c      | 74 ++++++++++++++++++++++------
- drivers/gpu/drm/xe/xe_device_types.h | 18 +++++++
+ drivers/gpu/drm/xe/xe_device_types.h |  2 +
  drivers/gpu/drm/xe/xe_guc_ads.c      | 14 +++---
  drivers/gpu/drm/xe/xe_guc_ads.h      |  5 +-
- 4 files changed, 89 insertions(+), 22 deletions(-)
+ 4 files changed, 73 insertions(+), 22 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index f18b7792a77e..31b0e766c4f0 100644
+index 4fe0d7b91e0de..8f969d40b1b39 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
-@@ -252,14 +252,66 @@ static ssize_t wedged_mode_show(struct file *f, char __user *ubuf,
+@@ -254,14 +254,66 @@ static ssize_t wedged_mode_show(struct file *f, char __user *ubuf,
  	return simple_read_from_buffer(ubuf, size, pos, buf, len);
  }
  
@@ -114,9 +114,9 @@ index f18b7792a77e..31b0e766c4f0 100644
  
  	ret = kstrtouint_from_user(ubuf, size, 0, &wedged_mode);
  	if (ret)
-@@ -268,22 +320,14 @@ static ssize_t wedged_mode_set(struct file *f, const char __user *ubuf,
- 	if (wedged_mode > 2)
- 		return -EINVAL;
+@@ -271,22 +323,14 @@ static ssize_t wedged_mode_set(struct file *f, const char __user *ubuf,
+ 	if (ret)
+ 		return ret;
  
 -	if (xe->wedged.mode == wedged_mode)
 -		return size;
@@ -143,34 +143,11 @@ index f18b7792a77e..31b0e766c4f0 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index e7923b631529..37d12960fb98 100644
+index d470f15ef58e7..7910381136aef 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -39,6 +39,22 @@ struct xe_pat_ops;
- struct xe_pxp;
- struct xe_vram_region;
- 
-+/**
-+ * enum xe_wedged_mode - possible wedged modes
-+ * @XE_WEDGED_MODE_NEVER: Device will never be declared wedged.
-+ * @XE_WEDGED_MODE_UPON_CRITICAL_ERROR: Device will be declared wedged only
-+ *	when critical error occurs like GT reset failure or firmware failure.
-+ *	This is the default mode.
-+ * @XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET: Device will be declared wedged on
-+ *	any hang. In this mode, engine resets are disabled to avoid automatic
-+ *	recovery attempts. This mode is primarily intended for debugging hangs.
-+ */
-+enum xe_wedged_mode {
-+	XE_WEDGED_MODE_NEVER = 0,
-+	XE_WEDGED_MODE_UPON_CRITICAL_ERROR = 1,
-+	XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET = 2,
-+};
-+
- #define XE_BO_INVALID_OFFSET	LONG_MAX
- 
- #define GRAPHICS_VER(xe) ((xe)->info.graphics_verx100 / 100)
-@@ -545,6 +561,8 @@ struct xe_device {
- 		int mode;
+@@ -588,6 +588,8 @@ struct xe_device {
+ 		enum xe_wedged_mode mode;
  		/** @wedged.method: Recovery method to be sent in the drm device wedged uevent */
  		unsigned long method;
 +		/** @wedged.inconsistent_reset: Inconsistent reset policy state between GTs */
@@ -179,7 +156,7 @@ index e7923b631529..37d12960fb98 100644
  
  	/** @bo_device: Struct to control async free of BOs */
 diff --git a/drivers/gpu/drm/xe/xe_guc_ads.c b/drivers/gpu/drm/xe/xe_guc_ads.c
-index 8ff8626227ae..8688a74f2759 100644
+index 0a18b978998ba..d206e3482bf7e 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ads.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ads.c
 @@ -1033,16 +1033,17 @@ static int guc_ads_action_update_policies(struct xe_guc_ads *ads, u32 policy_off
@@ -207,7 +184,7 @@ index 8ff8626227ae..8688a74f2759 100644
  	policies->dpc_promote_time = ads_blob_read(ads, policies.dpc_promote_time);
  	policies->max_num_work_items = ads_blob_read(ads, policies.max_num_work_items);
  	policies->is_valid = 1;
--	if (xe->wedged.mode == 2)
+-	if (xe->wedged.mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET)
 -		policies->global_flags |= GLOBAL_POLICY_DISABLE_ENGINE_RESET;
 -	else
 +
@@ -219,7 +196,7 @@ index 8ff8626227ae..8688a74f2759 100644
  	return guc_ads_action_update_policies(ads, xe_guc_buf_flush(buf));
  }
 diff --git a/drivers/gpu/drm/xe/xe_guc_ads.h b/drivers/gpu/drm/xe/xe_guc_ads.h
-index 2e6674c760ff..7a39f361cb17 100644
+index 2e6674c760ff9..7a39f361cb17d 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ads.h
 +++ b/drivers/gpu/drm/xe/xe_guc_ads.h
 @@ -6,6 +6,8 @@

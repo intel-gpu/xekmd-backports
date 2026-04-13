@@ -13,14 +13,14 @@ Cc: stable@vger.kernel.org
 Reviewed-by: Zhanjun Dong <zhanjun.dong@intel.com>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://patch.msgid.link/20260310225039.1320161-4-zhanjun.dong@intel.com
-(backported from commit e25ba41c8227c5393c16e4aab398076014bd345f linux-next)
+(cherry-picked from commit e25ba41c8227c5393c16e4aab398076014bd345f linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
- drivers/gpu/drm/xe/xe_guc_submit.c | 35 ++++++++++++++++++++----------
- 1 file changed, 23 insertions(+), 12 deletions(-)
+ drivers/gpu/drm/xe/xe_guc_submit.c | 35 +++++++++++++++++++-----------
+ 1 file changed, 22 insertions(+), 13 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 3c5258b89..fb916ddcb 100644
+index 229cc7554a0e3..72b324bfa6437 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
 @@ -1020,6 +1020,7 @@ static void xe_guc_exec_queue_trigger_cleanup(struct xe_exec_queue *q)
@@ -31,32 +31,32 @@ index 3c5258b89..fb916ddcb 100644
  	struct xe_gt *gt = guc_to_gt(guc);
  	struct xe_exec_queue *q;
  	unsigned long index;
-@@ -1034,19 +1035,29 @@ void xe_guc_submit_wedge(struct xe_guc *guc)
+@@ -1034,20 +1035,28 @@ void xe_guc_submit_wedge(struct xe_guc *guc)
  	if (!guc->submission_state.initialized)
  		return;
  
 -	err = devm_add_action_or_reset(guc_to_xe(guc)->drm.dev,
 -				       guc_submit_wedged_fini, guc);
 -	if (err) {
--		xe_gt_err(gt, "Failed to register clean-up on wedged.mode=2; "
--			  "Although device is wedged.\n");
+-		xe_gt_err(gt, "Failed to register clean-up in wedged.mode=%s; "
+-			  "Although device is wedged.\n",
+-			  xe_wedged_mode_to_string(XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET));
 -		return;
 -	}
 +	if (xe->wedged.mode == 2) {
 +		err = devm_add_action_or_reset(guc_to_xe(guc)->drm.dev,
-+				guc_submit_wedged_fini, guc);
++					       guc_submit_wedged_fini, guc);
++		if (err) {
++			xe_gt_err(gt, "Failed to register clean-up on wedged.mode=2; "
++				  "Although device is wedged.\n");
++			return;
++		}
  
 -	mutex_lock(&guc->submission_state.lock);
 -	xa_for_each(&guc->submission_state.exec_queue_lookup, index, q)
 -		if (xe_exec_queue_get_unless_zero(q))
 -			set_exec_queue_wedged(q);
 -	mutex_unlock(&guc->submission_state.lock);
-+		if (err) {
-+			xe_gt_err(gt, "Failed to register clean-up on wedged.mode=2; "
-+					"Although device is wedged.\n");
-+			return;
-+		}
-+
 +		mutex_lock(&guc->submission_state.lock);
 +		xa_for_each(&guc->submission_state.exec_queue_lookup, index, q)
 +			if (xe_exec_queue_get_unless_zero(q))

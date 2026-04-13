@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 25 Mar 2026 18:12:07 -0700
+Subject: drm/xe: Issue GGTT invalidation under lock in
+ ggtt_node_remove
+
+Async work (e.g., GuC queue teardowns) can call ggtt_node_remove, so the
+operation must be performed under the GGTT lock to ensure the GGTT
+online check remains stable. GGTT insertion and removal are heavyweight
+operations (e.g., queue create/destroy), so the additional serialization
+cost is negligible compared to ensuring correctness.
+
+Fixes: 4f3a998a173b ("drm/xe: Open-code GGTT MMIO access protection")
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Link: https://patch.msgid.link/20260326011207.62373-1-matthew.brost@intel.com
+(backported from commit 225d02cb46d0e567eb788308168159f61735c8fe linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ggtt.c | 9 ++-------
+ 1 file changed, 2 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
+index 847a383f0861b..2f41f9b40ae27 100644
+--- a/drivers/gpu/drm/xe/xe_ggtt.c
++++ b/drivers/gpu/drm/xe/xe_ggtt.c
+@@ -363,15 +363,10 @@ static void ggtt_node_remove(struct xe_ggtt_node *node)
+ 		xe_ggtt_clear(ggtt, node->base.start, node->base.size);
+ 	drm_mm_remove_node(&node->base);
+ 	node->base.size = 0;
+-	mutex_unlock(&ggtt->lock);
+-
+-	if (!bound)
+-		goto free_node;
+-
+-	if (node->invalidate_on_remove)
++	if (bound && node->invalidate_on_remove)
+ 		xe_ggtt_invalidate(ggtt);
++	mutex_unlock(&ggtt->lock);
+ 
+-free_node:
+ 	xe_ggtt_node_fini(node);
+ }
+ 
+-- 
+2.43.0
+

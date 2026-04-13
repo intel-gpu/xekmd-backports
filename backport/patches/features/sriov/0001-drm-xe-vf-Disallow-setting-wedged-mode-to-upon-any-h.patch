@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Lukasz Laguna <lukasz.laguna@intel.com>
+Date: Wed, 7 Jan 2026 18:47:40 +0100
+Subject: drm/xe/vf: Disallow setting wedged mode to upon-any-hang
+
+In upon-any-hang (2) wedged mode, engine resets need to be disabled,
+which requires changing the GuC reset policy. VFs are not permitted to
+do that.
+
+Signed-off-by: Lukasz Laguna <lukasz.laguna@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://patch.msgid.link/20260107174741.29163-4-lukasz.laguna@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 43d78aca8ed01a643f198b831231a6231f52d9d5 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index f5b1bfa553a1e..e13bfb22251f9 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -1277,6 +1277,11 @@ int xe_device_validate_wedged_mode(struct xe_device *xe, unsigned int mode)
+ 	if (mode > XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET) {
+ 		drm_dbg(&xe->drm, "wedged_mode: invalid value (%u)\n", mode);
+ 		return -EINVAL;
++	} else if (mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET && IS_SRIOV_VF(xe)) {
++		drm_dbg(&xe->drm, "wedged_mode: (%u) %s mode is not supported for %s\n",
++			mode, xe_wedged_mode_to_string(mode),
++			xe_sriov_mode_to_string(xe_device_sriov_mode(xe)));
++		return -EPERM;
+ 	}
+ 
+ 	return 0;
+-- 
+2.43.0
+

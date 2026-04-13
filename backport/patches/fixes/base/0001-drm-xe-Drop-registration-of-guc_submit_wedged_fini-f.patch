@@ -20,11 +20,11 @@ Link: https://patch.msgid.link/20260326210116.202585-3-matthew.brost@intel.com
 (backported from commit 4a706bd93c4fb156a13477e26ffdf2e633edeb10 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
- drivers/gpu/drm/xe/xe_guc_submit.c | 33 ++++++++----------------------
- 1 file changed, 9 insertions(+), 24 deletions(-)
+ drivers/gpu/drm/xe/xe_guc_submit.c | 32 +++++++++---------------------
+ 1 file changed, 9 insertions(+), 23 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index fb916ddcb927c..0c0cadcfe1f97 100644
+index 72b324bfa6437..78f05fbe2237a 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
 @@ -291,24 +291,12 @@ static void guc_submit_sw_fini(struct drm_device *drm, void *arg)
@@ -79,16 +79,15 @@ index fb916ddcb927c..0c0cadcfe1f97 100644
  
  	xe_gt_assert(guc_to_gt(guc), guc_to_xe(guc)->wedged.mode);
  
-@@ -1036,15 +1030,6 @@ void xe_guc_submit_wedge(struct xe_guc *guc)
+@@ -1036,14 +1030,6 @@ void xe_guc_submit_wedge(struct xe_guc *guc)
  		return;
  
  	if (xe->wedged.mode == 2) {
 -		err = devm_add_action_or_reset(guc_to_xe(guc)->drm.dev,
--				guc_submit_wedged_fini, guc);
--
+-					       guc_submit_wedged_fini, guc);
 -		if (err) {
 -			xe_gt_err(gt, "Failed to register clean-up on wedged.mode=2; "
--					"Although device is wedged.\n");
+-				  "Although device is wedged.\n");
 -			return;
 -		}
 -

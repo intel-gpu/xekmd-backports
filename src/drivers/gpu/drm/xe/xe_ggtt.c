@@ -363,15 +363,10 @@ static void ggtt_node_remove(struct xe_ggtt_node *node)
 		xe_ggtt_clear(ggtt, node->base.start, node->base.size);
 	drm_mm_remove_node(&node->base);
 	node->base.size = 0;
+	if (bound && node->invalidate_on_remove)
+		xe_ggtt_invalidate(ggtt);
 	mutex_unlock(&ggtt->lock);
 
-	if (!bound)
-		goto free_node;
-
-	if (node->invalidate_on_remove)
-		xe_ggtt_invalidate(ggtt);
-
-free_node:
 	xe_ggtt_node_fini(node);
 }
 

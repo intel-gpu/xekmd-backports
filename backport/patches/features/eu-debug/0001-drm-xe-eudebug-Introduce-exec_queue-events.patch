@@ -20,7 +20,7 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(cherry-picked from commit 46dfa9aed7e750c840b5aee9251a0a9d7d798392 drm-tip-eudebug)
+(backported from commit 46dfa9aed7e750c840b5aee9251a0a9d7d798392 drm-tip-eudebug)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c       | 189 +++++++++++++++++++++++++-
@@ -341,10 +341,10 @@ index e55e59e598af..67b371f2ff42 100644
  #endif /* _XE_EUDEBUG_TYPES_H_ */
 +
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 8991b4aed440..042ae9b3c5c2 100644
+index b69ee4487ccb..b08200851b1b 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -26,6 +26,7 @@
+@@ -29,6 +29,7 @@
  #include "xe_trace.h"
  #include "xe_vm.h"
  #include "xe_pxp.h"
@@ -352,7 +352,7 @@ index 8991b4aed440..042ae9b3c5c2 100644
  
  enum xe_exec_queue_sched_prop {
  	XE_EXEC_QUEUE_JOB_TIMEOUT = 0,
-@@ -702,6 +703,8 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
+@@ -885,6 +886,8 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
  
  	args->exec_queue_id = id;
  
@@ -360,8 +360,8 @@ index 8991b4aed440..042ae9b3c5c2 100644
 +
  	return 0;
  
- kill_exec_queue:
-@@ -891,6 +894,8 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
+ del_hw_engine_group:
+@@ -1058,6 +1061,8 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
  	if (q->vm && q->hwe->hw_engine_group)
  		xe_hw_engine_group_del_exec_queue(q->hwe->hw_engine_group, q);
  

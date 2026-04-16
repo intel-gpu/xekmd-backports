@@ -21,6 +21,7 @@ Note:
 2. Patches present in features are dynamic in nature, they may change frequently and removed once merged in drm-tip.
 3. Patches present in features will use prelim uapi to aviod conflict in updates, once patches are merged in drm-tip, uapi will change from prelim to normal.
 4. prelim uapi will be maintained at [drm-uapi-helper](https://github.com/intel-gpu/drm-uapi-helper/tree/xe).
+5. Patches present in oot directory are applied only when using the `-c <oot>` option.
 
 # Available Branches
 
@@ -40,10 +41,18 @@ backport.sh < options >
 
 ||options |description |
 |-- |--|--| 
-|1. |create-tree| Create kernel tree based on given option <base/features> (default)|
+|1. |create-tree| Create kernel tree based on given option <base/features/oot> (default)|
 |2. |delete-tree| Delete the tree|
 |3. |reset-tree| Delete the existing tree and re-create it|
 |4. |override| Overrides existing tree|
+
+## Examples
+
+### Create tree with out-of-tree (OOT) patches included
+```bash
+./backport.sh -c oot
+```
+This applies all patches including those in `backport/patches/oot/` directory.
 
 # Debugging
 
@@ -95,12 +104,13 @@ backport/patches/
 │   ├── .
 │   ├── .
 │   └── <feature N>
-└── fixes           # Fixes which are related to features
-    ├── <feature 1>
-    ├── <feature 2>
-    ├── .
-    ├── .
-    └── <feature N>
+├── fixes           # Fixes which are related to features
+│   ├── <feature 1>
+│   ├── <feature 2>
+│   ├── .
+│   ├── .
+│   └── <feature N>
+└── oot/            # Out-of-tree patches
 ```
 
 #### Placement Rules:
@@ -109,6 +119,7 @@ backport/patches/
   - Place feature patches in the appropriate feature subdirectory
   - If the feature directory doesn't exist, create one with a descriptive name
 - **`backport/patches/fixes/<feature-name>/`** Fixes related to feature
+**`backport/patches/oot/`** - For out-of-tree patches.
 
 **Examples:**
 - Bug fix → `backport/patches/base/0001-fix-memory-leak.patch`

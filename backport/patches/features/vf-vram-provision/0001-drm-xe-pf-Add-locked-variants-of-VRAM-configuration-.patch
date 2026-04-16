@@ -1,0 +1,155 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 18 Feb 2026 21:55:44 +0100
+Subject: drm/xe/pf: Add locked variants of VRAM configuration
+ functions
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We already have few functions to configure LMEM (aka VRAM) but they
+all are taking master mutex. Split them and expose locked variants
+to allow use by the caller who already hold this mutex.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260218205553.3561-3-michal.wajdeczko@intel.com
+(cherry-picked from commit 146f25b40ce4b97b193ec19ae747629e44dfdce9 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 77 ++++++++++++++++++++--
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h |  4 ++
+ 2 files changed, 74 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index b72155261338..c5d427a91489 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -1753,7 +1753,7 @@ int xe_gt_sriov_pf_config_set_lmem(struct xe_gt *gt, unsigned int vfid, u64 size
+ }
+ 
+ /**
+- * xe_gt_sriov_pf_config_bulk_set_lmem - Provision many VFs with LMEM.
++ * xe_gt_sriov_pf_config_bulk_set_lmem_locked() - Provision many VFs with LMEM.
+  * @gt: the &xe_gt (can't be media)
+  * @vfid: starting VF identifier (can't be 0)
+  * @num_vfs: number of VFs to provision
+@@ -1763,31 +1763,94 @@ int xe_gt_sriov_pf_config_set_lmem(struct xe_gt *gt, unsigned int vfid, u64 size
+  *
+  * Return: 0 on success or a negative error code on failure.
+  */
+-int xe_gt_sriov_pf_config_bulk_set_lmem(struct xe_gt *gt, unsigned int vfid,
+-					unsigned int num_vfs, u64 size)
++int xe_gt_sriov_pf_config_bulk_set_lmem_locked(struct xe_gt *gt, unsigned int vfid,
++					       unsigned int num_vfs, u64 size)
+ {
+ 	unsigned int n;
+ 	int err = 0;
+ 
+-	xe_gt_assert(gt, vfid);
++	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
++	xe_gt_assert(gt, xe_device_has_lmtt(gt_to_xe(gt)));
++	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
+ 	xe_gt_assert(gt, xe_gt_is_main_type(gt));
++	xe_gt_assert(gt, vfid);
+ 
+ 	if (!num_vfs)
+ 		return 0;
+ 
+-	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
+ 	for (n = vfid; n < vfid + num_vfs; n++) {
+ 		err = pf_provision_vf_lmem(gt, n, size);
+ 		if (err)
+ 			break;
+ 	}
+-	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
+ 
+ 	return pf_config_bulk_set_u64_done(gt, vfid, num_vfs, size,
+-					   xe_gt_sriov_pf_config_get_lmem,
++					   pf_get_vf_config_lmem,
+ 					   "LMEM", n, err);
+ }
+ 
++/**
++ * xe_gt_sriov_pf_config_bulk_set_lmem() - Provision many VFs with LMEM.
++ * @gt: the &xe_gt (can't be media)
++ * @vfid: starting VF identifier (can't be 0)
++ * @num_vfs: number of VFs to provision
++ * @size: requested LMEM size
++ *
++ * This function can only be called on PF.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_gt_sriov_pf_config_bulk_set_lmem(struct xe_gt *gt, unsigned int vfid,
++					unsigned int num_vfs, u64 size)
++{
++	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
++
++	return xe_gt_sriov_pf_config_bulk_set_lmem_locked(gt, vfid, num_vfs, size);
++}
++
++/**
++ * xe_gt_sriov_pf_config_get_lmem_locked() - Get VF's LMEM quota.
++ * @gt: the &xe_gt
++ * @vfid: the VF identifier (can't be 0 == PFID)
++ *
++ * This function can only be called on PF.
++ *
++ * Return: VF's LMEM quota.
++ */
++u64 xe_gt_sriov_pf_config_get_lmem_locked(struct xe_gt *gt, unsigned int vfid)
++{
++	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
++	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
++	xe_gt_assert(gt, vfid);
++
++	return pf_get_vf_config_lmem(gt, vfid);
++}
++
++/**
++ * xe_gt_sriov_pf_config_set_lmem_locked() - Provision VF with LMEM.
++ * @gt: the &xe_gt (can't be media)
++ * @vfid: the VF identifier (can't be 0 == PFID)
++ * @size: requested LMEM size
++ *
++ * This function can only be called on PF.
++ */
++int xe_gt_sriov_pf_config_set_lmem_locked(struct xe_gt *gt, unsigned int vfid, u64 size)
++{
++	int err;
++
++	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
++	xe_gt_assert(gt, xe_device_has_lmtt(gt_to_xe(gt)));
++	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
++	xe_gt_assert(gt, xe_gt_is_main_type(gt));
++	xe_gt_assert(gt, vfid);
++
++	err = pf_provision_vf_lmem(gt, vfid, size);
++
++	return pf_config_set_u64_done(gt, vfid, size,
++				      pf_get_vf_config_lmem(gt, vfid),
++				      "LMEM", err);
++}
++
+ static struct xe_bo *pf_get_vf_config_lmem_obj(struct xe_gt *gt, unsigned int vfid)
+ {
+ 	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
+index 3c6c8b6655af..4a004ecd6140 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
+@@ -36,6 +36,10 @@ int xe_gt_sriov_pf_config_set_lmem(struct xe_gt *gt, unsigned int vfid, u64 size
+ int xe_gt_sriov_pf_config_set_fair_lmem(struct xe_gt *gt, unsigned int vfid, unsigned int num_vfs);
+ int xe_gt_sriov_pf_config_bulk_set_lmem(struct xe_gt *gt, unsigned int vfid, unsigned int num_vfs,
+ 					u64 size);
++u64 xe_gt_sriov_pf_config_get_lmem_locked(struct xe_gt *gt, unsigned int vfid);
++int xe_gt_sriov_pf_config_set_lmem_locked(struct xe_gt *gt, unsigned int vfid, u64 size);
++int xe_gt_sriov_pf_config_bulk_set_lmem_locked(struct xe_gt *gt, unsigned int vfid,
++					       unsigned int num_vfs, u64 size);
+ struct xe_bo *xe_gt_sriov_pf_config_get_lmem_obj(struct xe_gt *gt, unsigned int vfid);
+ 
+ u32 xe_gt_sriov_pf_config_get_exec_quantum(struct xe_gt *gt, unsigned int vfid);
+-- 
+2.43.0
+

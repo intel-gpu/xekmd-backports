@@ -26,7 +26,7 @@ SHORT=:c,d,h,r,o
 LONG=create-tree:delete-tree,help,reset-tree,override
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 
-flavor="features"
+flavor=""
 is_existing_tree=0
 is_override=0
 xkb_tag=""
@@ -36,7 +36,7 @@ usage () {
           echo "Usage: $0 [-c|--create-tree] [-d|--delete-tree] [-r|--reset-tree]"
           echo ""
           echo "Options:"
-          echo "  -c, --create-tree                   	Create kernel tree based on given option <base/features>"
+          echo "  -c, --create-tree                   Create kernel tree based on given option <base/features/oot>"
           echo "  -d, --delete-tree    	      		Delete the tree"
           echo "  -r, --reset-tree    	      		Delete the existing tree and re-create it"
           echo "  -o, --override    	      		Overrides the existing tree"
@@ -45,20 +45,38 @@ usage () {
 
 apply_patches() {
 	echo "Applying local patches"
+	echo "Flavor: $flavor"
 	while read p; do
 		case "$p" in \#*)
-			if [ ! -z "$flavor" ]; then
-				echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
-				if [[ "$flavor" == "base" ]]; then
-					echo "Only base patches will be  applied"
-					flavor=""
+			patch_category=$(echo $p | tr -d "#" | xargs)
+			if [[ "$flavor" == "base" ]]; then
+				# Apply only the base section
+				if [[ "$patch_category" == "base" ]]; then
+					echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
+					continue
+				else
+					echo "Base patches completed, stopping"
+					break
 				fi
+
+			elif [ -z "$flavor" ] || [[ "$flavor" == "features" ]]; then
+				# Default or features: Apply everything EXCEPT oot
+				if [[ "$patch_category" != "oot" ]]; then
+					echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
+					continue
+				else
+					echo "features patches completed, stopping"
+					break
+				fi
+
+			elif [[ "$flavor" == "oot" ]]; then
+				# Apply everything including oot
+				echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
 				continue
-			else
-				break
 			fi
 			;;
 		esac
+
 		git am -q -s "$WORKING_DIR/$p"
 		if [ $? -ne 0 ]; then
 			echo "Failed to apply patch $p"
@@ -157,6 +175,7 @@ while [ $# -gt 0 ]; do
                 -c|--create-tree|-o|--override)
 			if [ ! $# -gt 1 ]; then
 				echo "No option provided for creating the tree"
+				flavor=""
 			else
 				flavor=$2
 			fi

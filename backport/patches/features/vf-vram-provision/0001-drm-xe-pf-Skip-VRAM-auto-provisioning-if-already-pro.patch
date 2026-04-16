@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 18 Feb 2026 21:55:51 +0100
+Subject: drm/xe/pf: Skip VRAM auto-provisioning if already provisioned
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In case VF's VRAM provisioning using sysfs is done by the admin
+prior to VFs enabling, this provisioning will be lost as PF will
+run VRAM auto-provisioning anyway. To avoid that skip this auto-
+provisioning if any VF has been already provisioned with VRAM.
+
+To help admin find any mistakes, add diagnostics messages about
+which VFs were provisioned with VRAM and which were missed.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260218205553.3561-10-michal.wajdeczko@intel.com
+(cherry-picked from commit d039fa856ee190ae8cd799800972137a00b55d43 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 56 ++++++++++++++++++++++
+ 1 file changed, 56 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index 230087fa4a33..2fa4708c75ae 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -1940,6 +1940,59 @@ static u64 pf_profile_fair_lmem(struct xe_gt *gt, unsigned int num_vfs)
+ 	return ALIGN_DOWN(fair, alignment);
+ }
+ 
++static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
++					unsigned int num_vfs, bool provisioned)
++{
++	unsigned int allvfs = 1 + xe_gt_sriov_pf_get_totalvfs(gt); /* PF plus VFs */
++	unsigned long *bitmap __free(bitmap) = bitmap_zalloc(allvfs, GFP_KERNEL);
++	unsigned int weight;
++	unsigned int n;
++
++	if (!bitmap)
++		return;
++
++	for (n = first_vf; n < first_vf + num_vfs; n++) {
++		if (!!pf_get_vf_config_lmem(gt, VFID(n)) == provisioned)
++			bitmap_set(bitmap, n, 1);
++	}
++
++	weight = bitmap_weight(bitmap, allvfs);
++	if (!weight)
++		return;
++
++	xe_gt_sriov_info(gt, "VF%s%*pbl %s provisioned with VRAM\n",
++			 weight > 1 ? "s " : "", allvfs, bitmap,
++			 provisioned ? "already" : "not");
++}
++
++static void pf_show_all_provisioned_lmem(struct xe_gt *gt)
++{
++	__pf_show_provisioning_lmem(gt, VFID(1), xe_gt_sriov_pf_get_totalvfs(gt), true);
++}
++
++static void pf_show_unprovisioned_lmem(struct xe_gt *gt, unsigned int first_vf,
++				       unsigned int num_vfs)
++{
++	__pf_show_provisioning_lmem(gt, first_vf, num_vfs, false);
++}
++
++static bool pf_needs_provision_lmem(struct xe_gt *gt, unsigned int first_vf,
++				    unsigned int num_vfs)
++{
++	unsigned int vfid;
++
++	for (vfid = first_vf; vfid < first_vf + num_vfs; vfid++) {
++		if (pf_get_vf_config_lmem(gt, vfid)) {
++			pf_show_all_provisioned_lmem(gt);
++			pf_show_unprovisioned_lmem(gt, first_vf, num_vfs);
++			return false;
++		}
++	}
++
++	pf_show_all_provisioned_lmem(gt);
++	return true;
++}
++
+ /**
+  * xe_gt_sriov_pf_config_set_fair_lmem - Provision many VFs with fair LMEM.
+  * @gt: the &xe_gt (can't be media)
+@@ -1965,6 +2018,9 @@ int xe_gt_sriov_pf_config_set_fair_lmem(struct xe_gt *gt, unsigned int vfid,
+ 
+ 	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
+ 
++	if (!pf_needs_provision_lmem(gt, vfid, num_vfs))
++		return 0;
++
+ 	fair = pf_estimate_fair_lmem(gt, num_vfs);
+ 	if (!fair)
+ 		return -ENOSPC;
+-- 
+2.43.0
+

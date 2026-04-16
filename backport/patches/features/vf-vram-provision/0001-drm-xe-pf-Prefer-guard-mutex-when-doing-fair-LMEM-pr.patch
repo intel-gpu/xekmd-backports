@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Wed, 18 Feb 2026 21:55:50 +0100
+Subject: drm/xe/pf: Prefer guard(mutex) when doing fair LMEM
+ provisioning
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We will add more code there and with guard() it will easier to
+avoid mistakes in unlocking.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260218205553.3561-9-michal.wajdeczko@intel.com
+(cherry-picked from commit 67a716b693f96177be253c1fa6a205db743d5445 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index 64a231fe6ba2..230087fa4a33 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -1963,10 +1963,9 @@ int xe_gt_sriov_pf_config_set_fair_lmem(struct xe_gt *gt, unsigned int vfid,
+ 	if (!xe_device_has_lmtt(gt_to_xe(gt)))
+ 		return 0;
+ 
+-	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
+-	fair = pf_estimate_fair_lmem(gt, num_vfs);
+-	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
++	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
+ 
++	fair = pf_estimate_fair_lmem(gt, num_vfs);
+ 	if (!fair)
+ 		return -ENOSPC;
+ 
+@@ -1976,7 +1975,7 @@ int xe_gt_sriov_pf_config_set_fair_lmem(struct xe_gt *gt, unsigned int vfid,
+ 		xe_gt_sriov_info(gt, "Using non-profile provisioning (%s %llu vs %llu)\n",
+ 				 "VRAM", fair, profile);
+ 
+-	return xe_gt_sriov_pf_config_bulk_set_lmem(gt, vfid, num_vfs, fair);
++	return xe_gt_sriov_pf_config_bulk_set_lmem_locked(gt, vfid, num_vfs, fair);
+ }
+ 
+ /**
+-- 
+2.43.0
+

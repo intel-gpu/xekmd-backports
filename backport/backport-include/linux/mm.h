@@ -68,4 +68,15 @@ static inline void *__bp_kvrealloc(const void *p, size_t newsize, gfp_t flags)
 #define kvrealloc(p, s, f) __bp_kvrealloc(p, s, f)
 #endif
 
+#ifdef BPM_PIN_USER_PAGES_REMOTE_ARG6_NOT_PRESENT
+static inline long bkpt_pin_user_pages_remote(struct mm_struct *mm,
+			   unsigned long start, unsigned long nr_pages,
+			   unsigned int gup_flags, struct page **pages,
+			   int *locked)
+{
+	return pin_user_pages_remote(mm, start, nr_pages, gup_flags, pages, NULL, locked);
+}
+#define pin_user_pages_remote bkpt_pin_user_pages_remote
+#endif
+
 #endif /* __BACKPORT_LINUX_MM_H */

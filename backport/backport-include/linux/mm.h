@@ -30,4 +30,15 @@
 #define folio_test_writeback(folio) PageWriteback((struct page *)(folio))
 #endif
 
+#ifdef BPM_PIN_USER_PAGES_REMOTE_ARG6_NOT_PRESENT
+static inline long bkpt_pin_user_pages_remote(struct mm_struct *mm,
+			   unsigned long start, unsigned long nr_pages,
+			   unsigned int gup_flags, struct page **pages,
+			   int *locked)
+{
+	return pin_user_pages_remote(mm, start, nr_pages, gup_flags, pages, NULL, locked);
+}
+#define pin_user_pages_remote bkpt_pin_user_pages_remote
+#endif
+
 #endif /* __BACKPORT_LINUX_MM_H */

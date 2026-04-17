@@ -5,6 +5,6 @@ else
 obj-y += xe-compat.o
 endif
 #xe-compat-y += main.o ptrace.o iov.o drm_drv.o drm_managed.o hrtimer.o memory.o dma-fence-array.o drm_print.o
-xe-compat-y += main.o
+xe-compat-y += main.o gup.o
 
 # Kernel backport compatibility code

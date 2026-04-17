@@ -12,4 +12,14 @@ static inline void iommufd_ctx_put(struct iommufd_ctx *ictx)
 {
 }
 
+static inline struct iommufd_ctx *iommufd_ctx_from_file(struct file *file)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline int iommufd_vfio_compat_set_no_iommu(struct iommufd_ctx *ictx)
+{
+	return -EOPNOTSUPP;
+}
+
 #endif

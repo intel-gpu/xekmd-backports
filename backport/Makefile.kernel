@@ -40,20 +40,20 @@ subdir-ccflags-y += -std=gnu11
 obj-y += compat/
 
 # XE Drivers
-obj-$(CPTCFG_DRM_XE) += drivers/gpu/drm/xe/
-obj-$(CPTCFG_DRM_TTM)   += drivers/gpu/drm/ttm/
-obj-$(CPTCFG_DRM_SCHED) += drivers/gpu/drm/scheduler/
-drm_ttm_helper-y := drivers/gpu/drm/drm_gem_ttm_helper.o
-obj-$(CPTCFG_DRM_TTM_HELPER) += drm_ttm_helper.o
+#obj-$(CPTCFG_DRM_XE) += drivers/gpu/drm/xe/
+#obj-$(CPTCFG_DRM_TTM)   += drivers/gpu/drm/ttm/
+#obj-$(CPTCFG_DRM_SCHED) += drivers/gpu/drm/scheduler/
+#drm_ttm_helper-y := drivers/gpu/drm/drm_gem_ttm_helper.o
+#obj-$(CPTCFG_DRM_TTM_HELPER) += drm_ttm_helper.o
 # Only compile drm_gpuvm if config is enabled and base kernel doesn't have it
 ifneq ($(filter m y, $(CPTCFG_DRM_GPUVM)),)
-obj-$(CPTCFG_DRM_GPUVM) += drm_gpuvm.o
-drm_gpuvm-y := drivers/gpu/drm/drm_gpuvm.o
+#obj-$(CPTCFG_DRM_GPUVM) += drm_gpuvm.o
+#drm_gpuvm-y := drivers/gpu/drm/drm_gpuvm.o
 endif
-obj-$(CPTCFG_INTEL_VSEC) += drivers/platform/x86/intel/
-obj-$(CPTCFG_MFD_INTEL_PMT) += drivers/platform/x86/intel/
+#obj-$(CPTCFG_INTEL_VSEC) += drivers/platform/x86/intel/
+#obj-$(CPTCFG_MFD_INTEL_PMT) += drivers/platform/x86/intel/
 #mtd
-mtd_intel_dg-y := drivers/mtd/devices/mtd_intel_dg.o
-obj-$(CPTCFG_MTD_INTEL_DG)      += mtd_intel_dg.o
+#mtd_intel_dg-y := drivers/mtd/devices/mtd_intel_dg.o
+#obj-$(CPTCFG_MTD_INTEL_DG)      += mtd_intel_dg.o
 #vfio
 obj-$(CPTCFG_VFIO) += drivers/vfio/

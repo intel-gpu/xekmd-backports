@@ -59,8 +59,13 @@ apply_patches() {
 					break
 				fi
 
-			elif [ -z "$flavor" ] || [[ "$flavor" == "features" ]]; then
-				# Default or features: Apply everything EXCEPT oot
+			elif [[ "$flavor" == "oot" ]]; then
+				# Apply everything including oot
+				echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
+				continue
+
+			else
+				# Default: features or any other parameter - Apply everything EXCEPT oot
 				if [[ "$patch_category" != "oot" ]]; then
 					echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
 					continue
@@ -68,11 +73,6 @@ apply_patches() {
 					echo "features patches completed, stopping"
 					break
 				fi
-
-			elif [[ "$flavor" == "oot" ]]; then
-				# Apply everything including oot
-				echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
-				continue
 			fi
 			;;
 		esac

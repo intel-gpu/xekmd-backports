@@ -73,6 +73,12 @@ apply_patches() {
 				# Apply everything including oot
 				echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
 				continue
+			else
+				# Invalid flavor provided
+				echo "ERROR: Flavor '$flavor' is not listed"
+				echo "Supported flavors are: base, features (default), oot"
+				echo "Please check README for more information"
+				exit 1
 			fi
 			;;
 		esac

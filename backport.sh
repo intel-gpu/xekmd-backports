@@ -11,7 +11,8 @@ WORKING_DIR="$PWD"
 TIME_STAMP=$(date +%Y%m%d_%H%M%S)
 
 # Link to download stable kernel releases
-KERNEL_STABLE_BASE="https://cdn.kernel.org/pub/linux/kernel/v6.x/"
+KERNEL_MAJOR=$(echo "$BASELINE" | sed 's/^v\([0-9]*\)\..*/\1/')
+KERNEL_STABLE_BASE="https://cdn.kernel.org/pub/linux/kernel/v${KERNEL_MAJOR}.x/"
 # Link to download Release candidates
 KERNEL_TORVALDS_BASE="https://git.kernel.org/torvalds/t/"
 if [[ $BASELINE == *"-rc"* ]]; then

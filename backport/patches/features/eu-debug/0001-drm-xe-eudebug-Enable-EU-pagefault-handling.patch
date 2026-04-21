@@ -47,7 +47,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  1 file changed, 37 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index 72f589fd2..6243f6eb3 100644
+index 0281b5b6d4ab..66eb2c394493 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
 @@ -19,7 +19,7 @@
@@ -117,8 +117,8 @@ index 72f589fd2..6243f6eb3 100644
 +		destroy_eudbg_pf = true;
  	}
  
- 	atomic = xe_pagefault_access_is_atomic(pf->consumer.access_type);
-@@ -199,6 +221,13 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
+ 	if (xe_vma_read_only(vma) &&
+@@ -205,6 +227,13 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
  	if (!err)
  		vm->usm.last_fault_vma = vma;
  	up_write(&vm->lock);
@@ -132,7 +132,7 @@ index 72f589fd2..6243f6eb3 100644
  	xe_vm_put(vm);
  
  	return err;
-@@ -254,12 +283,13 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -260,12 +289,13 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  	threshold = jiffies + msecs_to_jiffies(USM_QUEUE_MAX_RUNTIME_MS);
  
  	while (xe_pagefault_queue_pop(pf_queue, &pf)) {
@@ -147,7 +147,7 @@ index 72f589fd2..6243f6eb3 100644
  		if (err) {
  			xe_pagefault_print(&pf);
  			xe_gt_info(pf.gt, "Fault response: Unsuccessful %pe\n",
-@@ -268,6 +298,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -274,6 +304,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  
  		pf.producer.ops->ack_fault(&pf, err);
  
@@ -157,5 +157,5 @@ index 72f589fd2..6243f6eb3 100644
  			queue_work(gt_to_xe(pf.gt)->usm.pf_wq, w);
  			break;
 -- 
-2.34.1
+2.43.0
 

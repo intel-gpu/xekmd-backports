@@ -9,6 +9,9 @@ compatibility. Make drm_gpuvm depend on BUILD_XE_DRM_GPUVM from compat
 layer and change DRM_XE to conditionally select DRM_GPUVM only when the
 backport is needed.
 
+V1: Rebase to v7.0-rc6 [Akanksha]
+
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
  drivers/gpu/drm/xe/Kconfig | 3 ++-
@@ -26,10 +29,11 @@ index 0f3cef6..9c69a0e 100644
  	default m
  	help
  	  GPU-VM representation providing helpers to manage a GPUs virtual
-@@ -45,7 +46,7 @@ config DRM_XE
+@@ -45,8 +46,8 @@ config DRM_XE
  	select DRM_TTM
  	select DRM_TTM_HELPER
  	select DRM_EXEC
+ 	select DRM_GPUSVM if !UML
 -	select DRM_GPUVM
 +	select DRM_GPUVM if BUILD_XE_DRM_GPUVM
  	select DRM_SCHED

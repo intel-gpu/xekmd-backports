@@ -179,5 +179,3 @@ After successful tree generation, verify your changes:
 This work is a subset of the Linux kernel as such we keep the kernel's
 Copyright practice. Some files may have their own copyright and in those
 cases the license is mentioned in the file.
-
-<!-- Test: Verify auto-tag workflow -->

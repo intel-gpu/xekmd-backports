@@ -78,10 +78,9 @@ jobs:
         env:
           NEW_TAG: ${{ steps.increment.outputs.new_tag }}
         run: |
-          BRANCH_NAME="${{ github.event.pull_request.base.ref }}"
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          COMMIT_SHA=$(git rev-parse HEAD)
+          BRANCH_NAME="${{ github.ref_name }}"
+          COMMIT_SHA="${{ github.sha }}"
+          COMMIT_MSG=$(git log -1 --pretty=%B)
           
           # Check if tag already exists (safety check)
           if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
@@ -94,8 +93,8 @@ jobs:
           # Create annotated tag with detailed message
           git tag -a "$NEW_TAG" \
             -m "Auto-generated tag for $BRANCH_NAME" \
-            -m "PR #$PR_NUMBER: $PR_TITLE" \
-            -m "Commit: $COMMIT_SHA"
+            -m "Commit: $COMMIT_SHA" \
+            -m "$COMMIT_MSG"
           
           # Push the tag
           git push origin "$NEW_TAG"

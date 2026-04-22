@@ -172,7 +172,7 @@ After successful tree generation, verify your changes:
 ### 6. Submit
 - Commit your changes (patch file + series file update)
 - Create a pull request with clear description
-- Reference upstream commit or mailing list discussion
+- Reference upstream commit or mailing list discussion.
 
 # License
 

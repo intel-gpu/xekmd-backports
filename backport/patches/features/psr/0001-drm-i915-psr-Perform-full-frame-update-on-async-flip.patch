@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jouni=20H=C3=B6gander?= <jouni.hogander@intel.com>
+Date: Thu, 4 Dec 2025 09:07:17 +0200
+Subject: drm/i915/psr: Perform full frame update on async flip
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+According to bspec selective fetch is not supported with async flips and
+instructing full frame update on async flip.
+
+v4:
+  - check crtc_state->async_flip_planes in
+    psr2_sel_fetch_pipe_state_supported
+v3:
+  - rebase
+  - fix old_crtc_state->pipe_srcsz_early_tpt
+  - fix using intel_atomic_get_new_crtc_state
+v2:
+  - check also crtc_state->async_flip_planes in
+    psr2_sel_fetch_plane_state_supported
+
+Bspec: 55229
+Signed-off-by: Jouni Högander <jouni.hogander@intel.com>
+Reviewed-by: Ville Syrjälä <ville.syrjala@linux.intel.com>
+Link: https://patch.msgid.link/20251204070718.1090778-3-jouni.hogander@intel.com
+(cherry-picked from commit e540c47fc08e4480118e1f1b68adaf688d172528 xe internal)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/i915/display/intel_psr.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/i915/display/intel_psr.c b/drivers/gpu/drm/i915/display/intel_psr.c
+index 624f4985ea46..92a470dc2692 100644
+--- a/drivers/gpu/drm/i915/display/intel_psr.c
++++ b/drivers/gpu/drm/i915/display/intel_psr.c
+@@ -2654,7 +2654,8 @@ static bool psr2_sel_fetch_plane_state_supported(const struct intel_plane_state
+  */
+ static bool psr2_sel_fetch_pipe_state_supported(const struct intel_crtc_state *crtc_state)
+ {
+-	if (crtc_state->scaler_state.scaler_id >= 0)
++	if (crtc_state->scaler_state.scaler_id >= 0 ||
++	    crtc_state->async_flip_planes)
+ 		return false;
+ 
+ 	return true;
+-- 
+2.43.0
+

@@ -21,15 +21,19 @@ jobs:
 
       - name: Check if this is a PR merge
         id: check-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get commit message
+          # Get commit message and SHA
+          COMMIT_SHA="${{ github.sha }}"
           COMMIT_MSG=$(git log -1 --pretty=%B HEAD)
+          echo "Commit SHA: $COMMIT_SHA"
           echo "Commit message: $COMMIT_MSG"
           
           # Check if commit has 2 parents (merge commit)
           if git rev-parse HEAD^2 >/dev/null 2>&1; then
             echo "is_merge=true" >> $GITHUB_OUTPUT
-            echo "✅ This is a merge commit"
+            echo "✅ This is a merge commit (2 parents)"
           # Check commit message for GitHub PR merge patterns
           elif echo "$COMMIT_MSG" | grep -qiE "^Merge pull request #[0-9]+"; then
             echo "is_merge=true" >> $GITHUB_OUTPUT
@@ -37,6 +41,12 @@ jobs:
           elif echo "$COMMIT_MSG" | head -1 | grep -qE "\(#[0-9]+\)$"; then
             echo "is_merge=true" >> $GITHUB_OUTPUT
             echo "✅ This is a squash merge (PR number in title)"
+          # Check GitHub API if commit is associated with a PR
+          elif curl -s -H "Authorization: token $GH_TOKEN" \
+                    "https://api.github.com/repos/${{ github.repository }}/commits/$COMMIT_SHA/pulls" \
+                    | grep -q '"number"'; then
+            echo "is_merge=true" >> $GITHUB_OUTPUT
+            echo "✅ This commit is associated with a PR (via GitHub API)"
           else
             echo "is_merge=false" >> $GITHUB_OUTPUT
             echo "❌ This is NOT a PR merge, skipping tag creation"

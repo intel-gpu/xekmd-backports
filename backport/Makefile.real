@@ -1,4 +1,5 @@
-include versions
+BACKPORT_DIR ?= $(shell pwd)
+include $(BACKPORT_DIR)/versions
 
 # Remove # from the tag to avoid issue of src folder flag corruption during NOSTDINC_FLAGS update
 TAG_EXTRACT := $(shell cat $(BACKPORT_DIR)/versions | grep BASE_KERNEL_TAG | sed "s/#//" | cut -d '"' -f 2 )

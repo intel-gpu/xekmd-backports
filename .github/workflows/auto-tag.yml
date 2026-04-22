@@ -1,15 +1,13 @@
 name: Auto Tag on Merge
 
 on:
-  pull_request_target:
-    types: [closed]
+  push:
     branches:
       - kernel-backport/main
       - kernel-backport/v6.17
 
 jobs:
   auto-tag:
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       contents: write

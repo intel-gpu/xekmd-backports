@@ -20,18 +20,50 @@
 # OSV GENERIC VARIABLES
 #
 
+# Kernel build directory - defaults to running kernel
+KLIB_BUILD ?= /lib/modules/@DOLLAR_SIGN@(shell uname -r)/build
+
 RELEASE=1
 
 # BKPT_VER consist of backported release version.
-# Expected input: 'BACKPORTS_RELEASE_TAG="XE_586_241121.0"'
-# Filtered output: 241121.0
+# Expected input: 'BACKPORTS_RELEASE_TAG="xeb_v6.17.13.43_260317.0"'
+# Filtered output: 260317.0
 BKPT_VER=@DOLLAR_SIGN@(shell cat src/versions | grep BACKPORTS_RELEASE_TAG | cut -d "_" -f 5 | cut -d "\"" -f 1 | cut -d "-" -f 1 2>/dev/null || echo 1)
+
+# BP_TAG is the backport tag from versions file  
+# Expected input: 'BACKPORTS_RELEASE_TAG="xeb_v6.17.13.43_260317.0"'
+# Filtered output: v6.17.13.43
+BP_TAG=@DOLLAR_SIGN@(shell cat src/versions | grep BACKPORTS_RELEASE_TAG | cut -d "_" -f 2-4 | sed 's/_/-/g' 2>/dev/null || echo 1)
+
+# Extract date portion from BKPT_VER (first 6 digits before any dot)
+# Expected input: 260317.0
+# Filtered output: 260317
+BP_DATE=@DOLLAR_SIGN@(shell echo $(BKPT_VER) | cut -d "." -f 1 2>/dev/null || echo 1)
 
 # DEV_TAG is extracted from BASE_KERNEL_TAG, which is auto genereated from Dev kernel source.
 # Tagging is needed for decoding
 DEV_TAG=@DOLLAR_SIGN@(shell cat src/versions | grep BASE_KERNEL_TAG | cut -f 2 -d "\"" | cut -d "-" -f 3 2>/dev/null || echo 1)
 
-VERSION=0.$(BKPT_VER)
+# Extract kernel version from build system
+UTS_RELEASE=@DOLLAR_SIGN@(shell cat $(KLIB_BUILD)/include/generated/utsrelease.h 2>/dev/null | grep "UTS_RELEASE" | cut -d "\"" -f 2 | tr -d '~+')
+
+# Base kernel version (X.Y.Z)
+KERN_VER_XYZ=@DOLLAR_SIGN@(shell cat $(KLIB_BUILD)/include/generated/utsrelease.h 2>/dev/null | grep "UTS_RELEASE" | cut -d '"' -f2 | cut -d '.' -f1-3 | cut -d '-' -f1 | tr -d '+')
+
+# Extract extended version for RHEL/similar (e.g., 124.49.1 from 6.12.0-124.49.1.el10_1.x86_64)
+EXTENDED_VERSION_STR=@DOLLAR_SIGN@(shell cat $(KLIB_BUILD)/include/generated/utsrelease.h 2>/dev/null | grep UTS_RELEASE | cut -d '"' -f2 | cut -d '-' -f2 | sed 's/\.el.*//' | sed 's/\.x86_64//')
+
+# Construct full kernel version: X.Y.Z-EXT.VER.STR
+BASE_KERNEL_NAME=@DOLLAR_SIGN@(shell test -n "$(EXTENDED_VERSION_STR)" && echo "$(KERN_VER_XYZ)-$(EXTENDED_VERSION_STR)" || echo "$(KERN_VER_XYZ)")
+
+# Kernel version with dots instead of hyphens  
+KER_VER=@DOLLAR_SIGN@(subst -,.,$(BASE_KERNEL_NAME))
+
+# Distro suffix (e.g., el10_1)
+DISTRO_SUFFIX=@DOLLAR_SIGN@(shell cat $(KLIB_BUILD)/include/generated/utsrelease.h 2>/dev/null | grep UTS_RELEASE | cut -d '"' -f2 | grep -o 'el[0-9]*_[0-9]*' | head -1)
+
+# Package version format: kernel_version-bp_tag-date
+VERSION=$(KER_VER)-$(BP_TAG)-$(BP_DATE)
 
 #------------------------------------------------------------------------------
 #
@@ -75,6 +107,15 @@ XE_DKMS_MK_DKMS=$(BACKPORT_DIR)/scripts/backport-mkxedebdkms
 XE_DKMS_MK_README=$(BACKPORT_DIR)/scripts/backport-mkdebreadme
 XE_DKMS_MK_COPYRIGHT=$(BACKPORT_DIR)/scripts/backport-mkdebcopyright
 
+#------------------------------------------------------------------------------
+#
+# RPM Package Targets
+#
+#------------------------------------------------------------------------------
+
+XE_RPM_MK_SPEC=$(BACKPORT_DIR)/scripts/backport-mkrpmcontrol
+XE_RPM_MK_DKMS=$(BACKPORT_DIR)/scripts/backport-mkxerpmdkms
+
 .PHONY: xe-dkms-deb-pkg
 xe-dkms-deb-pkg: clean
 	$(CONFIG_SHELL) $(XE_DKMS_MK_CONTROL) -n $(XE_PKG_NAME) -v $(XE_PKG_VERSION) -r $(XE_PKG_RELEASE) -z dkms > debian/control
@@ -100,6 +141,14 @@ xe-dkms-deb-pkg: clean
 	+dch -l "+i${XE_PKG_RELEASE}-" -m "build ${XE_PKG_RELEASE}"
 	+dpkg-buildpackage -j`nproc --all` -us -uc -b -rfakeroot
 
+.PHONY: xe-dkms-rpm-pkg
+xe-dkms-rpm-pkg: clean
+	mkdir -p rpm
+	mkdir -p ~/rpmbuild/SOURCES
+	$(CONFIG_SHELL) $(XE_RPM_MK_SPEC) -n $(XE_PKG_NAME) -v $(XE_PKG_VERSION) -r $(XE_PKG_RELEASE) -d $(DISTRO_SUFFIX) -z dkms > rpm/$(XE_PKG_NAME).spec
+	$(CONFIG_SHELL) $(XE_RPM_MK_DKMS) -n $(XE_PKG_NAME) -v $(XE_PKG_VERSION) -r $(XE_PKG_RELEASE) > rpm/$(XE_PKG_NAME).dkms.conf
+	cp -r src m4 debian Makefile* configure* aclocal.m4 AUTHORS ChangeLog COPYING INSTALL NEWS README compile.sh ~/rpmbuild/SOURCES/ 2>/dev/null || true
+	+rpmbuild -bb --define "_sourcedir $(PWD)" rpm/$(XE_PKG_NAME).spec
 
 all clean:
 	$(MAKE) -C src $@
@@ -139,6 +188,9 @@ mrproper:
 	@rm -f debian/$(XE_PKG_NAME_BASENAME)*.install.in
 	@rm -rf debian/$(XE_PKG_NAME_BASENAME)*
 	@rm -f debian/rules
+	@rm -f rpm/$(XE_PKG_NAME).spec
+	@rm -f rpm/$(XE_PKG_NAME).dkms.conf
+	@rm -rf rpm/
 	@rm -f src/dkms.conf
 	@test -f .config && $(MAKE) clean || true
 

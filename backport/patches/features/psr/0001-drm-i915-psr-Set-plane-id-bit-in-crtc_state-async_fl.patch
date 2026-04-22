@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jouni=20H=C3=B6gander?= <jouni.hogander@intel.com>
+Date: Thu, 4 Dec 2025 09:07:16 +0200
+Subject: drm/i915/psr: Set plane id bit in
+ crtc_state->async_flip_planes for PSR
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Currently plane id bit is set in crtc_state->async_flip_planes only when
+async flip toggle workaround is needed. We want to utilize
+crtc_state->async_flip_planes further in Selective Fetch calculation.
+
+v2:
+  - rework if-else if to if-if
+  - added comment updated
+
+Signed-off-by: Jouni Högander <jouni.hogander@intel.com>
+Reviewed-by: Ville Syrjälä <ville.syrjala@linux.intel.com>
+Link: https://patch.msgid.link/20251204070718.1090778-2-jouni.hogander@intel.com
+(cherry-picked from commit 1f5df537fa7910a6bdc96a7cb73c65fd30e2aab5 xe internal)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/i915/display/intel_plane.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/i915/display/intel_plane.c b/drivers/gpu/drm/i915/display/intel_plane.c
+index 36fb07471deb..0ba6c1b302d4 100644
+--- a/drivers/gpu/drm/i915/display/intel_plane.c
++++ b/drivers/gpu/drm/i915/display/intel_plane.c
+@@ -640,11 +640,10 @@ static int intel_plane_atomic_calc_changes(const struct intel_crtc_state *old_cr
+ 	    ilk_must_disable_cxsr(new_crtc_state, old_plane_state, new_plane_state))
+ 		new_crtc_state->disable_cxsr = true;
+ 
+-	if (intel_plane_do_async_flip(plane, old_crtc_state, new_crtc_state)) {
++	if (intel_plane_do_async_flip(plane, old_crtc_state, new_crtc_state))
+ 		new_crtc_state->do_async_flip = true;
+-		new_crtc_state->async_flip_planes |= BIT(plane->id);
+-	} else if (plane->need_async_flip_toggle_wa &&
+-		   new_crtc_state->uapi.async_flip) {
++
++	if (new_crtc_state->uapi.async_flip) {
+ 		/*
+ 		 * On platforms with double buffered async flip bit we
+ 		 * set the bit already one frame early during the sync
+@@ -652,6 +651,9 @@ static int intel_plane_atomic_calc_changes(const struct intel_crtc_state *old_cr
+ 		 * hardware will therefore be ready to perform a real
+ 		 * async flip during the next commit, without having
+ 		 * to wait yet another frame for the bit to latch.
++		 *
++		 * async_flip_planes bitmask is also used by selective
++		 * fetch calculation to choose full frame update.
+ 		 */
+ 		new_crtc_state->async_flip_planes |= BIT(plane->id);
+ 	}
+-- 
+2.43.0
+

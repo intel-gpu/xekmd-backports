@@ -16,16 +16,29 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.base.ref }}
           fetch-depth: 0
           token: ${{ secrets.AUTOTAG_TOKEN }}
 
+      - name: Check if merge commit
+        id: check-merge
+        run: |
+          # Check if the latest commit is a merge commit
+          if git rev-parse HEAD^2 >/dev/null 2>&1; then
+            echo "is_merge=true" >> $GITHUB_OUTPUT
+            echo "This is a merge commit (PR merge)"
+          else
+            echo "is_merge=false" >> $GITHUB_OUTPUT
+            echo "This is NOT a merge commit, skipping tag creation"
+          fi
+
       - name: Configure Git
+        if: steps.check-merge.outputs.is_merge == 'true'
         run: |
           git config user.name "SYS SEOS AUTOBACKPORT"
           git config user.email "sys_seos_autobackport@intel.com"
 
       - name: Determine Version Type
+        if: steps.check-merge.outputs.is_merge == 'true'
         id: version-type
         run: |
           # All configured branches use kernel-backport versioning with 'v' prefix
@@ -33,6 +46,7 @@ jobs:
           echo "prefix=v" >> $GITHUB_OUTPUT
 
       - name: Extract Kernel Version
+        if: steps.check-merge.outputs.is_merge == 'true'
         id: kernel-version
         run: |
           # Extract BASELINE value from config file (e.g., BASELINE=v7.0-rc1)
@@ -51,6 +65,7 @@ jobs:
           fi
 
       - name: Get Latest Tag and Increment
+        if: steps.check-merge.outputs.is_merge == 'true'
         id: increment
         run: |
           PREFIX="${{ steps.version-type.outputs.prefix }}"
@@ -75,6 +90,7 @@ jobs:
           echo "Generated tag: $NEW_TAG"
 
       - name: Create and Push Tag
+        if: steps.check-merge.outputs.is_merge == 'true'
         env:
           NEW_TAG: ${{ steps.increment.outputs.new_tag }}
         run: |

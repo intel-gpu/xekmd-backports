@@ -60,4 +60,12 @@
 #define folio_test_writeback(folio) PageWriteback((struct page *)(folio))
 #endif
 
+#ifdef BPM_KVREALLOC_OLDSIZE_PARAM_PRESENT
+static inline void *__bp_kvrealloc(const void *p, size_t newsize, gfp_t flags)
+{
+        return kvrealloc(p, 0, newsize, flags);
+}
+#define kvrealloc(p, s, f) __bp_kvrealloc(p, s, f)
+#endif
+
 #endif /* __BACKPORT_LINUX_MM_H */

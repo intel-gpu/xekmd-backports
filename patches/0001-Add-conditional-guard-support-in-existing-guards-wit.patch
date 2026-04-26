@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akanksha Hotta <akanksha.hotta@intel.com>
+Date: Sun, 26 Apr 2026 21:25:44 +0530
+Subject: Add conditional guard support in existing guards with lock
+ primitives
+
+Implement compatibility layer for DEFINE_GUARD_COND macro signature change
+from 3 to 4 arguments introduced in v7.0kv to support xe-power management guard helpers.
+
+In 7.0kv the implementation extended DEFINE_GUARD_COND from 3 to 4 arguments by
+adding a condition parameter (_RET >= 0) to determine guard success. The xe PM runtime
+ioctl guard uses the 4-argument form to check return values. But in older kernel it support
+the 3-argument form without condition checking.
+
+Implemented autoconf detection and conditional macro usage:
+- Use 3-argument form (without condition check) on older kernels
+- Use 4-argument form (with _RET >= 0 condition) on v7.0+ kernels
+
+Reference:
+   e4ab322fbaaaf
+   cleanup: Add conditional guard support
+
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pm.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_pm.h b/drivers/gpu/drm/xe/xe_pm.h
+index 6b27039..7a2661d 100644
+--- a/drivers/gpu/drm/xe/xe_pm.h
++++ b/drivers/gpu/drm/xe/xe_pm.h
+@@ -44,7 +44,11 @@ DEFINE_GUARD(xe_pm_runtime, struct xe_device *,
+ 	     xe_pm_runtime_get(_T), xe_pm_runtime_put(_T))
+ DEFINE_GUARD(xe_pm_runtime_noresume, struct xe_device *,
+ 	     xe_pm_runtime_get_noresume(_T), xe_pm_runtime_put(_T))
++#ifdef BPM_DEFINE_GUARD_COND_4_ARGS_NOT_PRESENT
++DEFINE_GUARD_COND(xe_pm_runtime, _ioctl, xe_pm_runtime_get_ioctl(_T))
++#else
+ DEFINE_GUARD_COND(xe_pm_runtime, _ioctl, xe_pm_runtime_get_ioctl(_T), _RET >= 0)
++#endif
+ 
+ /*
+  * Used when a function needs to release runtime PM in all possible cases
+-- 
+2.43.0
+

@@ -35,6 +35,12 @@ static inline int bpm_iommu_map(struct iommu_domain *domain, unsigned long iova,
 int iommu_group_claim_dma_owner(struct iommu_group *group, void *owner);
 void iommu_group_release_dma_owner(struct iommu_group *group);
 bool iommu_group_dma_owner_claimed(struct iommu_group *group);
+struct iommu_domain *iommu_paging_domain_alloc_flags(struct device *dev,
+						     unsigned int flags);
+static inline struct iommu_domain *iommu_paging_domain_alloc(struct device *dev)
+{
+	return iommu_paging_domain_alloc_flags(dev, 0);
+}
 #else
 static inline int
 iommu_group_claim_dma_owner(struct iommu_group *group, void *owner)
@@ -47,6 +53,15 @@ static inline void iommu_group_release_dma_owner(struct iommu_group *group)
 static inline bool iommu_group_dma_owner_claimed(struct iommu_group *group)
 {
 	return false;
+}
+static inline struct iommu_domain *iommu_paging_domain_alloc(struct device *dev)
+{
+	return ERR_PTR(-ENODEV);
+}
+static inline struct iommu_domain *iommu_paging_domain_alloc_flags(struct device *dev,
+						     unsigned int flags)
+{
+	return ERR_PTR(-ENODEV);
 }
 #endif /*CONFIG_IOMMU_API */
 #endif

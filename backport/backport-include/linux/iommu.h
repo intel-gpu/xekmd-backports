@@ -47,4 +47,13 @@ static inline bool iommu_group_dma_owner_claimed(struct iommu_group *group)
 #endif /*CONFIG_IOMMU_API */
 #endif /* BPM_IOMMU_GROUP_CLAIM_DMA_OWNER_NOT_PRESENT */
 
+#ifdef BPM_IOMMU_MAP_GFP_NOT_PRESENT
+static inline int bpm_iommu_map(struct iommu_domain *domain, unsigned long iova,
+		     phys_addr_t paddr, size_t size, int prot, gfp_t gfp)
+{
+	return iommu_map(domain, iova, paddr, size, prot);
+}
+#define iommu_map bpm_iommu_map
+#endif
+
 #endif /* __BACKPORT_IOMMU_H */

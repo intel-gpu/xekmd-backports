@@ -29,4 +29,16 @@ static inline int bpm_iommu_map(struct iommu_domain *domain, unsigned long iova,
 }
 #define iommu_map bpm_iommu_map
 #endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
+#ifdef CONFIG_IOMMU_API
+int iommu_group_claim_dma_owner(struct iommu_group *group, void *owner);
+#else
+static inline int
+iommu_group_claim_dma_owner(struct iommu_group *group, void *owner)
+{
+	return -ENODEV;
+}
+#endif /*CONFIG_IOMMU_API */
+#endif
 #endif

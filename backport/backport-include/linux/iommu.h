@@ -9,6 +9,11 @@
 
 #include_next <linux/iommu.h>
 
+#define IRQ_DOMAIN_FLAG_ISOLATED_MSI 32
+#ifndef arch_is_isolated_msi
+#define arch_is_isolated_msi() false
+#endif
+
 //#ifdef TRUE
 
 #ifdef CONFIG_IOMMU_API
@@ -41,6 +46,7 @@ static inline struct iommu_domain *iommu_paging_domain_alloc(struct device *dev)
 {
 	return iommu_paging_domain_alloc_flags(dev, 0);
 }
+extern bool iommu_group_has_isolated_msi(struct iommu_group *group);
 #else
 static inline int
 iommu_group_claim_dma_owner(struct iommu_group *group, void *owner)

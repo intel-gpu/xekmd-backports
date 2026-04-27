@@ -6,7 +6,7 @@
 
 #include<linux/iommu.h>
 
-#ifdef BPM_DEVICE_IOMMU_CAPABLE_NOT_PRESENT
+#if defined (BPM_DEVICE_IOMMU_CAPABLE_NOT_PRESENT) || defined (BPM_IOMMU_PAGING_DOMAIN_ALLOC_NOT_PRESENT)
 /*
  * Internal equivalent of device_iommu_mapped() for when we care that a device
  * actually has API ops, and don't want false positives from VFIO-only groups.
@@ -97,3 +97,20 @@ bool iommu_group_dma_owner_claimed(struct iommu_group *group)
 }
 EXPORT_SYMBOL_GPL(iommu_group_dma_owner_claimed);
 #endif /* BPM_IOMMU_GROUP_CLAIM_DMA_OWNER_NOT_PRESENT */
+
+#ifdef BPM_IOMMU_PAGING_DOMAIN_ALLOC_NOT_PRESENT
+/*
+ * @dev: device for which the domain is allocated
+ *
+ * Allocate a paging domain which will be managed by a kernel driver. Return
+ * allocated domain if successful, or a ERR pointer for failure.
+ */
+struct iommu_domain *iommu_paging_domain_alloc(struct device *dev)
+{
+	if (!dev_has_iommu(dev))
+		return ERR_PTR(-ENODEV);
+
+	return iommu_domain_alloc(dev->bus);
+}
+EXPORT_SYMBOL_GPL(iommu_paging_domain_alloc);
+#endif /* BPM_IOMMU_PAGING_DOMAIN_ALLOC_NOT_PRESENT */

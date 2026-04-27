@@ -9,6 +9,14 @@
 
 #include_next <linux/iommu.h>
 
+#ifndef IRQ_DOMAIN_FLAG_ISOLATED_MSI
+#define IRQ_DOMAIN_FLAG_ISOLATED_MSI 32
+#endif
+
+#ifndef arch_is_isolated_msi
+#define arch_is_isolated_msi() false
+#endif
+
 #ifdef BPM_DEVICE_IOMMU_CAPABLE_NOT_PRESENT
 #ifdef CONFIG_IOMMU_API
 extern bool device_iommu_capable(struct device *dev, enum iommu_cap cap);
@@ -57,6 +65,10 @@ static inline struct iommu_domain *iommu_paging_domain_alloc(struct device *dev)
 }
 #endif /*CONFIG_IOMMU_API */
 #endif /* BPM_IOMMU_PAGING_DOMAIN_ALLOC_NOT_PRESENT */
+
+#ifdef BPM_IOMMU_GROUP_HAS_ISOLATED_MSI_NOT_PRESENT
+extern bool iommu_group_has_isolated_msi(struct iommu_group *group);
+#endif
 
 #ifdef BPM_IOMMU_MAP_GFP_NOT_PRESENT
 static inline int bpm_iommu_map(struct iommu_domain *domain, unsigned long iova,

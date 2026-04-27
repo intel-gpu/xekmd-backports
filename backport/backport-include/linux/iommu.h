@@ -19,4 +19,9 @@ static inline bool device_iommu_capable(struct device *dev, enum iommu_cap cap)
 }
 #endif /* CONFIG_IOMMU_API */
 #endif /* BPM_DEVICE_IOMMU_CAPABLE_NOT_PRESENT */
+
+#ifndef IOMMU_CAP_ENFORCE_CACHE_COHERENCY
+#define IOMMU_CAP_ENFORCE_CACHE_COHERENCY IOMMU_CAP_CACHE_COHERENCY
+#endif
+
 #endif /* __BACKPORT_IOMMU_H */

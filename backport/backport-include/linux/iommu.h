@@ -34,6 +34,7 @@ static inline int bpm_iommu_map(struct iommu_domain *domain, unsigned long iova,
 #ifdef CONFIG_IOMMU_API
 int iommu_group_claim_dma_owner(struct iommu_group *group, void *owner);
 void iommu_group_release_dma_owner(struct iommu_group *group);
+bool iommu_group_dma_owner_claimed(struct iommu_group *group);
 #else
 static inline int
 iommu_group_claim_dma_owner(struct iommu_group *group, void *owner)
@@ -42,6 +43,10 @@ iommu_group_claim_dma_owner(struct iommu_group *group, void *owner)
 }
 static inline void iommu_group_release_dma_owner(struct iommu_group *group)
 {
+}
+static inline bool iommu_group_dma_owner_claimed(struct iommu_group *group)
+{
+	return false;
 }
 #endif /*CONFIG_IOMMU_API */
 #endif

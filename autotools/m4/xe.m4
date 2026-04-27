@@ -128,6 +128,7 @@ dnl # SVM-related probes
 	AC_FOLLOW_PFNMAP_START_NOT_PRESENT
 	AC_IOMMU_MAP_GFP_NOT_PRESENT
 	AC_IOMMU_PAGING_DOMAIN_ALLOC_NOT_PRESENT
+	AC_IOMMU_GROUP_HAS_ISOLATED_MSI_NOT_PRESENT
 
 dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/i915_gsc_proxy_mei_interface.h])

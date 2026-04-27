@@ -14,6 +14,10 @@
 #define arch_is_isolated_msi() false
 #endif
 
+#ifndef IOMMU_CAP_ENFORCE_CACHE_COHERENCY
+#define IOMMU_CAP_ENFORCE_CACHE_COHERENCY IOMMU_CAP_CACHE_COHERENCY
+#endif
+
 //#ifdef TRUE
 
 #ifdef CONFIG_IOMMU_API

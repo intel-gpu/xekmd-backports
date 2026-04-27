@@ -47,6 +47,17 @@ static inline bool iommu_group_dma_owner_claimed(struct iommu_group *group)
 #endif /*CONFIG_IOMMU_API */
 #endif /* BPM_IOMMU_GROUP_CLAIM_DMA_OWNER_NOT_PRESENT */
 
+#ifdef BPM_IOMMU_PAGING_DOMAIN_ALLOC_NOT_PRESENT
+#ifdef CONFIG_IOMMU_API
+struct iommu_domain *iommu_paging_domain_alloc(struct device *dev);
+#else
+static inline struct iommu_domain *iommu_paging_domain_alloc(struct device *dev)
+{
+	return ERR_PTR(-ENODEV);
+}
+#endif /*CONFIG_IOMMU_API */
+#endif /* BPM_IOMMU_PAGING_DOMAIN_ALLOC_NOT_PRESENT */
+
 #ifdef BPM_IOMMU_MAP_GFP_NOT_PRESENT
 static inline int bpm_iommu_map(struct iommu_domain *domain, unsigned long iova,
 		     phys_addr_t paddr, size_t size, int prot, gfp_t gfp)

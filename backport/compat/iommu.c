@@ -50,3 +50,47 @@ bool device_iommu_capable(struct device *dev, enum iommu_cap cap)
 EXPORT_SYMBOL_GPL(device_iommu_capable);
 #endif /* CONFIG_IOMMU_API */
 #endif /* BPM_DEVICE_IOMMU_CAPABLE_NOT_PRESENT */
+
+struct iommu_group {
+        struct kobject kobj;
+        struct kobject *devices_kobj;
+        struct list_head devices;
+        struct mutex mutex;
+        void *iommu_data;
+        void (*iommu_data_release)(void *iommu_data);
+        char *name;
+        int id;
+        struct iommu_domain *default_domain;
+        struct iommu_domain *blocking_domain;
+        struct iommu_domain *domain;
+        struct list_head entry;
+        unsigned int owner_cnt;
+        void *owner;
+};
+
+struct group_device {
+        struct list_head list;
+        struct device *dev;
+        char *name;
+};
+
+
+#ifdef BPM_IOMMU_GROUP_CLAIM_DMA_OWNER_NOT_PRESENT
+
+int iommu_group_claim_dma_owner(struct iommu_group *group, void *owner)
+{
+        return 0;
+}
+EXPORT_SYMBOL_GPL(iommu_group_claim_dma_owner);
+
+void iommu_group_release_dma_owner(struct iommu_group *group)
+{
+}
+EXPORT_SYMBOL_GPL(iommu_group_release_dma_owner);
+
+bool iommu_group_dma_owner_claimed(struct iommu_group *group)
+{
+	return false;
+}
+EXPORT_SYMBOL_GPL(iommu_group_dma_owner_claimed);
+#endif /* BPM_IOMMU_GROUP_CLAIM_DMA_OWNER_NOT_PRESENT */

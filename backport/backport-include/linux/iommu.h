@@ -20,4 +20,13 @@ static inline bool device_iommu_capable(struct device *dev, enum iommu_cap cap)
 }
 #endif
 //#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 3, 0)
+static inline int bpm_iommu_map(struct iommu_domain *domain, unsigned long iova,
+		     phys_addr_t paddr, size_t size, int prot, gfp_t gfp)
+{
+	return iommu_map(domain, iova, paddr, size, prot);
+}
+#define iommu_map bpm_iommu_map
+#endif
 #endif

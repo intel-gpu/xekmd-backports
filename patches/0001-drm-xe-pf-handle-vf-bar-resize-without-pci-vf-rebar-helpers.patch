@@ -13,7 +13,7 @@ Signed-off-by: Marcin Bernatowicz <marcin.bernatowicz@linux.intel.com>
 diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov.c
 --- a/drivers/gpu/drm/xe/xe_pci_sriov.c
 +++ b/drivers/gpu/drm/xe/xe_pci_sriov.c
-@@ -86,13 +86,113 @@ static void pf_engine_activity_stats(struct xe_device *xe, unsigned int num_vfs, bool enable)
+@@ -85,13 +85,108 @@ static void pf_engine_activity_stats(struct xe_device *xe, unsigned int num_vfs, bool enable)
 -static int resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
 -{
 -	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
@@ -46,11 +46,6 @@ diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov
 +#ifndef PCI_EXT_CAP_ID_VF_REBAR
 +#define PCI_EXT_CAP_ID_VF_REBAR 0x24 /* VF Resizable BAR */
 +#endif
-+
-+static inline resource_size_t pci_rebar_size_to_bytes(int size)
-+{
-+	return 1ULL << (size + ilog2((resource_size_t)SZ_1M));
-+}
 +
 +/*
 + * The real 'struct pci_sriov' is PCI-core internal (drivers/pci/pci.h).
@@ -137,6 +132,6 @@ diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov
 +}
 +#endif
  
- static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
+ static int pf_prepare_vfs_enabling(struct xe_device *xe)
 --
 2.43.0

@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Winiarski?= <michal.winiarski@intel.com>
+Date: Fri, 30 Jan 2026 22:56:24 +0100
+Subject: drm/xe/pf: Fix the address range assert in ggtt_get_pte
+ helper
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The ggtt_get_pte helper used for saving VF GGTT incorrectly assumes that
+ggtt_size == ggtt_end.
+Fix it to avoid triggering spurious asserts if VF GGTT object lands in
+high GGTT range.
+
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Link: https://patch.msgid.link/20260130215624.556099-1-michal.winiarski@intel.com
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+(cherry-picked from commit 6fa45759cf43df3508a94dda7b6b02735ab19c4f linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ggtt.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
+index d1561ebe4..1521ae1da 100644
+--- a/drivers/gpu/drm/xe/xe_ggtt.c
++++ b/drivers/gpu/drm/xe/xe_ggtt.c
+@@ -193,7 +193,7 @@ static void xe_ggtt_set_pte_and_flush(struct xe_ggtt *ggtt, u64 addr, u64 pte)
+ static u64 xe_ggtt_get_pte(struct xe_ggtt *ggtt, u64 addr)
+ {
+ 	xe_tile_assert(ggtt->tile, !(addr & XE_PTE_MASK));
+-	xe_tile_assert(ggtt->tile, addr < ggtt->size);
++	xe_tile_assert(ggtt->tile, addr < ggtt->start + ggtt->size);
+ 
+ 	return readq(&ggtt->gsm[addr >> XE_PTE_SHIFT]);
+ }
+-- 
+2.43.0
+

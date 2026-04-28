@@ -93,4 +93,47 @@
 })
 #endif /* read_poll_timeout_atomic */
 
+#ifndef poll_timeout_us
+/**
+ * poll_timeout_us - Periodically poll an expression until it returns true or a timeout occurs
+ * @op: operation to perform
+ * @cond: break condition (usually involving the result of @op)
+ * @sleep_us: Maximum time to sleep between polls in us (0 tight-loops)
+ * @timeout_us: Timeout in us, 0 means never timeout
+ * @sleep_before_op: if it is true, sleep @sleep_us before the first poll
+ *
+ * Returns 0 on success and -ETIMEDOUT upon a timeout.
+ * Must not be called from atomic context if sleep_us or timeout_us are used.
+ */
+#define poll_timeout_us(op, cond, sleep_us, timeout_us, sleep_before_op) \
+({ \
+	u64 __timeout_us = (timeout_us); \
+	unsigned long __sleep_us = (sleep_us); \
+	ktime_t __timeout = ktime_add_us(ktime_get(), __timeout_us); \
+	int ___ret; \
+	might_sleep_if((__sleep_us) != 0); \
+	if ((sleep_before_op) && __sleep_us) \
+		usleep_range((__sleep_us >> 2) + 1, __sleep_us); \
+	for (;;) { \
+		bool __expired = __timeout_us && \
+			ktime_compare(ktime_get(), __timeout) > 0; \
+		/* guarantee 'op' and 'cond' are evaluated after timeout expired */ \
+		barrier(); \
+		op; \
+		if (cond) { \
+			___ret = 0; \
+			break; \
+		} \
+		if (__expired) { \
+			___ret = -ETIMEDOUT; \
+			break; \
+		} \
+		if (__sleep_us) \
+			usleep_range((__sleep_us >> 2) + 1, __sleep_us); \
+		cpu_relax(); \
+	} \
+	___ret; \
+})
+#endif /* poll_timeout_us */
+
 #endif /* _BACKPORTS_LINUX_IOPOLL_H */

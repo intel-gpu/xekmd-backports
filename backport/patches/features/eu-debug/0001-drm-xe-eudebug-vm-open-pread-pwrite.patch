@@ -376,7 +376,7 @@ index ebd8551c4..ca8965970 100644
 +	mutex_lock(&d->eu_lock);
 +	psmi_ctrl = xe_mmio_read32(&gt->mmio, psmi_addr);
 +	if (!(psmi_ctrl & IDLE_MSG_DISABLE))
-+		xe_mmio_write32(&gt->mmio, psmi_addr, _MASKED_BIT_ENABLE(IDLE_MSG_DISABLE));
++		xe_mmio_write32(&gt->mmio, psmi_addr, REG_MASKED_FIELD_ENABLE(IDLE_MSG_DISABLE));
 +
 +	/* XXX: Timeout is per operation but in here we flush previous */
 +	ret = xe_mmio_wait32(&gt->mmio, RCU_ASYNC_FLUSH,
@@ -392,7 +392,7 @@ index ebd8551c4..ca8965970 100644
 +			     timeout_us, NULL, false);
 +out:
 +	if (!(psmi_ctrl & IDLE_MSG_DISABLE))
-+		xe_mmio_write32(&gt->mmio, psmi_addr, _MASKED_BIT_ENABLE(IDLE_MSG_DISABLE));
++		xe_mmio_write32(&gt->mmio, psmi_addr, REG_MASKED_FIELD_ENABLE(IDLE_MSG_DISABLE));
 +
 +	mutex_unlock(&d->eu_lock);
 +	xe_force_wake_put(gt_to_fw(gt), fw_ref);

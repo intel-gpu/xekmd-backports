@@ -41,7 +41,7 @@ index 1f15a8ca1..ccc6c5cd5 100644
  ================
  
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 4a6f9956e..6d5d59594 100644
+index e230a254f..61da17495 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -194,6 +194,14 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
@@ -60,17 +60,17 @@ index 4a6f9956e..6d5d59594 100644
  	DRM_IOCTL_DEF_DRV(XE_DEVICE_QUERY, xe_query_ioctl, DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_GEM_CREATE, xe_gem_create_ioctl, DRM_RENDER_ALLOW),
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index e670cb475..ef450de28 100644
+index e32998921..ee48de8bf 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
-@@ -2450,6 +2450,7 @@ struct drm_xe_debug_metadata_destroy {
+@@ -2623,6 +2623,7 @@ struct drm_xe_debug_metadata_destroy {
  };
  
  #include "xe_drm_eudebug.h"
 +#include "xe_drm_prelim.h"
  
- #if defined(__cplusplus)
- }
+ /**
+  * DOC: Xe DRM RAS
 diff --git a/include/uapi/drm/xe_drm_prelim.h b/include/uapi/drm/xe_drm_prelim.h
 new file mode 100644
 index 000000000..31cfbdcb5
@@ -169,5 +169,5 @@ index 000000000..31cfbdcb5
 + */
 +#endif /* _UAPI_XE_DRM_PRELIM_H_ */
 -- 
-2.34.1
+2.43.0
 

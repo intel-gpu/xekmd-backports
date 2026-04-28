@@ -102,10 +102,10 @@ index 4d7dcaff2..78d467366 100644
  depends on DRM_XE
  depends on EXPERT
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index b39cbb756..8a6796bcd 100644
+index 49de1c22a..c1abd31c0 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -146,6 +146,7 @@ xe-y += xe_bb.o \
+@@ -148,6 +148,7 @@ xe-y += xe_bb.o \
  	xe_wopcm.o
  
  xe-$(CONFIG_I2C)	+= xe_i2c.o
@@ -114,10 +114,10 @@ index b39cbb756..8a6796bcd 100644
  xe-$(CONFIG_DRM_GPUSVM) += xe_userptr.o
  
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 52ee24e9c..bc8cb720d 100644
+index ffea4a453..ae0553745 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -31,6 +31,7 @@
+@@ -32,6 +32,7 @@
  #include "xe_dma_buf.h"
  #include "xe_drm_client.h"
  #include "xe_drv.h"
@@ -125,7 +125,7 @@ index 52ee24e9c..bc8cb720d 100644
  #include "xe_exec.h"
  #include "xe_exec_queue.h"
  #include "xe_force_wake.h"
-@@ -116,6 +117,8 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
+@@ -117,6 +118,8 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
  		put_task_struct(task);
  	}
  
@@ -134,7 +134,7 @@ index 52ee24e9c..bc8cb720d 100644
  	return 0;
  }
  
-@@ -169,6 +172,8 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -170,6 +173,8 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  
  	guard(xe_pm_runtime)(xe);
  
@@ -143,14 +143,14 @@ index 52ee24e9c..bc8cb720d 100644
  	/*
  	 * No need for exec_queue.lock here as there is no contention for it
  	 * when FD is closing as IOCTLs presumably can't be modifying the
-@@ -210,6 +215,7 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
+@@ -211,6 +216,7 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
  			  DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_EXEC_QUEUE_SET_PROPERTY, xe_exec_queue_set_property_ioctl,
  			  DRM_RENDER_ALLOW),
 +	DRM_IOCTL_DEF_DRV(XE_EUDEBUG_CONNECT, xe_eudebug_connect_ioctl, DRM_RENDER_ALLOW),
+ 	DRM_IOCTL_DEF_DRV(XE_VM_GET_PROPERTY, xe_vm_get_property_ioctl,
+ 			  DRM_RENDER_ALLOW),
  };
- 
- static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 @@ -418,6 +424,8 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
  {
  	struct xe_device *xe = to_xe_device(dev);
@@ -162,7 +162,7 @@ index 52ee24e9c..bc8cb720d 100644
  	if (xe->preempt_fence_wq)
 @@ -505,6 +513,8 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
  	if (err)
- 		goto err;
+ 		return ERR_PTR(err);
  
 +	xe_eudebug_init(xe);
 +
@@ -170,10 +170,10 @@ index 52ee24e9c..bc8cb720d 100644
  						       WQ_MEM_RECLAIM);
  	xe->ordered_wq = alloc_ordered_workqueue("xe-ordered-wq", 0);
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index e8e8d54d1..a39f26144 100644
+index 615218d77..08fb5543a 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -458,6 +458,17 @@ struct xe_device {
+@@ -293,6 +293,17 @@ struct xe_device {
  		struct workqueue_struct *wq;
  	} sriov;
  
@@ -191,7 +191,7 @@ index e8e8d54d1..a39f26144 100644
  	/** @usm: unified memory state */
  	struct {
  		/** @usm.asid: convert a ASID to VM */
-@@ -712,6 +723,23 @@ struct xe_device {
+@@ -550,6 +561,23 @@ struct xe_device {
  	atomic_t g2g_test_count;
  #endif
  
@@ -215,7 +215,7 @@ index e8e8d54d1..a39f26144 100644
  	/* private: */
  
  #if IS_ENABLED(CONFIG_DRM_XE_DISPLAY)
-@@ -787,6 +815,14 @@ struct xe_file {
+@@ -625,6 +653,14 @@ struct xe_file {
  
  	/** @refcount: ref count of this xe file */
  	struct kref refcount;
@@ -1605,7 +1605,7 @@ index 000000000..52d4205e0
 +
 +#endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index a82e3a4fb..8d0fc797e 100644
+index 56e2db50b..fa6798d7a 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -26,6 +26,7 @@
@@ -1614,9 +1614,9 @@ index a82e3a4fb..8d0fc797e 100644
  #include "xe_drm_client.h"
 +#include "xe_eudebug.h"
  #include "xe_exec_queue.h"
+ #include "xe_gt.h"
  #include "xe_migrate.h"
- #include "xe_pat.h"
-@@ -1981,6 +1982,8 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
+@@ -2104,6 +2105,8 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
  
  	args->vm_id = id;
  
@@ -1625,7 +1625,7 @@ index a82e3a4fb..8d0fc797e 100644
  	return 0;
  
  err_close_and_put:
-@@ -2012,8 +2015,10 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
+@@ -2135,8 +2138,10 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
  		xa_erase(&xef->vm.xa, args->vm_id);
  	mutex_unlock(&xef->vm.lock);
  
@@ -1638,26 +1638,26 @@ index a82e3a4fb..8d0fc797e 100644
  	return err;
  }
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 077e66a68..07f566fcc 100644
+index ae2fda23c..21e689db1 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
-@@ -107,6 +107,7 @@ extern "C" {
- #define DRM_XE_MADVISE			0x0c
+@@ -109,6 +109,7 @@ extern "C" {
  #define DRM_XE_VM_QUERY_MEM_RANGE_ATTRS	0x0d
  #define DRM_XE_EXEC_QUEUE_SET_PROPERTY	0x0e
-+#define DRM_XE_EUDEBUG_CONNECT		0x0f
+ #define DRM_XE_VM_GET_PROPERTY		0x0f
++#define DRM_XE_EUDEBUG_CONNECT		0x10
  
  /* Must be kept compact -- no holes */
  
-@@ -125,6 +126,7 @@ extern "C" {
- #define DRM_IOCTL_XE_MADVISE			DRM_IOW(DRM_COMMAND_BASE + DRM_XE_MADVISE, struct drm_xe_madvise)
+@@ -128,6 +129,7 @@ extern "C" {
  #define DRM_IOCTL_XE_VM_QUERY_MEM_RANGE_ATTRS	DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_VM_QUERY_MEM_RANGE_ATTRS, struct drm_xe_vm_query_mem_range_attr)
  #define DRM_IOCTL_XE_EXEC_QUEUE_SET_PROPERTY	DRM_IOW(DRM_COMMAND_BASE + DRM_XE_EXEC_QUEUE_SET_PROPERTY, struct drm_xe_exec_queue_set_property)
+ #define DRM_IOCTL_XE_VM_GET_PROPERTY		DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_VM_GET_PROPERTY, struct drm_xe_vm_get_property)
 +#define DRM_IOCTL_XE_EUDEBUG_CONNECT		DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_EUDEBUG_CONNECT, struct drm_xe_eudebug_connect)
  
  /**
   * DOC: Xe IOCTL Extensions
-@@ -2357,6 +2359,25 @@ struct drm_xe_exec_queue_set_property {
+@@ -2530,6 +2532,25 @@ struct drm_xe_exec_queue_set_property {
  	__u64 reserved[2];
  };
  
@@ -1680,9 +1680,9 @@ index 077e66a68..07f566fcc 100644
 +
 +#include "xe_drm_eudebug.h"
 +
- #if defined(__cplusplus)
- }
- #endif
+ /**
+  * DOC: Xe DRM RAS
+  *
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
 new file mode 100644
 index 000000000..d926d3736
@@ -1749,5 +1749,5 @@ index 000000000..d926d3736
 +
 +#endif /* _UAPI_XE_DRM_EUDEBUG_H_ */
 -- 
-2.34.1
+2.43.0
 

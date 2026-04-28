@@ -340,7 +340,7 @@ index be94e4b9a..c1ac938c0 100644
 +
  #endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 0ddae7fcf..c0e16177f 100644
+index 071b8c41d..49f569bb3 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -29,6 +29,7 @@
@@ -351,7 +351,7 @@ index 0ddae7fcf..c0e16177f 100644
  
  /**
   * DOC: Execution Queue
-@@ -1241,6 +1242,8 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
+@@ -1420,6 +1421,8 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
  
  	args->exec_queue_id = id;
  
@@ -359,8 +359,8 @@ index 0ddae7fcf..c0e16177f 100644
 +
  	return 0;
  
- kill_exec_queue:
-@@ -1430,6 +1433,7 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
+ del_hw_engine_group:
+@@ -1618,6 +1621,7 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
  		xe_hw_engine_group_del_exec_queue(q->hwe->hw_engine_group, q);
  
  	xe_exec_queue_kill(q);
@@ -399,5 +399,5 @@ index d926d3736..0a3e8e057 100644
  }
  #endif
 -- 
-2.34.1
+2.43.0
 

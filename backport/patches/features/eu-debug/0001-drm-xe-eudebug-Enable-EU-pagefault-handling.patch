@@ -47,7 +47,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  1 file changed, 37 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index 0281b5b6d4ab..66eb2c394493 100644
+index dd3c068e1..f12636fb7 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
 @@ -19,7 +19,7 @@
@@ -59,7 +59,7 @@ index 0281b5b6d4ab..66eb2c394493 100644
  /**
   * DOC: Xe page faults
   *
-@@ -154,12 +154,15 @@ static struct xe_vm *xe_pagefault_asid_to_vm(struct xe_device *xe, u32 asid)
+@@ -167,12 +167,15 @@ static struct xe_vm *xe_pagefault_asid_to_vm(struct xe_device *xe, u32 asid)
  	return vm;
  }
  
@@ -76,7 +76,7 @@ index 0281b5b6d4ab..66eb2c394493 100644
  	int err;
  	bool atomic;
  
-@@ -171,6 +174,8 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
+@@ -184,6 +187,8 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
  	if (IS_ERR(vm))
  		return PTR_ERR(vm);
  
@@ -85,7 +85,7 @@ index 0281b5b6d4ab..66eb2c394493 100644
  	/*
  	 * TODO: Change to read lock? Using write lock for simplicity.
  	 */
-@@ -178,13 +183,30 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
+@@ -191,13 +196,30 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
  
  	if (xe_vm_is_closed(vm)) {
  		err = -ENOENT;
@@ -118,7 +118,7 @@ index 0281b5b6d4ab..66eb2c394493 100644
  	}
  
  	if (xe_vma_read_only(vma) &&
-@@ -205,6 +227,13 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
+@@ -218,6 +240,13 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
  	if (!err)
  		vm->usm.last_fault_vma = vma;
  	up_write(&vm->lock);
@@ -132,7 +132,7 @@ index 0281b5b6d4ab..66eb2c394493 100644
  	xe_vm_put(vm);
  
  	return err;
-@@ -260,12 +289,13 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -299,12 +328,13 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  	threshold = jiffies + msecs_to_jiffies(USM_QUEUE_MAX_RUNTIME_MS);
  
  	while (xe_pagefault_queue_pop(pf_queue, &pf)) {
@@ -145,9 +145,9 @@ index 0281b5b6d4ab..66eb2c394493 100644
 -		err = xe_pagefault_service(&pf);
 +		err = xe_pagefault_service(&pf, &eudbg_pf);
  		if (err) {
- 			xe_pagefault_print(&pf);
- 			xe_gt_info(pf.gt, "Fault response: Unsuccessful %pe\n",
-@@ -274,6 +304,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+ 			xe_pagefault_save_to_vm(gt_to_xe(pf.gt), &pf);
+ 			if (!(pf.consumer.access_type & XE_PAGEFAULT_ACCESS_PREFETCH)) {
+@@ -320,6 +350,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  
  		pf.producer.ops->ack_fault(&pf, err);
  

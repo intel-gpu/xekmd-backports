@@ -12,30 +12,28 @@ Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 (backported from commit e026569c30e36207868aa0c9bcce4823c21abd29 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
- drivers/gpu/drm/xe/xe_exec_queue.c | 70 +++++++++++++++++++++++++-----
- 1 file changed, 59 insertions(+), 11 deletions(-)
+ drivers/gpu/drm/xe/xe_exec_queue.c | 68 +++++++++++++++++++++++++-----
+ 1 file changed, 57 insertions(+), 11 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index fa3115c38..8bcc58118 100644
+index 04a1588e2..ea0337a01 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -915,7 +915,14 @@ static const xe_exec_queue_set_property_fn exec_queue_set_property_funcs[] = {
- 	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_MULTI_GROUP] = exec_queue_set_multi_group,
- 	[DRM_XE_EXEC_QUEUE_SET_PROPERTY_MULTI_QUEUE_PRIORITY] =
+@@ -1062,7 +1062,12 @@ static const xe_exec_queue_set_property_fn exec_queue_set_property_funcs[] = {
  							exec_queue_set_multi_queue_priority,
+ 	[DRM_XE_EXEC_QUEUE_SET_DISABLE_STATE_CACHE_PERF_FIX] =
+ 							exec_queue_set_state_cache_perf_fix,
 -	[PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG] = exec_queue_set_eudebug,
 +};
 +
 +static const xe_exec_queue_set_property_fn prelim_exec_queue_set_property_funcs[] = {
 +#define MAKE_TABLE_IDX(id)[PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_##id & PRELIM_DRM_XE_VALUE_MASK]
-+
 +	MAKE_TABLE_IDX(EUDEBUG) = exec_queue_set_eudebug,
-+
 +#undef MAKE_TABLE_IDX
  };
  
- int xe_exec_queue_set_property_ioctl(struct drm_device *dev, void *data,
-@@ -939,9 +946,32 @@ int xe_exec_queue_set_property_ioctl(struct drm_device *dev, void *data,
+ /**
+@@ -1097,9 +1102,32 @@ int xe_exec_queue_set_property_ioctl(struct drm_device *dev, void *data,
  	if (XE_IOCTL_DBG(xe, !q))
  		return -ENOENT;
  
@@ -71,7 +69,7 @@ index fa3115c38..8bcc58118 100644
  	if (XE_IOCTL_DBG(xe, ret))
  		goto err_post_lookup;
  
-@@ -992,9 +1022,7 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
+@@ -1150,9 +1178,7 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
  	if (XE_IOCTL_DBG(xe, err))
  		return -EFAULT;
  
@@ -82,7 +80,7 @@ index fa3115c38..8bcc58118 100644
  	    XE_IOCTL_DBG(xe, ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY &&
  			 ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_TIMESLICE &&
  			 ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_PXP_TYPE &&
-@@ -1004,16 +1032,36 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
+@@ -1163,16 +1189,36 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
  			 ext.property != PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG))
  		return -EINVAL;
  
@@ -124,5 +122,5 @@ index fa3115c38..8bcc58118 100644
  
  typedef int (*xe_exec_queue_user_extension_fn)(struct xe_device *xe,
 -- 
-2.34.1
+2.43.0
 

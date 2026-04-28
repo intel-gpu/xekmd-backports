@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Date: Mon, 11 Nov 2024 12:03:47 +0200
-Subject: drm/xe/vm: Support for adding null page VMA to VM on
- request
+Subject: drm/xe/vm: Support for adding null page VMA to VM on request
 
 The XE2 (and PVC) HW has a limitation that the pagefault due to invalid
 access will halt the corresponding EUs. So, in order to activate the
@@ -32,18 +31,19 @@ Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 (backported from commit 5e591bba2c7503083008439b2be3ddeba49770ad drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
- drivers/gpu/drm/xe/xe_vm.c | 32 ++++++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_vm.c | 33 +++++++++++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_vm.h |  1 +
- 2 files changed, 33 insertions(+)
+ 2 files changed, 34 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 61c31e100..ca7c35e84 100644
+index 56abcb8f3..6251b5672 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -4679,3 +4679,35 @@ int xe_vm_alloc_cpu_addr_mirror_vma(struct xe_vm *vm, uint64_t start, uint64_t r
- 	return xe_vm_alloc_vma(vm, &map_req, false);
+@@ -5034,3 +5034,36 @@ void xe_vm_remove_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
+ 	}
+ 	up_write(&vm->exec_queues.lock);
  }
- 
++
 +struct xe_vma *xe_vm_create_null_vma(struct xe_vm *vm, u64 addr)
 +{
 +	struct xe_vma *vma;
@@ -77,15 +77,15 @@ index 61c31e100..ca7c35e84 100644
 +	return vma;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index 6cc98df47..f75389253 100644
+index c5b900f38..c7402b474 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
-@@ -415,4 +415,5 @@ static inline struct drm_exec *xe_vm_validation_exec(struct xe_vm *vm)
+@@ -436,4 +436,5 @@ static inline struct drm_exec *xe_vm_validation_exec(struct xe_vm *vm)
  	((READ_ONCE(tile_present) & ~READ_ONCE(tile_invalidated)) & BIT((tile)->id))
  
  void xe_vma_mem_attr_copy(struct xe_vma_mem_attr *to, struct xe_vma_mem_attr *from);
 +struct xe_vma *xe_vm_create_null_vma(struct xe_vm *vm, u64 addr);
  #endif
 -- 
-2.34.1
+2.43.0
 

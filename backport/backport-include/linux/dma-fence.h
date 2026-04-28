@@ -43,4 +43,14 @@ static inline struct dma_fence *dma_fence_chain_contained(struct dma_fence *fenc
 	return __bp_to_dma_fence_chain(fence)->fence;
 }
 #endif
+
+#ifdef BPM_DMA_FENCE_CHECK_AND_SIGNAL_LOCKED_NOT_PRESENT
+static inline bool dma_fence_check_and_signal_locked(struct dma_fence *fence)
+{
+	bool was_signaled = test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags);
+	dma_fence_signal_locked(fence);
+	return was_signaled;
+}
 #endif
+
+#endif /* __BACKPORT_LINUX_DMA_FENCE_H */

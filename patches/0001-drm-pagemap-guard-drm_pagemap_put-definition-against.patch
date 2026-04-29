@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akanksha Hotta <akanksha.hotta@intel.com>
+Date: Mon, 18 May 2026 16:33:21 +0530
+Subject: drm/pagemap: guard drm_pagemap_put() definition against
+ header inline
+
+When BPM_DRM_PAGEMAP_PUT_NOT_PRESENT is defined (kernel lacks
+drm_pagemap_put), drm_pagemap.h provides a static inline fallback.
+The unconditional definition of drm_pagemap_put() in drm_pagemap.c
+then conflicts with that inline, causing a redefinition error.
+
+Guard the .c definition with BPM_DRM_PAGEMAP_PUT_NOT_PRESENT
+so that:
+- On kernels without drm_pagemap_put: the header inline is used.
+- On kernels with drm_pagemap_put: the full implementation (including
+  drm_pagemap_shrinker_might_lock) is compiled and exported.
+
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/drm_pagemap.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/gpu/drm/drm_pagemap.c b/drivers/gpu/drm/drm_pagemap.c
+index 1b1e7bd..a35a1b0 100644
+--- a/drivers/gpu/drm/drm_pagemap.c
++++ b/drivers/gpu/drm/drm_pagemap.c
+@@ -923,6 +923,7 @@ int drm_pagemap_init(struct drm_pagemap *dpagemap,
+ }
+ EXPORT_SYMBOL(drm_pagemap_init);
+ 
++#ifndef BPM_DRM_PAGEMAP_PUT_NOT_PRESENT
+ /**
+  * drm_pagemap_put() - Put a struct drm_pagemap reference
+  * @dpagemap: Pointer to a struct drm_pagemap object.
+@@ -938,6 +939,7 @@ void drm_pagemap_put(struct drm_pagemap *dpagemap)
+ 	}
+ }
+ EXPORT_SYMBOL(drm_pagemap_put);
++#endif /* BPM_DRM_PAGEMAP_PUT_NOT_PRESENT */
+ 
+ /**
+  * drm_pagemap_evict_to_ram() - Evict GPU SVM range to RAM
+-- 
+2.43.0
+

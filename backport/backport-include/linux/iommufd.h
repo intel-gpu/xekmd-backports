@@ -22,4 +22,9 @@ static inline int iommufd_vfio_compat_set_no_iommu(struct iommufd_ctx *ictx)
 	return -EOPNOTSUPP;
 }
 
+static inline int iommufd_vfio_compat_ioas_create(struct iommufd_ctx *ictx)
+{
+	return -EOPNOTSUPP;
+}
+
 #endif

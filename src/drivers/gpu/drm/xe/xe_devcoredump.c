@@ -187,6 +187,7 @@ static void xe_devcoredump_snapshot_free(struct xe_devcoredump_snapshot *ss)
  *
  * Return: Number of bytes copied on success, or a negative error code on failure.
  */
+#ifndef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
 static ssize_t xe_devcoredump_read(char *buffer, loff_t offset,
 				   size_t count, void *data, size_t datalen)
 {
@@ -270,6 +271,7 @@ static void xe_devcoredump_free(void *data)
 
 	mutex_unlock(&coredump->lock);
 }
+#endif
 
 static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
 {
@@ -283,9 +285,11 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
 	 * internally using GFP_KERNEL explicitly. Hence this call must be in the worker
 	 * thread and not in the initial capture call.
 	 */
+#ifndef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
 	dev_coredumpm_timeout(gt_to_xe(ss->gt)->drm.dev, THIS_MODULE, coredump, 0, GFP_KERNEL,
 			      xe_devcoredump_read, xe_devcoredump_free,
 			      XE_COREDUMP_TIMEOUT_JIFFIES);
+#endif
 
 	xe_pm_runtime_get(xe);
 
@@ -303,6 +307,14 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
 	ss->read.size = __xe_devcoredump_read(NULL, LONG_MAX, 0, coredump);
 
 	if (ss->read.size > XE_DEVCOREDUMP_CHUNK_MAX) {
+#ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
+		ss->read.buffer = vmalloc(ss->read.size);
+		if (!ss->read.buffer)
+			goto put_pm;
+
+		__xe_devcoredump_read(ss->read.buffer, ss->read.size, 0, coredump);
+		xe_devcoredump_snapshot_free(ss);
+#else
 		ss->read.buffer = kvmalloc(XE_DEVCOREDUMP_CHUNK_MAX,
 					   GFP_USER);
 		if (!ss->read.buffer)
@@ -311,8 +323,13 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
 		__xe_devcoredump_read(ss->read.buffer,
 				      XE_DEVCOREDUMP_CHUNK_MAX,
 				      0, coredump);
+#endif
 	} else {
+#ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
+		ss->read.buffer = vmalloc(ss->read.size);
+#else
 		ss->read.buffer = kvmalloc(ss->read.size, GFP_USER);
+#endif
 		if (!ss->read.buffer)
 			goto put_pm;
 
@@ -320,6 +337,14 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
 				      coredump);
 		xe_devcoredump_snapshot_free(ss);
 	}
+
+#ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
+	dev_coredumpv(gt_to_xe(ss->gt)->drm.dev, ss->read.buffer,
+		      ss->read.size, GFP_KERNEL);
+	ss->read.buffer = NULL;
+	ss->read.size = 0;
+	ss->read.chunk_position = 0;
+#endif
 
 put_pm:
 	xe_pm_runtime_put(xe);
@@ -413,9 +438,11 @@ void xe_devcoredump(struct xe_exec_queue *q, struct xe_sched_job *job, const cha
 
 static void xe_driver_devcoredump_fini(void *arg)
 {
+#ifndef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
 	struct drm_device *drm = arg;
 
 	dev_coredump_put(drm->dev);
+#endif
 }
 
 int xe_devcoredump_init(struct xe_device *xe)

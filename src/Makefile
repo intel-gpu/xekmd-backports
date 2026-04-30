@@ -2,11 +2,19 @@
 # Makefile for the output source package
 #
 
+# Set BACKPORT_DIR early so it's available in all contexts
+# When called by kernel build system, use $(src) which points to this directory
+# Otherwise use current directory
+ifeq ($(KERNELRELEASE),)
+BACKPORT_DIR ?= $(shell pwd)
+else
+BACKPORT_DIR ?= $(src)
+endif
+
 ifeq ($(KERNELRELEASE),)
 
 MAKEFLAGS += --no-print-directory
 SHELL := /bin/bash
-BACKPORT_DIR := $(shell pwd)
 
 KMODDIR ?= updates
 ifneq ($(origin KLIB), undefined)
@@ -29,7 +37,7 @@ export KLIB KLIB_BUILD BACKPORT_DIR KMODDIR KMODPATH_ARG TARGET_KERNEL_NAME
 # Packaging targets Available
 #
 DEB_PKG_DISTRO_TARGETS := xe-dkms-deb-pkg
-RPM_PKG_DISTRO_TARGETS :=
+RPM_PKG_DISTRO_TARGETS := xe-dkms-rpm-pkg
 
 # PKG_DISTRO_TARGETS
 # DKMS Package Targets
@@ -176,5 +184,6 @@ help: defconfig-help
 	@echo ""
 	@echo "Execute "make" or "make all" to build all targets marked with [*]"
 else
+# Called by kernel build system (KERNELRELEASE is set)
 include $(BACKPORT_DIR)/Makefile.kernel
 endif

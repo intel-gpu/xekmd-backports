@@ -20,18 +20,36 @@
 # OSV GENERIC VARIABLES
 #
 
+# Kernel build directory - defaults to running kernel
+KLIB_BUILD ?= /lib/modules/@DOLLAR_SIGN@(shell uname -r)/build
+
 RELEASE=1
 
+# Extract kernel version from running kernel or KLIB_BUILD
+# Try CONFIG_BUILD_SALT first (has full version like 6.12.0-124.49.1.el10_1.x86_64)
+# Fall back to UTS_RELEASE if not found, then uname -r
+TARGET_KERN_VER=@DOLLAR_SIGN@(shell cat @DOLLAR_SIGN@(KLIB_BUILD)/include/generated/autoconf.h 2>/dev/null | grep 'CONFIG_BUILD_SALT' | cut -d '"' -f2 2>/dev/null || cat @DOLLAR_SIGN@(KLIB_BUILD)/include/generated/utsrelease.h 2>/dev/null | grep UTS_RELEASE | cut -d '"' -f2 || uname -r)
+FULL_KERN_STR=@DOLLAR_SIGN@(shell echo "@DOLLAR_SIGN@(TARGET_KERN_VER)" | sed 's/\.el[0-9]*_[0-9]*\.x86_64//' | sed 's/\.x86_64//' | tr -d '+')
+KER_VER=@DOLLAR_SIGN@(subst -,.,@DOLLAR_SIGN@(FULL_KERN_STR))
+
 # BKPT_VER consist of backported release version.
-# Expected input: 'BACKPORTS_RELEASE_TAG="XE_586_241121.0"'
-# Filtered output: 241121.0
-BKPT_VER=@DOLLAR_SIGN@(shell cat src/versions | grep BACKPORTS_RELEASE_TAG | cut -d "_" -f 5 | cut -d "\"" -f 1 | cut -d "-" -f 1 2>/dev/null || echo 1)
+# Expected input: 'BACKPORTS_RELEASE_TAG="xeb_v6.17.13.49_260409.4"'
+# Extract value after ="...", then get field 3 after splitting by _: 260409.4
+BKPT_VER=@DOLLAR_SIGN@(shell cat src/versions | grep BACKPORTS_RELEASE_TAG | cut -d '=' -f 2 | tr -d '"' | cut -d '_' -f 3 2>/dev/null || echo 1)
 
-# DEV_TAG is extracted from BASE_KERNEL_TAG, which is auto genereated from Dev kernel source.
-# Tagging is needed for decoding
-DEV_TAG=@DOLLAR_SIGN@(shell cat src/versions | grep BASE_KERNEL_TAG | cut -f 2 -d "\"" | cut -d "-" -f 3 2>/dev/null || echo 1)
+# DEV_TAG is extracted from BASE_KERNEL_TAG.
+# Expected format: "xe-v6.17.13.49" -> extracts "v6.17.13.49" and removes 'v' prefix
+DEV_TAG_RAW=@DOLLAR_SIGN@(shell cat src/versions | grep BASE_KERNEL_TAG | cut -f 2 -d "\"" | cut -d "-" -f 2 2>/dev/null || echo 1)
+DEV_TAG=@DOLLAR_SIGN@(shell echo @DOLLAR_SIGN@(DEV_TAG_RAW) | sed 's/^v//')
 
-VERSION=0.$(BKPT_VER)
+# Debian package version: 0.<BKPT_VER> (e.g., 0.260409.5)
+# RPM package version: kernel version (e.g., 6.12.0.124.8.1)
+# Note: VERSION is reserved by automake (set via AC_INIT in configure.ac), use KERN_PKG_VERSION for RPM
+KERN_PKG_VERSION=$(KER_VER)
+RELEASE_VERSION=$(DEV_TAG).$(BKPT_VER)
+
+# Distro suffix (e.g., el10_1) for RPM packaging - supports RHEL 9 and 10 only
+DISTRO_SUFFIX=@DOLLAR_SIGN@(shell cat $(KLIB_BUILD)/include/generated/utsrelease.h 2>/dev/null | grep UTS_RELEASE | cut -d '"' -f2 | grep -oE 'el(9|10)_[0-9]+' | head -1)
 
 #------------------------------------------------------------------------------
 #
@@ -41,8 +59,14 @@ VERSION=0.$(BKPT_VER)
 
 XE_PKG_NAME_BASENAME=intel-xe-dkms
 XE_PKG_NAME=$(XE_PKG_NAME_BASENAME)
-XE_PKG_VERSION=$(VERSION)
+
+# Debian version format: 0.<BKPT_VER> e.g. intel-xe-dkms_0.260409.5+i1-1_all.deb
+XE_PKG_VERSION=0.$(BKPT_VER)
 XE_PKG_RELEASE=$(RELEASE)
+
+# RPM version format: <kernel-ver>-<dev_tag>.<bkpt_ver>.<release> e.g. intel-xe-dkms-6.12.0.124.8.1-6.17.13.54.260409.5.1.el10_1.x86_64.rpm
+XE_RPM_PKG_VERSION=$(KERN_PKG_VERSION)
+XE_RPM_PKG_RELEASE=$(RELEASE_VERSION).$(RELEASE)
 
 #------------------------------------------------------------------------------
 #
@@ -75,6 +99,15 @@ XE_DKMS_MK_DKMS=$(BACKPORT_DIR)/scripts/backport-mkxedebdkms
 XE_DKMS_MK_README=$(BACKPORT_DIR)/scripts/backport-mkdebreadme
 XE_DKMS_MK_COPYRIGHT=$(BACKPORT_DIR)/scripts/backport-mkdebcopyright
 
+#------------------------------------------------------------------------------
+#
+# RPM Package Targets
+#
+#------------------------------------------------------------------------------
+
+XE_RPM_MK_SPEC=$(BACKPORT_DIR)/scripts/backport-mkdrmdkmsspec
+XE_RPM_MK_DKMS=$(BACKPORT_DIR)/scripts/backport-mkdrmdkmsconf
+
 .PHONY: xe-dkms-deb-pkg
 xe-dkms-deb-pkg: clean
 	$(CONFIG_SHELL) $(XE_DKMS_MK_CONTROL) -n $(XE_PKG_NAME) -v $(XE_PKG_VERSION) -r $(XE_PKG_RELEASE) -z dkms > debian/control
@@ -100,6 +133,14 @@ xe-dkms-deb-pkg: clean
 	+dch -l "+i${XE_PKG_RELEASE}-" -m "build ${XE_PKG_RELEASE}"
 	+dpkg-buildpackage -j`nproc --all` -us -uc -b -rfakeroot
 
+.PHONY: xe-dkms-rpm-pkg
+xe-dkms-rpm-pkg: clean
+	mkdir -p rpm
+	mkdir -p ~/rpmbuild/SOURCES
+	@DOLLAR_SIGN@(CONFIG_SHELL) @DOLLAR_SIGN@(XE_RPM_MK_SPEC) -n @DOLLAR_SIGN@(XE_PKG_NAME) -v @DOLLAR_SIGN@(XE_RPM_PKG_VERSION) -r @DOLLAR_SIGN@(XE_RPM_PKG_RELEASE) @DOLLAR_SIGN@(if @DOLLAR_SIGN@(DISTRO_SUFFIX),-d @DOLLAR_SIGN@(DISTRO_SUFFIX)) -z dkms > rpm/@DOLLAR_SIGN@(XE_PKG_NAME).spec
+	@DOLLAR_SIGN@(CONFIG_SHELL) @DOLLAR_SIGN@(XE_RPM_MK_DKMS) -n @DOLLAR_SIGN@(XE_PKG_NAME) -v @DOLLAR_SIGN@(XE_RPM_PKG_VERSION) -r @DOLLAR_SIGN@(XE_RPM_PKG_RELEASE) > rpm/@DOLLAR_SIGN@(XE_PKG_NAME).dkms.conf
+	cp -r src m4 debian Makefile* configure* aclocal.m4 AUTHORS ChangeLog COPYING INSTALL NEWS README.md compile.sh ~/rpmbuild/SOURCES/ 2>/dev/null || true
+	+rpmbuild -bb --define "_sourcedir @DOLLAR_SIGN@(PWD)" rpm/@DOLLAR_SIGN@(XE_PKG_NAME).spec
 
 all clean:
 	$(MAKE) -C src $@

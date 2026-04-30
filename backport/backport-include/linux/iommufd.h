@@ -27,4 +27,19 @@ static inline int iommufd_vfio_compat_ioas_create(struct iommufd_ctx *ictx)
 	return -EOPNOTSUPP;
 }
 
+static inline int iommufd_access_pin_pages(struct iommufd_access *access,
+					   unsigned long iova,
+					   unsigned long length,
+					   struct page **out_pages,
+					   unsigned int flags)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void iommufd_access_unpin_pages(struct iommufd_access *access,
+					      unsigned long iova,
+					      unsigned long length)
+{
+}
+
 #endif

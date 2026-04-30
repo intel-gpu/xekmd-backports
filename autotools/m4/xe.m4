@@ -162,5 +162,7 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/drm_accel.h])
 	dnl # v5.17-a1a98689301b drm: Add privacy-screen class (v4)
 	AC_KERNEL_CHECK_HEADERS([drm/drm_privacy_screen_machine.h])
+	AC_KERNEL_CHECK_HEADERS([linux/dma-iommu.h])
+
 	AC_KERNEL_WAIT
 ])

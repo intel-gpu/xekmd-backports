@@ -9,6 +9,10 @@
 
 #include_next <linux/iommu.h>
 
+#ifdef HAVE_LINUX_DMA_IOMMU_H
+#include <linux/dma-iommu.h>
+#endif
+
 #ifndef arch_is_isolated_msi
 #define arch_is_isolated_msi() false
 #endif

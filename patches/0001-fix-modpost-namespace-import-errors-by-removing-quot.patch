@@ -1,0 +1,55 @@
+From 4327e35d319a6c79526f335d3532d0c8f96d9230 Mon Sep 17 00:00:00 2001
+From: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Date: Sat, 2 May 2026 01:10:33 +0530
+Subject: fix modpost namespace import errors by removing quoted
+ MODULE_IMPORT_NS args
+
+MODULE_IMPORT_NS() accepts a bare token, not a quoted string. Prior
+to 6.13, the macro internally used __stringify(ns) to convert the
+token to a string — passing a pre-quoted string like "IOMMUFD"
+caused __stringify to produce "\"IOMMUFD\"", which modpost could not
+match against exported namespace symbols.
+
+Remove the erroneous quotes so __stringify(IOMMUFD) correctly
+resolves to "IOMMUFD" on kernels < 6.13, and the refactored macro
+on 6.13+ likewise works correctly.
+
+Errors:
+------------------------------------------------------------------------------
+ERROR: modpost: module vfio uses symbol iommufd_vfio_compat_ioas_get_id from namespace IOMMUFD_VFIO, but does not import it.
+ERROR: modpost: module vfio uses symbol iommufd_access_unpin_pages from namespace IOMMUFD, but does not import it.
+ERROR: modpost: module vfio uses symbol iommufd_access_detach from namespace IOMMUFD, but does not import it.
+ERROR: modpost: module vfio uses symbol iommufd_device_attach from namespace IOMMUFD, but does not import it.
+ERROR: modpost: module vfio uses symbol iommufd_access_pin_pages from namespace IOMMUFD, but does not import it.
+ERROR: modpost: module vfio uses symbol iommufd_access_replace from namespace IOMMUFD, but does not import it.
+------------------------------------------------------------------------------
+
+Reference:
+    cdd30ebb1b9f module: Convert symbol namespace to string literal
+
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+---
+ drivers/vfio/iommufd.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/vfio/iommufd.c b/drivers/vfio/iommufd.c
+index a38d262..cbfc51c 100644
+--- a/drivers/vfio/iommufd.c
++++ b/drivers/vfio/iommufd.c
+@@ -7,8 +7,13 @@
+ 
+ #include "vfio.h"
+ 
++#ifdef BPM_MODULE_IMPORT_TO_STRING_LITERAL_PRESENT
++MODULE_IMPORT_NS(IOMMUFD);
++MODULE_IMPORT_NS(IOMMUFD_VFIO);
++#else
+ MODULE_IMPORT_NS("IOMMUFD");
+ MODULE_IMPORT_NS("IOMMUFD_VFIO");
++#endif
+ 
+ bool vfio_iommufd_device_has_compat_ioas(struct vfio_device *vdev,
+ 					 struct iommufd_ctx *ictx)
+-- 
+2.43.0
+

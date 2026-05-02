@@ -39,4 +39,21 @@ struct follow_pfnmap_args {
 int follow_pfnmap_start(struct follow_pfnmap_args *args);
 void follow_pfnmap_end(struct follow_pfnmap_args *args);
 #endif
+
+#ifndef VM_ALLOW_ANY_UNCACHED
+/*
+ * This flag is used to connect VFIO to arch specific KVM code. It
+ * indicates that the memory under this VMA is safe for use with any
+ * non-cachable memory type inside KVM. Some VFIO devices, on some
+ * platforms, are thought to be unsafe and can cause machine crashes
+ * if KVM does not lock down the memory type.
+ */
+#ifdef CONFIG_64BIT
+#define VM_ALLOW_ANY_UNCACHED_BIT	39
+#define VM_ALLOW_ANY_UNCACHED		BIT(VM_ALLOW_ANY_UNCACHED_BIT)
+#else
+#define VM_ALLOW_ANY_UNCACHED		VM_NONE
+#endif
+#endif
+
 #endif

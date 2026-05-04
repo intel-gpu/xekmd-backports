@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tvrtko Ursulin <tvrtko.ursulin@igalia.com>
+Date: Mon, 20 Apr 2026 14:16:03 +0100
+Subject: drm/xe/xelp: Fix Wa_18022495364
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Command parser relative MMIO addressing needs to be enabled when writing
+to the register.
+
+Signed-off-by: Tvrtko Ursulin <tvrtko.ursulin@igalia.com>
+Fixes: ca33cd271ef9 ("drm/xe/xelp: Add Wa_18022495364")
+Cc: Matt Roper <matthew.d.roper@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
+Link: https://patch.msgid.link/20260420131603.70357-1-tvrtko.ursulin@igalia.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit 5627392001802a98ed6cf8cf79a303abd00d1c0f linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_lrc.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index bdfec1c9b..383c22bab 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1118,7 +1118,7 @@ static ssize_t setup_invalidate_state_cache_wa(struct xe_lrc *lrc,
+ 	if (xe_gt_WARN_ON(lrc->gt, max_len < 3))
+ 		return -ENOSPC;
+ 
+-	*cmd++ = MI_LOAD_REGISTER_IMM | MI_LRI_NUM_REGS(1);
++	*cmd++ = MI_LOAD_REGISTER_IMM | MI_LRI_LRM_CS_MMIO | MI_LRI_NUM_REGS(1);
+ 	*cmd++ = CS_DEBUG_MODE2(0).addr;
+ 	*cmd++ = _MASKED_BIT_ENABLE(INSTRUCTION_STATE_CACHE_INVALIDATE);
+ 
+-- 
+2.43.0
+

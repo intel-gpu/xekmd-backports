@@ -1,0 +1,65 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shuicheng Lin <shuicheng.lin@intel.com>
+Date: Wed, 29 Apr 2026 19:22:59 +0000
+Subject: drm/xe/pf: Fix MMIO access using PF view instead of VF view
+ during migration
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+pf_migration_mmio_save() and pf_migration_mmio_restore() initialize a
+local VF-specific MMIO view via xe_mmio_init_vf_view() but then pass
+&gt->mmio (the PF base) to all xe_mmio_read32()/xe_mmio_write32()
+calls instead of the local &mmio. This causes the PF own SW flag
+registers to be saved/restored rather than the target VF registers,
+silently corrupting migration state.
+
+Use the VF MMIO view for all register accesses, matching the correct
+pattern used in pf_clear_vf_scratch_regs().
+
+Fixes: b7c1b990f719 ("drm/xe/pf: Handle MMIO migration data as part of PF control")
+Cc: Michał Winiarski <michal.winiarski@intel.com>
+Assisted-by: Claude:claude-opus-4.6
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Stuart Summers <stuart.summers@intel.com>
+Link: https://patch.msgid.link/20260429192259.4009211-1-shuicheng.lin@intel.com
+Signed-off-by: Shuicheng Lin <shuicheng.lin@intel.com>
+(cherry-picked from commit 7d9c39cfb31ff389490ca1308767c2807a9829a6 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+index ea5efbb8c..fa1205aee 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_migration.c
+@@ -385,10 +385,10 @@ static int pf_migration_mmio_save(struct xe_gt *gt, unsigned int vfid, void *buf
+ 
+ 	if (xe_gt_is_media_type(gt))
+ 		for (n = 0; n < MED_VF_SW_FLAG_COUNT; n++)
+-			regs[n] = xe_mmio_read32(&gt->mmio, MED_VF_SW_FLAG(n));
++			regs[n] = xe_mmio_read32(&mmio, MED_VF_SW_FLAG(n));
+ 	else
+ 		for (n = 0; n < VF_SW_FLAG_COUNT; n++)
+-			regs[n] = xe_mmio_read32(&gt->mmio, VF_SW_FLAG(n));
++			regs[n] = xe_mmio_read32(&mmio, VF_SW_FLAG(n));
+ 
+ 	return 0;
+ }
+@@ -407,10 +407,10 @@ static int pf_migration_mmio_restore(struct xe_gt *gt, unsigned int vfid,
+ 
+ 	if (xe_gt_is_media_type(gt))
+ 		for (n = 0; n < MED_VF_SW_FLAG_COUNT; n++)
+-			xe_mmio_write32(&gt->mmio, MED_VF_SW_FLAG(n), regs[n]);
++			xe_mmio_write32(&mmio, MED_VF_SW_FLAG(n), regs[n]);
+ 	else
+ 		for (n = 0; n < VF_SW_FLAG_COUNT; n++)
+-			xe_mmio_write32(&gt->mmio, VF_SW_FLAG(n), regs[n]);
++			xe_mmio_write32(&mmio, VF_SW_FLAG(n), regs[n]);
+ 
+ 	return 0;
+ }
+-- 
+2.43.0
+

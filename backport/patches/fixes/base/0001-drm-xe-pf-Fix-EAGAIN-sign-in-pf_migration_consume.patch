@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shuicheng Lin <shuicheng.lin@intel.com>
+Date: Tue, 28 Apr 2026 20:14:48 +0000
+Subject: drm/xe/pf: Fix EAGAIN sign in pf_migration_consume()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+PTR_ERR() returns a negative value, so comparing against the positive
+EAGAIN is always true for ERR_PTR(-EAGAIN), causing pf_migration_consume()
+to bail out instead of continuing to the remaining GTs. On multi-GT
+platforms this can skip GTs that already have data ready.
+
+Compare against -EAGAIN to match the intent (and the following line
+that correctly uses -EAGAIN). While at it, gate PTR_ERR() with
+IS_ERR().
+
+v2: add IS_ERR() guard before PTR_ERR(). (Gustavo)
+
+Fixes: 67df4a5cbc58 ("drm/xe/pf: Add data structures and handlers for migration rings")
+Cc: Michał Winiarski <michal.winiarski@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://patch.msgid.link/20260428201448.3999428-1-shuicheng.lin@intel.com
+Signed-off-by: Shuicheng Lin <shuicheng.lin@intel.com>
+(cherry-picked from commit 9d770e72e1edb54beacfce5f402edb51632811e3 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_pf_migration.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+index aefc6d81c..e51c6aaaf 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_migration.c
+@@ -146,10 +146,11 @@ pf_migration_consume(struct xe_device *xe, unsigned int vfid)
+ 
+ 	for_each_gt(gt, xe, gt_id) {
+ 		data = xe_gt_sriov_pf_migration_save_consume(gt, vfid);
+-		if (data && PTR_ERR(data) != EAGAIN)
++		if (!data)
++			continue;
++		if (!IS_ERR(data) || PTR_ERR(data) != -EAGAIN)
+ 			return data;
+-		if (PTR_ERR(data) == -EAGAIN)
+-			more_data = true;
++		more_data = true;
+ 	}
+ 
+ 	if (!more_data)
+-- 
+2.43.0
+

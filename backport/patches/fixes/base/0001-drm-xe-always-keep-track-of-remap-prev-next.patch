@@ -126,7 +126,7 @@ index 8376b4b7d..26f485e97 100644
  				       fence, fence2, false);
  		break;
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 706549def..fa616f78b 100644
+index 706549def..be2f30034 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -2674,7 +2674,6 @@ static int xe_vma_op_commit(struct xe_vm *vm, struct xe_vma_op *op)
@@ -162,7 +162,7 @@ index 706549def..fa616f78b 100644
  
  			flags |= op->base.remap.unmap->va->flags &
  				XE_VMA_READ_ONLY ?
-@@ -2914,8 +2917,19 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
+@@ -2935,8 +2938,19 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
  			down_read(&vm->userptr.notifier_lock);
  			vma->gpuva.flags &= ~XE_VMA_DESTROYED;
  			up_read(&vm->userptr.notifier_lock);

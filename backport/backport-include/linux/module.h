@@ -11,6 +11,9 @@
 #ifndef ___ADDRESSABLE
 #define ___ADDRESSABLE(sym, attrs) \
 	static void * attrs __used __UNIQUE_ID(__PASTE(__addressable_,sym)) = (void *)&sym;
+#endif
+
+#ifndef  __CFI_ADDRESSABLE
 #define __CFI_ADDRESSABLE(sym, attrs) ___ADDRESSABLE(sym, attrs)
 #endif
 #endif /* BPM_OBJTOOL_COPY_ATTRIBUTE_NEEDED */

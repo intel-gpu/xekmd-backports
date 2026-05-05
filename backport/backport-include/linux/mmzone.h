@@ -7,4 +7,8 @@
 #define MAX_PAGE_ORDER MAX_ORDER
 #endif
 
+#ifndef NR_PAGE_ORDERS
+#define NR_PAGE_ORDERS (MAX_PAGE_ORDER + 1)
+#endif
+
 #endif /* __BACKPORT_LINUX_MMZONE_H */

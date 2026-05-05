@@ -19,4 +19,8 @@ static inline struct dev_pagemap *page_pgmap(const struct page *page)
 }
 #endif /* BPM_PAGE_PGMAP_NOT_PRESENT */
 
+#ifndef NR_PAGE_ORDERS
+#define NR_PAGE_ORDERS (MAX_PAGE_ORDER + 1)
+#endif
+
 #endif /* __BACKPORT_LINUX_MMZONE_H */

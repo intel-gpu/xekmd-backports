@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jouni=20H=C3=B6gander?= <jouni.hogander@intel.com>
+Date: Tue, 16 Dec 2025 15:03:51 +0200
+Subject: drm/i915/display: Allow async flip when Selective Fetch is
+ enabled
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fix silent conflict during drm-next backmerge causing async flips being
+rejected when Selective Fetch is enabled.
+
+Fixes: b8304863a399 ("Merge drm/drm-next into drm-intel-next")
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Signed-off-by: Jouni Högander <jouni.hogander@intel.com>
+Acked-by: Jani Nikula <jani.nikula@intel.com>
+Link: https://patch.msgid.link/20251216130351.2799110-1-jouni.hogander@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit d400dad620ab146303ba0d5ffd1b3c6639cc4fa1 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/i915/display/intel_display.c | 8 --------
+ 1 file changed, 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/i915/display/intel_display.c b/drivers/gpu/drm/i915/display/intel_display.c
+index 9c6d3ecdb589..d5947cc9b94c 100644
+--- a/drivers/gpu/drm/i915/display/intel_display.c
++++ b/drivers/gpu/drm/i915/display/intel_display.c
+@@ -6026,14 +6026,6 @@ static int intel_async_flip_check_uapi(struct intel_atomic_state *state,
+ 		return -EINVAL;
+ 	}
+ 
+-	/* FIXME: selective fetch should be disabled for async flips */
+-	if (new_crtc_state->enable_psr2_sel_fetch) {
+-		drm_dbg_kms(display->drm,
+-			    "[CRTC:%d:%s] async flip disallowed with PSR2 selective fetch\n",
+-			    crtc->base.base.id, crtc->base.name);
+-		return -EINVAL;
+-	}
+-
+ 	for_each_oldnew_intel_plane_in_state(state, plane, old_plane_state,
+ 					     new_plane_state, i) {
+ 		if (plane->pipe != crtc->pipe)
+-- 
+2.43.0
+

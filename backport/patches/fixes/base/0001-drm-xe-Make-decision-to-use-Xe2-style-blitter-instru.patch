@@ -1,0 +1,130 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Thu, 7 May 2026 14:00:15 -0700
+Subject: drm/xe: Make decision to use Xe2-style blitter instructions a
+ feature flag
+
+The blitter engines' MEM_COPY and MEM_SET instructions were added as
+part of the same hardware change that introduced service copy engines
+(i.e., BCS1-BCS8) which is why the driver checks for service copy engine
+presence when deciding whether to use these instructions or the older
+XY_* instructions.  However when making this decision the driver should
+consider which engines are part of the hardware architecture, not which
+engines are present/usable on the current device.  For graphics IP
+versions that architecturally include service copy engines (i.e.,
+everything Xe2 and later, plus PVC's Xe_HPC) we should use MEM_SET and
+MEM_COPY even in if all of the service copy engines wind up getting
+fused off.  I.e., we need to decide based on whether the platform's
+graphics descriptor contains these engines, rather than whether the
+usable engine mask contains them.  This logic got broken when
+gt->info.__engine_mask was removed, although in practice that mistake
+has been harmless so far because there haven't been any hardware
+SKUs that fuse off all of the service copy engines yet.
+
+Replace the incorrect has_service_copy_support() function with a GT
+feature flag that tracks more accurately whether the new blitter
+instructions are usable.  In addition to fixing incorrect logic if all
+service copies are fused off, the flag also makes it more obvious what
+the calling code is trying to do; previously it wasn't terribly obvious
+why "has service copy engines" was being used as the condition for using
+different instructions on all copy engine types.
+
+The new feature flag is named 'has_xe2_blt_instructions' because we
+expect this flag to be set for all Xe2 and later platforms (i.e.,
+everything officially supported by the Xe driver).  Technically there's
+also one Xe1-era platform (PVC) that supports these engines/instructions
+and will set this flag, but this still seems to be the most clear and
+understandable name for the flag.
+
+Fixes: 61549a2ee594 ("drm/xe: Drop __engine_mask")
+Cc: Balasubramani Vivekanandan <balasubramani.vivekanandan@intel.com>
+Reviewed-by: Balasubramani Vivekanandan <balasubramani.vivekanandan@intel.com>
+Link: https://patch.msgid.link/20260507-xe2_copy-v1-1-26506381b821@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit 09b399842907565a64e351fb22da790b4c673ffb linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_types.h |  7 +++++++
+ drivers/gpu/drm/xe/xe_migrate.c  | 18 ++----------------
+ drivers/gpu/drm/xe/xe_pci.c      |  9 +++++++++
+ 3 files changed, 18 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_types.h b/drivers/gpu/drm/xe/xe_gt_types.h
+index cdba2e9f5..6570596d3 100644
+--- a/drivers/gpu/drm/xe/xe_gt_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_types.h
+@@ -136,6 +136,13 @@ struct xe_gt {
+ 		u8 id;
+ 		/** @info.has_indirect_ring_state: GT has indirect ring state support */
+ 		u8 has_indirect_ring_state:1;
++		/**
++		 * @info.has_xe2_blt_instructions: GT supports Xe2-style MEM_SET
++		 * and MEM_COPY blitter functionality.  Note that despite the
++		 * name, some Xe1 platforms may also support this "Xe2-style"
++		 * feature.
++		 */
++		u8 has_xe2_blt_instructions:1;
+ 	} info;
+ 
+ #if IS_ENABLED(CONFIG_DEBUG_FS)
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 3705e665e..3863750e6 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -1360,23 +1360,9 @@ static void emit_clear_main_copy(struct xe_gt *gt, struct xe_bb *bb,
+ 	bb->len += len;
+ }
+ 
+-static bool has_service_copy_support(struct xe_gt *gt)
+-{
+-	/*
+-	 * What we care about is whether the architecture was designed with
+-	 * service copy functionality (specifically the new MEM_SET / MEM_COPY
+-	 * instructions) so check the architectural engine list rather than the
+-	 * actual list since these instructions are usable on BCS0 even if
+-	 * all of the actual service copy engines (BCS1-BCS8) have been fused
+-	 * off.
+-	 */
+-	return gt->info.engine_mask & GENMASK(XE_HW_ENGINE_BCS8,
+-					      XE_HW_ENGINE_BCS1);
+-}
+-
+ static u32 emit_clear_cmd_len(struct xe_gt *gt)
+ {
+-	if (has_service_copy_support(gt))
++	if (gt->info.has_xe2_blt_instructions)
+ 		return PVC_MEM_SET_CMD_LEN_DW;
+ 	else
+ 		return XY_FAST_COLOR_BLT_DW;
+@@ -1385,7 +1371,7 @@ static u32 emit_clear_cmd_len(struct xe_gt *gt)
+ static void emit_clear(struct xe_gt *gt, struct xe_bb *bb, u64 src_ofs,
+ 		       u32 size, u32 pitch, bool is_vram)
+ {
+-	if (has_service_copy_support(gt))
++	if (gt->info.has_xe2_blt_instructions)
+ 		emit_clear_link_copy(gt, bb, src_ofs, size, pitch);
+ 	else
+ 		emit_clear_main_copy(gt, bb, src_ofs, size, pitch,
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index fc49dfd46..04a339fb9 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -711,6 +711,15 @@ static int xe_info_init(struct xe_device *xe,
+ 		if (err)
+ 			return err;
+ 
++		/*
++		 * Even if the service copy engines wind up being fused off, their
++		 * presence in the IP descriptor indicates that the platform supports
++		 * Xe2-style MEM_SET and MEM_COPY functionality.
++		 */
++		if (graphics_desc->hw_engine_mask & GENMASK(XE_HW_ENGINE_BCS8,
++					XE_HW_ENGINE_BCS1))
++			gt->info.has_xe2_blt_instructions = true;
++
+ 		if (MEDIA_VER(xe) < 13 && media_desc)
+ 			gt->info.engine_mask |= media_desc->hw_engine_mask;
+ 
+-- 
+2.43.0
+

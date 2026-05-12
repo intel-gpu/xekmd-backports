@@ -71,6 +71,18 @@ config BPAUTO_USERSEL_BUILD_ALL
 	  It's only really useful for compat testing, so
 	  you probably shouldn't enable it.
 
+config KERNEL_5_15
+        def_bool y
+        depends on KERNEL_VERSION >= 331520 && KERNEL_VERSION < 331776
+        help
+          Kernel version 5.15 detected
+
+config KERNEL_6_1
+        def_bool y
+        depends on KERNEL_VERSION >= 393472 && KERNEL_VERSION < 393728
+        help
+          Kernel version 6.1 detected
+
 config KERNEL_6_6
         def_bool y
         depends on KERNEL_VERSION >= 394240 && KERNEL_VERSION < 409600
@@ -85,9 +97,9 @@ config KERNEL_6_7
 
 config BUILD_XE_DRM_GPUVM
         def_bool y
-        depends on KERNEL_6_6 || KERNEL_6_7
+	depends on KERNEL_5_15 || KERNEL_6_1 || KERNEL_6_6 || KERNEL_6_7
         help
           Enable building of XE drm_gpuvm backport module.
-          Only enabled for kernels 6.6 and 6.7 that need GPUVM backport.
+          Only enabled for kernels 5.15,6.1,6.6 and 6.7 that need GPUVM backport.
           Disabled for 6.8+ kernels which have native GPUVM support.
 

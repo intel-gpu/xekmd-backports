@@ -85,6 +85,7 @@ dnl # SVM-related probes
 	AC_ZONE_DEVICE_PAGE_INIT_3ARGS_NOT_PRESENT
 	AC_MIGRATE_DEVICE_PFNS_NOT_PRESENT
 	AC_DMA_RESV_USAGE_NOT_PRESENT
+	AC_DMA_RESV_FOR_EACH_FENCE_NOT_PRESENT
 
 dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/i915_gsc_proxy_mei_interface.h])

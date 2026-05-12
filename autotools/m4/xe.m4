@@ -64,6 +64,8 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([linux/workqueue_types.h])
 	dnl # v6.8-d84f31791517 locking/mutex: split out mutex_types.h
 	AC_KERNEL_CHECK_HEADERS([linux/mutex_types.h])
+	dnl # v5.18-7938f4218168 dma-buf-map: Rename to iosys-map
+	AC_KERNEL_CHECK_HEADERS([linux/iosys-map.h])
 
 	AC_KERNEL_WAIT
 ])

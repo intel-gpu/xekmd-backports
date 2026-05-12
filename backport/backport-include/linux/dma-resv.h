@@ -25,4 +25,30 @@ static inline enum dma_resv_usage dma_resv_usage_rw(bool write)
              (fence); \
              (fence) = dma_resv_iter_next_unlocked((cursor)))
 #endif
+
+#ifdef BPM_DMA_RESV_RESERVE_FENCES_NOT_PRESENT
+#define dma_resv_reserve_fences dma_resv_reserve_shared
+#endif
+
+#ifdef BPM_DMA_RESV_ADD_FENCE_NOT_PRESENT
+static inline void dma_resv_add_fence(struct dma_resv *obj,
+                                      struct dma_fence *fence,
+                                      enum dma_resv_usage usage)
+{
+        if (usage >= DMA_RESV_USAGE_READ)
+                dma_resv_add_shared_fence(obj, fence);
+        else
+                dma_resv_add_excl_fence(obj, fence);
+}
+#endif
+
+#ifndef dma_resv_replace_fences
+static inline void dma_resv_replace_fences(struct dma_resv *obj,
+                                           uint64_t context,
+                                           struct dma_fence *fence,
+                                           enum dma_resv_usage usage)
+{
+}
+#define dma_resv_replace_fences dma_resv_replace_fences
+#endif
 #endif

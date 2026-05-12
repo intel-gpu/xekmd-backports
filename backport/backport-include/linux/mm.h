@@ -82,4 +82,9 @@ long bkpt_pin_user_pages_remote(struct mm_struct *mm,
 #endif
 #endif
 
+
+#ifdef BPM_VM_FLAGS_SET_NOT_PRESENT
+#define vm_flags_set(vma, flags)	((vma)->vm_flags |= (flags))
 #endif
+
+#endif /* __BACKPORT_LINUX_MM_H */

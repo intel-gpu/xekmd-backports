@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __BACKPORT_LINUX_DMA_FENCE_H
 #define __BACKPORT_LINUX_DMA_FENCE_H
 
@@ -18,5 +19,12 @@ dma_fence_check_and_signal_locked(struct dma_fence *fence)
 	return was_signaled;
 }
 #endif /* BPM_DMA_FENCE_CHECK_AND_SIGNAL_LOCKED_NOT_PRESENT */
+
+#ifdef BPM_DMA_FENCE_SET_DEADLINE_NOT_PRESENT
+static inline void dma_fence_set_deadline(struct dma_fence *fence,
+					  ktime_t deadline)
+{
+}
+#endif
 
 #endif /* __BACKPORT_LINUX_DMA_FENCE_H */

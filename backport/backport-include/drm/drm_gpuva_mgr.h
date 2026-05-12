@@ -3,7 +3,11 @@
 #ifndef __BACKPORT_DRM_GPUVA_MGR_H
 #define __BACKPORT_DRM_GPUVA_MGR_H
 
+#ifdef HAVE_DRM_DRM_GPUVA_MGR_H
 #include_next<drm/drm_gpuva_mgr.h>
+#else
+#include <drm/drm_gpuvm.h>
+#endif
 
 #ifdef BPM_DRM_GPUVA_OP_DRIVER_NOT_PRESENT
 #define drm_gpuva_op_type LINUX_BACKPORT(drm_gpuva_op_type)

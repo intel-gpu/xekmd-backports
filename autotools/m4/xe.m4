@@ -69,6 +69,8 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([linux/mutex_types.h])
 	dnl # v5.18-7938f4218168 dma-buf-map: Rename to iosys-map
 	AC_KERNEL_CHECK_HEADERS([linux/iosys-map.h])
+	dnl # v6.6-e6303f323b1a drm: manager to keep track of GPUs VA mappings
+	AC_KERNEL_CHECK_HEADERS([drm/drm_gpuva_mgr.h])
 
 	AC_KERNEL_WAIT
 ])

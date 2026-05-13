@@ -89,6 +89,8 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/drm_gpuva_mgr.h])
 	dnl # v5.16-d2a8ebbf8192 kernel.h: split out container_of() and typeof_member() macros
 	AC_KERNEL_CHECK_HEADERS([linux/container_of.h])
+	dnl # v6.1-9a3bab6af4c8 locking: Introduce __cleanup() macro infrastructure
+        AC_KERNEL_CHECK_HEADERS([linux/cleanup.h])
 
 	AC_KERNEL_WAIT
 ])

@@ -93,6 +93,8 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([linux/container_of.h])
 	dnl # v6.1-9a3bab6af4c8 locking: Introduce __cleanup() macro infrastructure
         AC_KERNEL_CHECK_HEADERS([linux/cleanup.h])
+	dnl # v6.6-b229baa374db kernel.h: split out COUNT_ARGS() and CONCATENATE() to args.h
+	AC_KERNEL_CHECK_HEADERS([linux/args.h])
 
 	AC_KERNEL_WAIT
 ])

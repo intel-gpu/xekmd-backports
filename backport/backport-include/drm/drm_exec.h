@@ -5,7 +5,9 @@
 #include_next <drm/drm_exec.h>
 
 #ifdef BPM_DRM_EXEC_INIT_ARG3_NOT_PRESENT
+#if !defined(CPTCFG_BUILD_XE_DRM_EXEC)
 #define drm_exec_init(a,b,c) drm_exec_init(a,b)
+#endif
 #endif
 
 #endif /* __BACKPORT_DRM_EXEC_H */

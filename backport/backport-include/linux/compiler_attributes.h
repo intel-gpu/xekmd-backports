@@ -31,4 +31,10 @@
 #endif
 #endif /* fallthrough */
 
+#ifdef BPM_COUNTED_BY_NOT_PRESENT
+#define __counted_by(member)
+#else
+#define __counted_by(member) __attribute__((__counted_by__(member)))
+#endif
+
 #endif /* _BACKPORTS_LINUX_COMPILER_ATTRIBUTES_H */

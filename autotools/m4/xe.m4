@@ -73,6 +73,8 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([linux/iosys-map.h])
 	dnl # v6.6-e6303f323b1a drm: manager to keep track of GPUs VA mappings
 	AC_KERNEL_CHECK_HEADERS([drm/drm_gpuva_mgr.h])
+	dnl # v5.16-d2a8ebbf8192 kernel.h: split out container_of() and typeof_member() macros
+	AC_KERNEL_CHECK_HEADERS([linux/container_of.h])
 
 	AC_KERNEL_WAIT
 ])

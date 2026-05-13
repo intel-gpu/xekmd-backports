@@ -83,10 +83,6 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
 	BUILT_MODULE_LOCATION[10]="src"
 	DEST_MODULE_LOCATION[10]="/updates"
 
-	BUILT_MODULE_NAME[11]="xe-vfio-pci"
-	BUILT_MODULE_LOCATION[11]="src/drivers/vfio/pci/xe"
-	DEST_MODULE_LOCATION[11]="/updates"
-
 	select_drm_gpuvm() {
 		if [ -z "\$kernelver" ]; then
 			echo "false"

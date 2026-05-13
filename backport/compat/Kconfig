@@ -109,3 +109,10 @@ config BUILD_XE_DRM_EXEC
         help
           Enable building of XE drm_exec backport module.
           Enabled for kernel 5.15 where drm_exec is not available.
+
+config BUILD_XE_DRM_BUDDY
+        def_bool y
+        depends on KERNEL_5_15 || KERNEL_5_16
+        help
+        Enable building of XE drm_buddy backport module
+        Enabled for kernel 5.15 where drm_buddy is not available.

@@ -12,17 +12,20 @@ Use m4 macro to detect API availability and provide compatibility.
 v2:
 Fix Hunk failure
 
+v3:
+support register_shrinker signature for multiple kernels[Raju]
+
 Reference:
     d35b5c98c1f1 drm/ttm: dynamically allocate the drm-ttm_pool shrinker
 
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
 ---
- drivers/gpu/drm/ttm/ttm_pool.c | 27 +++++++++++++++++++++++++++
- 1 file changed, 27 insertions(+)
+ drivers/gpu/drm/ttm/ttm_pool.c | 31 ++++++++++++++++++++++++++++++
+ 1 file changed, 31 insertions(+)
 
 diff --git a/drivers/gpu/drm/ttm/ttm_pool.c b/drivers/gpu/drm/ttm/ttm_pool.c
-index baf27c7..8440f27 100644
+index baf27c7..72ae044 100644
 --- a/drivers/gpu/drm/ttm/ttm_pool.c
 +++ b/drivers/gpu/drm/ttm/ttm_pool.c
 @@ -126,9 +126,22 @@ static struct ttm_pool_type global_uncached[NR_PAGE_ORDERS];
@@ -64,17 +67,21 @@ index baf27c7..8440f27 100644
  	fs_reclaim_release(GFP_KERNEL);
  
  	return 0;
-@@ -1334,6 +1353,9 @@ int ttm_pool_mgr_init(unsigned long num_pages)
+@@ -1334,6 +1353,13 @@ int ttm_pool_mgr_init(unsigned long num_pages)
  #endif
  #endif
  
 +#ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
++#ifdef BPM_REGISTER_SHRINKER_ARG2_NOT_PRESENT
++        register_shrinker(&mm_shrinker);
++#else
 +	register_shrinker(&mm_shrinker, "drm-ttm_pool");
++#endif
 +#else
  	mm_shrinker = shrinker_alloc(0, "drm-ttm_pool");
  	if (!mm_shrinker)
  		return -ENOMEM;
-@@ -1344,6 +1366,7 @@ int ttm_pool_mgr_init(unsigned long num_pages)
+@@ -1344,6 +1370,7 @@ int ttm_pool_mgr_init(unsigned long num_pages)
  	mm_shrinker->seeks = 1;
  
  	shrinker_register(mm_shrinker);
@@ -82,7 +89,7 @@ index baf27c7..8440f27 100644
  
  	return 0;
  }
-@@ -1365,6 +1388,10 @@ void ttm_pool_mgr_fini(void)
+@@ -1365,6 +1392,10 @@ void ttm_pool_mgr_fini(void)
  		ttm_pool_type_fini(&global_dma32_uncached[i]);
  	}
  
@@ -95,4 +102,3 @@ index baf27c7..8440f27 100644
  }
 -- 
 2.43.0
-

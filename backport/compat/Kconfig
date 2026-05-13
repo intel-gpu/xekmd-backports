@@ -103,3 +103,9 @@ config BUILD_XE_DRM_GPUVM
           Only enabled for kernels 5.15,6.1,6.6 and 6.7 that need GPUVM backport.
           Disabled for 6.8+ kernels which have native GPUVM support.
 
+config BUILD_XE_DRM_EXEC
+        def_bool y
+        depends on KERNEL_5_15 || KERNEL_5_16
+        help
+          Enable building of XE drm_exec backport module.
+          Enabled for kernel 5.15 where drm_exec is not available.

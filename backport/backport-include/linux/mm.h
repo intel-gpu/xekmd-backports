@@ -21,4 +21,18 @@ extern int access_remote_vm(struct mm_struct *mm, unsigned long addr,
 	} while (0)
 #endif
 
+#ifdef BPM_FOLIO_PUT_NOT_PRESENT
+#define folio_file_page(folio, idx) ((struct page *)(folio))
+#define folio_put(folio) put_page((struct page *)(folio))
+#define folio_mark_accessed(folio) mark_page_accessed((struct page *)(folio))
+#define folio_lock(folio) lock_page((struct page *)(folio))
+#define folio_unlock(folio) unlock_page((struct page *)(folio))
+#define folio_mark_dirty(folio) set_page_dirty((struct page *)(folio))
+#define folio_mapped(folio) page_mapped((struct page *)(folio))
+#define folio_clear_dirty_for_io(folio) clear_page_dirty_for_io((struct page *)(folio))
+#define folio_set_reclaim(folio) SetPageReclaim((struct page *)(folio))
+#define folio_clear_reclaim(folio) ClearPageReclaim((struct page *)(folio))
+#define folio_test_writeback(folio) PageWriteback((struct page *)(folio))
+#endif
+
 #endif /* __BACKPORT_LINUX_MM_H */

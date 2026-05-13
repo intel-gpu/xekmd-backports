@@ -95,6 +95,7 @@ dnl # SVM-related probes
 	AC_SHMEM_READ_FOLIO_NOT_PRESENT
 	AC_DMA_FENCE_IS_CONTAINER_NOT_PRESENT
 	AC_COUNTED_BY_NOT_PRESENT
+	AC_REGISTER_SHRINKER_ARG2_NOT_PRESENT
 
 dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/i915_gsc_proxy_mei_interface.h])

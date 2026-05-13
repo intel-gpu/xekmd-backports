@@ -1,0 +1,130 @@
+From e2ba72eaed3b9a02bbf6c53b626f7e5062087d9e Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 5 Mar 2025 17:26:27 -0800
+Subject: [PATCH 1/3] mm/migrate: Add migrate_device_pfns
+
+Add migrate_device_pfns which prepares an array of pre-populated device
+pages for migration. This is needed for eviction of known set of
+non-contiguous devices pages to cpu pages which is a common case for SVM
+in DRM drivers using TTM.
+
+v2:
+ - s/migrate_device_vma_range/migrate_device_prepopulated_range
+ - Drop extra mmu invalidation (Vetter)
+v3:
+ - s/migrate_device_prepopulated_range/migrate_device_pfns (Alistar)
+ - Use helper to lock device pages (Alistar)
+ - Update commit message with why this is required (Alistar)
+
+Cc: Andrew Morton <akpm@linux-foundation.org>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Alistair Popple <apopple@nvidia.com>
+Reviewed-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/20250306012657.3505757-3-matthew.brost@intel.com
+[ Backported to 6.6: migrate_device_pfn_lock() adapted to use page-based
+  API (get_page_unless_zero/trylock_page/put_page) instead of folio API
+  not present in v6.6. Docstring typo fixed (pre-popluated -> pre-populated). - Varun Gupta ]
+(cherry-picked from commit a14fa8ec9d811c1cef902345b58294b589655b41 linux)
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ include/linux/migrate.h |  1 +
+ mm/migrate_device.c     | 53 +++++++++++++++++++++++++++++------------
+ 2 files changed, 39 insertions(+), 15 deletions(-)
+
+diff --git a/include/linux/migrate.h b/include/linux/migrate.h
+index 711dd9412561..6a08de54fdaf 100644
+--- a/include/linux/migrate.h
++++ b/include/linux/migrate.h
+@@ -222,6 +222,7 @@ void migrate_vma_pages(struct migrate_vma *migrate);
+ void migrate_vma_finalize(struct migrate_vma *migrate);
+ int migrate_device_range(unsigned long *src_pfns, unsigned long start,
+ 			unsigned long npages);
++int migrate_device_pfns(unsigned long *src_pfns, unsigned long npages);
+ void migrate_device_pages(unsigned long *src_pfns, unsigned long *dst_pfns,
+ 			unsigned long npages);
+ void migrate_device_finalize(unsigned long *src_pfns,
+diff --git a/mm/migrate_device.c b/mm/migrate_device.c
+index f209dc512d82..8eace07de568 100644
+--- a/mm/migrate_device.c
++++ b/mm/migrate_device.c
+@@ -866,10 +866,26 @@ EXPORT_SYMBOL(migrate_device_finalize);
+  */
+ void migrate_vma_finalize(struct migrate_vma *migrate)
+ {
+-	migrate_device_finalize(migrate->src, migrate->dst, migrate->npages);
++	__migrate_device_finalize(migrate->src, migrate->dst, migrate->npages,
++				  migrate->fault_page);
+ }
+ EXPORT_SYMBOL(migrate_vma_finalize);
+ 
++static unsigned long migrate_device_pfn_lock(unsigned long pfn)
++{
++	struct page *page = pfn_to_page(pfn);
++
++	if (!get_page_unless_zero(page))
++		return 0;
++
++	if (!trylock_page(page)) {
++		put_page(page);
++		return 0;
++	}
++
++	return migrate_pfn(pfn) | MIGRATE_PFN_MIGRATE;
++}
++
+ /**
+  * migrate_device_range() - migrate device private pfns to normal memory.
+  * @src_pfns: array large enough to hold migrating source device private pfns.
+@@ -894,28 +910,35 @@ int migrate_device_range(unsigned long *src_pfns, unsigned long start,
+ {
+ 	unsigned long i, pfn;
+ 
+-	for (pfn = start, i = 0; i < npages; pfn++, i++) {
+-		struct page *page = pfn_to_page(pfn);
++	for (pfn = start, i = 0; i < npages; pfn++, i++)
++		src_pfns[i] = migrate_device_pfn_lock(pfn);
+ 
+-		if (!get_page_unless_zero(page)) {
+-			src_pfns[i] = 0;
+-			continue;
+-		}
++	migrate_device_unmap(src_pfns, npages, NULL);
+ 
+-		if (!trylock_page(page)) {
+-			src_pfns[i] = 0;
+-			put_page(page);
+-			continue;
+-		}
++	return 0;
++}
++EXPORT_SYMBOL(migrate_device_range);
+ 
+-		src_pfns[i] = migrate_pfn(pfn) | MIGRATE_PFN_MIGRATE;
+-	}
++/**
++ * migrate_device_pfns() - migrate device private pfns to normal memory.
++ * @src_pfns: pre-populated array of source device private pfns to migrate.
++ * @npages: number of pages to migrate.
++ *
++ * Similar to migrate_device_range() but supports non-contiguous pre-populated
++ * array of device pages to migrate.
++ */
++int migrate_device_pfns(unsigned long *src_pfns, unsigned long npages)
++{
++	unsigned long i;
++
++	for (i = 0; i < npages; i++)
++		src_pfns[i] = migrate_device_pfn_lock(src_pfns[i]);
+ 
+ 	migrate_device_unmap(src_pfns, npages, NULL);
+ 
+ 	return 0;
+ }
+-EXPORT_SYMBOL(migrate_device_range);
++EXPORT_SYMBOL(migrate_device_pfns);
+ 
+ /*
+  * Migrate a device coherent page back to normal memory. The caller should have
+-- 
+2.43.0
+

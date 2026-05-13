@@ -1,0 +1,96 @@
+From 424541a29b0f7804eedd8e8df37d50fe88e43f6f Mon Sep 17 00:00:00 2001
+From: Alice Ryhl <aliceryhl@google.com>
+Date: Tue, 12 May 2026 10:20:04 +0530
+Subject: [PATCH 3/3] drm_gem: add mutex to drm_gem_object.gpuva
+
+There are two main ways that GPUVM might be used:
+
+* staged mode, where VM_BIND ioctls update the GPUVM immediately so that
+  the GPUVM reflects the state of the VM *including* staged changes that
+  are not yet applied to the GPU's virtual address space.
+* immediate mode, where the GPUVM state is updated during run_job(),
+  i.e., in the DMA fence signalling critical path, to ensure that the
+  GPUVM and the GPU's virtual address space has the same state at all
+  times.
+
+Currently, only Panthor uses GPUVM in immediate mode, but the Rust
+drivers Tyr and Nova will also use GPUVM in immediate mode, so it is
+worth to support both staged and immediate mode well in GPUVM. To use
+immediate mode, the GEMs gpuva list must be modified during the fence
+signalling path, which means that it must be protected by a lock that is
+fence signalling safe.
+
+For this reason, a mutex is added to struct drm_gem_object that is
+intended to achieve this purpose. Adding it directly in the GEM object
+both makes it easier to use GPUVM in immediate mode, but also makes it
+possible to take the gpuva lock from core drm code.
+
+As a follow-up, another change that should probably be made to support
+immediate mode is a mechanism to postpone cleanup of vm_bo objects, as
+dropping a vm_bo object in the fence signalling path is problematic for
+two reasons:
+
+* When using DRM_GPUVM_RESV_PROTECTED, you cannot remove the vm_bo from
+  the extobj/evicted lists during the fence signalling path.
+* Dropping a vm_bo could lead to the GEM object getting destroyed.
+  The requirement that GEM object cleanup is fence signalling safe is
+  dubious and likely to be violated in practice.
+
+Panthor already has its own custom implementation of postponing vm_bo
+cleanup.
+
+Reviewed-by: Boris Brezillon <boris.brezillon@collabora.com>
+Signed-off-by: Alice Ryhl <aliceryhl@google.com>
+Link: https://lore.kernel.org/r/20250827-gpuva-mutex-in-gem-v3-1-bd89f5a82c0d@google.com
+Signed-off-by: Danilo Krummrich <dakr@kernel.org>
+[ Backported to 6.6: combined with "gpuvm: remove gem.gpuva.lock_dep_map"
+  (commit 3c8d31b8937a) since both change the gpuva struct layout and must
+  be applied atomically. lock_dep_map pointer replaced with struct mutex;
+  mutex_destroy() added to drm_gem_private_object_fini(). drm_gpuvm.c and
+  panthor changes omitted (not present in 6.6). - Varun Gupta ]
+(cherry-picked from commit e7fa80e2932c68c17e7003fdfd01addc123567f7 linux)
+(cherry-picked from commit 3c8d31b8937a7ee6e5de74f0274810b8705d77ea linux)
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/gpu/drm/drm_gem.c | 1 +
+ include/drm/drm_gem.h     | 5 ++---
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/drm_gem.c b/drivers/gpu/drm/drm_gem.c
+index a3370c77e949..65a0b3b5a049 100644
+--- a/drivers/gpu/drm/drm_gem.c
++++ b/drivers/gpu/drm/drm_gem.c
+@@ -182,6 +182,7 @@ void drm_gem_private_object_fini(struct drm_gem_object *obj)
+ {
+ 	WARN_ON(obj->dma_buf);
+ 
++	mutex_destroy(&obj->gpuva.lock);
+ 	dma_resv_fini(&obj->_resv);
+ }
+ EXPORT_SYMBOL(drm_gem_private_object_fini);
+diff --git a/include/drm/drm_gem.h b/include/drm/drm_gem.h
+index a578068169f1..572917f4fdbf 100644
+--- a/include/drm/drm_gem.h
++++ b/include/drm/drm_gem.h
+@@ -393,9 +393,7 @@ struct drm_gem_object {
+ 	struct {
+ 		struct list_head list;
+ 
+-#ifdef CONFIG_LOCKDEP
+-		struct lockdep_map *lock_dep_map;
+-#endif
++		struct mutex lock;
+ 	} gpuva;
+ 
+ 	/**
+@@ -607,6 +605,7 @@ static inline bool drm_gem_is_imported(const struct drm_gem_object *obj)
+ static inline void drm_gem_gpuva_init(struct drm_gem_object *obj)
+ {
+ 	INIT_LIST_HEAD(&obj->gpuva.list);
++	mutex_init(&obj->gpuva.lock);
+ }
+ 
+ /**
+-- 
+2.43.0
+

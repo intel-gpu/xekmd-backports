@@ -25,6 +25,7 @@ static void yyerror(const char *err);
 static void zconfprint(const char *err, ...);
 static void zconf_error(const char *err, ...);
 static bool zconf_endtoken(const struct kconf_id *id, int starttoken, int endtoken);
+static const struct kconf_id *kconf_id_lookup(const char *str, unsigned int len);
 
 struct symbol *symbol_hash[SYMBOL_HASHSIZE];
 
@@ -100,11 +101,6 @@ static struct menu *current_menu, *current_entry;
 	if (current_menu == $$)
 		menu_end_menu();
 } if_entry menu_entry choice_entry
-
-%{
-/* Include kconf_id.c here so it can see the token constants. */
-#include "kconf_id.c"
-%}
 
 %%
 input: nl start | start;
@@ -774,6 +770,7 @@ void zconfdump(FILE *out)
 	}
 }
 
+#include "kconf_id.c"
 #include "zconf.lex.c"
 #include "util.c"
 #include "confdata.c"

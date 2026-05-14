@@ -41,4 +41,8 @@ static inline int backport_drm_dev_wedged_event_arg3(struct drm_device *dev,
         backport_drm_dev_wedged_event_arg3((_dev), (_method), (_info))
 #endif
 
+#ifndef DRIVER_GEM_GPUVA
+#define DRIVER_GEM_GPUVA        (1U << 8)
+#endif
+
 #endif /* __BACKPORT_DRM_DRV_H__ */

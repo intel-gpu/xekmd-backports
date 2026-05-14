@@ -23,20 +23,41 @@
 #ifndef _BACKPORT_STRING_CHOICES_H
 #define _BACKPORT_STRING_CHOICES_H
 
-#include_next<linux/string_choices.h>
+#if defined(HAVE_LINUX_STRING_CHOICES_H) && \
+	!defined(BPM_STR_PLURAL_NOT_PRESENT)
+#include_next <linux/string_choices.h>
+#else
 
-#ifdef BPM_STR_PLURAL_NOT_PRESENT
 static inline const char *str_plural(size_t num)
 {
 	return num == 1 ? "" : "s";
 }
-#endif
 
-#ifdef BPM_STR_UP_DOWN_NOT_PRESENT
 static inline const char *str_up_down(bool v)
 {
-        return v ? "up" : "down";
+	return v ? "up" : "down";
 }
+
+static inline const char *str_yes_no(bool v)
+{
+	return v ? "yes" : "no";
+}
+
+static inline const char *str_on_off(bool v)
+{
+	return v ? "on" : "off";
+}
+
+static inline const char *str_enable_disable(bool v)
+{
+	return v ? "enable" : "disable";
+}
+
+static inline const char *str_enabled_disabled(bool v)
+{
+	return v ? "enabled" : "disabled";
+}
+
 #endif
 
 #endif /* _BACKPORT_STRING_CHOICES_H */

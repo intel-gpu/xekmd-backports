@@ -95,6 +95,8 @@ dnl # Macros to check for header availability
         AC_KERNEL_CHECK_HEADERS([linux/cleanup.h])
 	dnl # v6.6-b229baa374db kernel.h: split out COUNT_ARGS() and CONCATENATE() to args.h
 	AC_KERNEL_CHECK_HEADERS([linux/args.h])
+	dnl # v6.3-e047c5eaa763 kunit: Expose 'static stub' API to redirect functions
+	AC_KERNEL_CHECK_HEADERS([kunit/static_stub.h])
 
 	AC_KERNEL_WAIT
 ])

@@ -8,6 +8,8 @@
 
 #include <drm/drm_buddy.h>
 #include_next <drm/drm_managed.h>
+#include <linux/mutex.h>
+#include <linux/find.h>
 
 #ifdef BPM_DRM_BUDDY_BLOCK_TRIM_2ND_ARG_NOT_PRESENT
 #define drm_buddy_block_trim(a,b,c,d) drm_buddy_block_trim(a,c,d)
@@ -27,6 +29,16 @@ void __drmm_workqueue_release(struct drm_device *device, void *wq);
 		}) :										\
 			wq;									\
 	})
+#endif
+
+#ifdef BPM_DRMM_MUTEX_INIT_NOT_PRESENT
+void __drmm_mutex_release(struct drm_device *dev, void *res);
+
+#define drmm_mutex_init(dev, lock) ({                                        \
+	static struct lock_class_key __key;                                  \
+	__mutex_init(lock, #lock, &__key);                                   \
+	drmm_add_action_or_reset(dev, __drmm_mutex_release, lock);           \
+})
 #endif
 
 #endif /* __BACKPORT_DRM_BUDDY_H__ */

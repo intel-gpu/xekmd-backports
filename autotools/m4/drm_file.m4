@@ -20,3 +20,25 @@ AC_DEFUN([AC_DRM_SHOW_FDINFO_NOT_PRESENT], [
                 ])
         ])
 ])
+
+dnl #
+dnl # v6.5-686b21b5f6ca2
+dnl # drm: Add fdinfo memory stats
+dnl #
+AC_DEFUN([AC_DRM_MEMORY_STATS_NOT_PRESENT], [
+        AC_KERNEL_DO_BACKGROUND([
+                AC_KERNEL_TRY_COMPILE([
+                        #include <drm/drm_file.h>
+                ],[
+                        struct drm_memory_stats stats[TTM_NUM_MEM_TYPES] = {};
+
+                        drm_print_memory_stats(NULL, &stats[0],
+                                               DRM_GEM_OBJECT_ACTIVE,
+                                               NULL);
+                ],[
+                ],[
+                        AC_DEFINE(BPM_DRM_MEMORY_STATS_NOT_PRESENT, 1,
+                                [drm_memory_stats is not available])
+                ])
+        ])
+])

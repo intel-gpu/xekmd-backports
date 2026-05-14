@@ -32,3 +32,20 @@ AC_DEFUN([AC_DRMM_ALLOC_ORDERED_WORKQUEUE_NOT_PRESENT], [
                 ])
         ])
 ])
+
+dnl #
+dnl # v5.19-e13f13e039dc drm: Add DRM-managed mutex_init()
+dnl #
+AC_DEFUN([AC_DRMM_MUTEX_INIT_NOT_PRESENT], [
+        AC_KERNEL_DO_BACKGROUND([
+                AC_KERNEL_TRY_COMPILE([
+                        #include <drm/drm_managed.h>
+                ],[
+                        drmm_mutex_init(NULL, NULL);
+                ],[
+                ],[
+                        AC_DEFINE(BPM_DRMM_MUTEX_INIT_NOT_PRESENT, 1,
+                                [drmm_mutex_init is not available])
+                ])
+        ])
+])

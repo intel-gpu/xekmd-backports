@@ -99,6 +99,7 @@ dnl # SVM-related probes
 	AC_DRMM_MUTEX_INIT_NOT_PRESENT
 	AC_DRM_SHOW_FDINFO_NOT_PRESENT
 	AC_DRM_MEMORY_STATS_NOT_PRESENT
+	AC_FOR_EACH_OR_BIT_NOT_PRESENT
 
 dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/i915_gsc_proxy_mei_interface.h])

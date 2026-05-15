@@ -103,7 +103,7 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([kunit/static_stub.h])
 	dnl $ v6.5-fca76071bab2 lib/string_helpers: Split out string_choices.h
 	AC_KERNEL_CHECK_HEADERS([linux/string_choices.h])
-	
+	AC_KERNEL_CHECK_HEADERS([drm/intel/i915_gsc_proxy_mei_interface.h])
 
 	AC_KERNEL_WAIT
 ])

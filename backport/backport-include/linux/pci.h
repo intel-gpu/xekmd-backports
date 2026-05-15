@@ -40,4 +40,16 @@ static inline int pci_rebar_get_max_size(struct pci_dev *pdev, int bar)
 }
 #endif /* BPM_PCI_REBAR_SIZE_SUPPORTED_NOT_PRESENT */
 
+#ifdef BPM_PCI_IOV_GET_PF_DRVDATA_NOT_PRESENT
+#ifdef CONFIG_PCI_IOV
+void *pci_iov_get_pf_drvdata(struct pci_dev *dev, struct pci_driver *pf_driver);
+#else
+static inline void *pci_iov_get_pf_drvdata(struct pci_dev *dev,
+					   struct pci_driver *pf_driver)
+{
+	return ERR_PTR(-EINVAL);
+}
+#endif
+#endif
+
 #endif /* _BACKPORT_LINUX_PCI_H */

@@ -36,3 +36,27 @@ AC_DEFUN([AC_PCI_IOV_GET_PF_DRVDATA_NOT_PRESENT], [
                 ])
         ])
 ])
+
+dnl #
+dnl # v6.4-09cc90063240
+dnl # PCI: Introduce pci_dev_for_each_resource()
+dnl #
+AC_DEFUN([AC_PCI_DEV_FOR_EACH_RESOURCE_NOT_PRESENT], [
+	AC_KERNEL_DO_BACKGROUND([
+		AC_KERNEL_TRY_COMPILE([
+			#include <linux/pci.h>
+		],[
+			struct pci_dev *pdev = NULL;
+			struct resource *res;
+			int i;
+
+			pci_dev_for_each_resource(pdev, res, i) {
+				break;
+			}
+		],[
+		],[
+			AC_DEFINE([BPM_PCI_DEV_FOR_EACH_RESOURCE_NOT_PRESENT], 1,
+				[pci_dev_for_each_resource helper not available])
+		])
+	])
+])

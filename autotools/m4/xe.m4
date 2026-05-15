@@ -105,6 +105,8 @@ dnl # Macros to check for header availability
 	dnl $ v6.5-fca76071bab2 lib/string_helpers: Split out string_choices.h
 	AC_KERNEL_CHECK_HEADERS([linux/string_choices.h])
 	AC_KERNEL_CHECK_HEADERS([drm/intel/i915_gsc_proxy_mei_interface.h])
+	dnl # v5.19-1e3dc1d8622b drm/i915/gsc: add gsc as a mei auxiliary device
+	AC_KERNEL_CHECK_HEADERS([linux/mei_aux.h])
 
 	AC_KERNEL_WAIT
 ])

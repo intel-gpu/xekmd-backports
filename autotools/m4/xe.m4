@@ -109,6 +109,8 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/intel/i915_gsc_proxy_mei_interface.h])
 	dnl # v5.19-1e3dc1d8622b drm/i915/gsc: add gsc as a mei auxiliary device
 	AC_KERNEL_CHECK_HEADERS([linux/mei_aux.h])
+	dnl # v5.18-52506b099e1b drm: Provide PCI module-init macros
+	AC_KERNEL_CHECK_HEADERS([drm/drm_module.h])
 
 	AC_KERNEL_WAIT
 ])

@@ -109,6 +109,7 @@ dnl # SVM-related probes
 	AC_LIST_COUNT_NODES_NOT_PRESENT
 	AC_PCI_IOV_GET_PF_DRVDATA_NOT_PRESENT
 	AC_DRM_FILE_CLIENT_ID_NOT_PRESENT
+	AC_PCI_DEV_FOR_EACH_RESOURCE_NOT_PRESENT
 
 dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/i915_gsc_proxy_mei_interface.h])

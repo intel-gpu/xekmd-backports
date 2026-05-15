@@ -11,4 +11,16 @@ int pci_iov_vf_bar_set_size(struct pci_dev *dev, int resno, int size);
 u32 pci_iov_vf_bar_get_sizes(struct pci_dev *dev, int resno, int num_vfs);
 #endif
 
+#ifdef BPM_PCI_IOV_GET_PF_DRVDATA_NOT_PRESENT
+#ifdef CONFIG_PCI_IOV
+void *pci_iov_get_pf_drvdata(struct pci_dev *dev, struct pci_driver *pf_driver);
+#else
+static inline void *pci_iov_get_pf_drvdata(struct pci_dev *dev,
+					   struct pci_driver *pf_driver)
+{
+	return ERR_PTR(-EINVAL);
+}
+#endif
+#endif
+
 #endif /* _BACKPORT_LINUX_PCI_H */

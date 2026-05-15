@@ -23,6 +23,8 @@
 #ifndef _BACKPORT_STRING_CHOICES_H
 #define _BACKPORT_STRING_CHOICES_H
 
+#include <linux/types.h>
+
 #if defined(HAVE_LINUX_STRING_CHOICES_H) && \
 	!defined(BPM_STR_PLURAL_NOT_PRESENT)
 #include_next <linux/string_choices.h>

@@ -114,6 +114,8 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([linux/mei_aux.h])
 	dnl # v5.18-52506b099e1b drm: Provide PCI module-init macros
 	AC_KERNEL_CHECK_HEADERS([drm/drm_module.h])
+	dnl # v6.6-39ced19b9e60 lib/vsprintf: split out sprintf() and friends
+	AC_KERNEL_CHECK_HEADERS([linux/sprintf.h])
 
 	AC_KERNEL_WAIT
 ])

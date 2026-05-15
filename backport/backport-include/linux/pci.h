@@ -23,4 +23,10 @@ static inline void *pci_iov_get_pf_drvdata(struct pci_dev *dev,
 #endif
 #endif
 
+#ifdef BPM_PCI_DEV_FOR_EACH_RESOURCE_NOT_PRESENT
+#define pci_dev_for_each_resource(pdev, res, i) \
+	for ((i) = 0; (i) < PCI_NUM_RESOURCES && \
+	     (((res) = &((pdev)->resource[(i)])), 1); (i)++)
+#endif
+
 #endif /* _BACKPORT_LINUX_PCI_H */

@@ -38,4 +38,8 @@
 })
 #endif
 
+#ifndef PCI_DVSEC_HEADER1_LEN
+#define PCI_DVSEC_HEADER1_LEN(x)   (((x) >> 20) & 0xfff)
+#endif
+
 #endif /* __BACKPORT_DEVICE_H_ */

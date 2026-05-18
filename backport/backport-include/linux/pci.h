@@ -29,4 +29,27 @@ static inline void *pci_iov_get_pf_drvdata(struct pci_dev *dev,
 	     (((res) = &((pdev)->resource[(i)])), 1); (i)++)
 #endif
 
+#ifdef BPM_PCI_MSIX_ALLOC_IRQ_NOT_PRESENT
+struct msi_map {
+        int     index;
+        int     virq;
+};
+
+#ifdef CONFIG_PCI_MSI
+struct msi_map pci_msix_alloc_irq_at(struct pci_dev *dev, unsigned int index,
+                                     const struct irq_affinity_desc *affdesc);
+bool pci_msix_can_alloc_dyn(struct pci_dev *dev);
+#else
+static inline struct msi_map pci_msix_alloc_irq_at(struct pci_dev *dev, unsigned int index,
+                                                   const struct irq_affinity_desc *affdesc)
+{
+        struct msi_map map = { .index = -ENOSYS, };
+
+        return map;
+}
+static inline bool pci_msix_can_alloc_dyn(struct pci_dev *dev)
+{ return false; }
+#endif
+#endif
+
 #endif /* _BACKPORT_LINUX_PCI_H */

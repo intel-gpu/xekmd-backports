@@ -1,0 +1,46 @@
+From e81afc87797361de00097ea95c8a35c0dff5a988 Mon Sep 17 00:00:00 2001
+From: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Date: Mon, 18 May 2026 22:18:02 +0530
+Subject: [PATCH] vfio/pci: guard driver_managed_dma for pre-v5.19 kernels
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+driver_managed_dma was added to struct pci_driver in upstream kernel
+v5.19 as part of the IOMMU DMA ownership tracking rework.
+Building vfio_pci.c on kernels older than v5.19 fails with below error.
+
+Guard the field initialization with a LINUX_VERSION_CODE check so
+that backport builds succeed on pre-v5.19 kernels.
+
+Error:
+------------------------------------------------------------------------------
+error: ‘struct pci_driver’ has no member named ‘driver_managed_dma’
+------------------------------------------------------------------------------
+
+Reference:
+	512881eacfa7
+	bus: platform,amba,fsl-mc,PCI: Add device DMA ownership management
+
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+---
+ drivers/vfio/pci/vfio_pci.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/vfio/pci/vfio_pci.c b/drivers/vfio/pci/vfio_pci.c
+index aa16d61..b7642cd 100644
+--- a/drivers/vfio/pci/vfio_pci.c
++++ b/drivers/vfio/pci/vfio_pci.c
+@@ -203,7 +203,9 @@ static struct pci_driver vfio_pci_driver = {
+ 	.remove			= vfio_pci_remove,
+ 	.sriov_configure	= vfio_pci_sriov_configure,
+ 	.err_handler		= &vfio_pci_core_err_handlers,
++#ifndef BPM_DRIVER_MANAGED_DMA_NOT_PRESENT
+ 	.driver_managed_dma	= true,
++#endif
+ };
+ 
+ static void __init vfio_pci_fill_ids(void)
+-- 
+2.43.0
+

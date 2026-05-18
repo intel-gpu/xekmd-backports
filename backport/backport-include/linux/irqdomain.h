@@ -36,4 +36,12 @@
 #define IRQ_DOMAIN_FLAG_ISOLATED_MSI 32
 #endif
 
+#ifndef IRQ_DOMAIN_FLAG_MSI_PARENT
+#define IRQ_DOMAIN_FLAG_MSI_PARENT (1 << 8)
+#endif
+
+#ifndef IRQ_DOMAIN_FLAG_MSI_DEVICE
+#define IRQ_DOMAIN_FLAG_MSI_DEVICE (1 << 9)
+#endif
+
 #endif

@@ -1,0 +1,28 @@
+From: Varun Gupta <varun.gupta@intel.com>
+Subject: [PATCH] drm/xe/pci_rebar: drop 4th arg of pci_resize_resource on 6.6
+
+On v7.0+, pci_resize_resource() gained a 4th argument (flags). On
+older kernels the function takes only 3 arguments.
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci_rebar.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci_rebar.c b/drivers/gpu/drm/xe/xe_pci_rebar.c
+--- a/drivers/gpu/drm/xe/xe_pci_rebar.c
++++ b/drivers/gpu/drm/xe/xe_pci_rebar.c
+@@ -17,7 +17,11 @@ static void resize_bar(struct xe_device *xe, int resno, resource_size_t size)
+ 	int bar_size = pci_rebar_bytes_to_size(size);
+ 	int ret;
+ 
++#ifdef BPM_PCI_REBAR_SIZE_SUPPORTED_NOT_PRESENT
++	ret = pci_resize_resource(pdev, resno, bar_size);
++#else
+ 	ret = pci_resize_resource(pdev, resno, bar_size, 0);
++#endif
+ 	if (ret) {
+ 		xe_info(xe, "Failed to resize BAR%d to %dMiB (%pe). Consider enabling 'Resizable BAR' support in your BIOS\n",
+ 			resno, 1 << bar_size, ERR_PTR(ret));
+-- 
+2.34.1

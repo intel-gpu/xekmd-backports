@@ -57,10 +57,11 @@ Example:
 	$./compile.sh configure
 	$ make xe-dkms-deb-pkg
 
-Generated package name :
-	intel-xe-dkms_1.250811.7.0+i1-1_all.deb
+Generated package name:
+	intel-xe-dkms_<kernel-version>-<release-version>+i1-1_all.deb
+	Example: intel-xe-dkms_6.12.0.124.8.1-6.17.13.49.260409.4+i1-1_all.deb
 ```
-Above command will create Debian package in parent folder. **intel-xe-dkms_<**release version**>.<**kernel-version**>.deb**
+Above command will create Debian package in parent folder. **intel-xe-dkms_\<kernel-version\>-\<release-version\>+i1-1_all.deb**
 
 ```
 Example:

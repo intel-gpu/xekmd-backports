@@ -38,9 +38,9 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
 	PACKAGE_VERSION="$PKG_VER"
 	AUTOINSTALL="yes"
 
-	MAKE="KSRC=/usr/src/kernels/\\\$kernelver; if [ ! -d \\\$KSRC ]; then KSRC=/lib/modules/\\\$kernelver/build; fi; ./compile.sh compile \\\$KSRC"
+	MAKE="export LEX=flex; export YACC=bison; KSRC=/usr/src/kernels/\\\$kernelver; if [ ! -d \\\$KSRC ]; then KSRC=/lib/modules/\\\$kernelver/build; fi; ./compile.sh compile \\\$KSRC"
 
-	CLEAN="'make' -C src clean 2>/dev/null || true; 'make' mrproper 2>/dev/null || true"
+	CLEAN="export LEX=flex; export YACC=bison; 'make' -C src clean 2>/dev/null || true; 'make' mrproper 2>/dev/null || true"
 
 	BUILT_MODULE_NAME[0]="xe-compat"
 	BUILT_MODULE_LOCATION[0]="src/compat"

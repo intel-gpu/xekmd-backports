@@ -50,6 +50,12 @@ ifneq ($(filter m y, $(CPTCFG_DRM_GPUVM)),)
 obj-$(CPTCFG_DRM_GPUVM) += drm_gpuvm.o
 drm_gpuvm-y := drivers/gpu/drm/drm_gpuvm.o
 endif
+# Compile drm_gpusvm_helper if config is enabled and base kernel doesn't have it
+ifneq ($(filter m y, $(CPTCFG_DRM_GPUSVM)),)
+obj-$(CPTCFG_DRM_GPUSVM) += drm_gpusvm_helper.o
+drm_gpusvm_helper-y := drivers/gpu/drm/drm_gpusvm.o
+drm_gpusvm_helper-$(CONFIG_ZONE_DEVICE) += drivers/gpu/drm/drm_pagemap.o drivers/gpu/drm/drm_pagemap_util.o
+endif
 obj-$(CPTCFG_INTEL_VSEC) += drivers/platform/x86/intel/
 obj-$(CPTCFG_MFD_INTEL_PMT) += drivers/platform/x86/intel/
 #mtd

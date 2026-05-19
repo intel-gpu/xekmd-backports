@@ -35,4 +35,11 @@ static inline bool pci_msix_can_alloc_dyn(struct pci_dev *dev)
 //#endif
 #endif
 
+#ifdef BPM_PCI_IS_DISPLAY_NOT_PRESENT
+static inline bool pci_is_display(struct pci_dev *pdev)
+{
+	return (pdev->class >> 16) == PCI_BASE_CLASS_DISPLAY;
+}
+#endif
+
 #endif /* _BACKPORT_LINUX_PCI_H */

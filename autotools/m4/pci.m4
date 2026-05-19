@@ -37,3 +37,25 @@ AC_DEFUN([AC_DRIVER_MANAGED_DMA_NOT_PRESENT], [
 		])
 	])
 ])
+
+dnl #
+dnl # v6.17-76720eed7d18
+dnl # PCI: Add pci_is_display() to check if device is a display controller
+dnl #
+AC_DEFUN([AC_PCI_IS_DISPLAY_NOT_PRESENT], [
+	AC_KERNEL_DO_BACKGROUND([
+		AC_KERNEL_TRY_COMPILE([
+			#include <linux/pci.h>
+		],[
+			struct pci_dev *pdev = NULL;
+			bool is_display;
+
+			is_display = pci_is_display(pdev);
+			(void)is_display;
+		],[
+		],[
+			AC_DEFINE([BPM_PCI_IS_DISPLAY_NOT_PRESENT], 1,
+				[pci_is_display helper is not available])
+		])
+	])
+])

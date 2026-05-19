@@ -48,30 +48,35 @@ Each project is tagged consistently, so when pulling these repos, pull the same 
 
 Creating xe DKMS packages
 
-```
-$ make <DKMS Package Target>
-```
+#### Debian / Ubuntu
 
 ```
-Example:
-	$./compile.sh configure
-	$ make xe-dkms-deb-pkg
-
-Generated package name :
-	intel-xe-dkms_1.250811.7.0+i1-1_all.deb
+$ ./compile.sh configure
+$ make xe-dkms-deb-pkg
 ```
-Above command will create Debian package in parent folder. **intel-xe-dkms_<**release version**>.<**kernel-version**>.deb**
+
+Above command will create a Debian package in the parent folder.
 
 ```
-Example:
-	$ ./compile.sh configure
-	$ make xe-dkms-rpm-pkg
+Generated package name:
+	intel-xe-dkms_<kernel-version>-<release-version>+i1-1_all.deb
+	Example: intel-xe-dkms_6.14.0.37-6.17.13.62.260409.9+i102-1_all.deb
+```
 
+#### Redhat / RHEL
+
+```
+$ ./compile.sh configure
+$ make xe-dkms-rpm-pkg
+```
+
+Above command will create an RPM package in `~/rpmbuild/RPMS/x86_64/` directory.
+
+```
 Generated package name:
 	intel-xe-dkms-<kernel-version>-<release-version>.<distro-suffix>.x86_64.rpm
 	Example: intel-xe-dkms-6.12.0.124.8.1-6.17.13.54.260409.4.1.el10_1.x86_64.rpm
 ```
-Above command will create RPM package in `~/rpmbuild/RPMS/x86_64/` directory.
 
 **Note:** You can check the expected package version and name before building:
 ```

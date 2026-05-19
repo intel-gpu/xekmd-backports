@@ -4,6 +4,8 @@
 #define _BACKPORT_LINUX_SLAB_H
 
 #include_next <linux/slab.h>
+#include <linux/module.h>
+
 
 /* Common helper macros for slab allocation compatibility */
 #ifndef __default_gfp
@@ -171,4 +173,13 @@
 	__alloc_flex(kzalloc, default_gfp(__VA_ARGS__), typeof(P), FAM, COUNT)
 #endif /* BPM_KZALLOC_FLEX_NOT_PRESENT */
 
-#endif /* _BACKPORT_LINUX_SLAB_H */
+#ifdef BPM_KVREALLOC_OLDSIZE_PARAM_PRESENT
+#include <linux/mm.h>
+static inline void *__bp_kvrealloc(const void *p, size_t newsize, gfp_t flags)
+{
+	return kvrealloc(p, 0, newsize, flags);
+}
+#define kvrealloc(p, s, f) __bp_kvrealloc(p, s, f)
+#endif
+
+#endif /* __BACKPORT_LINUX_SLAB_H */

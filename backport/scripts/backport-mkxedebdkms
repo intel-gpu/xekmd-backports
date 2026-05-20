@@ -94,7 +94,19 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
 		fi
 		kver_short=\$(echo "\$kernelver" | cut -d. -f1,2)
 		case "\$kver_short" in
-			6.6|6.7) echo "true" ;;
+			5.15|6.6|6.7) echo "true" ;;
+			*) echo "false" ;;
+		esac
+	}
+
+	select_xe_515_extra_modules() {
+		if [ -z "\$kernelver" ]; then
+			echo "false"
+			return
+		fi
+		kver_short=\$(echo "\$kernelver" | cut -d. -f1,2)
+		case "\$kver_short" in
+			5.15) echo "true" ;;
 			*) echo "false" ;;
 		esac
 	}
@@ -107,6 +119,21 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
 		BUILT_MODULE_NAME[12]="drm_gpusvm_helper"
 		BUILT_MODULE_LOCATION[12]="src"
 		DEST_MODULE_LOCATION[12]="/updates"
+	fi
+
+	if [ "\$(select_xe_515_extra_modules)" = "true" ]; then
+		BUILT_MODULE_NAME[13]="drm_buddy"
+		BUILT_MODULE_LOCATION[13]="src"
+		DEST_MODULE_LOCATION[13]="/updates"
+
+		BUILT_MODULE_NAME[14]="drm_suballoc_helper"
+		BUILT_MODULE_LOCATION[14]="src"
+		DEST_MODULE_LOCATION[14]="/updates"
+
+		BUILT_MODULE_NAME[15]="drm_exec"
+		BUILT_MODULE_LOCATION[15]="src"
+		DEST_MODULE_LOCATION[15]="/updates"
+
 	fi
 
 	# Find out how many CPU cores can be use if we pass appropriate -j option to make.

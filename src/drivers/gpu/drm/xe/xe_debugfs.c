@@ -364,8 +364,9 @@ static ssize_t wedged_mode_set(struct file *f, const char __user *ubuf,
 	if (ret)
 		return ret;
 
-	if (wedged_mode > 2)
-		return -EINVAL;
+	ret = xe_device_validate_wedged_mode(xe, wedged_mode);
+	if (ret)
+		return ret;
 
 	if (wedged_mode_needs_policy_update(xe, wedged_mode)) {
 		ret = wedged_mode_set_reset_policy(xe, wedged_mode);

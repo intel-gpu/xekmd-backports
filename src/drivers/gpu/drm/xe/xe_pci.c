@@ -711,6 +711,15 @@ static int xe_info_init(struct xe_device *xe,
 		if (err)
 			return err;
 
+		/*
+		 * Even if the service copy engines wind up being fused off, their
+		 * presence in the IP descriptor indicates that the platform supports
+		 * Xe2-style MEM_SET and MEM_COPY functionality.
+		 */
+		if (graphics_desc->hw_engine_mask & GENMASK(XE_HW_ENGINE_BCS8,
+					XE_HW_ENGINE_BCS1))
+			gt->info.has_xe2_blt_instructions = true;
+
 		if (MEDIA_VER(xe) < 13 && media_desc)
 			gt->info.engine_mask |= media_desc->hw_engine_mask;
 

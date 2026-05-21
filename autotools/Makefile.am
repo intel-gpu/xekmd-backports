@@ -25,17 +25,16 @@ KLIB_BUILD ?= /lib/modules/@DOLLAR_SIGN@(shell uname -r)/build
 
 RELEASE=1
 
-# Extract kernel version from running kernel or KLIB_BUILD
-# Try CONFIG_BUILD_SALT first (has full version like 6.12.0-124.49.1.el10_1.x86_64)
-# Fall back to UTS_RELEASE if not found, then uname -r
-TARGET_KERN_VER=@DOLLAR_SIGN@(shell cat @DOLLAR_SIGN@(KLIB_BUILD)/include/generated/autoconf.h 2>/dev/null | grep 'CONFIG_BUILD_SALT' | cut -d '"' -f2 2>/dev/null || cat @DOLLAR_SIGN@(KLIB_BUILD)/include/generated/utsrelease.h 2>/dev/null | grep UTS_RELEASE | cut -d '"' -f2 || uname -r)
-FULL_KERN_STR=@DOLLAR_SIGN@(shell echo "@DOLLAR_SIGN@(TARGET_KERN_VER)" | sed 's/\.el[0-9]*_[0-9]*\.x86_64//' | sed 's/\.x86_64//' | tr -d '+')
+# Extract kernel version from utsrelease.h
+# Uses precise '^#define UTS_RELEASE ' pattern to avoid matching UTS_UBUNTU_RELEASE_ABI.
+# Falls back to uname -r if headers are not available.
+TARGET_KERN_VER=@DOLLAR_SIGN@(shell cat @DOLLAR_SIGN@(KLIB_BUILD)/include/generated/utsrelease.h 2>/dev/null | grep '^#define UTS_RELEASE ' | cut -d '"' -f2 || uname -r)
+FULL_KERN_STR=@DOLLAR_SIGN@(shell echo "@DOLLAR_SIGN@(TARGET_KERN_VER)" | sed 's/\.el[0-9]*_[0-9]*\.x86_64//' | sed 's/\.x86_64//' | sed 's/-[a-zA-Z].*//' | tr -d '+')
 KER_VER=@DOLLAR_SIGN@(subst -,.,@DOLLAR_SIGN@(FULL_KERN_STR))
 
 # BKPT_VER consist of backported release version.
 # Expected input: 'BACKPORTS_RELEASE_TAG="xeb_v6.17.13.49_260409.4"'
-# Extract value after ="...", then get field 3 after splitting by _: 260409.4
-BKPT_VER=@DOLLAR_SIGN@(shell cat src/versions | grep BACKPORTS_RELEASE_TAG | cut -d '=' -f 2 | tr -d '"' | cut -d '_' -f 3 2>/dev/null || echo 1)
+BKPT_VER=@DOLLAR_SIGN@(shell cat src/versions | grep BACKPORTS_RELEASE_TAG | cut -d '=' -f 2 | tr -d '"' | cut -d '_' -f 3 | cut -d '-' -f 1 2>/dev/null || echo 1)
 
 # DEV_TAG is extracted from BASE_KERNEL_TAG.
 # Expected format: "xe-v6.17.13.49" -> extracts "v6.17.13.49" and removes 'v' prefix
@@ -60,8 +59,8 @@ DISTRO_SUFFIX=@DOLLAR_SIGN@(shell cat $(KLIB_BUILD)/include/generated/utsrelease
 XE_PKG_NAME_BASENAME=intel-xe-dkms
 XE_PKG_NAME=$(XE_PKG_NAME_BASENAME)
 
-# Debian version format: 0.<BKPT_VER> e.g. intel-xe-dkms_0.260409.5+i1-1_all.deb
-XE_PKG_VERSION=0.$(BKPT_VER)
+# Debian version format: <KER_VER>-<RELEASE_VERSION> e.g. intel-xe-dkms_6.12.0.124.8.1-6.17.13.49.260409.4+i1-1_all.deb
+XE_PKG_VERSION=$(KER_VER)-$(RELEASE_VERSION)
 XE_PKG_RELEASE=$(RELEASE)
 
 # RPM version format: <kernel-ver>-<dev_tag>.<bkpt_ver>.<release> e.g. intel-xe-dkms-6.12.0.124.8.1-6.17.13.54.260409.5.1.el10_1.x86_64.rpm

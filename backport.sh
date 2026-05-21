@@ -47,9 +47,11 @@ apply_patches() {
 	echo "Applying local patches"
 	echo "Flavor: $flavor"
 	while read p; do
-		case "$p" in \#*)
+		if [[ "$p" =~ ^\# ]]; then
 			patch_category=$(echo $p | tr -d "#" | xargs)
-			if [[ "$flavor" == "base" ]]; then
+
+		case "$flavor" in
+			base)
 				# Apply only the base section
 				if [[ "$patch_category" == "base" ]]; then
 					echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
@@ -58,8 +60,8 @@ apply_patches() {
 					echo "Base patches completed, stopping"
 					break
 				fi
-
-			elif [ -z "$flavor" ] || [[ "$flavor" == "features" ]]; then
+				;;
+			""|features)
 				# Default or features: Apply everything EXCEPT oot
 				if [[ "$patch_category" != "oot" ]]; then
 					echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
@@ -68,20 +70,34 @@ apply_patches() {
 					echo "features patches completed, stopping"
 					break
 				fi
-
-			elif [[ "$flavor" == "oot" ]]; then
+				;;
+			oot)
 				# Apply everything including oot
 				echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
 				continue
-			fi
-			;;
+				;;
+			*)
+				# Invalid flavor provided
+				echo "ERROR: Flavor '$flavor' is not listed"
+				echo "Supported flavors are: base, features (default), oot"
+				echo "Please check README for more information"
+				# Fall back to default features behavior
+				if [[ "$patch_category" != "oot" ]]; then
+					echo $p | tr -d "#" | (read name; echo "Applying $name patches..!" >&2)
+					continue
+				else
+					echo "features patches completed, stopping"
+					break
+				fi
+				;;
 		esac
-
+	else
 		git am -q -s "$WORKING_DIR/$p"
 		if [ $? -ne 0 ]; then
 			echo "Failed to apply patch $p"
 			exit 1;
 		fi
+	fi
 	done <$WORKING_DIR/series
 
 	git -C "$WORKING_DIR/kernel" tag "xe-$xkb_tag"

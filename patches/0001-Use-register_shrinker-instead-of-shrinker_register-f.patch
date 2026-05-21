@@ -19,13 +19,16 @@ Reference:
         c42d50aefd17
         mm: shrinker: add infrastructure for dynamically allocating shrinker
 
+v1: support register_shrinker for multiple kernels [Raju]
+
 Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/gpu/drm/xe/xe_shrinker.c | 21 +++++++++++++++++++++
- 1 file changed, 21 insertions(+)
+ drivers/gpu/drm/xe/xe_shrinker.c | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_shrinker.c b/drivers/gpu/drm/xe/xe_shrinker.c
-index 90244fe..c068235 100644
+index 90244fe..7510c2c 100644
 --- a/drivers/gpu/drm/xe/xe_shrinker.c
 +++ b/drivers/gpu/drm/xe/xe_shrinker.c
 @@ -28,13 +28,22 @@ struct xe_shrinker {
@@ -63,7 +66,7 @@ index 90244fe..c068235 100644
  	flush_work(&shrinker->pm_worker);
  	kfree(shrinker);
  }
-@@ -287,19 +300,27 @@ int xe_shrinker_create(struct xe_device *xe)
+@@ -287,19 +300,31 @@ int xe_shrinker_create(struct xe_device *xe)
  	if (!shrinker)
  		return -ENOMEM;
  
@@ -81,7 +84,11 @@ index 90244fe..c068235 100644
 +#ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
 +	shrinker->shrink.count_objects = xe_shrinker_count;
 +        shrinker->shrink.scan_objects = xe_shrinker_scan;
++#ifdef BPM_REGISTER_SHRINKER_ARG2_NOT_PRESENT
++	register_shrinker(&shrinker->shrink);
++#else
 +	register_shrinker(&shrinker->shrink, "drm-xe_gem");
++#endif
 +#else
  	shrinker->shrink->count_objects = xe_shrinker_count;
  	shrinker->shrink->scan_objects = xe_shrinker_scan;
@@ -93,4 +100,3 @@ index 90244fe..c068235 100644
  	return drmm_add_action_or_reset(&xe->drm, xe_shrinker_fini, shrinker);
 -- 
 2.43.0
-

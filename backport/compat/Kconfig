@@ -71,6 +71,18 @@ config BPAUTO_USERSEL_BUILD_ALL
 	  It's only really useful for compat testing, so
 	  you probably shouldn't enable it.
 
+config KERNEL_5_15
+        def_bool y
+        depends on KERNEL_VERSION >= 331520 && KERNEL_VERSION < 331776
+        help
+          Kernel version 5.15 detected
+
+config KERNEL_6_1
+        def_bool y
+        depends on KERNEL_VERSION >= 393472 && KERNEL_VERSION < 393728
+        help
+          Kernel version 6.1 detected
+
 config KERNEL_6_6
         def_bool y
         depends on KERNEL_VERSION >= 394240 && KERNEL_VERSION < 409600
@@ -85,9 +97,29 @@ config KERNEL_6_7
 
 config BUILD_XE_DRM_GPUVM
         def_bool y
-        depends on KERNEL_6_6 || KERNEL_6_7
+	depends on KERNEL_5_15 || KERNEL_6_1 || KERNEL_6_6 || KERNEL_6_7
         help
           Enable building of XE drm_gpuvm backport module.
-          Only enabled for kernels 6.6 and 6.7 that need GPUVM backport.
+          Only enabled for kernels 5.15,6.1,6.6 and 6.7 that need GPUVM backport.
           Disabled for 6.8+ kernels which have native GPUVM support.
 
+config BUILD_XE_DRM_EXEC
+        def_bool y
+        depends on KERNEL_5_15 || KERNEL_5_16
+        help
+          Enable building of XE drm_exec backport module.
+          Enabled for kernel 5.15 where drm_exec is not available.
+
+config BUILD_XE_DRM_BUDDY
+        def_bool y
+        depends on KERNEL_5_15 || KERNEL_5_16
+        help
+        Enable building of XE drm_buddy backport module
+        Enabled for kernel 5.15 where drm_buddy is not available.
+
+config BUILD_XE_DRM_SUBALLOC_HELPER
+       def_bool y
+       depends on KERNEL_5_15 || KERNEL_5_16
+       help
+       Enable building of XE drm_suballoc backport module
+       Enabled for kernel 5.15 where drm_suballoc is not available.

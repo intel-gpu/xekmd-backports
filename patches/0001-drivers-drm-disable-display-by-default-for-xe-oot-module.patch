@@ -8,13 +8,15 @@ for xe only oot module.
 
 V1: Rebase to v6.17.13-260217.28
 
+V2: keep DRM_SUBALLOC_HELPER for 5.15 backport [Raju]
+
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/gpu/drm/xe/Kconfig | 21 +++++++++++----------
- 1 file changed, 11 insertions(+), 10 deletions(-)
+ drivers/gpu/drm/xe/Kconfig | 19 ++++++++++---------
+ 1 file changed, 10 insertions(+), 9 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/Kconfig b/drivers/gpu/drm/xe/Kconfig
-index 14d1741..396ac3c 100644
+index 14d1741..fd99c0a 100644
 --- a/drivers/gpu/drm/xe/Kconfig
 +++ b/drivers/gpu/drm/xe/Kconfig
 @@ -12,17 +12,17 @@ config DRM_XE
@@ -27,15 +29,14 @@ index 14d1741..396ac3c 100644
 +	#select DRM_KMS_HELPER
  	select DRM_KUNIT_TEST_HELPERS if DRM_XE_KUNIT_TEST != n
 -	select DRM_PANEL
--	select DRM_SUBALLOC_HELPER
++	#select DRM_PANEL
+ 	select DRM_SUBALLOC_HELPER
 -	select DRM_DISPLAY_DP_HELPER
 -	select DRM_DISPLAY_DSC_HELPER
 -	select DRM_DISPLAY_HDCP_HELPER
 -	select DRM_DISPLAY_HDMI_HELPER
 -	select DRM_DISPLAY_HELPER
 -	select DRM_MIPI_DSI
-+	#select DRM_PANEL
-+	#select DRM_SUBALLOC_HELPER
 +	#select DRM_DISPLAY_DP_HELPER
 +	#select DRM_DISPLAY_DSC_HELPER
 +	#select DRM_DISPLAY_HDCP_HELPER

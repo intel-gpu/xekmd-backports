@@ -55,6 +55,40 @@ AC_DEFUN([AC_XE_CONFIG], [
 	AC_FREE_ATTRIBUTE_NOT_PRESENT
 	AC_DRM_DEV_WEDGED_EVENT_ARG3_NOT_PRESENT
 	AC_OBJTOOL_COPY_ATTRIBUTE_NEEDED
+	AC_DMA_RESV_USAGE_NOT_PRESENT
+	AC_DMA_RESV_FOR_EACH_FENCE_NOT_PRESENT
+	AC_VM_FLAGS_SET_NOT_PRESENT
+	AC_DMA_FENCE_SET_DEADLINE_NOT_PRESENT
+	AC_DMA_RESV_RESERVE_FENCES_NOT_PRESENT
+	AC_DMA_RESV_ADD_FENCE_NOT_PRESENT
+	AC_FOLIO_PUT_NOT_PRESENT
+	AC_FOLIO_FILE_PAGE_NOT_PRESENT
+	AC_FOLIO_MARK_ACCESSED_NOT_PRESENT
+	AC_FOLIO_LOCK_NOT_PRESENT
+	AC_FOLIO_UNLOCK_NOT_PRESENT
+	AC_FOLIO_MARK_DIRTY_NOT_PRESENT
+	AC_FOLIO_MAPPED_NOT_PRESENT
+	AC_FOLIO_CLEAR_DIRTY_FOR_IO_NOT_PRESENT
+	AC_FOLIO_SET_RECLAIM_NOT_PRESENT
+	AC_FOLIO_CLEAR_RECLAIM_NOT_PRESENT
+	AC_FOLIO_TEST_WRITEBACK_NOT_PRESENT
+	AC_SHMEM_READ_FOLIO_NOT_PRESENT
+	AC_SHMEM_READ_FOLIO_GFP_NOT_PRESENT
+	AC_DMA_FENCE_IS_CONTAINER_NOT_PRESENT
+	AC_COUNTED_BY_NOT_PRESENT
+	AC_REGISTER_SHRINKER_ARG2_NOT_PRESENT
+	AC_DRMM_MUTEX_INIT_NOT_PRESENT
+	AC_DRM_SHOW_FDINFO_NOT_PRESENT
+	AC_DRM_MEMORY_STATS_NOT_PRESENT
+	AC_FOR_EACH_OR_BIT_NOT_PRESENT
+	AC_FIELD_PREP_CONST_NOT_PRESENT
+	AC_GENERIC_HANDLE_IRQ_SAFE_NOT_PRESENT
+	AC_LIST_COUNT_NODES_NOT_PRESENT
+	AC_PCI_IOV_GET_PF_DRVDATA_NOT_PRESENT
+	AC_DRM_FILE_CLIENT_ID_NOT_PRESENT
+	AC_PCI_DEV_FOR_EACH_RESOURCE_NOT_PRESENT
+	AC_LOCAL64_TRY_CMPXCHG_NOT_PRESENT
+	AC_KVREALLOC_OLDSIZE_PARAM_REMOVED
 
 dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/i915_gsc_proxy_mei_interface.h])
@@ -63,6 +97,27 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([linux/workqueue_types.h])
 	dnl # v6.8-d84f31791517 locking/mutex: split out mutex_types.h
 	AC_KERNEL_CHECK_HEADERS([linux/mutex_types.h])
+	dnl # v5.18-7938f4218168 dma-buf-map: Rename to iosys-map
+	AC_KERNEL_CHECK_HEADERS([linux/iosys-map.h])
+	dnl # v6.6-e6303f323b1a drm: manager to keep track of GPUs VA mappings
+	AC_KERNEL_CHECK_HEADERS([drm/drm_gpuva_mgr.h])
+	dnl # v5.16-d2a8ebbf8192 kernel.h: split out container_of() and typeof_member() macros
+	AC_KERNEL_CHECK_HEADERS([linux/container_of.h])
+	dnl # v6.1-9a3bab6af4c8 locking: Introduce __cleanup() macro infrastructure
+        AC_KERNEL_CHECK_HEADERS([linux/cleanup.h])
+	dnl # v6.6-b229baa374db kernel.h: split out COUNT_ARGS() and CONCATENATE() to args.h
+	AC_KERNEL_CHECK_HEADERS([linux/args.h])
+	dnl # v6.3-e047c5eaa763 kunit: Expose 'static stub' API to redirect functions
+	AC_KERNEL_CHECK_HEADERS([kunit/static_stub.h])
+	dnl $ v6.5-fca76071bab2 lib/string_helpers: Split out string_choices.h
+	AC_KERNEL_CHECK_HEADERS([linux/string_choices.h])
+	AC_KERNEL_CHECK_HEADERS([drm/intel/i915_gsc_proxy_mei_interface.h])
+	dnl # v5.19-1e3dc1d8622b drm/i915/gsc: add gsc as a mei auxiliary device
+	AC_KERNEL_CHECK_HEADERS([linux/mei_aux.h])
+	dnl # v5.18-52506b099e1b drm: Provide PCI module-init macros
+	AC_KERNEL_CHECK_HEADERS([drm/drm_module.h])
+	dnl # v6.6-39ced19b9e60 lib/vsprintf: split out sprintf() and friends
+	AC_KERNEL_CHECK_HEADERS([linux/sprintf.h])
 
 	AC_KERNEL_WAIT
 ])

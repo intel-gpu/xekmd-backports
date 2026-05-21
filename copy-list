@@ -29,6 +29,8 @@ include/uapi/drm/drm.h
 include/uapi/drm/drm_mode.h
 include/uapi/drm/xe_drm.h
 include/uapi/drm/xe_drm_prelim.h
+include/linux/aperture.h
+include/kunit/visibility.h
 
 #drm_gpuvm
 include/drm/drm_gem.h
@@ -36,6 +38,18 @@ include/drm/drm_gpuvm.h
 include/drm/drm_pagemap.h
 include/drm/drm_gpusvm.h
 drivers/gpu/drm/drm_gpuvm.c
+
+#drm_exec
+include/drm/drm_exec.h
+drivers/gpu/drm/drm_exec.c
+
+#drm_buddy
+drivers/gpu/drm/drm_buddy.c
+include/drm/drm_buddy.h
+
+#drm_suballoc
+drivers/gpu/drm/drm_suballoc.c
+include/drm/drm_suballoc.h
 
 #scheduler
 include/drm/gpu_scheduler.h

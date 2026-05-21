@@ -1,5 +1,9 @@
 #include <linux/version.h>
 
+#if LINUX_VERSION_IS_LESS(5,16,0) && !defined(BPM_ASSIGN_STR_SECOND_ARG_PRESENT)
+#define BPM_ASSIGN_STR_SECOND_ARG_PRESENT
+#endif
+
 #if LINUX_VERSION_IS_LESS(6,0,0)
 #undef VSTRING_MSG_MAX
 #define VSTRING_MSG_MAX	512

@@ -1,0 +1,26 @@
+From: Varun Gupta <varun.gupta@intel.com>
+Subject: [PATCH] drm/pagemap: guard 3-arg zone_device_page_init for older kernels
+
+On v7.0+, zone_device_page_init() takes 3 args (page, pgmap, order).
+On v6.6 it takes only the page.
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/gpu/drm/drm_pagemap.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/gpu/drm/drm_pagemap.c b/drivers/gpu/drm/drm_pagemap.c
+--- a/drivers/gpu/drm/drm_pagemap.c
++++ b/drivers/gpu/drm/drm_pagemap.c
+@@ -201,5 +201,9 @@ static void drm_pagemap_get_devmem_page(struct page *page,
+ 				    struct drm_pagemap_zdd *zdd)
+ {
+ 	page->zone_device_data = drm_pagemap_zdd_get(zdd);
++#ifdef BPM_ZONE_DEVICE_PAGE_INIT_3ARGS_NOT_PRESENT
++	zone_device_page_init(page);
++#else
+ 	zone_device_page_init(page, page_pgmap(page), 0);
++#endif
+ }
+-- 
+2.34.1

@@ -111,4 +111,10 @@ void drm_print_hex_dump(struct drm_printer *p, const char *prefix,
                         const u8 *buf, size_t len);
 #endif
 
+/* Fallback for drm_warn_once if not present in kernel */
+#ifndef drm_warn_once
+#define drm_warn_once(drm, fmt, ...) \
+	dev_warn_once((drm)->dev, fmt, ##__VA_ARGS__)
+#endif
+
 #endif /* _BACKPORT_DRM_PRINT_H_ */

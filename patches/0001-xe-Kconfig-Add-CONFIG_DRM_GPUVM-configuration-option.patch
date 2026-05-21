@@ -14,14 +14,14 @@ Reference:
 
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/gpu/drm/xe/Kconfig | 7 +++++++
- 1 file changed, 7 insertions(+)
+ drivers/gpu/drm/xe/Kconfig | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/Kconfig b/drivers/gpu/drm/xe/Kconfig
 index 3372998..b2d9c34 100644
 --- a/drivers/gpu/drm/xe/Kconfig
 +++ b/drivers/gpu/drm/xe/Kconfig
-@@ -1,4 +1,11 @@
+@@ -1,4 +1,18 @@
  # SPDX-License-Identifier: GPL-2.0-only
 +config DRM_GPUVM
 +	tristate "Enable Xe-specific DRM GPUVM support"
@@ -30,6 +30,13 @@ index 3372998..b2d9c34 100644
 +	help
 +	  GPU-VM representation providing helpers to manage a GPUs virtual
 +          address space (Xe-specific backport version)
++config DRM_GPUSVM
++	tristate "Enable Xe-specific DRM GPUSVM support"
++	depends on DRM
++	default m
++	help
++	  GPU-SVM representation providing helpers to manage shared virtual
++          memory between CPU and GPU (Xe-specific backport version)
  config DRM_XE
  	tristate "Intel Xe Graphics"
  	depends on DRM && PCI && MMU && (m || (y && KUNIT=y))

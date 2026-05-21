@@ -83,13 +83,19 @@ gt_engine_needs_indirect_ctx(struct xe_gt *gt, enum xe_engine_class class)
 	return false;
 }
 
-size_t xe_gt_lrc_size(struct xe_gt *gt, enum xe_engine_class class)
+/**
+ * xe_gt_lrc_hang_replay_size() - Hang replay size
+ * @gt: The GT
+ * @class: Hardware engine class
+ *
+ * Determine size of GPU hang replay state for a GT and hardware engine class.
+ *
+ * Return: Size of GPU hang replay size
+ */
+size_t xe_gt_lrc_hang_replay_size(struct xe_gt *gt, enum xe_engine_class class)
 {
 	struct xe_device *xe = gt_to_xe(gt);
-	size_t size;
-
-	/* Per-process HW status page (PPHWSP) */
-	size = LRC_PPHWSP_SIZE;
+	size_t size = 0;
 
 	/* Engine context image */
 	switch (class) {
@@ -115,11 +121,18 @@ size_t xe_gt_lrc_size(struct xe_gt *gt, enum xe_engine_class class)
 		size += 1 * SZ_4K;
 	}
 
+	return size;
+}
+
+size_t xe_gt_lrc_size(struct xe_gt *gt, enum xe_engine_class class)
+{
+	size_t size = xe_gt_lrc_hang_replay_size(gt, class);
+
 	/* Add indirect ring state page */
 	if (xe_gt_has_indirect_ring_state(gt))
 		size += LRC_INDIRECT_RING_STATE_SIZE;
 
-	return size;
+	return size + LRC_PPHWSP_SIZE;
 }
 
 /*
@@ -710,9 +723,16 @@ size_t xe_lrc_reg_size(struct xe_device *xe)
 		return 80 * sizeof(u32);
 }
 
-size_t xe_lrc_skip_size(struct xe_device *xe)
+/**
+ * xe_lrc_engine_state_size() - Get size of the engine state within LRC
+ * @gt: the &xe_gt struct instance
+ * @class: Hardware engine class
+ *
+ * Returns: Size of the engine state
+ */
+size_t xe_lrc_engine_state_size(struct xe_gt *gt, enum xe_engine_class class)
 {
-	return LRC_PPHWSP_SIZE + xe_lrc_reg_size(xe);
+	return xe_gt_lrc_hang_replay_size(gt, class) - xe_lrc_reg_size(gt_to_xe(gt));
 }
 
 static inline u32 __xe_lrc_seqno_offset(struct xe_lrc *lrc)

@@ -87,6 +87,7 @@ static inline size_t xe_lrc_ring_size(void)
 	return SZ_16K;
 }
 
+size_t xe_gt_lrc_hang_replay_size(struct xe_gt *gt, enum xe_engine_class class);
 size_t xe_gt_lrc_size(struct xe_gt *gt, enum xe_engine_class class);
 u32 xe_lrc_pphwsp_offset(struct xe_lrc *lrc);
 u32 xe_lrc_regs_offset(struct xe_lrc *lrc);
@@ -126,7 +127,7 @@ u32 xe_lrc_parallel_ggtt_addr(struct xe_lrc *lrc);
 struct iosys_map xe_lrc_parallel_map(struct xe_lrc *lrc);
 
 size_t xe_lrc_reg_size(struct xe_device *xe);
-size_t xe_lrc_skip_size(struct xe_device *xe);
+size_t xe_lrc_engine_state_size(struct xe_gt *gt, enum xe_engine_class class);
 
 void xe_lrc_dump_default(struct drm_printer *p,
 			 struct xe_gt *gt,

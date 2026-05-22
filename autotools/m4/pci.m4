@@ -60,3 +60,23 @@ AC_DEFUN([AC_PCI_DEV_FOR_EACH_RESOURCE_NOT_PRESENT], [
 		])
 	])
 ])
+
+dnl # v5.19 - 512881eacfa7
+dnl # PCI: Add device DMA ownership managementn
+dnl #
+AC_DEFUN([AC_DRIVER_MANAGED_DMA_NOT_PRESENT], [
+	AC_KERNEL_DO_BACKGROUND([
+		AC_KERNEL_TRY_COMPILE([
+			#include <linux/pci.h>
+		],[
+			static struct pci_driver drv = {
+				.driver_managed_dma = true,
+			};
+			(void)drv;
+		],[
+		],[
+			AC_DEFINE([BPM_DRIVER_MANAGED_DMA_NOT_PRESENT], 1,
+			[struct pci_driver does not have driver_managed_dma member])
+		])
+	])
+])

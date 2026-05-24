@@ -81,4 +81,15 @@ static inline bool pci_msix_can_alloc_dyn(struct pci_dev *dev)
 #endif
 #endif
 
+#ifdef BPM_PCI_IOV_VF_ID_NOT_PRESENT
+#ifdef CONFIG_PCI_IOV
+int pci_iov_vf_id(struct pci_dev *dev);
+#else
+static inline int pci_iov_vf_id(struct pci_dev *dev)
+{
+	return -ENOSYS;
+}
+#endif
+#endif
+
 #endif /* _BACKPORT_LINUX_PCI_H */

@@ -13,6 +13,9 @@ buffer and hand it to dev_coredumpv(). This keeps devcoredump visibility on
 older kernels while removing xe callback lifetime from the old-kernel path.
 Also compile out the legacy read/free helpers when they are not used.
 
+V1: Rebase to v7.0-rc6 [Varun]
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
  drivers/gpu/drm/xe/xe_devcoredump.c | 27 +++++++++++++++++++++++++
@@ -57,7 +60,7 @@ index 43877ac2f..2477300cc 100644
 +#ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
 +		ss->read.buffer = vmalloc(ss->read.size);
 +		if (!ss->read.buffer)
-+			goto put_pm;
++			return;
 +
 +		__xe_devcoredump_read(ss->read.buffer, ss->read.size, 0, coredump);
 +		xe_devcoredump_snapshot_free(ss);
@@ -79,10 +82,9 @@ index 43877ac2f..2477300cc 100644
  		if (!ss->read.buffer)
  			goto put_pm;
  
-@@ -321,6 +338,14 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
+@@ -337,2 +354,10 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
  		xe_devcoredump_snapshot_free(ss);
  	}
- 
 +#ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
 +	dev_coredumpv(gt_to_xe(ss->gt)->drm.dev, ss->read.buffer,
 +		      ss->read.size, GFP_KERNEL);
@@ -91,8 +93,6 @@ index 43877ac2f..2477300cc 100644
 +	ss->read.chunk_position = 0;
 +#endif
 +
- put_pm:
- 	xe_pm_runtime_put(xe);
  }
 @@ -413,9 +438,11 @@ void xe_devcoredump(struct xe_exec_queue *q, struct xe_sched_job *job, const cha
  

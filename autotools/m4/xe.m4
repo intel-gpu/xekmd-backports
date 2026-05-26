@@ -77,6 +77,9 @@ AC_DEFUN([AC_XE_CONFIG], [
 	AC_PAGE_PGMAP_NOT_PRESENT
 	AC_CLEANUP_ACQUIRE_NOT_PRESENT
 
+dnl # SVM-related probes
+	AC_SHRINKER_ALLOC_NOT_PRESENT
+
 dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/i915_gsc_proxy_mei_interface.h])
 	AC_KERNEL_CHECK_HEADERS([drm/intel/i915_drm.h])

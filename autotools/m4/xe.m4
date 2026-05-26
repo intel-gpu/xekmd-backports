@@ -81,7 +81,7 @@ dnl # SVM-related probes
 	AC_SHRINKER_ALLOC_NOT_PRESENT
 	AC_FOR_EACH_IF_NOT_PRESENT
 	AC_DEV_PAGEMAP_OPS_FOLIO_FREE_NOT_PRESENT
-
+	AC_VMA_ALLOC_FOLIO_4ARGS_NOT_PRESENT
 
 dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/i915_gsc_proxy_mei_interface.h])

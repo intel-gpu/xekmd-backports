@@ -4,7 +4,7 @@ obj-m += xe-compat.o
 else
 obj-y += xe-compat.o
 endif
-xe-compat-y += main.o ptrace.o iov.o drm_drv.o drm_managed.o hrtimer.o memory.o dma-fence-array.o drm_print.o
+xe-compat-y += main.o ptrace.o iov.o drm_drv.o drm_managed.o hrtimer.o memory.o dma-fence-array.o drm_print.o mutex.o
 xe-compat-y += anon_inodes.o iommu.o msi_api.o pci_iov.o
 
 # Kernel backport compatibility code

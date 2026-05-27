@@ -1,0 +1,127 @@
+From 094e9e6f5cb6b9968537ed73267de6e94233276b Mon Sep 17 00:00:00 2001
+From: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Date: Wed, 27 May 2026 15:10:37 +0530
+Subject: [PATCH] Fix null pointer issues for xe backport module
+
+Fix null pointer issues and lockdep issues during
+xe module load against 5.15 lts kernel.
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/xe/xe_bo.c          |  4 ++
+ drivers/gpu/drm/xe/xe_observation.c |  1 +
+ include/drm/drm_gem.h               | 53 +++++++++++++------------
+ include/kunit/visibility.h          |  2 +-
+ 4 files changed, 34 insertions(+), 26 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
+index 549b9a3..81b12ba 100644
+--- a/drivers/gpu/drm/xe/xe_bo.c
++++ b/drivers/gpu/drm/xe/xe_bo.c
+@@ -2171,6 +2171,10 @@ struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
+ 	INIT_LIST_HEAD(&bo->vram_userfault_link);
+ 
+ 	drm_gem_private_object_init(&xe->drm, &bo->ttm.base, size);
++	/* 5.15 kernel does not initialize the backport-added gpuva/lru fields */
++	INIT_LIST_HEAD(&bo->ttm.base.gpuva.list);
++	INIT_LIST_HEAD(&bo->ttm.base.lru_node);
++	bo->ttm.base.lru = NULL;
+ 
+ 	if (resv) {
+ 		ctx.allow_res_evict = !(flags & XE_BO_FLAG_NO_RESV_EVICT);
+diff --git a/drivers/gpu/drm/xe/xe_observation.c b/drivers/gpu/drm/xe/xe_observation.c
+index 6c27c8e..907352a 100644
+--- a/drivers/gpu/drm/xe/xe_observation.c
++++ b/drivers/gpu/drm/xe/xe_observation.c
+@@ -84,6 +84,7 @@ static const struct ctl_table observation_ctl_table[] = {
+ 	 .extra1 = SYSCTL_ZERO,
+ 	 .extra2 = SYSCTL_ONE,
+ 	 },
++	{ }
+ };
+ 
+ /**
+diff --git a/include/drm/drm_gem.h b/include/drm/drm_gem.h
+index d3a7b43..9852b19 100644
+--- a/include/drm/drm_gem.h
++++ b/include/drm/drm_gem.h
+@@ -398,35 +398,38 @@ struct drm_gem_object {
+ 	struct dma_resv _resv;
+ 
+ 	/**
+-	 * @gpuva:
+-	 *
+-	 * Provides the list of GPU VAs attached to this GEM object.
+-	 *
+-	 * Drivers should lock list accesses with the GEMs &dma_resv lock
+-	 * (&drm_gem_object.resv) or a custom lock if one is provided.
+-	 */
+-	struct {
+-		struct list_head list;
++         * @funcs:
++         *
++         * Optional GEM object functions. If this is set, it will be used instead of the
++         * corresponding &drm_driver GEM callbacks.
++         *
++         * New drivers should use this.
++         *
++         * NOTE: funcs must remain here (before gpuva/lru) to preserve ABI
++         * compatibility with the 5.15 kernel's struct drm_gem_object layout.
++         */
++        const struct drm_gem_object_funcs *funcs;
++
++        /**
++         * @gpuva:
++         *
++         * Provides the list of GPU VAs attached to this GEM object.
++         *
++         * Drivers should lock list accesses with the GEMs &dma_resv lock
++         * (&drm_gem_object.resv) or a custom lock if one is provided.
++         *
++         * NOTE: placed after funcs to preserve 5.15 kernel ABI for funcs offset.
++         */
++        struct {
++                struct list_head list;
+ 
+ #ifdef CONFIG_LOCKDEP
+-		struct lockdep_map *lock_dep_map;
++                struct lockdep_map *lock_dep_map;
+ #endif
+-	} gpuva;
++        } gpuva;
+ 
+-	/**
+-	 * @funcs:
+-	 *
+-	 * Optional GEM object functions. If this is set, it will be used instead of the
+-	 * corresponding &drm_driver GEM callbacks.
+-	 *
+-	 * New drivers should use this.
+-	 *
+-	 */
+-	const struct drm_gem_object_funcs *funcs;
+-
+-	/**
+-	 * @lru_node:
+-	 *
++        /**
++         * @lru_node:
+ 	 * List node in a &drm_gem_lru.
+ 	 */
+ 	struct list_head lru_node;
+diff --git a/include/kunit/visibility.h b/include/kunit/visibility.h
+index 7c34c8f..07e74c7 100644
+--- a/include/kunit/visibility.h
++++ b/include/kunit/visibility.h
+@@ -24,7 +24,7 @@
+      * in test file in order to use symbols.
+      * @symbol: the symbol identifier to export
+      */
+-    #define EXPORT_SYMBOL_IF_KUNIT(symbol) EXPORT_SYMBOL_NS(symbol, "EXPORTED_FOR_KUNIT_TESTING")
++    #define EXPORT_SYMBOL_IF_KUNIT(symbol) EXPORT_SYMBOL_NS(symbol, EXPORTED_FOR_KUNIT_TESTING)
+ #else
+     #define VISIBLE_IF_KUNIT static
+     #define EXPORT_SYMBOL_IF_KUNIT(symbol)
+-- 
+2.43.0
+

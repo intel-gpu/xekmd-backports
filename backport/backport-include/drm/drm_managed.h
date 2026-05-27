@@ -32,8 +32,13 @@ void __drmm_workqueue_release(struct drm_device *device, void *wq);
 #endif
 
 #ifdef BPM_DRMM_MUTEX_INIT_NOT_PRESENT
-struct mutex;
-int drmm_mutex_init(struct drm_device *dev, struct mutex *lock);
+void __drmm_mutex_release(struct drm_device *dev, void *res);
+
+#define drmm_mutex_init(dev, lock) ({                                        \
+	static struct lock_class_key __key;                                  \
+	__mutex_init(lock, #lock, &__key);                                   \
+	drmm_add_action_or_reset(dev, __drmm_mutex_release, lock);           \
+})
 #endif
 
 #endif /* __BACKPORT_DRM_BUDDY_H__ */

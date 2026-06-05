@@ -220,7 +220,7 @@ static inline struct oobmsm_plat_info *intel_vsec_get_mapping(struct pci_dev *pd
 }
 #endif
 
-#if IS_ENABLED(CONFIG_INTEL_PMT_TELEMETRY)
+#if IS_ENABLED(CPTCFG_INTEL_PMT_TELEMETRY)
 struct pmt_feature_group *
 intel_pmt_get_regions_by_feature(enum pmt_feature_id id);
 

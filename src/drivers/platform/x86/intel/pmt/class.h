@@ -73,7 +73,7 @@ int intel_pmt_dev_create(struct intel_pmt_entry *entry,
 			 struct intel_vsec_device *dev, int idx);
 void intel_pmt_dev_destroy(struct intel_pmt_entry *entry,
 			   struct intel_pmt_namespace *ns);
-#if IS_ENABLED(CONFIG_INTEL_PMT_DISCOVERY)
+#if IS_ENABLED(CPTCFG_INTEL_PMT_DISCOVERY)
 void intel_pmt_get_features(struct intel_pmt_entry *entry);
 #else
 static inline void intel_pmt_get_features(struct intel_pmt_entry *entry) {}

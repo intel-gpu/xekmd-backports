@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akanksha Hotta <akanksha.hotta@intel.com>
+Date: Tue, 9 Jun 2026 10:47:10 +0530
+Subject: autotools/m4: Manage the availability of const bin_attribute
+ pointer
+
+Use BPM_CONST_STRUCT_BIN_ATTRIBUTE_IS_NOT_PRESENT (not
+BPM_STRUCT_BIN_ATTRIBUTE_READ_NEW_NOT_PRESENT) to select the const
+vs non-const bin_attribute pointer in intel_pmt_read() and
+intel_pmt_mmap() signatures. On kernel 7.0 the transitional
+.read_new field is removed and .read is back but now takes
+'const struct bin_attribute *'; the old guard always emitted the
+non-const signature, producing an incompatible-pointer-types error
+when assigning to .read.
+
+Reference:
+   7ff2fecc8bc2e85
+   platform/x86/intel/pmt: Constify 'struct bin_attribute'
+
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/platform/x86/intel/pmt/class.c | 21 +++++++++++++++++++--
+ 1 file changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/platform/x86/intel/pmt/class.c b/drivers/platform/x86/intel/pmt/class.c
+index be3c8d9..83454b0 100644
+--- a/drivers/platform/x86/intel/pmt/class.c
++++ b/drivers/platform/x86/intel/pmt/class.c
+@@ -81,10 +81,17 @@ EXPORT_SYMBOL_NS_GPL(pmt_telem_read_mmio, "INTEL_PMT");
+ /*
+  * sysfs
+  */
++#ifdef BPM_CONST_STRUCT_BIN_ATTRIBUTE_IS_NOT_PRESENT
+ static ssize_t
+ intel_pmt_read(struct file *filp, struct kobject *kobj,
+-	       const struct bin_attribute *attr, char *buf, loff_t off,
+-	       size_t count)
++		struct bin_attribute *attr, char *buf, loff_t off,
++		size_t count)
++#else
++static ssize_t
++intel_pmt_read(struct file *filp, struct kobject *kobj,
++		const struct bin_attribute *attr, char *buf, loff_t off,
++		size_t count)
++#endif
+ {
+ 	struct intel_pmt_entry *entry = container_of(attr,
+ 						     struct intel_pmt_entry,
+@@ -105,9 +112,15 @@ intel_pmt_read(struct file *filp, struct kobject *kobj,
+ 	return count;
+ }
+ 
++#ifdef BPM_CONST_STRUCT_BIN_ATTRIBUTE_IS_NOT_PRESENT
++static int
++intel_pmt_mmap(struct file *filp, struct kobject *kobj,
++		struct bin_attribute *attr, struct vm_area_struct *vma)
++#else
+ static int
+ intel_pmt_mmap(struct file *filp, struct kobject *kobj,
+ 		const struct bin_attribute *attr, struct vm_area_struct *vma)
++#endif
+ {
+ 	struct intel_pmt_entry *entry = container_of(attr,
+ 						     struct intel_pmt_entry,
+@@ -340,7 +353,11 @@ static int intel_pmt_dev_register(struct intel_pmt_entry *entry,
+ 	entry->pmt_bin_attr.attr.name = ns->name;
+ 	entry->pmt_bin_attr.attr.mode = 0440;
+ 	entry->pmt_bin_attr.mmap = intel_pmt_mmap;
++#ifdef BPM_STRUCT_BIN_ATTRIBUTE_READ_NEW_NOT_PRESENT
+ 	entry->pmt_bin_attr.read = intel_pmt_read;
++#else
++	entry->pmt_bin_attr.read_new = intel_pmt_read;
++#endif
+ 	entry->pmt_bin_attr.size = entry->size;
+ 
+ 	ret = sysfs_create_bin_file(&dev->kobj, &entry->pmt_bin_attr);
+-- 
+2.43.0
+

@@ -54,7 +54,8 @@
 #include <drm/drm_privacy_screen_machine.h>
 
 
-#ifdef BPM_DRM_DEV_WEDGED_EVENT_NOT_PRESENT
+#if defined(BPM_DRM_DEV_WEDGED_EVENT_NOT_PRESENT) && \
+    defined(BPM_DRM_DEV_WEDGED_EVENT_ARG3_NOT_PRESENT)
 
 #define WEDGE_STR_LEN	32
 #define PID_STR_LEN	15

@@ -6,8 +6,10 @@ AC_DEFUN([AC_EXPORT_SYMBOL_FOR_MODULES_NOT_PRESENT], [
         AC_KERNEL_DO_BACKGROUND([
                 AC_KERNEL_TRY_COMPILE([
 			#include <linux/export.h>
+			#ifndef EXPORT_SYMBOL_FOR_MODULES
+			#error EXPORT_SYMBOL_FOR_MODULES not present
+			#endif
 		],[
-			EXPORT_SYMBOL_FOR_MODULES(sym, mods);
 		],[
 		],[
 			AC_DEFINE(BPM_EXPORT_SYMBOL_FOR_MODULES_NOT_PRESENT, 1,
@@ -15,3 +17,4 @@ AC_DEFUN([AC_EXPORT_SYMBOL_FOR_MODULES_NOT_PRESENT], [
 		])
 	])
 ])
+

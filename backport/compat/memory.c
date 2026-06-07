@@ -43,28 +43,24 @@
 
 #ifdef BPM_ACCESS_REMOTE_VM_NOT_PRESENT
 int access_remote_vm(struct mm_struct *mm, unsigned long addr,
-		void *buf, int len, unsigned int gup_flags)
+        void *buf, int len, unsigned int gup_flags)
 {
-	int ret;
-	struct task_struct *tsk = NULL;
+    struct task_struct *tsk;
+    int ret = 0;
 
-	if (mm && mm->owner)
-	{
-		tsk = mm->owner;
+    rcu_read_lock();
+    for_each_process(tsk) {
+        if (tsk->mm == mm) {
+            get_task_struct(tsk);
+            rcu_read_unlock();
+            ret = access_process_vm(tsk, addr, buf, len, gup_flags);
+            put_task_struct(tsk);
+            return ret;
+        }
+    }
+    rcu_read_unlock();
 
-		get_task_struct(tsk);  // Take reference
-
-		ret = access_process_vm(tsk, addr, buf, len, gup_flags);
-
-		put_task_struct(tsk);  // Release reference
-	}
-	else
-	{
-		pr_err("mm->owner has no task_struct (kernel thread)\n");
-		ret = 0;
-	}
-
-	return ret;
+    return 0;
 }
 
 EXPORT_SYMBOL(access_remote_vm);

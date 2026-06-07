@@ -31,8 +31,13 @@ AC_DEFUN([AC_STRUCT_BIN_ATTRIBUTE_READ_NEW_NOT_PRESENT], [
                 AC_KERNEL_TRY_COMPILE([
                         #include <linux/sysfs.h>
                 ],[
-                        struct bin_attribute test_attr;
-                        test_attr.read_new = NULL;
+                        ssize_t (*test_read_new)(struct file *, struct kobject *,
+                                                 const struct bin_attribute *,
+                                                 char *, loff_t, size_t) = NULL;
+                        struct bin_attribute test_attr = {
+                                .read_new = test_read_new,
+                        };
+                        (void)test_attr;
                 ],[
                 ],[
                         AC_DEFINE(BPM_STRUCT_BIN_ATTRIBUTE_READ_NEW_NOT_PRESENT, 1,

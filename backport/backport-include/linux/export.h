@@ -14,7 +14,7 @@
 #define EXPORT_SYMBOL_NS_GPL(sym, ns) EXPORT_SYMBOL_GPL(sym)
 #endif
 
-#ifdef BPM_EXPORT_SYMBOL_FOR_MODULES_NOT_PRESENT
+#ifndef EXPORT_SYMBOL_FOR_MODULES
 #define EXPORT_SYMBOL_FOR_MODULES(sym, mods) __EXPORT_SYMBOL(sym, "GPL", mods)
 #endif
 

@@ -18,6 +18,7 @@
 
 #if defined(BPM_DRM_DEV_WEDGED_EVENT_NOT_PRESENT) || \
         defined(BPM_DRM_DEV_WEDGED_EVENT_ARG3_NOT_PRESENT)
+#ifdef BPM_DRM_WEDGE_TASK_INFO_NOT_PRESENT
 /**
  * struct drm_wedge_task_info - information about the guilty task of a wedge dev
  */
@@ -27,6 +28,7 @@ struct drm_wedge_task_info {
 	/** @comm: command name of the task */
 	char comm[TASK_COMM_LEN];
 };
+#endif
 #endif
 
 #ifdef BPM_DRM_WEDGE_RECOVERY_VENDOR_NOT_PRESENT

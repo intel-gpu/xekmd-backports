@@ -145,6 +145,7 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([linux/sprintf.h])
 	dnl # v6.2-8bf4889762a8 drivers/accel: define kconfig and register a new major
 	AC_KERNEL_CHECK_HEADERS([drm/drm_accel.h])
-
+	dnl # v5.17-a1a98689301b drm: Add privacy-screen class (v4)
+	AC_KERNEL_CHECK_HEADERS([drm/drm_privacy_screen_machine.h])
 	AC_KERNEL_WAIT
 ])

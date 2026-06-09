@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Tue, 9 Jun 2026 15:46:54 +0530
+Subject: backport: Remove dma mappings during SVM disablement
+
+In order to build a local flags value during mapping and then update svm_pages
+atomically with WRITE_ONCE after mapping completes. Setting
+flags.has_dma_mapping = true only after mappings actually succeed prevents a
+stale/incorrect flag if mapping fails mid-loop.
+
+With SVM disabled, the higher-level API paths that perform mapping shouldn't run
+the header provides stub inline functions in that case. So there is no lost
+state there the mapping code path is simply not executed when SVM is disabled.
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/gpu/drm/drm_gpusvm.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/drm_gpusvm.c b/drivers/gpu/drm/drm_gpusvm.c
+index 04bdc38..9ef9e52 100644
+--- a/drivers/gpu/drm/drm_gpusvm.c
++++ b/drivers/gpu/drm/drm_gpusvm.c
+@@ -1495,7 +1495,7 @@ map_pages:
+ 			}
+ 			zdd = page->zone_device_data;
+ 			if (pagemap != page_pgmap(page)) {
+-				if (pagemap) {
++				if (i > 0) {
+ 					err = -EOPNOTSUPP;
+ 					goto err_unmap;
+ 				}
+@@ -1572,7 +1572,6 @@ set_seqno:
+ 	return 0;
+ 
+ err_unmap:
+-	svm_pages->flags.has_dma_mapping = true;
+ 	__drm_gpusvm_unmap_pages(gpusvm, svm_pages, num_dma_mapped);
+ 	drm_gpusvm_notifier_unlock(gpusvm);
+ err_free:
+-- 
+2.43.0
+

@@ -1,0 +1,103 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Tue, 9 Jun 2026 15:58:53 +0530
+Subject: Add no-op stubs and feature guards when GPUSVM is disabled
+
+Inline stubs return safe defaults (e.g. ERR_PTR(-EOPNOTSUPP), 0, NULL, false)
+and no-op macros preserve call sites without introducing runtime crashes when
+SVM is disabled.
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ include/drm/drm_gpusvm.h | 55 ++++++++++++++++++++++++++++++++++--
+ 1 file changed, 53 insertions(+), 2 deletions(-)
+
+diff --git a/include/drm/drm_gpusvm.h b/include/drm/drm_gpusvm.h
+index 2578ac9..f4ba610 100644
+--- a/include/drm/drm_gpusvm.h
++++ b/include/drm/drm_gpusvm.h
+@@ -252,6 +252,7 @@ struct drm_gpusvm_ctx {
+ 	unsigned int allow_mixed :1;
+ };
+ 
++#if IS_ENABLED(CPTCFG_DRM_GPUSVM) || IS_ENABLED(CPTCFG_DRM_GPUSVM)
+ int drm_gpusvm_init(struct drm_gpusvm *gpusvm,
+ 		    const char *name, struct drm_device *drm,
+ 		    struct mm_struct *mm,
+@@ -327,7 +328,29 @@ void drm_gpusvm_unmap_pages(struct drm_gpusvm *gpusvm,
+ void drm_gpusvm_free_pages(struct drm_gpusvm *gpusvm,
+ 			   struct drm_gpusvm_pages *svm_pages,
+ 			   unsigned long npages);
+-
++#else /* !IS_ENABLED(DRM_GPUSVM) */
++
++static inline int drm_gpusvm_init(struct drm_gpusvm *gpusvm, const char *name, struct drm_device *drm, struct mm_struct *mm, unsigned long mm_start, unsigned long mm_range, unsigned long notifier_size, const struct drm_gpusvm_ops *ops, const unsigned long *chunk_sizes, int num_chunks) { return 0; }
++static inline void drm_gpusvm_fini(struct drm_gpusvm *gpusvm) {}
++static inline void drm_gpusvm_free(struct drm_gpusvm *gpusvm) {}
++static inline unsigned long drm_gpusvm_find_vma_start(struct drm_gpusvm *gpusvm, unsigned long start, unsigned long end) { return 0; }
++static inline struct drm_gpusvm_range *drm_gpusvm_range_find_or_insert(struct drm_gpusvm *gpusvm, unsigned long fault_addr, unsigned long gpuva_start, unsigned long gpuva_end, const struct drm_gpusvm_ctx *ctx) { return ERR_PTR(-EOPNOTSUPP); }
++static inline void drm_gpusvm_range_remove(struct drm_gpusvm *gpusvm, struct drm_gpusvm_range *range) {}
++static inline int drm_gpusvm_range_evict(struct drm_gpusvm *gpusvm, struct drm_gpusvm_range *range) { return 0; }
++static inline struct drm_gpusvm_range *drm_gpusvm_range_get(struct drm_gpusvm_range *range) { return NULL; }
++static inline void drm_gpusvm_range_put(struct drm_gpusvm_range *range) {}
++static inline bool drm_gpusvm_range_pages_valid(struct drm_gpusvm *gpusvm, struct drm_gpusvm_range *range) { return false; }
++static inline int drm_gpusvm_range_get_pages(struct drm_gpusvm *gpusvm, struct drm_gpusvm_range *range, const struct drm_gpusvm_ctx *ctx) { return -EOPNOTSUPP; }
++static inline void drm_gpusvm_range_unmap_pages(struct drm_gpusvm *gpusvm, struct drm_gpusvm_range *range, const struct drm_gpusvm_ctx *ctx) {}
++static inline bool drm_gpusvm_has_mapping(struct drm_gpusvm *gpusvm, unsigned long start, unsigned long end) { return false; }
++static inline struct drm_gpusvm_notifier *drm_gpusvm_notifier_find(struct drm_gpusvm *gpusvm, unsigned long start, unsigned long end) { return NULL; }
++static inline struct drm_gpusvm_range *drm_gpusvm_range_find(struct drm_gpusvm_notifier *notifier, unsigned long start, unsigned long end) { return NULL; }
++static inline void drm_gpusvm_range_set_unmapped(struct drm_gpusvm_range *range, const struct mmu_notifier_range *mmu_range) {}
++static inline int drm_gpusvm_get_pages(struct drm_gpusvm *gpusvm, struct drm_gpusvm_pages *svm_pages, struct mm_struct *mm, struct mmu_interval_notifier *notifier, unsigned long pages_start, unsigned long pages_end, const struct drm_gpusvm_ctx *ctx) { return -EOPNOTSUPP; }
++static inline void drm_gpusvm_unmap_pages(struct drm_gpusvm *gpusvm, struct drm_gpusvm_pages *svm_pages, unsigned long npages, const struct drm_gpusvm_ctx *ctx) {}
++static inline void drm_gpusvm_free_pages(struct drm_gpusvm *gpusvm, struct drm_gpusvm_pages *svm_pages, unsigned long npages) {}
++
++#endif /* IS_ENABLED(DRM_GPUSVM) */
+ /**
+  * enum drm_gpusvm_scan_result - Scan result from the drm_gpusvm_scan_mm() function.
+  * @DRM_GPUSVM_SCAN_UNPOPULATED: At least one page was not present or inaccessible.
+@@ -352,7 +375,7 @@ enum drm_gpusvm_scan_result {
+ 	DRM_GPUSVM_SCAN_MIXED_DEVICE,
+ 	DRM_GPUSVM_SCAN_MIXED,
+ };
+-
++#if IS_ENABLED(CPTCFG_DRM_GPUSVM) || IS_ENABLED(CPTCFG_DRM_GPUSVM)
+ enum drm_gpusvm_scan_result drm_gpusvm_scan_mm(struct drm_gpusvm_range *range,
+ 					       void *dev_private_owner,
+ 					       const struct dev_pagemap *pagemap);
+@@ -567,5 +590,33 @@ __drm_gpusvm_notifier_next(struct drm_gpusvm_notifier *notifier)
+ 	     (next__) = __drm_gpusvm_notifier_next(notifier__);				\
+ 	     (notifier__) && (drm_gpusvm_notifier_start(notifier__) < (end__));		\
+ 	     (notifier__) = (next__), (next__) = __drm_gpusvm_notifier_next(notifier__))
++#else /* !IS_ENABLED(DRM_GPUSVM) */
+ 
++static inline enum drm_gpusvm_scan_result drm_gpusvm_scan_mm(struct drm_gpusvm_range *range, void *dev_private_owner, const struct dev_pagemap *pagemap) { return DRM_GPUSVM_SCAN_UNPOPULATED; }
++
++#define drm_gpusvm_driver_set_lock(gpusvm, lock) do {} while (0)
++#define drm_gpusvm_notifier_lock(gpusvm__) do {} while (0)
++#define drm_gpusvm_notifier_unlock(gpusvm__) do {} while (0)
++
++static inline unsigned long drm_gpusvm_range_start(struct drm_gpusvm_range *range) { return 0; }
++static inline unsigned long drm_gpusvm_range_end(struct drm_gpusvm_range *range) { return 0; }
++static inline unsigned long drm_gpusvm_range_size(struct drm_gpusvm_range *range) { return 0; }
++static inline unsigned long drm_gpusvm_notifier_start(struct drm_gpusvm_notifier *notifier) { return 0; }
++static inline unsigned long drm_gpusvm_notifier_end(struct drm_gpusvm_notifier *notifier) { return 0; }
++static inline unsigned long drm_gpusvm_notifier_size(struct drm_gpusvm_notifier *notifier) { return 0; }
++static inline struct drm_gpusvm_range *__drm_gpusvm_range_next(struct drm_gpusvm_range *range) { return NULL; }
++
++#define drm_gpusvm_for_each_range(range__, notifier__, start__, end__) \
++    for ((range__) = NULL; 0; )
++#define drm_gpusvm_for_each_range_safe(range__, next__, notifier__, start__, end__) \
++    for ((range__) = NULL, (next__) = NULL; 0; )
++
++static inline struct drm_gpusvm_notifier *__drm_gpusvm_notifier_next(struct drm_gpusvm_notifier *notifier) { return NULL; }
++
++#define drm_gpusvm_for_each_notifier(notifier__, gpusvm__, start__, end__) \
++    for ((notifier__) = NULL; 0; )
++#define drm_gpusvm_for_each_notifier_safe(notifier__, next__, gpusvm__, start__, end__) \
++    for ((notifier__) = NULL, (next__) = NULL; 0; )
++
++#endif /* IS_ENABLED(DRM_GPUSVM) */
+ #endif /* __DRM_GPUSVM_H__ */
+-- 
+2.43.0
+

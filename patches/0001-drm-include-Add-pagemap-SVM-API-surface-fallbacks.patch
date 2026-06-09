@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Tue, 9 Jun 2026 18:10:02 +0530
+Subject: drm/include: Add pagemap SVM API surface fallbacks
+
+With zone-device support may be disabled in some kernels configs.
+Without a guarded API surface, drivers that reference
+drm_pagemap* helpers fail to build or must scatter #ifdefs.
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ include/drm/drm_pagemap.h | 17 ++++++++++++++---
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/include/drm/drm_pagemap.h b/include/drm/drm_pagemap.h
+index c848f57..4402fce 100644
+--- a/include/drm/drm_pagemap.h
++++ b/include/drm/drm_pagemap.h
+@@ -243,7 +243,7 @@ struct drm_pagemap_devmem_ops {
+ 			   struct dma_fence *pre_migrate_fence);
+ };
+ 
+-#if IS_ENABLED(CONFIG_ZONE_DEVICE)
++#if IS_ENABLED(CONFIG_ZONE_DEVICE) && (IS_ENABLED(CPTCFG_DRM_GPUSVM) || IS_ENABLED(CPTCFG_DRM_GPUSVM)) && !defined(XE_SVM_FORCE_FALLBACK)
+ 
+ int drm_pagemap_init(struct drm_pagemap *dpagemap,
+ 		     struct dev_pagemap *pagemap,
+@@ -259,7 +259,8 @@ struct drm_pagemap *drm_pagemap_page_to_dpagemap(struct page *page);
+ void drm_pagemap_put(struct drm_pagemap *dpagemap);
+ 
+ #else
+-
++static inline int drm_pagemap_init(struct drm_pagemap *dpagemap, struct dev_pagemap *pagemap, struct drm_device *drm, const struct drm_pagemap_ops *ops) { return -EOPNOTSUPP; }
++static inline struct drm_pagemap *drm_pagemap_create(struct drm_device *drm, struct dev_pagemap *pagemap, const struct drm_pagemap_ops *ops) { return ERR_PTR(-EOPNOTSUPP); }
+ static inline struct drm_pagemap *drm_pagemap_page_to_dpagemap(struct page *page)
+ {
+ 	return NULL;
+@@ -341,7 +342,7 @@ struct drm_pagemap_migrate_details {
+ 	u32 source_peer_migrates : 1;
+ };
+ 
+-#if IS_ENABLED(CONFIG_ZONE_DEVICE)
++#if IS_ENABLED(CONFIG_ZONE_DEVICE) && (IS_ENABLED(CPTCFG_DRM_GPUSVM) || IS_ENABLED(CPTCFG_DRM_GPUSVM)) && !defined(XE_SVM_FORCE_FALLBACK)
+ 
+ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
+ 				  struct mm_struct *mm,
+@@ -367,6 +368,16 @@ void drm_pagemap_destroy(struct drm_pagemap *dpagemap, bool is_atomic_or_reclaim
+ 
+ int drm_pagemap_reinit(struct drm_pagemap *dpagemap);
+ 
++#else /* !ZONE_DEVICE or !GPUSVM */
++
++static inline int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation, struct mm_struct *mm, unsigned long start, unsigned long end, const struct drm_pagemap_migrate_details *mdetails) { return -EOPNOTSUPP; }
++static inline int drm_pagemap_evict_to_ram(struct drm_pagemap_devmem *devmem_allocation) { return -EOPNOTSUPP; }
++static inline const struct dev_pagemap_ops *drm_pagemap_pagemap_ops_get(void) { return NULL; }
++static inline void drm_pagemap_devmem_init(struct drm_pagemap_devmem *devmem_allocation, struct device *dev, struct mm_struct *mm, const struct drm_pagemap_devmem_ops *ops, struct drm_pagemap *dpagemap, size_t size, struct dma_fence *pre_migrate_fence) {}
++static inline int drm_pagemap_populate_mm(struct drm_pagemap *dpagemap, unsigned long start, unsigned long end, struct mm_struct *mm, unsigned long timeslice_ms) { return -EOPNOTSUPP; }
++static inline void drm_pagemap_destroy(struct drm_pagemap *dpagemap, bool is_atomic_or_reclaim) {}
++static inline int drm_pagemap_reinit(struct drm_pagemap *dpagemap) { return -EOPNOTSUPP; }
++
+ #endif /* IS_ENABLED(CONFIG_ZONE_DEVICE) */
+ 
+ #endif
+-- 
+2.43.0
+

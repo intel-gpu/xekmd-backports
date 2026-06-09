@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Tue, 9 Jun 2026 18:12:41 +0530
+Subject: drm: add pagemap SVM API surface fallbacks
+
+Without a guarded API surface, drivers that reference drm_pagemap* helpers
+fail to build or must scatter #ifdefs.
+Add drm_pagemap_util declarations with notifier helpers and inline no-op
+fallbacks to ensure safe defaults (NULL returns or -EOPNOTSUPP) so drivers
+can probe and build cleanly when GPUSVM or ZONE_DEVICE features are absent.
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ include/drm/drm_pagemap_util.h | 27 ++++++++++++++++++++++++++-
+ 1 file changed, 26 insertions(+), 1 deletion(-)
+
+diff --git a/include/drm/drm_pagemap_util.h b/include/drm/drm_pagemap_util.h
+index 19169b4..340789e 100644
+--- a/include/drm/drm_pagemap_util.h
++++ b/include/drm/drm_pagemap_util.h
+@@ -54,7 +54,7 @@ struct drm_pagemap_owner_list {
+ 	struct drm_pagemap_owner_list _name = {	\
+ 	  .lock = __MUTEX_INITIALIZER((_name).lock),	\
+ 	  .peers = LIST_HEAD_INIT((_name).peers) }
+-
++#if IS_ENABLED(CPTCFG_DRM_GPUSVM) || IS_ENABLED(CPTCFG_DRM_GPUSVM) && !defined(XE_SVM_FORCE_FALLBACK)
+ void drm_pagemap_shrinker_add(struct drm_pagemap *dpagemap);
+ 
+ int drm_pagemap_cache_lock_lookup(struct drm_pagemap_cache *cache);
+@@ -89,4 +89,29 @@ int drm_pagemap_acquire_owner(struct drm_pagemap_peer *peer,
+ 			      struct drm_pagemap_owner_list *owner_list,
+ 			      bool (*has_interconnect)(struct drm_pagemap_peer *peer1,
+ 						       struct drm_pagemap_peer *peer2));
++#else /* !IS_ENABLED(DRM_GPUSVM) */
++
++static inline void drm_pagemap_shrinker_add(struct drm_pagemap *dpagemap) {}
++static inline int drm_pagemap_cache_lock_lookup(struct drm_pagemap_cache *cache) { return 0; }
++static inline void drm_pagemap_cache_unlock_lookup(struct drm_pagemap_cache *cache) {}
++
++/* Returning NULL safely bypasses cache creation during driver probe */
++static inline struct drm_pagemap_shrinker *drm_pagemap_shrinker_create_devm(struct drm_device *drm) { return NULL; }
++static inline struct drm_pagemap_cache *drm_pagemap_cache_create_devm(struct drm_pagemap_shrinker *shrinker) { return NULL; }
++static inline struct drm_pagemap *drm_pagemap_get_from_cache(struct drm_pagemap_cache *cache) { return NULL; }
++static inline void drm_pagemap_cache_set_pagemap(struct drm_pagemap_cache *cache, struct drm_pagemap *dpagemap) {}
++static inline struct drm_pagemap *drm_pagemap_get_from_cache_if_active(struct drm_pagemap_cache *cache) { return NULL; }
++
++static inline void drm_pagemap_shrinker_might_lock(struct drm_pagemap *dpagemap) {}
++
++static inline void drm_pagemap_release_owner(struct drm_pagemap_peer *peer) {}
++static inline int drm_pagemap_acquire_owner(struct drm_pagemap_peer *peer,
++                                            struct drm_pagemap_owner_list *owner_list,
++                                            bool (*has_interconnect)(struct drm_pagemap_peer *peer1,
++                                                                     struct drm_pagemap_peer *peer2))
++{
++    return -EOPNOTSUPP;
++}
++
++#endif /* IS_ENABLED(DRM_GPUSVM) */
+ #endif
+-- 
+2.43.0
+

@@ -30,7 +30,19 @@ BACKPORT_PATH="$BACKPORT_DIR/backport-include/backport/automacro.h"
 
 # check if __assign_str prototype arguments
 # Returns: 0 if only 1 argument, 1 if 2 arguments
-BPM_MACRO_ASSIGN_STR_ARG2_PRESENT=`cat $KERNEL_HEADERS/include/trace/stages/stage6_event_callback.h | grep "define __assign_str(" | grep ',' | grep ')' | wc -l`
+# Support both old (5.15) and new (6.6+) kernel structures
+ASSIGN_STR_FILE=""
+if [ -f "$KERNEL_HEADERS/include/trace/stages/stage6_event_callback.h" ]; then
+	ASSIGN_STR_FILE="$KERNEL_HEADERS/include/trace/stages/stage6_event_callback.h"
+elif [ -f "$KERNEL_HEADERS/include/trace/trace_events.h" ]; then
+	ASSIGN_STR_FILE="$KERNEL_HEADERS/include/trace/trace_events.h"
+fi
+
+if [ -z "$ASSIGN_STR_FILE" ]; then
+	BPM_MACRO_ASSIGN_STR_ARG2_PRESENT=0
+else
+	BPM_MACRO_ASSIGN_STR_ARG2_PRESENT=`cat $ASSIGN_STR_FILE | grep "define __assign_str(" | grep ',' | grep ')' | wc -l`
+fi
 
 
 #

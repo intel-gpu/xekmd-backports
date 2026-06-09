@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Tue, 9 Jun 2026 17:40:02 +0530
+Subject: drm/xe: Manage SVM support with no-op fallbacks when GPUSVM
+ is disabled
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Ensure the driver builds and behaves correctly on kernels without DRM GPUSVM
+support or when XE_SVM_FORCE_FALLBACK is selected. Systems that disable GPUSVM
+must still load the driver and handle GPU/user memory interactions
+safely — otherwise builds fail or runtime paths that expect SVM/APIs
+will trigger crashes.
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_bo.c | 8 ++------
+ 1 file changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
+index 7e786f2..0be1494 100644
+--- a/drivers/gpu/drm/xe/xe_bo.c
++++ b/drivers/gpu/drm/xe/xe_bo.c
+@@ -2154,10 +2154,8 @@ struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
+ 	}
+ 
+ 	/* XE_BO_FLAG_GGTTx requires XE_BO_FLAG_GGTT also be set */
+-	if ((flags & XE_BO_FLAG_GGTT_ALL) && !(flags & XE_BO_FLAG_GGTT)) {
+-		xe_bo_free(bo);
++	if ((flags & XE_BO_FLAG_GGTT_ALL) && !(flags & XE_BO_FLAG_GGTT))
+ 		return ERR_PTR(-EINVAL);
+-	}
+ 
+ 	if (flags & (XE_BO_FLAG_VRAM_MASK | XE_BO_FLAG_STOLEN) &&
+ 	    !(flags & XE_BO_FLAG_IGNORE_MIN_PAGE_SIZE) &&
+@@ -2176,10 +2174,8 @@ struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
+ 		alignment = SZ_4K >> PAGE_SHIFT;
+ 	}
+ 
+-	if (type == ttm_bo_type_device && aligned_size != size) {
+-		xe_bo_free(bo);
++	if (type == ttm_bo_type_device && aligned_size != size)
+ 		return ERR_PTR(-EINVAL);
+-	}
+ 
+ 	if (!bo) {
+ 		bo = xe_bo_alloc();
+-- 
+2.43.0
+

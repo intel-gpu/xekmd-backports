@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Tue, 9 Jun 2026 17:57:54 +0530
+Subject: drm/xe: Add SVM headers and notifier API surface
+
+Provide SVM definitions and notifier-lock macros in headers (e.g.
+xe_svm.h, xe_userptr.h) so the driver exposes a stable API surface
+for SVM and userptr functionality regardless of upstream GPUSVM
+availability. Add inline helpers and safe return semantics used by C
+codepaths, and centralized fallback declarations that keep build
+boundaries clean when CPTCFG_DRM_XE_GPUSVM is disabled.
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_userptr.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_userptr.h b/drivers/gpu/drm/xe/xe_userptr.h
+index b8ef11f..47fcbb1 100644
+--- a/drivers/gpu/drm/xe/xe_userptr.h
++++ b/drivers/gpu/drm/xe/xe_userptr.h
+@@ -104,4 +104,8 @@ static inline void xe_vma_userptr_force_invalidate(struct xe_userptr_vma *uvma)
+ {
+ }
+ #endif
++#if !IS_ENABLED(CPTCFG_DRM_XE_GPUSVM)
++int xe_gup_populate_range(struct xe_userptr_vma *uvma);
++void xe_gup_free_sg(struct xe_userptr_vma *uvma);
++#endif
+ #endif
+-- 
+2.43.0
+

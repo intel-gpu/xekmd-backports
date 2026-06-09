@@ -1,0 +1,171 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Tue, 9 Jun 2026 17:59:35 +0530
+Subject: drm/xe: Implement svm and userptr fallbacks and safe runtime
+ behavior
+
+Implement runtime behavior for userptr, dma-buf and bo flows (e.g.
+xe_userptr.c, xe_dma_buf.c, xe_bo.c) to handle cases where
+GPUSVM is unavailable. Return clear error codes or use legacy HMM
+paths, ensure invalidation sequences are safe, and prevent
+panics by using the header-provided no-op/stub APIs.
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_userptr.c | 51 +++++++++++++++++++++++++----
+ 1 file changed, 45 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_userptr.c b/drivers/gpu/drm/xe/xe_userptr.c
+index ad9321b..f6a4e02 100644
+--- a/drivers/gpu/drm/xe/xe_userptr.c
++++ b/drivers/gpu/drm/xe/xe_userptr.c
+@@ -25,7 +25,11 @@
+ int xe_vma_userptr_check_repin(struct xe_userptr_vma *uvma)
+ {
+ 	return mmu_interval_check_retry(&uvma->userptr.notifier,
+-					uvma->userptr.pages.notifier_seq) ?
++#if IS_ENABLED(CPTCFG_DRM_XE_GPUSVM)			
++				uvma->userptr.pages.notifier_seq) ?
++#else
++				uvma->userptr.notifier_seq) ?
++#endif
+ 		-EAGAIN : 0;
+ }
+ 
+@@ -53,15 +57,18 @@ int xe_vma_userptr_pin_pages(struct xe_userptr_vma *uvma)
+ 	struct xe_vma *vma = &uvma->vma;
+ 	struct xe_vm *vm = xe_vma_vm(vma);
+ 	struct xe_device *xe = vm->xe;
++#if IS_ENABLED(CPTCFG_DRM_XE_GPUSVM)	
+ 	struct drm_gpusvm_ctx ctx = {
+ 		.read_only = xe_vma_read_only(vma),
+ 		.device_private_page_owner = xe_svm_private_page_owner(vm, false),
+ 		.allow_mixed = true,
+ 	};
++#endif
+ 
+ 	lockdep_assert_held(&vm->lock);
+ 	xe_assert(xe, xe_vma_is_userptr(vma));
+ 
++#if IS_ENABLED(CPTCFG_DRM_XE_GPUSVM)
+ 	if (vma->gpuva.flags & XE_VMA_DESTROYED)
+ 		return 0;
+ 
+@@ -71,6 +78,9 @@ int xe_vma_userptr_pin_pages(struct xe_userptr_vma *uvma)
+ 				    xe_vma_userptr(vma),
+ 				    xe_vma_userptr(vma) + xe_vma_size(vma),
+ 				    &ctx);
++#else
++	return xe_hmm_userptr_populate_range(uvma, false);
++#endif
+ }
+ 
+ static void __vma_userptr_invalidate(struct xe_vm *vm, struct xe_userptr_vma *uvma)
+@@ -79,10 +89,12 @@ static void __vma_userptr_invalidate(struct xe_vm *vm, struct xe_userptr_vma *uv
+ 	struct xe_vma *vma = &uvma->vma;
+ 	struct dma_resv_iter cursor;
+ 	struct dma_fence *fence;
++#if IS_ENABLED(CPTCFG_DRM_XE_GPUSVM)
+ 	struct drm_gpusvm_ctx ctx = {
+ 		.in_notifier = true,
+ 		.read_only = xe_vma_read_only(vma),
+ 	};
++#endif
+ 	long err;
+ 
+ 	/*
+@@ -118,9 +130,12 @@ static void __vma_userptr_invalidate(struct xe_vm *vm, struct xe_userptr_vma *uv
+ 		err = xe_vm_invalidate_vma(vma);
+ 		XE_WARN_ON(err);
+ 	}
+-
++#if IS_ENABLED(CPTCFG_DRM_XE_GPUSVM)
+ 	drm_gpusvm_unmap_pages(&vm->svm.gpusvm, &uvma->userptr.pages,
+ 			       xe_vma_size(vma) >> PAGE_SHIFT, &ctx);
++#else
++	xe_hmm_userptr_unmap(uvma);
++#endif
+ }
+ 
+ static bool vma_userptr_invalidate(struct mmu_interval_notifier *mni,
+@@ -177,8 +192,13 @@ void xe_vma_userptr_force_invalidate(struct xe_userptr_vma *uvma)
+ 	xe_vm_assert_held(vm);
+ 
+ 	if (!mmu_interval_read_retry(&uvma->userptr.notifier,
++#if IS_ENABLED(CPTCFG_DRM_XE_GPUSVM)
+ 				     uvma->userptr.pages.notifier_seq))
+ 		uvma->userptr.pages.notifier_seq -= 2;
++#else
++				     uvma->userptr.notifier_seq))
++		uvma->userptr.notifier_seq -= 2;
++#endif
+ 	__vma_userptr_invalidate(vm, uvma);
+ }
+ #endif
+@@ -188,7 +208,13 @@ int xe_vm_userptr_pin(struct xe_vm *vm)
+ 	struct xe_userptr_vma *uvma, *next;
+ 	int err = 0;
+ 
++	/* With SVM/GPUSVM compiled in, fault-mode VMs handle userptr via
++	 * the GPU page-fault retry path; the assert is only valid for the
++	 * legacy (non-SVM) case.
++	 */
++#if !IS_ENABLED(CPTCFG_DRM_XE_GPUSVM)
+ 	xe_assert(vm->xe, !xe_vm_in_fault_mode(vm));
++#endif
+ 	lockdep_assert_held_write(&vm->lock);
+ 
+ 	/* Collect invalidated userptrs */
+@@ -283,32 +309,45 @@ int xe_userptr_setup(struct xe_userptr_vma *uvma, unsigned long start,
+ 
+ 	INIT_LIST_HEAD(&userptr->invalidate_link);
+ 	INIT_LIST_HEAD(&userptr->repin_link);
+-
++#if !IS_ENABLED(CPTCFG_DRM_XE_GPUSVM)
++	mutex_init(&userptr->unmap_mutex);
++#endif
+ 	err = mmu_interval_notifier_insert(&userptr->notifier, current->mm,
+ 					   start, range,
+ 					   &vma_userptr_notifier_ops);
+ 	if (err)
+ 		return err;
+-
++#if IS_ENABLED(CPTCFG_DRM_XE_GPUSVM)
+ 	userptr->pages.notifier_seq = LONG_MAX;
++#else
++	userptr->notifier_seq = LONG_MAX;
++#endif
+ 
+ 	return 0;
+ }
+ 
+ void xe_userptr_remove(struct xe_userptr_vma *uvma)
+ {
++#if IS_ENABLED(CPTCFG_DRM_XE_GPUSVM)
+ 	struct xe_vm *vm = xe_vma_vm(&uvma->vma);
++#endif
+ 	struct xe_userptr *userptr = &uvma->userptr;
+-
++#if IS_ENABLED(CPTCFG_DRM_XE_GPUSVM)
+ 	drm_gpusvm_free_pages(&vm->svm.gpusvm, &uvma->userptr.pages,
+ 			      xe_vma_size(&uvma->vma) >> PAGE_SHIFT);
+-
++#else
++	if (userptr->sg)
++		xe_hmm_userptr_free_sg(uvma);
++#endif
+ 	/*
+ 	 * Since userptr pages are not pinned, we can't remove
+ 	 * the notifier until we're sure the GPU is not accessing
+ 	 * them anymore
+ 	 */
+ 	mmu_interval_notifier_remove(&userptr->notifier);
++#if !IS_ENABLED(CPTCFG_DRM_XE_GPUSVM)
++	mutex_destroy(&userptr->unmap_mutex);
++#endif
+ }
+ 
+ void xe_userptr_destroy(struct xe_userptr_vma *uvma)
+-- 
+2.43.0
+

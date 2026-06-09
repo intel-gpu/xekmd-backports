@@ -1,7 +1,7 @@
-From bccbca28f8d2331b11d2808d1a2a17dc412234a5 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Akanksha Hotta <akanksha.hotta@intel.com>
 Date: Tue, 9 Jun 2026 17:33:47 +0530
-Subject: [PATCH] drm/xe: Disable SVM support with fallback stubs
+Subject: drm/xe: Disable SVM support with fallback stubs
 
 Provide GPUSVM integration for the Xe driver behind the
 CPTCFG_DRM_XE_GPUSVM config, including struct xe_svm_range, struct xe_pagemap
@@ -15,13 +15,13 @@ GPUSVM support.
 
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
 ---
- src/drivers/gpu/drm/xe/xe_svm.h | 16 ++++++++++++----
+ drivers/gpu/drm/xe/xe_svm.h | 16 ++++++++++++----
  1 file changed, 12 insertions(+), 4 deletions(-)
 
-diff --git a/src/drivers/gpu/drm/xe/xe_svm.h b/src/drivers/gpu/drm/xe/xe_svm.h
+diff --git a/drivers/gpu/drm/xe/xe_svm.h b/drivers/gpu/drm/xe/xe_svm.h
 index 80ffec1..528bd38 100644
---- a/src/drivers/gpu/drm/xe/xe_svm.h
-+++ b/src/drivers/gpu/drm/xe/xe_svm.h
+--- a/drivers/gpu/drm/xe/xe_svm.h
++++ b/drivers/gpu/drm/xe/xe_svm.h
 @@ -6,12 +6,12 @@
  #ifndef _XE_SVM_H_
  #define _XE_SVM_H_

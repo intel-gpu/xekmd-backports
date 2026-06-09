@@ -110,6 +110,8 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/drm_module.h])
 	dnl # v6.6-39ced19b9e60 lib/vsprintf: split out sprintf() and friends
 	AC_KERNEL_CHECK_HEADERS([linux/sprintf.h])
+	dnl # v6.2-8bf4889762a8 drivers/accel: define kconfig and register a new major
+	AC_KERNEL_CHECK_HEADERS([drm/drm_accel.h])
 
 	AC_KERNEL_WAIT
 ])

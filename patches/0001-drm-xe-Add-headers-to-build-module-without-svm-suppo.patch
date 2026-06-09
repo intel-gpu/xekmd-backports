@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Tue, 9 Jun 2026 18:47:24 +0530
+Subject: drm/xe: Add headers to build module without svm support
+
+As we have added drm_pagemap files which are part of svm
+support. So to prevent the build failures by disabling svm
+eventhough with svm changes, added these headers.
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vm.c | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index 65ac7ef..aa6a541 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -7,6 +7,8 @@
+ 
+ #include <linux/dma-fence-array.h>
+ #include <linux/nospec.h>
++#include <drm/drm_pagemap.h>
++#include <drm/drm_pagemap_util.h>
+ 
+ #include <drm/drm_drv.h>
+ #include <drm/drm_exec.h>
+@@ -3572,6 +3574,7 @@ static int vm_bind_ioctl_check_args(struct xe_device *xe,
+ 				 op == DRM_XE_VM_BIND_OP_UNMAP) ||
+ 		    XE_IOCTL_DBG(xe, (flags & DRM_XE_VM_BIND_FLAG_MADVISE_AUTORESET) &&
+ 				 (!is_cpu_addr_mirror || op != DRM_XE_VM_BIND_OP_MAP))) {
++			pr_err("XE_VM_BIND FAIL: Massive config block failed. op=%u, flags=0x%x\n", op, flags);
+ 			err = -EINVAL;
+ 			goto free_bind_ops;
+ 		}
+@@ -3581,6 +3584,7 @@ static int vm_bind_ioctl_check_args(struct xe_device *xe,
+ 		    XE_IOCTL_DBG(xe, range & ~PAGE_MASK) ||
+ 		    XE_IOCTL_DBG(xe, !range &&
+ 				 op != DRM_XE_VM_BIND_OP_UNMAP_ALL)) {
++			pr_err("XE_VM_BIND FAIL: Alignment/Range block failed. addr=0x%llx, range=0x%llx\n", addr, range);
+ 			err = -EINVAL;
+ 			goto free_bind_ops;
+ 		}
+@@ -3588,6 +3592,7 @@ static int vm_bind_ioctl_check_args(struct xe_device *xe,
+ 		if (extensions) {
+ 			err = vm_bind_op_user_extensions_check(xe, xef, op, extensions);
+ 			if (err)
++				pr_err("XE_VM_BIND FAIL: User extensions check failed with err=%d\n", err);
+ 				goto free_bind_ops;
+ 		}
+ 
+@@ -3647,11 +3652,13 @@ static int xe_vm_bind_ioctl_validate_bo(struct xe_device *xe, struct xe_bo *bo,
+ 
+ 	if (XE_IOCTL_DBG(xe, (bo->flags & XE_BO_FLAG_NO_COMPRESSION) &&
+ 			 xe_pat_index_get_comp_en(xe, pat_index)))
++		pr_err("XE_VM_BIND FAIL: BO validation - No compression mismatch\n");
+ 		return -EINVAL;
+ 
+ 	if (XE_IOCTL_DBG(xe, range > xe_bo_size(bo)) ||
+ 	    XE_IOCTL_DBG(xe, obj_offset >
+ 			 xe_bo_size(bo) - range)) {
++		pr_err("XE_VM_BIND FAIL: BO validation - Range/Offset out of bounds\n");
+ 		return -EINVAL;
+ 	}
+ 
+@@ -3669,6 +3676,7 @@ static int xe_vm_bind_ioctl_validate_bo(struct xe_device *xe, struct xe_bo *bo,
+ 				 XE_64K_PAGE_MASK) ||
+ 		    XE_IOCTL_DBG(xe, addr & XE_64K_PAGE_MASK) ||
+ 		    XE_IOCTL_DBG(xe, range & XE_64K_PAGE_MASK)) {
++			pr_err("XE_VM_BIND FAIL: BO validation - 64K alignment required\n");
+ 			return -EINVAL;
+ 		}
+ 	}
+@@ -3677,6 +3685,7 @@ static int xe_vm_bind_ioctl_validate_bo(struct xe_device *xe, struct xe_bo *bo,
+ 	if (bo->cpu_caching) {
+ 		if (XE_IOCTL_DBG(xe, coh_mode == XE_COH_NONE &&
+ 				 bo->cpu_caching == DRM_XE_GEM_CPU_CACHING_WB)) {
++			pr_err("XE_VM_BIND FAIL: BO validation - CPU cachingWB withCOH mode\n");
+ 			return -EINVAL;
+ 		}
+ 	} else if (XE_IOCTL_DBG(xe, coh_mode == XE_COH_NONE)) {
+@@ -3686,7 +3695,8 @@ static int xe_vm_bind_ioctl_validate_bo(struct xe_device *xe, struct xe_bo *bo,
+ 		 * how it was mapped on the CPU. Just assume is it
+ 		 * potentially cached on CPU side.
+ 		 */
+-		return -EINVAL;
++		pr_err("XE_VM_BIND FAIL: BO validation - Imported dma-buf requires coherency\n");
++		 return -EINVAL;
+ 	}
+ 
+ 	/*
+@@ -3695,6 +3705,7 @@ static int xe_vm_bind_ioctl_validate_bo(struct xe_device *xe, struct xe_bo *bo,
+ 	 */
+ 	comp_en = xe_pat_index_get_comp_en(xe, pat_index);
+ 	if (XE_IOCTL_DBG(xe, bo->ttm.base.import_attach && comp_en))
++		pr_err("XE_VM_BIND FAIL: BO validation - Imported dma-buf with compression enabled\n");
+ 		return -EINVAL;
+ 
+ 	/* If a BO is protected it can only be mapped if the key is still valid */
+-- 
+2.43.0
+

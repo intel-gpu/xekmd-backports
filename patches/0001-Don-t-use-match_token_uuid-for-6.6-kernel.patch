@@ -1,6 +1,6 @@
-From d866e392474c2571b0afd0a51b49c2bf817cab7a Mon Sep 17 00:00:00 2001
+From f131eccfafa183ae126c475283a6104c5f0c750d Mon Sep 17 00:00:00 2001
 From: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
-Date: Fri, 30 Jan 2026 18:27:51 +0530
+Date: Fri, 12 Jun 2026 18:10:00 +0530
 Subject: [PATCH] Don't use match_token_uuid for 6.6 kernel
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -9,7 +9,8 @@ Content-Transfer-Encoding: 8bit
 struct vfio_device_ops has no member named ‘match_token_uuid’ for 6.6 kernel.
 Hence observing below errors.
 To fix these errors, don't use match_token_uuid and related function for 6.6
-kernel.
+kernel. On kernels < 6.2, the full VFIO framework is backported
+(CPTCFG_BUILD_FULL_VFIO) which includes match_token_uuid in vfio_device_ops.
 
 Errors:
 --------------------------------------------------------------------------------
@@ -30,14 +31,14 @@ Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
  1 file changed, 2 insertions(+)
 
 diff --git a/drivers/vfio/pci/xe/main.c b/drivers/vfio/pci/xe/main.c
-index 48436ba..179da10 100644
+index 606b4e2..a7d7bb9 100644
 --- a/drivers/vfio/pci/xe/main.c
 +++ b/drivers/vfio/pci/xe/main.c
-@@ -508,7 +508,9 @@ static const struct vfio_device_ops xe_vfio_pci_ops = {
+@@ -505,7 +505,9 @@ static const struct vfio_device_ops xe_vfio_pci_ops = {
  	.mmap = vfio_pci_core_mmap,
  	.request = vfio_pci_core_request,
  	.match = vfio_pci_core_match,
-+#ifndef BPM_MATCH_TOKEN_UUID_NOT_PRESENT
++#if !defined(BPM_MATCH_TOKEN_UUID_NOT_PRESENT) || defined(CPTCFG_BUILD_FULL_VFIO)
  	.match_token_uuid = vfio_pci_core_match_token_uuid,
 +#endif
  	.bind_iommufd = vfio_iommufd_physical_bind,

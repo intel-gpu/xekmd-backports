@@ -174,12 +174,14 @@
 #endif /* BPM_KZALLOC_FLEX_NOT_PRESENT */
 
 #ifdef BPM_KVREALLOC_OLDSIZE_PARAM_PRESENT
+#ifndef BPM_KVREALLOC_NOPROF_PRESENT
 #include <linux/mm.h>
 static inline void *__bp_kvrealloc(const void *p, size_t newsize, gfp_t flags)
 {
 	return kvrealloc(p, 0, newsize, flags);
 }
 #define kvrealloc(p, s, f) __bp_kvrealloc(p, s, f)
+#endif
 #endif
 
 #endif /* __BACKPORT_LINUX_SLAB_H */

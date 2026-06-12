@@ -12,7 +12,9 @@
 #include <linux/find.h>
 
 #ifdef BPM_DRM_BUDDY_BLOCK_TRIM_2ND_ARG_NOT_PRESENT
+#if !defined(CPTCFG_BUILD_XE_DRM_BUDDY)
 #define drm_buddy_block_trim(a,b,c,d) drm_buddy_block_trim(a,c,d)
+#endif
 #endif
 
 #ifdef BPM_DRMM_WORKQUEUE_RELEASE_NOT_PRESENT

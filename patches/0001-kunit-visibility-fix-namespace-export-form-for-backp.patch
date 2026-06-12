@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Date: Fri, 12 Jun 2026 23:42:46 +0530
+Subject: kunit: visibility: fix namespace export form for backports
+
+Use kernel-compatible EXPORT_SYMBOL_NS() namespace argument
+style in EXPORT_SYMBOL_IF_KUNIT().
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ include/kunit/visibility.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/include/kunit/visibility.h b/include/kunit/visibility.h
+index 7c34c8f..dd8c4af 100644
+--- a/include/kunit/visibility.h
++++ b/include/kunit/visibility.h
+@@ -24,7 +24,11 @@
+      * in test file in order to use symbols.
+      * @symbol: the symbol identifier to export
+      */
++    #ifdef BPM_MODULE_IMPORT_TO_STRING_LITERAL_PRESENT
++    #define EXPORT_SYMBOL_IF_KUNIT(symbol) EXPORT_SYMBOL_NS(symbol, EXPORTED_FOR_KUNIT_TESTING)
++    #else
+     #define EXPORT_SYMBOL_IF_KUNIT(symbol) EXPORT_SYMBOL_NS(symbol, "EXPORTED_FOR_KUNIT_TESTING")
++    #endif
+ #else
+     #define VISIBLE_IF_KUNIT static
+     #define EXPORT_SYMBOL_IF_KUNIT(symbol)
+-- 
+2.43.0

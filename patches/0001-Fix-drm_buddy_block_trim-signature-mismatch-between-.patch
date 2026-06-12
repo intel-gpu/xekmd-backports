@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Date: Thu, 11 Jun 2026 17:55:02 +0530
+Subject: Fix drm_buddy_block_trim signature mismatch between 5.15 and 6.6
+
+The drm_buddy_block_trim function has different signatures across kernel
+versions: 5.15 backport uses 4 arguments, while 6.6 native kernel uses
+3 arguments. This caused "too few arguments" compile errors.
+
+Make the prototype conditional based on which kernel version is being
+built, ensuring call sites match the actual function signature.
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ include/drm/drm_buddy.h | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/include/drm/drm_buddy.h b/include/drm/drm_buddy.h
+index 5138376..ed3e219 100644
+--- a/include/drm/drm_buddy.h
++++ b/include/drm/drm_buddy.h
+@@ -154,19 +154,29 @@ int drm_buddy_alloc_blocks(struct drm_buddy *mm,
+ 			   u64 min_page_size,
+ 			   struct list_head *blocks,
+ 			   unsigned long flags);
+-
++#if defined(BPM_DRM_BUDDY_FREE_LIST_ARG3_NOT_PRESENT) && !defined(CPTCFG_BUILD_XE_DRM_BUDDY)
++int drm_buddy_block_trim(struct drm_buddy *mm,
++			 u64 *start,
++			 u64 new_size);
++#else
+ int drm_buddy_block_trim(struct drm_buddy *mm,
+ 			 u64 *start,
+ 			 u64 new_size,
+ 			 struct list_head *blocks);
++#endif
+ 
+ void drm_buddy_reset_clear(struct drm_buddy *mm, bool is_clear);
+ 
+ void drm_buddy_free_block(struct drm_buddy *mm, struct drm_buddy_block *block);
+ 
++#if defined(BPM_DRM_BUDDY_FREE_LIST_ARG3_NOT_PRESENT) && !defined(CPTCFG_BUILD_XE_DRM_BUDDY)
++void drm_buddy_free_list(struct drm_buddy *mm,
++			 struct list_head *objects);
++#else
+ void drm_buddy_free_list(struct drm_buddy *mm,
+ 			 struct list_head *objects,
+ 			 unsigned int flags);
++#endif
+ 
+ void drm_buddy_print(struct drm_buddy *mm, struct drm_printer *p);
+ void drm_buddy_block_print(struct drm_buddy *mm,
+-- 
+2.43.0

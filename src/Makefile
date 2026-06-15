@@ -109,13 +109,12 @@ mrproper:
 			done								\
 		) > Kconfig.kernel							;\
 		kver=$$($(MAKE) --no-print-directory -C $(KLIB_BUILD) M=$(BACKPORT_DIR)	\
-			kernelversion |	sed 's/^\(\([3-7]\|2\.6\)\.[0-9]\+\).*/\1/;t;d');\
+			kernelversion |	sed 's/^\(\([3-6]\|2\.6\)\.[0-9]\+\).*/\1/;t;d');\
 		test "$$kver" != "" || echo "Kernel version parse failed!"		;\
 		test "$$kver" != ""							;\
 		kvers="$$kvers $$(seq 0 20 | sed 's/^/4./')"				;\
 		kvers="$$kvers $$(seq 0 19 | sed 's/^/5./')"				;\
 		kvers="$$kvers $$(seq 0 20 | sed 's/^/6./')"				;\
-		kvers="$$kvers $$(seq 0 20 | sed 's/^/7./')"				;\
 		print=0									;\
 		for v in $$kvers ; do							\
 			if [ "$$print" = "1" ] ; then					\

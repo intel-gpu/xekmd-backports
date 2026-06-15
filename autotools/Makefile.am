@@ -59,9 +59,8 @@ DISTRO_SUFFIX=@DOLLAR_SIGN@(shell cat $(KLIB_BUILD)/include/generated/utsrelease
 XE_PKG_NAME_BASENAME=intel-xe-dkms
 XE_PKG_NAME=$(XE_PKG_NAME_BASENAME)
 
-# Previous deb-pkg format: <KER_VER>-<RELEASE_VERSION> e.g. intel-xe-dkms_6.12.0.124.8.1-6.17.13.49.260409.4+i1-1_all.deb
-# Current deb-pkg format: <KER_VER>+<RELEASE_VERSION> e.g. intel-xe-dkms_6.12.0.124.8.1+6.17.13.49.260409.4+i1-1_all.deb
-XE_PKG_VERSION=$(KER_VER)+$(RELEASE_VERSION)
+# Debian version format: <KER_VER>-<RELEASE_VERSION> e.g. intel-xe-dkms_6.12.0.124.8.1-6.17.13.49.260409.4+i1-1_all.deb
+XE_PKG_VERSION=$(KER_VER)-$(RELEASE_VERSION)
 XE_PKG_RELEASE=$(RELEASE)
 
 # RPM version format: <kernel-ver>-<dev_tag>.<bkpt_ver>.<release> e.g. intel-xe-dkms-6.12.0.124.8.1-6.17.13.54.260409.5.1.el10_1.x86_64.rpm

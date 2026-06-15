@@ -92,4 +92,19 @@ static inline int pci_iov_vf_id(struct pci_dev *dev)
 #endif
 #endif
 
+#ifdef BPM_PCIM_P2PDMA_NOT_PRESENT
+/* P2PDMA managed helpers (v6.9+) - stub for older kernels */
+static inline int pcim_p2pdma_init(struct pci_dev *pdev)
+{
+	/* P2PDMA not supported in older kernels, return -EOPNOTSUPP */
+	return -EOPNOTSUPP;
+}
+
+static inline struct pci_dev *pcim_p2pdma_provider(struct pci_dev *pdev, int bar)
+{
+	/* P2PDMA not supported in older kernels */
+	return NULL;
+}
+#endif /* BPM_PCIM_P2PDMA_NOT_PRESENT */
+
 #endif /* _BACKPORT_LINUX_PCI_H */

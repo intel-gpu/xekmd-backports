@@ -3,28 +3,33 @@ From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 Date: Tue, 9 Jun 2026 07:23:51 +0530
 Subject: drm/xe: fix NULL pointer in drm_gem_object_free on kv 5.15
 
-The v5.15 kernel's drm_gem_object_free() reads 'funcs' at a fixed compiled
-offset. On v5.15 'funcs' sits after '_resv', but the v6.17 backport header
-placed 'gpuva' before 'funcs', shifting the offset and causing the kernel
+The v5.15 kernel's drm_gem_object_free() reads 'funcs' at a fixed
+compiled
+offset. On v5.15 'funcs' sits after '_resv', but the v6.17 backport
+header
+placed 'gpuva' before 'funcs', shifting the offset and causing the
+kernel
 to read the wrong bytes as NULL.
 
 Fix by adding an autoconf probe to detect whether the kernel struct has
-'gpuva'. On v5.15, reorder the backport struct to put 'funcs' before 'gpuva'
+'gpuva'. On v5.15, reorder the backport struct to put 'funcs' before
+'gpuva'
 to match the kernel ABI. Also explicitly initialise the backport-added
 gpuva/lru fields in xe_bo_create_internal() on v5.15, where the kernel's
 drm_gem_private_object_init() does not.
 
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 ---
- drivers/gpu/drm/xe/xe_bo.c |  7 +++-
- include/drm/drm_gem.h      | 65 ++++++++++++++++++++++------------
- 2 files changed, 49 insertions(+), 23 deletions(-)
+ drivers/gpu/drm/xe/xe_bo.c |  7 ++++++-
+ include/drm/drm_gem.h      | 35 ++++++++++++++++++++++++++++++++++
+ 2 files changed, 41 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
-index 5cf4fdd..3dde197 100644
+index b299fcb..eb6fa45 100644
 --- a/drivers/gpu/drm/xe/xe_bo.c
 +++ b/drivers/gpu/drm/xe/xe_bo.c
-@@ -2167,7 +2167,12 @@ struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
+@@ -2200,7 +2200,12 @@ struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
  	INIT_LIST_HEAD(&bo->vram_userfault_link);
  
  	drm_gem_private_object_init(&xe->drm, &bo->ttm.base, size);
@@ -39,84 +44,65 @@ index 5cf4fdd..3dde197 100644
  		ctx.allow_res_evict = !(flags & XE_BO_FLAG_NO_RESV_EVICT);
  		ctx.resv = resv;
 diff --git a/include/drm/drm_gem.h b/include/drm/drm_gem.h
-index d3a7b43..e57f903 100644
+index bed38f4..5e5ea00 100644
 --- a/include/drm/drm_gem.h
 +++ b/include/drm/drm_gem.h
-@@ -397,32 +397,53 @@ struct drm_gem_object {
+@@ -400,6 +400,7 @@ struct drm_gem_object {
  	 */
  	struct dma_resv _resv;
  
--	/**
--	 * @gpuva:
--	 *
--	 * Provides the list of GPU VAs attached to this GEM object.
--	 *
--	 * Drivers should lock list accesses with the GEMs &dma_resv lock
--	 * (&drm_gem_object.resv) or a custom lock if one is provided.
--	 */
--	struct {
--		struct list_head list;
 +#ifndef BPM_DRM_GEM_OBJECT_GPUVA_MEMBER_NOT_PRESENT
-+        /**
-+         * @gpuva:
-+         *
-+         * Provides the list of GPU VAs attached to this GEM object.
-+         *
-+         * Drivers should lock list accesses with the GEMs &dma_resv lock
-+         * (&drm_gem_object.resv) or a custom lock if one is provided.
-+         */
-+        struct {
-+                struct list_head list;
- 
- #ifdef CONFIG_LOCKDEP
--		struct lockdep_map *lock_dep_map;
-+                struct lockdep_map *lock_dep_map;
- #endif
--	} gpuva;
-+        } gpuva;
+ 	/**
+ 	 * @gpuva: Fields used by GPUVM to manage mappings pointing to this GEM object.
+ 	 *
+@@ -430,6 +431,7 @@ struct drm_gem_object {
+ 		 */
+ 		struct mutex lock;
+ 	} gpuva;
 +#endif /* !BPM_DRM_GEM_OBJECT_GPUVA_MEMBER_NOT_PRESENT */
-+
-+        /**
-+         * @funcs:
-+         *
-+         * Optional GEM object functions. If this is set, it will be used instead of the
-+         * corresponding &drm_driver GEM callbacks.
-+         *
-+         * New drivers should use this.
-+         *
-+		 * NOTE: Field order is conditional to match kernel ABI.
-+         */
-+        const struct drm_gem_object_funcs *funcs;
-+
-+#ifdef BPM_DRM_GEM_OBJECT_GPUVA_MEMBER_NOT_PRESENT
-+        /**
-+         * @gpuva:
-+         *
-+         * Provides the list of GPU VAs attached to this GEM object.
-+         *
-+         * Drivers should lock list accesses with the GEMs &dma_resv lock
-+         * (&drm_gem_object.resv) or a custom lock if one is provided.
-+         */
-+        struct {
-+                struct list_head list;
- 
--	/**
--	 * @funcs:
--	 *
--	 * Optional GEM object functions. If this is set, it will be used instead of the
--	 * corresponding &drm_driver GEM callbacks.
--	 *
--	 * New drivers should use this.
--	 *
--	 */
--	const struct drm_gem_object_funcs *funcs;
-+#ifdef CONFIG_LOCKDEP
-+                struct lockdep_map *lock_dep_map;
-+#endif
-+        } gpuva;
-+#endif /* BPM_DRM_GEM_OBJECT_GPUVA_MEMBER_NOT_PRESENT */
  
  	/**
+ 	 * @funcs:
+@@ -442,6 +444,39 @@ struct drm_gem_object {
+ 	 */
+ 	const struct drm_gem_object_funcs *funcs;
+ 
++#ifdef BPM_DRM_GEM_OBJECT_GPUVA_MEMBER_NOT_PRESENT
++	/**
++	 * @gpuva: Fields used by GPUVM to manage mappings pointing to this GEM object.
++	 *
++	 * When DRM_GPUVM_IMMEDIATE_MODE is set, this list is protected by the
++	 * mutex. Otherwise, the list is protected by the GEMs &dma_resv lock.
++	 *
++	 * Note that all entries in this list must agree on whether
++	 * DRM_GPUVM_IMMEDIATE_MODE is set.
++	 */
++	struct {
++		/**
++		 * @gpuva.list: list of GPUVM mappings attached to this GEM object.
++		 *
++		 * Drivers should lock list accesses with either the GEMs
++		 * &dma_resv lock (&drm_gem_object.resv) or the
++		 * &drm_gem_object.gpuva.lock mutex.
++		 */
++		struct list_head list;
++
++		/**
++		 * @gpuva.lock: lock protecting access to &drm_gem_object.gpuva.list
++		 * when DRM_GPUVM_IMMEDIATE_MODE is used.
++		 *
++		 * Only used when DRM_GPUVM_IMMEDIATE_MODE is set. It should be
++		 * safe to take this mutex during the fence signalling path, so
++		 * do not allocate memory while holding this lock. Otherwise,
++		 * the &dma_resv lock should be used.
++		 */
++		struct mutex lock;
++	} gpuva;
++#endif /* BPM_DRM_GEM_OBJECT_GPUVA_MEMBER_NOT_PRESENT */
++
+ 	/**
  	 * @lru_node:
+ 	 *
 -- 
-2.43.0
+2.34.1
+

@@ -116,6 +116,7 @@ dnl # SVM-related probes
 	AC_SYSCTL_TABLE_SENTINEL_NOT_PRESENT
 	AC_AUXILIARY_BUS_HELPERS_NOT_PRESENT
 	AC_KVREALLOC_NOPROF_PRESENT
+	AC_XE_PM_UNBOUNDED_BRIDGE_DISABLE_PM
 
 dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/i915_gsc_proxy_mei_interface.h])

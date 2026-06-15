@@ -1,0 +1,23 @@
+Source: intel-xe-dkms
+Section: kernel
+Priority: optional
+Maintainer: Intel Linux Graphics Team <linux-graphics@intel.com>
+Build-Depends:
+ debhelper (>=9),
+ dkms,
+Standards-Version: 4.3.0
+Homepage: https://www.intel.com
+Vcs-Browser: https://www.intel.com
+Vcs-Git: https://www.intel.com
+
+Package: intel-xe-dkms
+Architecture: all
+Depends:
+ dkms,
+ flex,
+ bison,
+ libc6-dev | libc-dev,
+ mawk,
+Provides:
+ xe-modules,
+Description: Out of tree xe driver.

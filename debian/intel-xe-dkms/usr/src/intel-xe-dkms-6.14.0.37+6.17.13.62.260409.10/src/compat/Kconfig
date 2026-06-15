@@ -1,0 +1,93 @@
+#
+# backport Kconfig
+#
+# Some options are user-selectable ("BPAUTO_USERSEL_*")
+#
+# Most options, however, follow a few different schemes:
+#
+# A) An option that is selected by drivers ("select FOO") will be
+#    changed to "select BPAUTO_FOO" (if the option BPAUTO_FOO
+#    exists). The option BPAUTO_FOO then controls setting of the
+#    BPAUTO_BUILD_FOO option, which is a module, like this:
+#
+# config BPAUTO_BUILD_FOO
+#	tristate
+#	# or bool
+#
+#	# not possible on kernel < X.Y, build will fail if any
+#	# drivers are allowed to build on kernels < X.Y
+#	depends on KERNEL_X_Y
+#
+#	# don't build the backport code if FOO is in the kernel
+#	# already, but only if the kernel version is also >= X.Z;
+#	# this is an example of backporting where the version of
+#	# the FOO subsystem that we need is only available from
+#	# kernel version X.Z
+#	depends on !FOO || KERNEL_X_Z
+#
+#	# build if driver needs it (it selects BPAUTO_FOO)
+#	default m if BPAUTO_FOO
+#
+#	# or for build-testing (BPAUTO_USERSEL_BUILD_ALL is enabled)
+#	default m if BPAUTO_USERSEL_BUILD_ALL
+#
+# config BPAUTO_FOO
+#	bool
+#
+# This only works as-is if the kernel code is usable on any version,
+# otherwise the "&& !FOO" part needs to be different.
+#
+#
+# B) An option for code always present on some kernels (e.g. KFIFO).
+#    This simply depends on/sets the default based on the version:
+#
+# config BPAUTO_BUILD_KFIFO
+#	def_bool y
+#	depends on KERNEL_2_6_36
+#
+#
+# C) similarly, a kconfig symbol for an option, e.g.
+#    BPAUTO_OPTION_SOME_FIX (no examples provided) check git log
+#
+#
+# Variations are obviously possible.
+#
+
+config BP_MODULES
+	option modules
+	bool
+	default MODULES
+
+	help
+	This symbol is necessary for the newer kconf tool, it looks
+	for the "option modules" to control the 'm' state.
+
+config BPAUTO_USERSEL_BUILD_ALL
+	bool "Build all compat code"
+	help
+	  This option selects all the compat code options
+	  that would otherwise only be selected by drivers.
+
+	  It's only really useful for compat testing, so
+	  you probably shouldn't enable it.
+
+config KERNEL_6_6
+        def_bool y
+        depends on KERNEL_VERSION >= 394240 && KERNEL_VERSION < 409600
+        help
+          Kernel version 6.6 detected
+
+config KERNEL_6_7
+        def_bool y
+        depends on KERNEL_VERSION >= 409600 && KERNEL_VERSION < 425984
+        help
+          Kernel version 6.7 detected
+
+config BUILD_XE_DRM_GPUVM
+        def_bool y
+        depends on KERNEL_6_6 || KERNEL_6_7
+        help
+          Enable building of XE drm_gpuvm backport module.
+          Only enabled for kernels 6.6 and 6.7 that need GPUVM backport.
+          Disabled for 6.8+ kernels which have native GPUVM support.
+

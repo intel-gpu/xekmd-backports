@@ -1,0 +1,42 @@
+#!/usr/bin/make -f
+
+# export DH_VERBOSE = 1
+include /usr/share/dpkg/pkg-info.mk
+
+_krel=
+tmpdir=debian/intel-xe-dkms
+
+BACKPORT_PACKAGE_NAME=intel-xe-dkms
+BACKPORT_PACKAGE_VERSION=6.14.0.37+6.17.13.62.260409.10
+GENERATED_PKG_FILES= \
+    debian/intel-xe-dkms.install \
+    debian/intel-xe-dkms.dkms
+
+%:
+	dh $@ --with dkms
+
+
+
+override_dh_auto_configure:
+override_dh_auto_build:
+override_dh_auto_test:
+override_dh_auto_install:
+override_dh_auto_clean:
+
+override_dh_clean:
+	rm -f $(GENERATED_PKG_FILES)
+	dh_clean
+
+# Be careful with these names, they must match the pkg name or you'll get an empty .deb
+override_dh_install: debian/intel-xe-dkms.install
+	dh_install --exclude=.gitignore
+
+override_dh_dkms: debian/intel-xe-dkms.dkms
+	dh_dkms -V $(BACKPORT_PACKAGE_VERSION)
+	sed '1d' debian/package.postinst.in >> debian/intel-xe-dkms.postinst.debhelper
+	sed '1d' debian/package.postrm.in >> debian/intel-xe-dkms.prerm.debhelper
+
+$(GENERATED_PKG_FILES) : $(GENERATED_PKG_FILES:=.in) debian/rules
+	sed -e 's,@BACKPORT_PACKAGE_NAME@,$(BACKPORT_PACKAGE_NAME),g' \
+	    -e 's,@BACKPORT_PACKAGE_VERSION@,$(BACKPORT_PACKAGE_VERSION),g' \
+	    <$(@:=.in) >$@

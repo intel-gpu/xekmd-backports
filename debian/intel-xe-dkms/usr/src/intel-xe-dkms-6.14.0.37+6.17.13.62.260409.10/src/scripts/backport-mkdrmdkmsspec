@@ -1,0 +1,163 @@
+#!/bin/sh
+#
+# Output a .spec file for RPM DKMS package
+#
+
+PKG_NAME="intel-xe"
+PKG_VER="1.0"
+REL_NAME="1"
+DISTRO_SUFFIX=""
+PKG_TYPE=""
+DKMS=""
+BIN="DEL"
+
+helpFunction()
+{
+	echo ""
+	echo "Usage: $0 -n packagename -v packageversion -r releaseversion -d distrosuffix -z Package Type"
+	echo -e "\t-n packagename"
+	echo -e "\t-v packageversion"
+	echo -e "\t-r releaseversion"
+	echo -e "\t-d distrosuffix (e.g., el10_1)"
+	echo -e "\t-z Package Type : binary/dkms"
+	exit 1
+}
+
+while getopts "n:v:r:d:z:" opt
+do
+	case "$opt" in
+		n ) PKG_NAME="$OPTARG" ;;
+		v ) PKG_VER="$OPTARG" ;;
+		r ) REL_NAME="$OPTARG" ;;
+		d ) DISTRO_SUFFIX="$OPTARG" ;;
+		z )
+			PKG_TYPE="$OPTARG"
+			if [ "$PKG_TYPE" = "binary" ]; then
+				DKMS=DEL
+				BIN=
+			else
+				DKMS=
+				BIN=DEL
+			fi
+			;;
+		* ) helpFunction ;;
+	esac
+done
+
+# Construct release string with distro suffix if provided
+if [ -n "$DISTRO_SUFFIX" ]; then
+	RELEASE_STR="${REL_NAME}.${DISTRO_SUFFIX}"
+else
+	RELEASE_STR="${REL_NAME}"
+fi
+
+
+sed -e 's/^[[:space:]]*//' -e '/^DEL/d' <<EOF
+	Name:           $PKG_NAME
+	Version:        $PKG_VER
+	Release:        $RELEASE_STR
+	Summary:        Intel Xe DRM Driver
+	License:        MIT/GPL
+	Packager:       Intel Linux Graphics Team <linux-graphics@intel.com>
+	BuildArch:      x86_64
+
+	$DKMS %define __os_install_post %{nil}
+	$DKMS %define debug_package %{nil}
+
+	$BIN BuildRequires: gcc, make, kernel-devel
+
+	Requires: dkms, kernel-devel, gcc, make, flex, bison
+
+	Provides: xe-modules
+
+	%description
+	Out of tree xe driver.
+
+	%build
+	$BIN \$(MAKE) modules
+
+	%install
+	mkdir -p %{buildroot}/usr/src/%{name}-%{version}
+	$DKMS cp -r %{_sourcedir}/src %{buildroot}/usr/src/%{name}-%{version}/ 2>/dev/null || true
+	$DKMS cp -r %{_sourcedir}/m4 %{buildroot}/usr/src/%{name}-%{version}/ 2>/dev/null || true
+	$DKMS cp -r %{_sourcedir}/debian %{buildroot}/usr/src/%{name}-%{version}/ 2>/dev/null || true
+	$DKMS cp %{_sourcedir}/Makefile* %{_sourcedir}/configure* %{_sourcedir}/aclocal.m4 %{buildroot}/usr/src/%{name}-%{version}/ 2>/dev/null || true
+	$DKMS cp %{_sourcedir}/AUTHORS %{_sourcedir}/ChangeLog %{_sourcedir}/COPYING %{_sourcedir}/INSTALL %{_sourcedir}/NEWS %{_sourcedir}/README.md %{_sourcedir}/compile.sh %{buildroot}/usr/src/%{name}-%{version}/ 2>/dev/null || true
+	$DKMS cp -r %{_sourcedir}/src/backport-include %{buildroot}/usr/src/%{name}-%{version}/ 2>/dev/null || true
+	$DKMS cp -r %{_sourcedir}/src/include %{buildroot}/usr/src/%{name}-%{version}/ 2>/dev/null || true
+	$DKMS cp %{_sourcedir}/rpm/%{name}.dkms.conf %{buildroot}/usr/src/%{name}-%{version}/dkms.conf 2>/dev/null || true
+	$BIN \$(MAKE) modules_install INSTALL_MOD_PATH=%{buildroot}
+
+	%post
+	$DKMS dkms add -m $PKG_NAME -v $PKG_VER --rpm_safe_upgrade || true
+	$DKMS CREATE_INITRD="0"
+	$DKMS for i in /lib/modules/[5-7]*; do
+	$DKMS   H="\$i/build"
+	$DKMS   K=\$(echo \$i | cut -d '/' -f 4)
+	$DKMS   if [ -d /usr/src/kernels/\$K ]; then
+	$DKMS     KDIR=/usr/src/kernels/\$K
+	$DKMS   elif [ -d \$H ]; then
+	$DKMS     KDIR=\$H
+	$DKMS   else
+	$DKMS     KDIR=""
+	$DKMS   fi
+	$DKMS   if [ -n "\$KDIR" ]; then
+	$DKMS     dkms build -m $PKG_NAME -v $PKG_VER --kernelsourcedir "\$KDIR" --rpm_safe_upgrade || true
+	$DKMS     dkms install --force -m $PKG_NAME -v $PKG_VER --kernelsourcedir "\$KDIR" --rpm_safe_upgrade || true
+	$DKMS     echo -e "Creating initramfs for :\$K"
+	$DKMS     if [ -e /boot/vmlinuz-\$K ] && [ -e /sbin/depmod ] && [ -x %{_bindir}/dracut ]; then
+	$DKMS       /sbin/depmod -a "\$K"
+	$DKMS       if [ -e /etc/redhat-release ] || [ -e /etc/fedora-release ]; then
+	$DKMS         %{_bindir}/dracut -f --kver "\$K"
+	$DKMS       else
+	$DKMS         CREATE_INITRD="1"
+	$DKMS       fi
+	$DKMS     else
+	$DKMS       echo -e "Unable to create initramfs for :\$K"
+	$DKMS     fi
+	$DKMS   else
+	$DKMS     echo "SKIP DKMS Installation: kernel headers not available for \$K"
+	$DKMS   fi
+	$DKMS done
+	$DKMS if [ "\$CREATE_INITRD" == "1" ]; then
+	$DKMS   /sbin/mkinitrd
+	$DKMS fi
+
+	%preun
+	$DKMS CREATE_INITRD="0"
+	$DKMS for i in /var/lib/dkms/$PKG_NAME/$PKG_VER/[^a-zA-Z]*; do
+	$DKMS   if [[ \$i = *^* ]]; then continue; fi
+	$DKMS   K=\$(echo \$i | cut -d '/' -f 7)
+	$DKMS   if [ -d /usr/src/kernels/\$K ]; then
+	$DKMS     KDIR=/usr/src/kernels/\$K
+	$DKMS   elif [ -d /lib/modules/\$K/build ]; then
+	$DKMS     KDIR=/lib/modules/\$K/build
+	$DKMS   else
+	$DKMS     KDIR=""
+	$DKMS   fi
+	$DKMS   if [ -n "\$KDIR" ]; then
+	$DKMS     dkms uninstall -m $PKG_NAME -v $PKG_VER --kernelsourcedir "\$KDIR" --rpm_safe_upgrade || true
+	$DKMS   else
+	$DKMS     dkms uninstall -m $PKG_NAME -v $PKG_VER -k \$K --rpm_safe_upgrade || true
+	$DKMS   fi
+	$DKMS   echo -e "Creating initramfs for :\$K"
+	$DKMS   if [ -e /boot/vmlinuz-\$K ] && [ -e /sbin/depmod ] && [ -x %{_bindir}/dracut ]; then
+	$DKMS     /sbin/depmod -a "\$K"
+	$DKMS     if [ -e /etc/redhat-release ] || [ -e /etc/fedora-release ]; then
+	$DKMS       %{_bindir}/dracut -f --kver "\$K"
+	$DKMS     else
+	$DKMS       CREATE_INITRD="1"
+	$DKMS     fi
+	$DKMS   else
+	$DKMS     echo -e "Unable to create initramfs for :\$K"
+	$DKMS   fi
+	$DKMS done
+	$DKMS if [ "\$CREATE_INITRD" == "1" ]; then
+	$DKMS   /sbin/mkinitrd
+	$DKMS fi
+	$DKMS dkms remove -m $PKG_NAME -v $PKG_VER --all --rpm_safe_upgrade || true
+
+	%files
+	$DKMS /usr/src/%{name}-%{version}/
+	$BIN /lib/modules/
+EOF

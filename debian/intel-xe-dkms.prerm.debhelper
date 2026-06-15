@@ -1,0 +1,36 @@
+# Automatically added by dh_dkms/3.0.11-1ubuntu13
+DKMS_NAME=intel-xe-dkms
+DKMS_VERSION=6.14.0.37+6.17.13.62.260409.10
+
+case "$1" in
+    remove|upgrade|deconfigure)
+      if [  "$(dkms status -m $DKMS_NAME -v $DKMS_VERSION)" ]; then
+         dkms remove -m $DKMS_NAME -v $DKMS_VERSION --all
+      fi
+    ;;
+esac
+# End automatically added section
+#
+#postrm script for intel-xe-dkms
+
+set -e
+
+#update initramfs
+case "$1" in
+    remove)
+	depmod -a
+	if [ -x /usr/sbin/update-initramfs ]; then
+	    /usr/sbin/update-initramfs -u
+	fi
+    ;;
+
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+    ;;
+
+    *)
+	echo "postrm called with unknown argument \`$1'" >&2
+	exit 1
+    ;;
+esac
+
+exit 0

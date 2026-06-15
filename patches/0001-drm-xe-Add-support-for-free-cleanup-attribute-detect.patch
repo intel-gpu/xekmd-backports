@@ -18,13 +18,21 @@ autotools to determine if __free(bitmap) is supported by the target kernel.
 If available, use the automatic cleanup attribute else fall back to standard
 variable declaration.
 
+v2: By Jagadeesh
+When falling back to the standard declaration the bitmap must be released
+manually, otherwise the memory allocated by bitmap_zalloc() leaks on every
+invocation of __pf_show_provisioning_lmem() (reported by kmemleak via
+sriov_numvfs_store() -> xe_pci_sriov_configure()). Add a common exit path
+that frees the bitmap when the cleanup attribute is not present.
+
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
 ---
- drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 6 +++++-
- 1 file changed, 5 insertions(+), 1 deletion(-)
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-index 6654ed7..9687445 100644
+index b44eed2..e95b80c 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 @@ -1844,7 +1844,11 @@ static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
@@ -40,6 +48,23 @@ index 6654ed7..9687445 100644
  	unsigned int weight;
  	unsigned int n;
  
+@@ -1858,11 +1862,15 @@ static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
+ 
+ 	weight = bitmap_weight(bitmap, allvfs);
+ 	if (!weight)
+-		return;
++		goto out;
+ 
+ 	xe_gt_sriov_info(gt, "VF%s%*pbl %s provisioned with VRAM\n",
+ 			 weight > 1 ? "s " : "", allvfs, bitmap,
+ 			 provisioned ? "already" : "not");
++out:
++#ifdef BPM_FREE_ATTRIBUTE_NOT_PRESENT
++	bitmap_free(bitmap);
++#endif
+ }
+ 
+ static void pf_show_all_provisioned_lmem(struct xe_gt *gt)
 -- 
 2.43.0
 

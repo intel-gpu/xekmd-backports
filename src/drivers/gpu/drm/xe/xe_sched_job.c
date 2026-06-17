@@ -113,8 +113,12 @@ struct xe_sched_job *xe_sched_job_create(struct xe_exec_queue *q,
 	kref_init(&job->refcount);
 	xe_exec_queue_get(job->q);
 
+#ifdef BPM_DRM_FILE_CLIENT_ID_NOT_PRESENT
+	err = drm_sched_job_init(&job->drm, q->entity, 1, NULL, 0);
+#else
 	err = drm_sched_job_init(&job->drm, q->entity, 1, NULL,
 				 q->xef ? q->xef->drm->client_id : 0);
+#endif
 	if (err)
 		goto err_free;
 

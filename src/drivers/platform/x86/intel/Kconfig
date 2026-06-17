@@ -3,24 +3,25 @@
 # Intel x86 Platform Specific Drivers
 #
 
-source "drivers/platform/x86/intel/atomisp2/Kconfig"
-source "drivers/platform/x86/intel/ifs/Kconfig"
-source "drivers/platform/x86/intel/int1092/Kconfig"
-source "drivers/platform/x86/intel/int3472/Kconfig"
-source "drivers/platform/x86/intel/pmc/Kconfig"
+#source "drivers/platform/x86/intel/atomisp2/Kconfig"
+#source "drivers/platform/x86/intel/ifs/Kconfig"
+#source "drivers/platform/x86/intel/int1092/Kconfig"
+#source "drivers/platform/x86/intel/int3472/Kconfig"
+#source "drivers/platform/x86/intel/pmc/Kconfig"
 source "drivers/platform/x86/intel/pmt/Kconfig"
-source "drivers/platform/x86/intel/speed_select_if/Kconfig"
-source "drivers/platform/x86/intel/telemetry/Kconfig"
-source "drivers/platform/x86/intel/wmi/Kconfig"
-source "drivers/platform/x86/intel/uncore-frequency/Kconfig"
+#source "drivers/platform/x86/intel/speed_select_if/Kconfig"
+#source "drivers/platform/x86/intel/telemetry/Kconfig"
+#source "drivers/platform/x86/intel/wmi/Kconfig"
+#source "drivers/platform/x86/intel/uncore-frequency/Kconfig"
 
 
 config INTEL_HID_EVENT
 	tristate "Intel HID Event"
+	depends on m
 	depends on ACPI
 	depends on INPUT
 	depends on I2C
-	select INPUT_SPARSEKMAP
+	depends on INPUT_SPARSEKMAP
 	help
 	  This driver provides support for the Intel HID Event hotkey interface.
 	  Some laptops require this driver for hotkey support.
@@ -30,10 +31,11 @@ config INTEL_HID_EVENT
 
 config INTEL_VBTN
 	tristate "Intel Virtual Button"
+	depends on m
 	depends on ACPI
 	depends on INPUT
 	depends on I2C
-	select INPUT_SPARSEKMAP
+	depends on INPUT_SPARSEKMAP
 	help
 	  This driver provides support for the Intel Virtual Button interface.
 	  Some laptops require this driver for power button support.
@@ -43,8 +45,9 @@ config INTEL_VBTN
 
 config INTEL_INT0002_VGPIO
 	tristate "Intel ACPI INT0002 Virtual GPIO driver"
+	depends on m
 	depends on GPIOLIB && ACPI && PM_SLEEP
-	select GPIOLIB_IRQCHIP
+	depends on GPIOLIB_IRQCHIP
 	help
 	  Some peripherals on Bay Trail and Cherry Trail platforms signal a
 	  Power Management Event (PME) to the Power Management Controller (PMC)
@@ -62,6 +65,7 @@ config INTEL_INT0002_VGPIO
 
 config INTEL_OAKTRAIL
 	tristate "Intel Oaktrail Platform Extras"
+	depends on m
 	depends on ACPI_EC
 	depends on ACPI_VIDEO || ACPI_VIDEO=n
 	depends on RFKILL && BACKLIGHT_CLASS_DEVICE && ACPI
@@ -72,9 +76,10 @@ config INTEL_OAKTRAIL
 
 config INTEL_BXTWC_PMIC_TMU
 	tristate "Intel Broxton Whiskey Cove TMU Driver"
+	depends on m
 	depends on INTEL_SOC_PMIC_BXTWC
 	depends on MFD_INTEL_PMC_BXT
-	select REGMAP
+	depends on REGMAP
 	help
 	  Select this driver to use Intel Broxton Whiskey Cove PMIC TMU feature.
 	  This driver enables the alarm wakeup functionality in the TMU unit of
@@ -82,6 +87,7 @@ config INTEL_BXTWC_PMIC_TMU
 
 config INTEL_BYTCRC_PWRSRC
 	tristate "Intel Bay Trail Crystal Cove power source driver"
+	depends on m
 	depends on INTEL_SOC_PMIC
 	depends on POWER_SUPPLY
 	help
@@ -93,6 +99,7 @@ config INTEL_BYTCRC_PWRSRC
 
 config INTEL_CHTDC_TI_PWRBTN
 	tristate "Intel Cherry Trail Dollar Cove TI power button driver"
+	depends on m
 	depends on INTEL_SOC_PMIC_CHTDC_TI
 	depends on INPUT
 	help
@@ -104,6 +111,7 @@ config INTEL_CHTDC_TI_PWRBTN
 
 config INTEL_CHTWC_INT33FE
 	tristate "Intel Cherry Trail Whiskey Cove ACPI INT33FE Driver"
+	depends on m
 	depends on X86 && ACPI && I2C && REGULATOR
 	depends on CHARGER_BQ24190=y || (CHARGER_BQ24190=m && m)
 	depends on USB_ROLES_INTEL_XHCI=y || (USB_ROLES_INTEL_XHCI=m && m)
@@ -124,6 +132,7 @@ config INTEL_CHTWC_INT33FE
 
 config INTEL_ISHTP_ECLITE
 	tristate "Intel ISHTP eclite controller Driver"
+	depends on m
 	depends on INTEL_ISH_HID
 	depends on ACPI
 	help
@@ -140,6 +149,7 @@ config INTEL_ISHTP_ECLITE
 
 config INTEL_MRFLD_PWRBTN
 	tristate "Intel Merrifield Basin Cove power button driver"
+	depends on m
 	depends on INTEL_SOC_PMIC_MRFLD
 	depends on INPUT
 	help
@@ -151,12 +161,14 @@ config INTEL_MRFLD_PWRBTN
 
 config INTEL_PUNIT_IPC
 	tristate "Intel P-Unit IPC Driver"
+	depends on m
 	help
 	  This driver provides support for Intel P-Unit Mailbox IPC mechanism,
 	  which is used to bridge the communications between kernel and P-Unit.
 
 config INTEL_RST
 	tristate "Intel Rapid Start Technology Driver"
+	depends on m
 	depends on ACPI
 	help
 	  This driver provides support for modifying parameters on systems
@@ -169,6 +181,7 @@ config INTEL_RST
 
 config INTEL_SDSI
 	tristate "Intel On Demand (Software Defined Silicon) Driver"
+	depends on m
 	depends on INTEL_VSEC
 	depends on X86_64
 	help
@@ -181,6 +194,7 @@ config INTEL_SDSI
 
 config INTEL_SMARTCONNECT
 	tristate "Intel Smart Connect disabling driver"
+	depends on m
 	depends on ACPI
 	help
 	  Intel Smart Connect is a technology intended to permit devices to
@@ -195,9 +209,11 @@ config INTEL_SMARTCONNECT
 
 config INTEL_TPMI_POWER_DOMAINS
 	tristate
+	depends on m
 
 config INTEL_TPMI
 	tristate "Intel Topology Aware Register and PM Capsule Interface (TPMI)"
+	depends on m
 	depends on INTEL_VSEC
 	depends on X86_64
 	select INTEL_TPMI_POWER_DOMAINS
@@ -212,6 +228,7 @@ config INTEL_TPMI
 
 config INTEL_PLR_TPMI
         tristate "Intel SoC TPMI Power Limit Reasons driver"
+        depends on m
         depends on INTEL_TPMI
         help
           This driver provides the TPMI power limit reasons status information
@@ -230,8 +247,9 @@ config INTEL_TURBO_MAX_3
 
 config INTEL_VSEC
 	tristate "Intel Vendor Specific Extended Capabilities Driver"
+	depends on m
 	depends on PCI
-	select AUXILIARY_BUS
+	depends on AUXILIARY_BUS
 	help
 	  Adds support for feature drivers exposed using Intel PCIe VSEC and
 	  DVSEC.

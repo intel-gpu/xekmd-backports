@@ -14,6 +14,7 @@ subdir-ccflags-y += -I$(obj) -I$(src)
 # generated sources
 
 hostprogs := xe_gen_wa_oob
+HOSTCFLAGS_xe_gen_wa_oob.o := -std=gnu11
 generated_oob := $(obj)/generated/xe_wa_oob.c $(obj)/generated/xe_wa_oob.h
 quiet_cmd_wa_oob = GEN     $(notdir $(generated_oob))
       cmd_wa_oob = mkdir -p $(@D); $^ $(generated_oob)

@@ -1862,11 +1862,15 @@ static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
 
 	weight = bitmap_weight(bitmap, allvfs);
 	if (!weight)
-		return;
+		goto out;
 
 	xe_gt_sriov_info(gt, "VF%s%*pbl %s provisioned with VRAM\n",
 			 weight > 1 ? "s " : "", allvfs, bitmap,
 			 provisioned ? "already" : "not");
+out:
+#ifdef BPM_FREE_ATTRIBUTE_NOT_PRESENT
+	bitmap_free(bitmap);
+#endif
 }
 
 static void pf_show_all_provisioned_lmem(struct xe_gt *gt)

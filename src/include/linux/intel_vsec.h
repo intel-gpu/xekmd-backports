@@ -197,7 +197,7 @@ static inline struct intel_vsec_device *auxdev_to_ivdev(struct auxiliary_device 
 	return container_of(auxdev, struct intel_vsec_device, auxdev);
 }
 
-#if IS_ENABLED(CONFIG_INTEL_VSEC)
+#if IS_ENABLED(CPTCFG_INTEL_VSEC)
 int intel_vsec_register(struct pci_dev *pdev,
 			 struct intel_vsec_platform_info *info);
 int intel_vsec_set_mapping(struct oobmsm_plat_info *plat_info,

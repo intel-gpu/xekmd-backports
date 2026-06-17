@@ -149,6 +149,7 @@ static void drm_sched_fence_release_finished(struct dma_fence *f)
 	dma_fence_put(&fence->scheduled);
 }
 
+#ifndef BPM_DMA_FENCE_SET_DEADLINE_NOT_PRESENT
 static void drm_sched_fence_set_deadline_finished(struct dma_fence *f,
 						  ktime_t deadline)
 {
@@ -179,6 +180,7 @@ static void drm_sched_fence_set_deadline_finished(struct dma_fence *f,
 	if (parent)
 		dma_fence_set_deadline(parent, deadline);
 }
+#endif
 
 static const struct dma_fence_ops drm_sched_fence_ops_scheduled = {
 	.get_driver_name = drm_sched_fence_get_driver_name,
@@ -190,7 +192,9 @@ static const struct dma_fence_ops drm_sched_fence_ops_finished = {
 	.get_driver_name = drm_sched_fence_get_driver_name,
 	.get_timeline_name = drm_sched_fence_get_timeline_name,
 	.release = drm_sched_fence_release_finished,
+#ifndef BPM_DMA_FENCE_SET_DEADLINE_NOT_PRESENT
 	.set_deadline = drm_sched_fence_set_deadline_finished,
+#endif
 };
 
 struct drm_sched_fence *to_drm_sched_fence(struct dma_fence *f)

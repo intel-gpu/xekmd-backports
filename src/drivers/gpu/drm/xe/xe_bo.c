@@ -2171,7 +2171,12 @@ struct xe_bo *xe_bo_init_locked(struct xe_device *xe, struct xe_bo *bo,
 	INIT_LIST_HEAD(&bo->vram_userfault_link);
 
 	drm_gem_private_object_init(&xe->drm, &bo->ttm.base, size);
-
+#ifdef BPM_DRM_GEM_OBJECT_GPUVA_MEMBER_NOT_PRESENT
+	/* v5.15: initialize backport-added gpuva/lru fields. */
+        INIT_LIST_HEAD(&bo->ttm.base.gpuva.list);
+        INIT_LIST_HEAD(&bo->ttm.base.lru_node);
+        bo->ttm.base.lru = NULL;
+#endif
 	if (resv) {
 		ctx.allow_res_evict = !(flags & XE_BO_FLAG_NO_RESV_EVICT);
 		ctx.resv = resv;

@@ -6,6 +6,7 @@
 #include "xe_gsc_submit.h"
 
 #include <linux/poison.h>
+#include <linux/random.h>
 
 #include "abi/gsc_command_header_abi.h"
 #include "xe_assert.h"

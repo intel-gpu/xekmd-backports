@@ -62,13 +62,16 @@
 #define drm_gpuva_map LINUX_BACKPORT(drm_gpuva_map)
 #define drm_gpuva_remap LINUX_BACKPORT(drm_gpuva_remap)
 #define drm_gpuva_unmap LINUX_BACKPORT(drm_gpuva_unmap)
+#define drm_gpuva_flags LINUX_BACKPORT(drm_gpuva_flags)
+#define DRM_GPUVA_INVALIDATED LINUX_BACKPORT(DRM_GPUVA_INVALIDATED)
+#define DRM_GPUVA_SPARSE LINUX_BACKPORT(DRM_GPUVA_SPARSE)
+#define DRM_GPUVA_USERBITS LINUX_BACKPORT(DRM_GPUVA_USERBITS)
 #endif
 
 struct drm_gpuvm;
 struct drm_gpuvm_bo;
 struct drm_gpuvm_ops;
 
-#ifndef BPM_DRM_GPUVM_RENAMING_SYMBOLS
 /**
  * enum drm_gpuva_flags - flags for struct drm_gpuva
  */
@@ -92,7 +95,6 @@ enum drm_gpuva_flags {
 	 */
 	DRM_GPUVA_USERBITS = (1 << 2),
 };
-#endif
 
 /**
  * struct drm_gpuva - structure to track a GPU VA mapping

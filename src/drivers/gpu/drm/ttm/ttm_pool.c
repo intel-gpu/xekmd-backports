@@ -1354,7 +1354,11 @@ int ttm_pool_mgr_init(unsigned long num_pages)
 #endif
 
 #ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
+#ifdef BPM_REGISTER_SHRINKER_ARG2_NOT_PRESENT
+        register_shrinker(&mm_shrinker);
+#else
 	register_shrinker(&mm_shrinker, "drm-ttm_pool");
+#endif
 #else
 	mm_shrinker = shrinker_alloc(0, "drm-ttm_pool");
 	if (!mm_shrinker)

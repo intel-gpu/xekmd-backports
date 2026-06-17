@@ -120,8 +120,12 @@ xe_tlb_inval_job_create(struct xe_exec_queue *q, struct xe_tlb_inval *tlb_inval,
 	}
 	job->fence = &ifence->base;
 
+#ifdef BPM_DRM_FILE_CLIENT_ID_NOT_PRESENT
+	err = drm_sched_job_init(&job->dep.drm, entity, 1, NULL, 0);
+#else
 	err = drm_sched_job_init(&job->dep.drm, entity, 1, NULL,
 				 q->xef ? q->xef->drm->client_id : 0);
+#endif
 	if (err)
 		goto err_fence;
 

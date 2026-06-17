@@ -505,7 +505,7 @@ static const struct vfio_device_ops xe_vfio_pci_ops = {
 	.mmap = vfio_pci_core_mmap,
 	.request = vfio_pci_core_request,
 	.match = vfio_pci_core_match,
-#ifndef BPM_MATCH_TOKEN_UUID_NOT_PRESENT
+#if !defined(BPM_MATCH_TOKEN_UUID_NOT_PRESENT) || defined(CPTCFG_BUILD_FULL_VFIO)
 	.match_token_uuid = vfio_pci_core_match_token_uuid,
 #endif
 	.bind_iommufd = vfio_iommufd_physical_bind,
@@ -561,7 +561,9 @@ static struct pci_driver xe_vfio_pci_driver = {
 	.probe = xe_vfio_pci_probe,
 	.remove = xe_vfio_pci_remove,
 	.err_handler = &xe_vfio_pci_err_handlers,
+#ifndef BPM_DRIVER_MANAGED_DMA_NOT_PRESENT
 	.driver_managed_dma = true,
+#endif
 };
 module_pci_driver(xe_vfio_pci_driver);
 

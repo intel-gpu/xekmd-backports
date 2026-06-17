@@ -151,9 +151,9 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
 	i=\$((i + 1))
 
 	if [ "\$(select_drm_gpuvm)" = "true" ]; then
-		BUILT_MODULE_NAME[\$i]="drm_gpuvm"
-		BUILT_MODULE_LOCATION[\$i]="src"
-		DEST_MODULE_LOCATION[\$i]="/updates"
+		BUILT_MODULE_NAME[i]="drm_gpuvm"
+		BUILT_MODULE_LOCATION[i]="src"
+		DEST_MODULE_LOCATION[i]="/updates"
 		i=\$((i + 1))
 	fi
 

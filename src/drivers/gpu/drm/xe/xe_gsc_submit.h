@@ -8,6 +8,13 @@
 
 #include <linux/types.h>
 
+#ifdef HAVE_LINUX_IOSYS_MAP_H
+#include <linux/iosys-map.h>
+#else
+#include <linux/dma-buf-map.h>
+#define iosys_map dma_buf_map
+#endif
+
 struct iosys_map;
 struct xe_device;
 struct xe_gsc;

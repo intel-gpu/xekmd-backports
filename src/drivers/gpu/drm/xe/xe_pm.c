@@ -813,8 +813,12 @@ void xe_pm_assert_unbounded_bridge(struct xe_device *xe)
 		return;
 
 	if (!bridge->driver) {
+#ifdef BPM_XE_PM_UNBOUNDED_BRIDGE_DISABLE_PM
 		drm_warn(&xe->drm, "unbounded parent pci bridge, device won't support any PM support.\n");
 		device_set_pm_not_required(&pdev->dev);
+#else
+		drm_dbg(&xe->drm, "unbounded parent pci bridge, device won't support any PM support.\n");
+#endif
 	}
 }
 

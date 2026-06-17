@@ -5,6 +5,7 @@
 
 #include <linux/bitmap.h>
 #include <linux/mutex.h>
+#include <linux/find.h>
 
 #include <drm/drm_managed.h>
 

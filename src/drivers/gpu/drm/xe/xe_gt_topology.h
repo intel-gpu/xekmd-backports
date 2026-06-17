@@ -6,6 +6,10 @@
 #ifndef _XE_GT_TOPOLOGY_H_
 #define _XE_GT_TOPOLOGY_H_
 
+#ifdef BPM_DRM_MEMORY_STATS_NOT_PRESENT
+#include <linux/find.h>
+#endif
+
 #include "xe_gt_types.h"
 
 /*

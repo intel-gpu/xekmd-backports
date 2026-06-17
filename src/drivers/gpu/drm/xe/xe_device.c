@@ -384,7 +384,7 @@ static const struct file_operations xe_driver_fops = {
 	.read = drm_read,
 	.compat_ioctl = xe_drm_compat_ioctl,
 	.llseek = noop_llseek,
-#ifdef CONFIG_PROC_FS
+#if defined(CONFIG_PROC_FS) && !defined(BPM_DRM_SHOW_FDINFO_NOT_PRESENT)
 	.show_fdinfo = drm_show_fdinfo,
 #endif
 #ifndef BPM_FOP_UNSIGNED_OFFSET_NOT_PRESENT
@@ -405,9 +405,13 @@ static struct drm_driver driver = {
 
 	.gem_prime_import = xe_gem_prime_import,
 
+#ifndef BPM_DRM_DRIVER_PRIME_CALLBACKS_NOT_PRESENT
+	.prime_handle_to_fd = drm_gem_prime_handle_to_fd,
+	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
+#endif
 	.dumb_create = xe_bo_dumb_create,
 	.dumb_map_offset = drm_gem_ttm_dumb_map_offset,
-#ifdef CONFIG_PROC_FS
+#if defined(CONFIG_PROC_FS) && !defined(BPM_DRM_SHOW_FDINFO_NOT_PRESENT)
 	.show_fdinfo = xe_drm_client_fdinfo,
 #endif
 	.ioctls = xe_ioctls,

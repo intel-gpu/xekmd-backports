@@ -397,32 +397,53 @@ struct drm_gem_object {
 	 */
 	struct dma_resv _resv;
 
-	/**
-	 * @gpuva:
-	 *
-	 * Provides the list of GPU VAs attached to this GEM object.
-	 *
-	 * Drivers should lock list accesses with the GEMs &dma_resv lock
-	 * (&drm_gem_object.resv) or a custom lock if one is provided.
-	 */
-	struct {
-		struct list_head list;
+#ifndef BPM_DRM_GEM_OBJECT_GPUVA_MEMBER_NOT_PRESENT
+        /**
+         * @gpuva:
+         *
+         * Provides the list of GPU VAs attached to this GEM object.
+         *
+         * Drivers should lock list accesses with the GEMs &dma_resv lock
+         * (&drm_gem_object.resv) or a custom lock if one is provided.
+         */
+        struct {
+                struct list_head list;
 
 #ifdef CONFIG_LOCKDEP
-		struct lockdep_map *lock_dep_map;
+                struct lockdep_map *lock_dep_map;
 #endif
-	} gpuva;
+        } gpuva;
+#endif /* !BPM_DRM_GEM_OBJECT_GPUVA_MEMBER_NOT_PRESENT */
 
-	/**
-	 * @funcs:
-	 *
-	 * Optional GEM object functions. If this is set, it will be used instead of the
-	 * corresponding &drm_driver GEM callbacks.
-	 *
-	 * New drivers should use this.
-	 *
-	 */
-	const struct drm_gem_object_funcs *funcs;
+        /**
+         * @funcs:
+         *
+         * Optional GEM object functions. If this is set, it will be used instead of the
+         * corresponding &drm_driver GEM callbacks.
+         *
+         * New drivers should use this.
+         *
+		 * NOTE: Field order is conditional to match kernel ABI.
+         */
+        const struct drm_gem_object_funcs *funcs;
+
+#ifdef BPM_DRM_GEM_OBJECT_GPUVA_MEMBER_NOT_PRESENT
+        /**
+         * @gpuva:
+         *
+         * Provides the list of GPU VAs attached to this GEM object.
+         *
+         * Drivers should lock list accesses with the GEMs &dma_resv lock
+         * (&drm_gem_object.resv) or a custom lock if one is provided.
+         */
+        struct {
+                struct list_head list;
+
+#ifdef CONFIG_LOCKDEP
+                struct lockdep_map *lock_dep_map;
+#endif
+        } gpuva;
+#endif /* BPM_DRM_GEM_OBJECT_GPUVA_MEMBER_NOT_PRESENT */
 
 	/**
 	 * @lru_node:

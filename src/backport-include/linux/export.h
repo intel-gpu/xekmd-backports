@@ -7,7 +7,11 @@
 
 #ifdef BPM_MODULE_IMPORT_TO_STRING_LITERAL_PRESENT
 #undef EXPORT_SYMBOL_NS_GPL
+#ifdef __EXPORT_SYMBOL_REF
 #define EXPORT_SYMBOL_NS_GPL(sym, ns) __EXPORT_SYMBOL(sym, "GPL", ns)
+#else
+#define EXPORT_SYMBOL_NS_GPL(sym, ns) __EXPORT_SYMBOL(sym, "_gpl", ns)
+#endif
 #endif
 
 #ifndef EXPORT_SYMBOL_NS_GPL
@@ -15,7 +19,11 @@
 #endif
 
 #ifdef BPM_EXPORT_SYMBOL_FOR_MODULES_NOT_PRESENT
+#ifdef __EXPORT_SYMBOL_REF
 #define EXPORT_SYMBOL_FOR_MODULES(sym, mods) __EXPORT_SYMBOL(sym, "GPL", mods)
+#else
+#define EXPORT_SYMBOL_FOR_MODULES(sym, mods) __EXPORT_SYMBOL(sym, "_gpl", mods)
+#endif
 #endif
 
 #endif /* _COMPAT_LINUX_EXPORT_H */

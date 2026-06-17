@@ -2,6 +2,11 @@
 
 #include <linux/export.h>
 #include <linux/module.h>
+#ifndef HAVE_LINUX_IOSYS_MAP_H
+#include <linux/dma-buf-map.h>
+#else
+#include <linux/iosys-map.h>
+#endif
 
 #include <drm/drm_gem_ttm_helper.h>
 #include <drm/ttm/ttm_placement.h>
@@ -63,8 +68,13 @@ EXPORT_SYMBOL(drm_gem_ttm_print_info);
  * Returns:
  * 0 on success, or a negative errno code otherwise.
  */
+#ifndef HAVE_LINUX_IOSYS_MAP_H
+int drm_gem_ttm_vmap(struct drm_gem_object *gem,
+		     struct dma_buf_map *map)
+#else
 int drm_gem_ttm_vmap(struct drm_gem_object *gem,
 		     struct iosys_map *map)
+#endif
 {
 	struct ttm_buffer_object *bo = drm_gem_ttm_of_gem(gem);
 
@@ -80,8 +90,13 @@ EXPORT_SYMBOL(drm_gem_ttm_vmap);
  * Unmaps a GEM object with ttm_bo_vunmap(). This function can be used as
  * &drm_gem_object_funcs.vmap callback.
  */
+#ifndef HAVE_LINUX_IOSYS_MAP_H
+void drm_gem_ttm_vunmap(struct drm_gem_object *gem,
+			struct dma_buf_map *map)
+#else
 void drm_gem_ttm_vunmap(struct drm_gem_object *gem,
 			struct iosys_map *map)
+#endif
 {
 	struct ttm_buffer_object *bo = drm_gem_ttm_of_gem(gem);
 

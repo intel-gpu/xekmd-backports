@@ -102,7 +102,7 @@ obj-$(CONFIG_DRM_PANEL_BACKLIGHT_QUIRKS) += drm_panel_backlight_quirks.o
 # Memory-management helpers
 #
 #
-obj-$(CONFIG_DRM_EXEC) += drm_exec.o
+obj-$(CPTCFG_DRM_EXEC) += drm_exec.o
 obj-$(CPTCFG_DRM_GPUVM) += drm_gpuvm.o
 
 drm_gpusvm_helper-y := \
@@ -110,7 +110,7 @@ drm_gpusvm_helper-y := \
 	drm_pagemap.o
 obj-$(CONFIG_DRM_GPUSVM) += drm_gpusvm_helper.o
 
-obj-$(CONFIG_DRM_BUDDY) += drm_buddy.o
+obj-$(CPTCFG_DRM_BUDDY) += drm_buddy.o
 
 drm_dma_helper-y := drm_gem_dma_helper.o
 drm_dma_helper-$(CONFIG_DRM_FBDEV_EMULATION) += drm_fbdev_dma.o
@@ -122,7 +122,7 @@ drm_shmem_helper-$(CONFIG_DRM_FBDEV_EMULATION) += drm_fbdev_shmem.o
 obj-$(CONFIG_DRM_GEM_SHMEM_HELPER) += drm_shmem_helper.o
 
 drm_suballoc_helper-y := drm_suballoc.o
-obj-$(CONFIG_DRM_SUBALLOC_HELPER) += drm_suballoc_helper.o
+obj-$(CPTCFG_DRM_SUBALLOC_HELPER) += drm_suballoc_helper.o
 
 drm_vram_helper-y := drm_gem_vram_helper.o
 obj-$(CONFIG_DRM_VRAM_HELPER) += drm_vram_helper.o

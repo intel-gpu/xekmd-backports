@@ -84,6 +84,9 @@ static const struct ctl_table observation_ctl_table[] = {
 	 .extra1 = SYSCTL_ZERO,
 	 .extra2 = SYSCTL_ONE,
 	 },
+#ifdef BPM_SYSCTL_TABLE_SENTINEL_NOT_PRESENT
+	{ }
+#endif
 };
 
 /**

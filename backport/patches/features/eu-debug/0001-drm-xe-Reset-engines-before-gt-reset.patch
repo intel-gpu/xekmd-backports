@@ -26,7 +26,7 @@ Cc: Chris Wilson <chris@chris-wilson.co.uk>
 Cc: Joonas Lahtinen <joonas.lahtinen@linux.intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit ff5c8e55d8f5093cb5e884abba74d4df4a12eddb drm-tip-eudebug)
+(backported from commit b476daba4f313c30239484ac355b2781dd7ae0c3 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h |  1 +
@@ -34,10 +34,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  2 files changed, 39 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 10fae78f0..6194e9144 100644
+index e0873ed24..d6da4f2bb 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -268,6 +268,7 @@
+@@ -276,6 +276,7 @@
  
  #define GDRST					XE_REG(0x941c)
  #define   GRDOM_GUC				REG_BIT(3)
@@ -46,7 +46,7 @@ index 10fae78f0..6194e9144 100644
  
  #define MISCCPCTL				XE_REG(0x9424)
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index 9d090d0f2..afe589fa7 100644
+index 8a31c963c..e9ae52c85 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -5,6 +5,7 @@
@@ -57,7 +57,7 @@ index 9d090d0f2..afe589fa7 100644
  #include <linux/minmax.h>
  
  #include <drm/drm_managed.h>
-@@ -723,8 +724,42 @@ void xe_gt_record_user_engines(struct xe_gt *gt)
+@@ -810,8 +811,42 @@ void xe_gt_record_user_engines(struct xe_gt *gt)
  		     == gt->info.engine_mask);
  }
  
@@ -100,7 +100,7 @@ index 9d090d0f2..afe589fa7 100644
  	int err;
  
  	if (IS_SRIOV_VF(gt_to_xe(gt)))
-@@ -732,6 +767,9 @@ static int do_gt_reset(struct xe_gt *gt)
+@@ -819,6 +854,9 @@ static int do_gt_reset(struct xe_gt *gt)
  
  	xe_gsc_wa_14015076503(gt, true);
  
@@ -111,5 +111,5 @@ index 9d090d0f2..afe589fa7 100644
  	err = xe_mmio_wait32(&gt->mmio, GDRST, GRDOM_FULL, 0, 5000, NULL, false);
  	if (err)
 -- 
-2.34.1
+2.43.0
 

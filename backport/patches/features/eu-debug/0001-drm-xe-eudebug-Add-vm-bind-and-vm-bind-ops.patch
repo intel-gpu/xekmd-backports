@@ -24,7 +24,7 @@ Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com>
 Co-developed-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit fa38abbf0da9ee2ed920926c277256f0a6d489fa drm-tip-eudebug)
+(backported from commit b0f174b74f7b08c681ef6db22d0b24058e441a04 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c       | 314 +++++++++++++++++++++++++-
@@ -475,10 +475,10 @@ index 4a4e192a6..a6d0e2287 100644
 +
  #endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 8d0fc797e..4c98c152b 100644
+index e573a5348..264485830 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -1538,6 +1538,8 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags, struct xe_file *xef)
+@@ -1675,6 +1675,8 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags, struct xe_file *xef)
  	for_each_tile(tile, xe, id)
  		xe_range_fence_tree_init(&vm->rftree[id]);
  
@@ -487,7 +487,7 @@ index 8d0fc797e..4c98c152b 100644
  	vm->pt_ops = &xelp_pt_ops;
  
  	/*
-@@ -1847,6 +1849,8 @@ static void vm_destroy_work_func(struct work_struct *w)
+@@ -1989,6 +1991,8 @@ static void vm_destroy_work_func(struct work_struct *w)
  	struct xe_tile *tile;
  	u8 id;
  
@@ -496,7 +496,7 @@ index 8d0fc797e..4c98c152b 100644
  	/* xe_vm_close_and_put was not called? */
  	xe_assert(xe, !vm->size);
  
-@@ -3279,7 +3283,7 @@ static void op_add_ufence(struct xe_vm *vm, struct xe_vma_op *op,
+@@ -3515,7 +3519,7 @@ static void op_add_ufence(struct xe_vm *vm, struct xe_vma_op *op,
  static void vm_bind_ioctl_ops_fini(struct xe_vm *vm, struct xe_vma_ops *vops,
  				   struct dma_fence *fence)
  {
@@ -505,7 +505,7 @@ index 8d0fc797e..4c98c152b 100644
  	struct xe_vma_op *op;
  	int i;
  
-@@ -3294,6 +3298,9 @@ static void vm_bind_ioctl_ops_fini(struct xe_vm *vm, struct xe_vma_ops *vops,
+@@ -3530,6 +3534,9 @@ static void vm_bind_ioctl_ops_fini(struct xe_vm *vm, struct xe_vma_ops *vops,
  			xe_vma_destroy(gpuva_to_vma(op->base.remap.unmap->va),
  				       fence);
  	}
@@ -515,7 +515,7 @@ index 8d0fc797e..4c98c152b 100644
  	if (ufence)
  		xe_sync_ufence_put(ufence);
  	if (fence) {
-@@ -3771,6 +3778,8 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -4028,6 +4035,8 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		if (err)
  			goto unwind_ops;
  
@@ -524,7 +524,7 @@ index 8d0fc797e..4c98c152b 100644
  #ifdef TEST_VM_OPS_ERROR
  		if (flags & FORCE_OP_ERROR) {
  			vops.inject_error = true;
-@@ -3802,8 +3811,11 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -4059,8 +4068,11 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		dma_fence_put(fence);
  
  unwind_ops:
@@ -538,10 +538,10 @@ index 8d0fc797e..4c98c152b 100644
  	for (i = args->num_binds - 1; i >= 0; --i)
  		if (ops[i])
 diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
-index 437f64202..e1faedfd1 100644
+index a94827d7f..61850fb72 100644
 --- a/drivers/gpu/drm/xe/xe_vm_types.h
 +++ b/drivers/gpu/drm/xe/xe_vm_types.h
-@@ -348,6 +348,19 @@ struct xe_vm {
+@@ -406,6 +406,19 @@ struct xe_vm {
  	bool batch_invalidate_tlb;
  	/** @xef: Xe file handle for tracking this VM's drm client */
  	struct xe_file *xef;
@@ -644,5 +644,5 @@ index 3315aa887..505529bc1 100644
  }
  #endif
 -- 
-2.34.1
+2.43.0
 

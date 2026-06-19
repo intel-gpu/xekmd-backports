@@ -29,7 +29,7 @@ Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 351a05e22a2221da1a66247af29104a0c0423e8a drm-tip-eudebug)
+(backported from commit 0fb00ea4a4fad06214c1efc05d10760f397451ca drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/Makefile              |   1 +
@@ -48,10 +48,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_gt_debug.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 8a6796bcd..9fc11e3b4 100644
+index 811d4c8b3..8c312f9d0 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -57,6 +57,7 @@ xe-y += xe_bb.o \
+@@ -58,6 +58,7 @@ xe-y += xe_bb.o \
  	xe_gt_clock.o \
  	xe_gt_freq.o \
  	xe_gt_idle.o \
@@ -60,10 +60,10 @@ index 8a6796bcd..9fc11e3b4 100644
  	xe_gt_sysfs.o \
  	xe_gt_throttle.o \
 diff --git a/drivers/gpu/drm/xe/regs/xe_engine_regs.h b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
-index d588975e5..09d335927 100644
+index 7ae6ea2d7..e87f606bf 100644
 --- a/drivers/gpu/drm/xe/regs/xe_engine_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
-@@ -146,6 +146,7 @@
+@@ -157,6 +157,7 @@
  #define   IDLE_DELAY				REG_GENMASK(20, 0)
  
  #define RING_CURRENT_LRCA(base)			XE_REG((base) + 0x240)
@@ -72,10 +72,10 @@ index d588975e5..09d335927 100644
  #define RING_CONTEXT_CONTROL(base)		XE_REG((base) + 0x244, XE_REG_OPTION_MASKED)
  #define	  CTX_CTRL_PXP_ENABLE			REG_BIT(10)
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 48fb57677..c0855a0eb 100644
+index ae82759bb..38a2a0603 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -514,6 +514,8 @@
+@@ -527,6 +527,8 @@
  #define   DISABLE_ECC				REG_BIT(5)
  #define   ENABLE_PREFETCH_INTO_IC		REG_BIT(3)
  
@@ -84,7 +84,7 @@ index 48fb57677..c0855a0eb 100644
  #define ROW_CHICKEN4				XE_REG_MCR(0xe48c, XE_REG_OPTION_MASKED)
  #define   DISABLE_GRF_CLEAR			REG_BIT(13)
  #define   XEHP_DIS_BBL_SYSPIPE			REG_BIT(11)
-@@ -607,6 +609,11 @@
+@@ -621,6 +623,11 @@
  #define   CCS_MODE_CSLICE(cslice, ccs) \
  	((ccs) << ((cslice) * CCS_MODE_CSLICE_WIDTH))
  
@@ -97,10 +97,10 @@ index 48fb57677..c0855a0eb 100644
  
  /* Applicable for all FORCEWAKE_DOMAIN and FORCEWAKE_ACK_DOMAIN regs */
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 57180ad24..d4cd8c064 100644
+index 62ae80f6b..0e41df4c3 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -1010,6 +1010,8 @@ int xe_device_probe(struct xe_device *xe)
+@@ -1014,6 +1014,8 @@ int xe_device_probe(struct xe_device *xe)
  
  	xe_debugfs_register(xe);
  
@@ -110,10 +110,10 @@ index 57180ad24..d4cd8c064 100644
  	if (err)
  		goto err_unregister_display;
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 2915563a5..a95afebdf 100644
+index 4ed01d81c..06d0ad37f 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -743,6 +743,9 @@ struct xe_device {
+@@ -581,6 +581,9 @@ struct xe_device {
  
  		/** @eudebug.discovery_lock: used for discovery to block xe ioctls */
  		struct rw_semaphore discovery_lock;
@@ -874,5 +874,5 @@ index 0a3e8e057..eff924361 100644
  }
  #endif
 -- 
-2.34.1
+2.43.0
 

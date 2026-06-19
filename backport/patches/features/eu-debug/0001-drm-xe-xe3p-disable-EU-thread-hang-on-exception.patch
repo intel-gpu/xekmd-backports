@@ -15,7 +15,7 @@ v4: removed the empty bracket at the end of engine_tunings (Maciej)
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Andrzej Hajda <andrzej.hajda@intel.com>
 Reviewed-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
-(backported from commit 865a5da9722d80aa8495cf4f893ed13afe4f7154 drm-tip-eudebug)
+(backported from commit f922a77a2c00ff4336ff887d5f167930aad0fdb1 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h | 1 +
@@ -23,7 +23,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  2 files changed, 5 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 5fe12e5d6af9..47582c959263 100644
+index 5fe12e5d6..47582c959 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 @@ -555,6 +555,7 @@
@@ -35,7 +35,7 @@ index 5fe12e5d6af9..47582c959263 100644
  #define   MDQ_ARBITRATION_MODE			REG_BIT(12)
  #define   STALL_DOP_GATING_DISABLE		REG_BIT(5)
 diff --git a/drivers/gpu/drm/xe/xe_tuning.c b/drivers/gpu/drm/xe/xe_tuning.c
-index 9a1b3862e192..90d6c99134d4 100644
+index 9a1b3862e..90d6c9913 100644
 --- a/drivers/gpu/drm/xe/xe_tuning.c
 +++ b/drivers/gpu/drm/xe/xe_tuning.c
 @@ -129,6 +129,10 @@ static const struct xe_rtp_entry_sr engine_tunings[] = {

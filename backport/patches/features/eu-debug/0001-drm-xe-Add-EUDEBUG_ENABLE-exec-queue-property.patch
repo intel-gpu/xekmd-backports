@@ -22,16 +22,16 @@ Cc: Matthew Brost <matthew.brost@intel.com>
 Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 852ec9ae5909ca0b4a213d5bd06f34c0826f5cac drm-tip-eudebug)
+(backported from commit aa14a3b4bbb073c5fc71ccc79f6400c67cf85473 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c          |  4 +--
- drivers/gpu/drm/xe/xe_exec_queue.c       | 44 ++++++++++++++++++++++--
+ drivers/gpu/drm/xe/xe_exec_queue.c       | 45 ++++++++++++++++++++++--
  drivers/gpu/drm/xe/xe_exec_queue.h       |  2 ++
  drivers/gpu/drm/xe/xe_exec_queue_types.h |  7 ++++
  drivers/gpu/drm/xe/xe_lrc.c              | 10 ++++++
  include/uapi/drm/xe_drm.h                |  2 ++
- 6 files changed, 65 insertions(+), 4 deletions(-)
+ 6 files changed, 66 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
 index fcb1e0f19..6c3aae821 100644
@@ -73,23 +73,23 @@ index 49f569bb3..7d9418cd8 100644
  	if (q->flags & EXEC_QUEUE_FLAG_DISABLE_STATE_CACHE_PERF_FIX)
  		flags |= XE_LRC_DISABLE_STATE_CACHE_PERF_FIX;
  
-+	 if (q->eudebug_flags & EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)
-+		 flags |= XE_LRC_CREATE_RUNALONE;
++	if (q->eudebug_flags & EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)
++		flags |= XE_LRC_CREATE_RUNALONE;
 +
  	err = q->ops->init(q);
  	if (err)
  		return err;
-@@ -993,6 +996,41 @@ static int exec_queue_set_state_cache_perf_fix(struct xe_device *xe, struct xe_e
+@@ -993,6 +996,42 @@ static int exec_queue_set_state_cache_perf_fix(struct xe_device *xe, struct xe_e
  	return 0;
  }
  
 +static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
-+		u64 value)
++				  u64 value)
 +{
 +	const u64 known_flags = DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE;
 +
 +	if (XE_IOCTL_DBG(xe, (q->class != XE_ENGINE_CLASS_RENDER &&
-+					q->class != XE_ENGINE_CLASS_COMPUTE)))
++			      q->class != XE_ENGINE_CLASS_COMPUTE)))
 +		return -EINVAL;
 +
 +	if (XE_IOCTL_DBG(xe, (value & ~known_flags)))
@@ -101,10 +101,11 @@ index 49f569bb3..7d9418cd8 100644
 +	if (XE_IOCTL_DBG(xe, !xe_exec_queue_is_lr(q)))
 +		return -EINVAL;
 +	/*
-+	* We want to explicitly set the global feature if
-+	* property is set.
-+	*/
-+	if (XE_IOCTL_DBG(xe, !(value & DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)))
++	 * We want to explicitly set the global feature if
++	 * property is set.
++	 */
++	if (XE_IOCTL_DBG(xe,
++			 !(value & DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)))
 +		return -EINVAL;
 +
 +	q->eudebug_flags = EXEC_QUEUE_EUDEBUG_FLAG_ENABLE;
@@ -121,7 +122,7 @@ index 49f569bb3..7d9418cd8 100644
  typedef int (*xe_exec_queue_set_property_fn)(struct xe_device *xe,
  					     struct xe_exec_queue *q,
  					     u64 value);
-@@ -1007,6 +1045,7 @@ static const xe_exec_queue_set_property_fn exec_queue_set_property_funcs[] = {
+@@ -1007,6 +1046,7 @@ static const xe_exec_queue_set_property_fn exec_queue_set_property_funcs[] = {
  							exec_queue_set_multi_queue_priority,
  	[DRM_XE_EXEC_QUEUE_SET_DISABLE_STATE_CACHE_PERF_FIX] =
  							exec_queue_set_state_cache_perf_fix,
@@ -129,7 +130,7 @@ index 49f569bb3..7d9418cd8 100644
  };
  
  /**
-@@ -1103,7 +1142,8 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
+@@ -1103,7 +1143,8 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
  			 ext.property != DRM_XE_EXEC_QUEUE_SET_HANG_REPLAY_STATE &&
  			 ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_MULTI_GROUP &&
  			 ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_MULTI_QUEUE_PRIORITY &&
@@ -190,15 +191,15 @@ index 4af9f0d7c..2fa823220 100644
  
  err_lrc_finish:
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 21e689db1..f7d85a789 100644
+index f67a99aa4..ed9cb434b 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -1436,6 +1436,8 @@ struct drm_xe_exec_queue_create {
  #define     DRM_XE_MULTI_GROUP_CREATE				(1ull << 63)
  #define   DRM_XE_EXEC_QUEUE_SET_PROPERTY_MULTI_QUEUE_PRIORITY	5
  #define   DRM_XE_EXEC_QUEUE_SET_DISABLE_STATE_CACHE_PERF_FIX	6
-+#define	DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG			7
-+#define	DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE			(1 << 0)
++#define   DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG		7
++#define     DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE		(1 << 0)
  	/** @extensions: Pointer to the first extension struct, if any */
  	__u64 extensions;
  

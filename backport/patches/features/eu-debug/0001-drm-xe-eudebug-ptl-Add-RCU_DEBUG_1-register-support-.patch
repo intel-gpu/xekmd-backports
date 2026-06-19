@@ -11,14 +11,14 @@ Acked-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 4523bb85f914738c22e6029b5428ed0785c86f07 drm-tip-eudebug)
+(backported from commit bffb950b1b47f0039aa71d9b54365acaf679b3af drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c | 13 +++++++++++++
  1 file changed, 13 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 128551b51..6d8373d67 100644
+index eddcbfb4e..3dcdc9857 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -1464,6 +1464,17 @@ static u32 engine_status_xe2(const struct xe_hw_engine * const hwe,
@@ -49,5 +49,5 @@ index 128551b51..6d8373d67 100644
  		XE_WARN_ON(GRAPHICS_VER(gt_to_xe(hwe->gt)));
  
 -- 
-2.34.1
+2.43.0
 

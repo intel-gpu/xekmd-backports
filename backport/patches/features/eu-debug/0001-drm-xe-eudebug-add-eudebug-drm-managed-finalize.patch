@@ -31,7 +31,7 @@ Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com> #v2
 Reviewed-by: Christoph Manszewski <christoph.manszewski@intel.com>
 Reviewed-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com> #v2
-(backported from commit 5ac85708cfba5a908bf24c0cb30a5d74faa29474 drm-tip-eudebug)
+(backported from commit da6f2ca8f813cb825c1e250642d2cc0a19c6e731 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_device.c  |  2 --
@@ -40,7 +40,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  3 files changed, 22 insertions(+), 15 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 225216684..4f58121e8 100644
+index 48bcb8818..7f9fce523 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -435,8 +435,6 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
@@ -53,7 +53,7 @@ index 225216684..4f58121e8 100644
  
  	if (xe->preempt_fence_wq)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index c43df6834..d7a4ccc77 100644
+index 783bc7cb1..76d800e3f 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -2501,9 +2501,18 @@ static void xe_eudebug_sysfs_fini(void *arg)
@@ -133,5 +133,5 @@ index 0e2b6e3c7..cf2690b7f 100644
  static inline void xe_eudebug_file_open(struct xe_file *xef) { }
  static inline void xe_eudebug_file_close(struct xe_file *xef) { }
 -- 
-2.34.1
+2.43.0
 

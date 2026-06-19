@@ -26,7 +26,7 @@ Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com> #v4
-(backported from commit 87fe25ab460fdd9be4f9adee3f9dbf37fe0e5487 drm-tip-eudebug)
+(backported from commit 07100da23348a6c2a413cd10d471485ccab530dc drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/tests/xe_eudebug.c       | 177 ++++++++++++++++++++
@@ -235,7 +235,7 @@ index c55e46f1a..dc83bb6a8 100644
  MODULE_LICENSE("GPL");
  MODULE_DESCRIPTION("xe live kunit tests");
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 2267681ba..70ba4bee5 100644
+index f3fd8b3fe..2704c4ebe 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -3903,3 +3903,7 @@ xe_eudebug_vm_open_ioctl(struct xe_eudebug *d, unsigned long arg)
@@ -247,5 +247,5 @@ index 2267681ba..70ba4bee5 100644
 +#include "tests/xe_eudebug.c"
 +#endif
 -- 
-2.34.1
+2.43.0
 

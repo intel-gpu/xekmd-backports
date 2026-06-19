@@ -14,7 +14,7 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit df6b8c0a2ec9938b4c7899fd67df4f41afe80e68 drm-tip-eudebug)
+(backported from commit 8e4e6ae84dc7ba2ddd3b6a3adc9809be81e1daa6 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h |  4 +-
@@ -24,10 +24,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  4 files changed, 88 insertions(+), 61 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 13d2edb27..10fae78f0 100644
+index ceb394c03..e0873ed24 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -514,7 +514,7 @@
+@@ -527,7 +527,7 @@
  #define   DISABLE_ECC				REG_BIT(5)
  #define   ENABLE_PREFETCH_INTO_IC		REG_BIT(3)
  
@@ -36,17 +36,17 @@ index 13d2edb27..10fae78f0 100644
  
  #define ROW_CHICKEN4				XE_REG_MCR(0xe48c, XE_REG_OPTION_MASKED)
  #define   DISABLE_GRF_CLEAR			REG_BIT(13)
-@@ -525,7 +525,7 @@
+@@ -538,7 +538,7 @@
  #define   THREAD_EX_ARB_MODE			REG_GENMASK(3, 2)
  #define   THREAD_EX_ARB_MODE_RR_AFTER_DEP	REG_FIELD_PREP(THREAD_EX_ARB_MODE, 0x2)
  
--#define EU_ATT_CLR(i)				XE_REG_MCR(0xe490 + (i) * 4)
+-#define EU_ATT_CLR(i)                          XE_REG_MCR(0xe490 + (i) * 4)
 +#define EU_ATT_CLR(reg, row)			XE_REG_MCR((reg ? 0xe698 : 0xe490) + (row) * 4)
  
  #define ROW_CHICKEN3				XE_REG_MCR(0xe49c, XE_REG_OPTION_MASKED)
  #define   XE2_EUPEND_CHK_FLUSH_DIS		REG_BIT(14)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 70ba4bee5..128551b51 100644
+index 2704c4ebe..eddcbfb4e 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -1877,29 +1877,31 @@ static int check_attn_mcr(struct xe_gt *gt, void *data,
@@ -280,5 +280,5 @@ index d91d1f27b..f882770e1 100644
  int xe_gt_foreach_dss_group_instance(struct xe_gt *gt,
  				     int (*fn)(struct xe_gt *gt,
 -- 
-2.34.1
+2.43.0
 

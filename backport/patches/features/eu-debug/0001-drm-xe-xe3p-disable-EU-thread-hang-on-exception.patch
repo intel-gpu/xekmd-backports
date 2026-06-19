@@ -15,7 +15,7 @@ v4: removed the empty bracket at the end of engine_tunings (Maciej)
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Andrzej Hajda <andrzej.hajda@intel.com>
 Reviewed-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
-(backported from commit 865a5da9722d80aa8495cf4f893ed13afe4f7154 drm-tip-eudebug)
+(backported from commit f922a77a2c00ff4336ff887d5f167930aad0fdb1 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h | 1 +
@@ -23,10 +23,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  2 files changed, 5 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 315f355e2..b762e2ff2 100644
+index c949c445a..683100534 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -539,6 +539,7 @@
+@@ -552,6 +552,7 @@
  #define   RES_CHK_SPR_DIS			REG_BIT(6)
  
  #define ROW_CHICKEN				XE_REG_MCR(0xe4f0, XE_REG_OPTION_MASKED)
@@ -35,20 +35,20 @@ index 315f355e2..b762e2ff2 100644
  #define   MDQ_ARBITRATION_MODE			REG_BIT(12)
  #define   STALL_DOP_GATING_DISABLE		REG_BIT(5)
 diff --git a/drivers/gpu/drm/xe/xe_tuning.c b/drivers/gpu/drm/xe/xe_tuning.c
-index 316f5e2b2..614a1a99f 100644
+index fcb6698ab..8be7b6766 100644
 --- a/drivers/gpu/drm/xe/xe_tuning.c
 +++ b/drivers/gpu/drm/xe/xe_tuning.c
-@@ -123,6 +123,10 @@ static const struct xe_rtp_entry_sr engine_tunings[] = {
+@@ -124,6 +124,10 @@ static const struct xe_rtp_entry_sr engine_tunings[] = {
  			     GHWSP_CSB_REPORT_DIS,
  			     XE_RTP_ACTION_FLAG(ENGINE_BASE)))
  	},
 +	{ XE_RTP_NAME("Tuning: disable EU thread hang on exception"),
-+	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(3500, XE_RTP_END_VERSION_UNDEFINED)),
-+	  XE_RTP_ACTIONS(CLR(ROW_CHICKEN, CHICK_HANG_SEND_EXCEPTION))
-+	  },
++		XE_RTP_RULES(GRAPHICS_VERSION_RANGE(3500, XE_RTP_END_VERSION_UNDEFINED)),
++		XE_RTP_ACTIONS(CLR(ROW_CHICKEN, CHICK_HANG_SEND_EXCEPTION))
++	},
  };
  
  static const struct xe_rtp_entry_sr lrc_tunings[] = {
 -- 
-2.34.1
+2.43.0
 

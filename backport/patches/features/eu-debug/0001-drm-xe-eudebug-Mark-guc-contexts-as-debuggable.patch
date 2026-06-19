@@ -19,7 +19,7 @@ Cc: Jan Sokolowski <jan.sokolowski@intel.com>
 Co-developed-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Co-developed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
-(backported from commit cdcec6fb31749beb722c20d90c97882017686ad1 drm-tip-eudebug)
+(backported from commit e67781291ae461975057a03d678023f43127b704 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/abi/guc_actions_abi.h |  4 +++
@@ -30,8 +30,8 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  drivers/gpu/drm/xe/xe_guc_ads.c          | 17 +++++++++++++
  drivers/gpu/drm/xe/xe_guc_submit.c       | 31 ++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_guc_submit.h       |  1 +
- drivers/gpu/drm/xe/xe_wa_oob.rules       |  3 +++
- 9 files changed, 82 insertions(+)
+ drivers/gpu/drm/xe/xe_wa_oob.rules       |  2 ++
+ 9 files changed, 81 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/abi/guc_actions_abi.h b/drivers/gpu/drm/xe/abi/guc_actions_abi.h
 index 83a6e7794..805fc5068 100644
@@ -66,7 +66,7 @@ index e33bd622a..4970d664d 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index f1b5a5de6..c06fcf0b8 100644
+index 3c8c0b36a..03722dc28 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -19,6 +19,7 @@
@@ -77,15 +77,15 @@ index f1b5a5de6..c06fcf0b8 100644
  #include "xe_hw_engine_class_sysfs.h"
  #include "xe_hw_engine_group.h"
  #include "xe_irq.h"
-@@ -854,6 +855,7 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
- 		u64 value)
+@@ -1000,6 +1001,7 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+ 				  u64 value)
  {
  	const u64 known_flags = DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE;
 +	struct xe_guc *guc = &q->gt->uc.guc;
  
  	if (XE_IOCTL_DBG(xe, (q->class != XE_ENGINE_CLASS_RENDER &&
- 					q->class != XE_ENGINE_CLASS_COMPUTE)))
-@@ -865,6 +867,9 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+ 			      q->class != XE_ENGINE_CLASS_COMPUTE)))
+@@ -1011,6 +1013,9 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
  	if (XE_IOCTL_DBG(xe, !IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)))
  		return -EOPNOTSUPP;
  
@@ -96,10 +96,10 @@ index f1b5a5de6..c06fcf0b8 100644
  		return -EINVAL;
  	/*
 diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
-index 6df7c3f26..7a9e0c7e2 100644
+index ccebb437e..5253e96af 100644
 --- a/drivers/gpu/drm/xe/xe_guc.c
 +++ b/drivers/gpu/drm/xe/xe_guc.c
-@@ -1756,6 +1756,23 @@ bool xe_guc_using_main_gamctrl_queues(struct xe_guc *guc)
+@@ -1843,6 +1843,23 @@ bool xe_guc_using_main_gamctrl_queues(struct xe_guc *guc)
  	return GT_VER(gt) >= 35;
  }
  
@@ -124,7 +124,7 @@ index 6df7c3f26..7a9e0c7e2 100644
  #include "tests/xe_guc_g2g_test.c"
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_guc.h b/drivers/gpu/drm/xe/xe_guc.h
-index 66e7edc70..a516a479b 100644
+index 02514914f..9c6b3845d 100644
 --- a/drivers/gpu/drm/xe/xe_guc.h
 +++ b/drivers/gpu/drm/xe/xe_guc.h
 @@ -29,6 +29,8 @@
@@ -136,7 +136,7 @@ index 66e7edc70..a516a479b 100644
  struct drm_printer;
  
  void xe_guc_comm_init_early(struct xe_guc *guc);
-@@ -61,6 +63,7 @@ void xe_guc_stop(struct xe_guc *guc);
+@@ -62,6 +64,7 @@ void xe_guc_stop(struct xe_guc *guc);
  int xe_guc_start(struct xe_guc *guc);
  void xe_guc_declare_wedged(struct xe_guc *guc);
  bool xe_guc_using_main_gamctrl_queues(struct xe_guc *guc);
@@ -145,38 +145,38 @@ index 66e7edc70..a516a479b 100644
  #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
  int xe_guc_g2g_test_notification(struct xe_guc *guc, u32 *payload, u32 len);
 diff --git a/drivers/gpu/drm/xe/xe_guc_ads.c b/drivers/gpu/drm/xe/xe_guc_ads.c
-index f4cbc030f..1b84f4bd4 100644
+index 5760251cb..a42b6dbd3 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ads.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ads.c
-@@ -361,6 +361,23 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
- 		guc_waklv_enable(ads, NULL, 0, &offset, &remain,
- 				 GUC_WORKAROUND_KLV_DISABLE_PSMI_INTERRUPTS_AT_C6_ENTRY_RESTORE_AT_EXIT);
+@@ -365,6 +365,23 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
+ 	if (!size)
+ 		return;
  
 +#if IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)
 +	if (XE_GT_WA(gt, 14022766366)) {
 +		if (xe_guc_has_debug_contexts(&gt->uc.guc)) {
 +			guc_waklv_enable(ads, NULL, 0, &offset, &remain,
-+					 GUC_WA_KLV_RESET_DEP_ENGINES_ON_DEBUG_CTX_SWITCH);
++					GUC_WA_KLV_RESET_DEP_ENGINES_ON_DEBUG_CTX_SWITCH);
 +		} else  {
 +			const struct xe_uc_fw_version required =
 +				XE_UC_FW_VERSION_DEBUG_CONTEXTS;
 +
 +			xe_gt_info(gt, "eudebug needs GuC version %u.%u.%u or greater\n",
-+				   required.major,
-+				   required.minor,
-+				   required.patch);
++					required.major,
++					required.minor,
++					required.patch);
 +		}
 +	}
 +#endif
 +
- 	size = guc_ads_waklv_size(ads) - remain;
- 	if (!size)
- 		return;
+ 	offset = guc_ads_waklv_offset(ads);
+ 	addr_ggtt = xe_bo_ggtt_addr(ads->bo) + offset;
+ 
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 799ef9f48..fa126c2c3 100644
+index 42110e01b..bd0087dd0 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -895,6 +895,34 @@ static void __register_exec_queue(struct xe_guc *guc,
+@@ -968,6 +968,34 @@ static void __register_exec_queue(struct xe_guc *guc,
  	xe_guc_ct_send(&guc->ct, action, ARRAY_SIZE(action), 0, 0);
  }
  
@@ -211,7 +211,7 @@ index 799ef9f48..fa126c2c3 100644
  static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
  {
  	struct xe_guc *guc = exec_queue_to_guc(q);
-@@ -955,6 +983,9 @@ static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
+@@ -1028,6 +1056,9 @@ static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
  
  	if (xe_exec_queue_is_multi_queue_secondary(q))
  		xe_guc_exec_queue_group_add(guc, q);
@@ -233,19 +233,18 @@ index b3839a90c..d296e30f9 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
-index efe67018f..ba9e57201 100644
+index 053d50db6..f90aa848d 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
-@@ -72,6 +72,9 @@
- 
- 18022722726    GRAPHICS_VERSION_RANGE(1250, 1274)
- 14015474168    PLATFORM(PVC)
+@@ -53,6 +53,8 @@
+ 		MEDIA_VERSION(3000), MEDIA_STEP(A0, B0), FUNC(xe_rtp_match_psmi_enabled)
+ 18022722726	GRAPHICS_VERSION_RANGE(1250, 1274)
+ 14015474168	PLATFORM(PVC)
 +14022766366	GRAPHICS_VERSION_RANGE(2001, 2004)
 +		GRAPHICS_VERSION_RANGE(3000, 3005)
-+
  
  15015404425_disable	PLATFORM(PANTHERLAKE), MEDIA_STEP(B0, FOREVER)
  16026007364    MEDIA_VERSION(3000)
 -- 
-2.34.1
+2.43.0
 

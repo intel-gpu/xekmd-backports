@@ -12,7 +12,7 @@ The patch is necessary for incoming eudebug feature.
 
 Signed-off-by: Andrzej Hajda <andrzej.hajda@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 64e72c14dc390f3573ced66f30e66129953dd2da drm-tip-eudebug)
+(backported from commit 1eb860f066d8a71f4e56f569dfc08657f5d0e231 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_devcoredump.c  | 2 +-
@@ -22,7 +22,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  4 files changed, 8 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_devcoredump.c b/drivers/gpu/drm/xe/xe_devcoredump.c
-index cf41bb6d2..23f4bc7ec 100644
+index 558a1a984..5b816beda 100644
 --- a/drivers/gpu/drm/xe/xe_devcoredump.c
 +++ b/drivers/gpu/drm/xe/xe_devcoredump.c
 @@ -334,7 +334,7 @@ static void devcoredump_snapshot(struct xe_devcoredump *coredump,
@@ -35,10 +35,10 @@ index cf41bb6d2..23f4bc7ec 100644
  
  	strscpy(ss->process_name, process_name);
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 4f58121e8..4a6f9956e 100644
+index 7f9fce523..6be605889 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -111,10 +111,10 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
+@@ -112,10 +112,10 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
  	file->driver_priv = xef;
  	kref_init(&xef->refcount);
  
@@ -51,7 +51,7 @@ index 4f58121e8..4a6f9956e 100644
  		put_task_struct(task);
  	}
  
-@@ -131,6 +131,7 @@ static void xe_file_destroy(struct kref *ref)
+@@ -132,6 +132,7 @@ static void xe_file_destroy(struct kref *ref)
  	mutex_destroy(&xef->exec_queue.lock);
  	xa_destroy(&xef->vm.xa);
  	mutex_destroy(&xef->vm.lock);
@@ -60,10 +60,10 @@ index 4f58121e8..4a6f9956e 100644
  	xe_drm_client_put(xef->client);
  	kfree(xef->process_name);
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index fc153d71b..afc8cac6f 100644
+index 3e2ed16ed..a26e51a2f 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -818,10 +818,10 @@ struct xe_file {
+@@ -656,10 +656,10 @@ struct xe_file {
  	char *process_name;
  
  	/**
@@ -78,10 +78,10 @@ index fc153d71b..afc8cac6f 100644
  	/** @refcount: ref count of this xe file */
  	struct kref refcount;
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index fa126c2c3..b68f57135 100644
+index bd0087dd0..5226982b1 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -1573,7 +1573,7 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+@@ -1641,7 +1641,7 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
  
  	if (q->vm && q->vm->xef) {
  		process_name = q->vm->xef->process_name;
@@ -91,5 +91,5 @@ index fa126c2c3..b68f57135 100644
  
  	if (!exec_queue_killed(q))
 -- 
-2.34.1
+2.43.0
 

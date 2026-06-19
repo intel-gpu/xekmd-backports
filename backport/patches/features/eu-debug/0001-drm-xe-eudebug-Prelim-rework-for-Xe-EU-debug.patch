@@ -9,7 +9,7 @@ Added prelim_ prefix where necessary.
 
 Signed-off-by: Andrzej Hajda <andrzej.hajda@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit a22c6abc5027805fb79a1cf06747add56de3b6a9 drm-tip-eudebug)
+(backported from commit df0d510db5a08c9d4fd3d8ce5f67ac7d2baecc7c drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/Kconfig                    |   2 +-
@@ -25,7 +25,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  .../drm/xe/tests/{ => prelim}/xe_eudebug.c    |   0
  drivers/gpu/drm/xe/tests/xe_live_test_mod.c   |   2 +-
  drivers/gpu/drm/xe/xe_debug_metadata.h        | 106 -----
- drivers/gpu/drm/xe/xe_device.c                |  17 +-
+ drivers/gpu/drm/xe/xe_device.c                |  16 +-
  drivers/gpu/drm/xe/xe_device.h                |  10 +-
  drivers/gpu/drm/xe/xe_device_types.h          |   8 +-
  drivers/gpu/drm/xe/xe_eudebug.h               | 121 -----
@@ -44,7 +44,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  include/uapi/drm/xe_drm.h                     |  93 ----
  include/uapi/drm/xe_drm_eudebug.h             | 265 -----------
  include/uapi/drm/xe_drm_prelim.h              | 346 ++++++++++++++
- 32 files changed, 980 insertions(+), 991 deletions(-)
+ 32 files changed, 979 insertions(+), 991 deletions(-)
  rename drivers/gpu/drm/xe/{ => prelim}/xe_debug_metadata.c (74%)
  create mode 100644 drivers/gpu/drm/xe/prelim/xe_debug_metadata.h
  rename drivers/gpu/drm/xe/{ => prelim}/xe_debug_metadata_types.h (92%)
@@ -2405,7 +2405,7 @@ index 65d66153a..000000000
 -
 -#endif
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index eb0756aa2..085255e33 100644
+index 689d7ed8a..98594ca38 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -29,11 +29,11 @@
@@ -2440,16 +2440,13 @@ index eb0756aa2..085255e33 100644
  
  	/*
  	 * No need for exec_queue.lock here as there is no contention for it
-@@ -226,12 +226,13 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
+@@ -228,10 +228,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
  			  DRM_RENDER_ALLOW),
- 	DRM_IOCTL_DEF_DRV(XE_EXEC_QUEUE_SET_PROPERTY, xe_exec_queue_set_property_ioctl,
- 			  DRM_RENDER_ALLOW),
--	DRM_IOCTL_DEF_DRV(XE_EUDEBUG_CONNECT, xe_eudebug_connect_ioctl, DRM_RENDER_ALLOW),
-+	PRELIM_DRM_IOCTL_DEF_DRV(XE_EUDEBUG_CONNECT, prelim_xe_eudebug_connect_ioctl,
-+			  DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_VM_GET_PROPERTY, xe_vm_get_property_ioctl,
  			  DRM_RENDER_ALLOW),
+-	DRM_IOCTL_DEF_DRV(XE_EUDEBUG_CONNECT, xe_eudebug_connect_ioctl, DRM_RENDER_ALLOW),
 -	DRM_IOCTL_DEF_DRV(XE_DEBUG_METADATA_CREATE, xe_debug_metadata_create_ioctl,
++	PRELIM_DRM_IOCTL_DEF_DRV(XE_EUDEBUG_CONNECT, prelim_xe_eudebug_connect_ioctl, DRM_RENDER_ALLOW),
 +	PRELIM_DRM_IOCTL_DEF_DRV(XE_DEBUG_METADATA_CREATE, prelim_xe_debug_metadata_create_ioctl,
  			  DRM_RENDER_ALLOW),
 -	DRM_IOCTL_DEF_DRV(XE_DEBUG_METADATA_DESTROY, xe_debug_metadata_destroy_ioctl,
@@ -2457,7 +2454,7 @@ index eb0756aa2..085255e33 100644
  			  DRM_RENDER_ALLOW),
  };
  
-@@ -736,7 +737,7 @@ int xe_device_probe_early(struct xe_device *xe)
+@@ -736,7 +736,7 @@ int xe_device_probe_early(struct xe_device *xe)
  	if (IS_SRIOV_VF(xe))
  		vf_update_device_info(xe);
  
@@ -2501,18 +2498,18 @@ index f0added83..4bce01108 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index cadfa3f08..dab275e1c 100644
+index a26e51a2f..0dad909d0 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -13,7 +13,7 @@
- #include <drm/ttm/ttm_device.h>
+@@ -14,7 +14,7 @@
  
  #include "xe_devcoredump_types.h"
+ #include "xe_drm_ras_types.h"
 -#include "xe_eudebug_types.h"
 +#include "prelim/xe_eudebug_types.h"
- #include "xe_drm_ras_types.h"
  #include "xe_heci_gsc.h"
  #include "xe_late_bind_fw_types.h"
+ #include "xe_oa_types.h"
 @@ -294,7 +294,7 @@ struct xe_device {
  		struct workqueue_struct *wq;
  	} sriov;
@@ -2668,7 +2665,7 @@ index 00ddd385f..000000000
 -
 -#endif /* _XE_EUDEBUG_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 384b9bf9e..c8618dd02 100644
+index cccd7d635..d63a6cebe 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -30,7 +30,7 @@
@@ -2682,7 +2679,7 @@ index 384b9bf9e..c8618dd02 100644
   * DOC: Execution Queue
 @@ -1005,8 +1005,8 @@ static int exec_queue_set_state_cache_perf_fix(struct xe_device *xe, struct xe_e
  static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
- 		u64 value)
+ 				  u64 value)
  {
 -	const u64 known_flags = DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE |
 -				DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE;
@@ -2700,12 +2697,12 @@ index 384b9bf9e..c8618dd02 100644
  		return -EOPNOTSUPP;
  
  	if (XE_IOCTL_DBG(xe, !xe_guc_has_debug_contexts(guc)))
-@@ -1028,16 +1028,16 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
- 	* We want to explicitly set the global feature if
- 	* property is set.
- 	*/
--	if (XE_IOCTL_DBG(xe, !(value & DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)))
-+	if (XE_IOCTL_DBG(xe, !(value & PRELIM_DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)))
+@@ -1029,16 +1029,16 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+ 	 * property is set.
+ 	 */
+ 	if (XE_IOCTL_DBG(xe,
+-			 !(value & DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)))
++			 !(value & PRELIM_DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)))
  		return -EINVAL;
  
 -	if (XE_IOCTL_DBG(xe, !xe_eudebug_is_enabled(xe)))
@@ -2720,7 +2717,7 @@ index 384b9bf9e..c8618dd02 100644
  		q->eudebug_flags |= EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE;
  
  	return 0;
-@@ -1062,7 +1062,7 @@ static const xe_exec_queue_set_property_fn exec_queue_set_property_funcs[] = {
+@@ -1063,7 +1063,7 @@ static const xe_exec_queue_set_property_fn exec_queue_set_property_funcs[] = {
  							exec_queue_set_multi_queue_priority,
  	[DRM_XE_EXEC_QUEUE_SET_DISABLE_STATE_CACHE_PERF_FIX] =
  							exec_queue_set_state_cache_perf_fix,
@@ -2729,7 +2726,7 @@ index 384b9bf9e..c8618dd02 100644
  };
  
  /**
-@@ -1160,7 +1160,7 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
+@@ -1161,7 +1161,7 @@ static int exec_queue_user_ext_set_property(struct xe_device *xe,
  			 ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_MULTI_GROUP &&
  			 ext.property != DRM_XE_EXEC_QUEUE_SET_PROPERTY_MULTI_QUEUE_PRIORITY &&
  			 ext.property != DRM_XE_EXEC_QUEUE_SET_DISABLE_STATE_CACHE_PERF_FIX &&
@@ -2738,7 +2735,7 @@ index 384b9bf9e..c8618dd02 100644
  		return -EINVAL;
  
  	idx = array_index_nospec(ext.property, ARRAY_SIZE(exec_queue_set_property_funcs));
-@@ -1478,7 +1478,7 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
+@@ -1479,7 +1479,7 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
  
  	args->exec_queue_id = id;
  
@@ -2747,7 +2744,7 @@ index 384b9bf9e..c8618dd02 100644
  
  	return 0;
  
-@@ -1678,7 +1678,7 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
+@@ -1679,7 +1679,7 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
  		xe_hw_engine_group_del_exec_queue(q->hwe->hw_engine_group, q);
  
  	xe_exec_queue_kill(q);
@@ -2879,12 +2876,12 @@ index 185d40427..000000000
 -
 -#endif
 diff --git a/drivers/gpu/drm/xe/xe_guc_ads.c b/drivers/gpu/drm/xe/xe_guc_ads.c
-index c14e533e7..b63885b4c 100644
+index a42b6dbd3..4af1d8e45 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ads.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ads.c
-@@ -361,7 +361,7 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
- 		guc_waklv_enable(ads, NULL, 0, &offset, &remain,
- 				 GUC_WORKAROUND_KLV_DISABLE_PSMI_INTERRUPTS_AT_C6_ENTRY_RESTORE_AT_EXIT);
+@@ -365,7 +365,7 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
+ 	if (!size)
+ 		return;
  
 -#if IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)
 +#if IS_ENABLED(CONFIG_PRELIM_DRM_XE_EUDEBUG)
@@ -2914,7 +2911,7 @@ index d54379aa3..57cb362a6 100644
  	case XE_GUC_ACTION_GUC2PF_RELAY_FROM_VF:
  		ret = xe_guc_relay_process_guc2pf(&guc->relay, hxg, hxg_len);
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 23e20830f..98d785ce0 100644
+index 7ac98ed46..3911ccd4d 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
 @@ -19,7 +19,7 @@
@@ -3002,7 +2999,7 @@ index 33a93a0fa..be9fc77ad 100644
  		spinlock_t lock;
  		struct xe_eudebug *debugger;
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 3b5e800c7..14910063d 100644
+index e4eeb2544..228d7f2ca 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -24,10 +24,10 @@
@@ -3208,7 +3205,7 @@ index ec0f4d444..31b43e26a 100644
  		/** @lock: Lock for eudebug_bind members */
  		spinlock_t lock;
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index b04433961..2d39db5d7 100644
+index 28df35626..480b007ee 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -109,9 +109,6 @@ extern "C" {
@@ -3226,8 +3223,8 @@ index b04433961..2d39db5d7 100644
  #define DRM_IOCTL_XE_EXEC_QUEUE_SET_PROPERTY	DRM_IOW(DRM_COMMAND_BASE + DRM_XE_EXEC_QUEUE_SET_PROPERTY, struct drm_xe_exec_queue_set_property)
  #define DRM_IOCTL_XE_VM_GET_PROPERTY		DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_VM_GET_PROPERTY, struct drm_xe_vm_get_property)
 -#define DRM_IOCTL_XE_EUDEBUG_CONNECT		DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_EUDEBUG_CONNECT, struct drm_xe_eudebug_connect)
--#define DRM_IOCTL_XE_DEBUG_METADATA_CREATE	DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_DEBUG_METADATA_CREATE, struct drm_xe_debug_metadata_create)
--#define DRM_IOCTL_XE_DEBUG_METADATA_DESTROY	DRM_IOW(DRM_COMMAND_BASE + DRM_XE_DEBUG_METADATA_DESTROY, struct drm_xe_debug_metadata_destroy)
+-#define DRM_IOCTL_XE_DEBUG_METADATA_CREATE	 DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_DEBUG_METADATA_CREATE, struct drm_xe_debug_metadata_create)
+-#define DRM_IOCTL_XE_DEBUG_METADATA_DESTROY	 DRM_IOW(DRM_COMMAND_BASE + DRM_XE_DEBUG_METADATA_DESTROY, struct drm_xe_debug_metadata_destroy)
  
  /**
   * DOC: Xe IOCTL Extensions
@@ -3267,15 +3264,15 @@ index b04433961..2d39db5d7 100644
  #define     DRM_XE_MULTI_GROUP_CREATE				(1ull << 63)
  #define   DRM_XE_EXEC_QUEUE_SET_PROPERTY_MULTI_QUEUE_PRIORITY	5
  #define   DRM_XE_EXEC_QUEUE_SET_DISABLE_STATE_CACHE_PERF_FIX	6
--#define	DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG			7
--#define	DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE			(1 << 0)
--#define DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE		(1 << 1)
+-#define   DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG		7
+-#define     DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE		(1 << 0)
+-#define     DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE	(1 << 1)
  	/** @extensions: Pointer to the first extension struct, if any */
  	__u64 extensions;
  
-@@ -2557,72 +2530,6 @@ struct drm_xe_exec_queue_set_property {
- 	__u64 reserved[2];
- };
+@@ -2636,72 +2609,6 @@ enum drm_xe_ras_error_component {
+ 	[DRM_XE_RAS_ERR_COMP_SOC_INTERNAL] = "soc-internal"		\
+ }
  
 -/*
 - * Debugger ABI (ioctl and events) Version History:
@@ -3314,7 +3311,7 @@ index b04433961..2d39db5d7 100644
 -#define WORK_IN_PROGRESS_DRM_XE_DEBUG_METADATA_SBA_AREA 3
 -#define WORK_IN_PROGRESS_DRM_XE_DEBUG_METADATA_SIP_AREA 4
 -#define WORK_IN_PROGRESS_DRM_XE_DEBUG_METADATA_NUM (1 + \
--	WORK_IN_PROGRESS_DRM_XE_DEBUG_METADATA_SIP_AREA)
+-	  WORK_IN_PROGRESS_DRM_XE_DEBUG_METADATA_SIP_AREA)
 -
 -	/** @type: Type of metadata */
 -	__u64 type;
@@ -3345,7 +3342,7 @@ index b04433961..2d39db5d7 100644
 -#include "xe_drm_eudebug.h"
  #include "xe_drm_prelim.h"
  
- /**
+ #if defined(__cplusplus)
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
 deleted file mode 100644
 index e72fc8ba3..000000000

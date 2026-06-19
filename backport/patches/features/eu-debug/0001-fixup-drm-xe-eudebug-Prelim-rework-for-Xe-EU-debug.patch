@@ -6,17 +6,17 @@ Subject: fixup! drm/xe/eudebug: Prelim rework for Xe EU debug
 VM_BIND extension EUDEBUG_ATTACH to use prelim macros.
 
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit e96bc2c5cf5dab6223261c6daa2ce3cc3c5e318c drm-tip-eudebug)
+(backported from commit 7cc9a2bc62da948567ca531190fc7365b1ae4adb drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_vm.c | 15 ++++++++++-----
  1 file changed, 10 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index f30d36c47..745a57bcc 100644
+index 228d7f2ca..baebfda83 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -3172,8 +3172,12 @@ typedef int (*xe_vm_bind_op_user_extension_fn)(struct xe_device *xe,
+@@ -3408,8 +3408,12 @@ typedef int (*xe_vm_bind_op_user_extension_fn)(struct xe_device *xe,
  					       struct drm_gpuva_ops *ops,
  					       u32 operation, u64 extension);
  
@@ -31,7 +31,7 @@ index f30d36c47..745a57bcc 100644
  };
  
  #define MAX_USER_EXTENSIONS	16
-@@ -3195,12 +3199,13 @@ static int vm_bind_op_user_extensions(struct xe_device *xe,
+@@ -3431,12 +3435,13 @@ static int vm_bind_op_user_extensions(struct xe_device *xe,
  		return -EFAULT;
  
  	if (XE_IOCTL_DBG(xe, ext.pad) ||
@@ -49,5 +49,5 @@ index f30d36c47..745a57bcc 100644
  		return err;
  
 -- 
-2.34.1
+2.43.0
 

@@ -32,7 +32,7 @@ v4: - offset as unsigned long (Thomas)
 Cc: Matthew Brost <matthew.brost@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 24b6baa17e6e4634e80075e8b6d36f53da0a9cfc drm-tip-eudebug)
+(backported from commit 1f5c37a54b2c4018c73d7735bdde057b1804a897 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h |  24 ++
@@ -41,10 +41,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  3 files changed, 489 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index fbbe24128..13d2edb27 100644
+index d55576ba8..ceb394c03 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -611,6 +611,30 @@
+@@ -625,6 +625,30 @@
  #define   CCS_MODE_CSLICE(cslice, ccs) \
  	((ccs) << ((cslice) * CCS_MODE_CSLICE_WIDTH))
  
@@ -76,7 +76,7 @@ index fbbe24128..13d2edb27 100644
  #define   RCU_DEBUG_1_ENGINE_STATUS		REG_GENMASK(2, 0)
  #define   RCU_DEBUG_1_RUNALONE_ACTIVE		REG_BIT(2)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index ebd8551c4..ca8965970 100644
+index ebd8551c4..99449462d 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -5,9 +5,12 @@
@@ -598,5 +598,5 @@ index d597648ec..b1695cb9e 100644
  }
  #endif
 -- 
-2.34.1
+2.43.0
 

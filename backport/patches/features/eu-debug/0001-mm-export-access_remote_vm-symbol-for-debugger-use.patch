@@ -24,17 +24,17 @@ Cc: Joonas Lahtinen <joonas.lahtinen@linux.intel.com>
 Cc: Simona Vetter <simona@ffwll.ch>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 07ada30d968b2956e090970295893967defbde7a drm-tip-eudebug)
+(backported from commit 32f4488a5e173562c6d2fe9d530133839550dcd5 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  mm/memory.c | 1 +
  1 file changed, 1 insertion(+)
 
 diff --git a/mm/memory.c b/mm/memory.c
-index 07778814b..35ece03ad 100644
+index 86a973119..9b7db7ff8 100644
 --- a/mm/memory.c
 +++ b/mm/memory.c
-@@ -7037,6 +7037,7 @@ int access_remote_vm(struct mm_struct *mm, unsigned long addr,
+@@ -7160,6 +7160,7 @@ int access_remote_vm(struct mm_struct *mm, unsigned long addr,
  {
  	return __access_remote_vm(mm, addr, buf, len, gup_flags);
  }
@@ -43,5 +43,5 @@ index 07778814b..35ece03ad 100644
  /*
   * Access another process' address space.
 -- 
-2.34.1
+2.43.0
 

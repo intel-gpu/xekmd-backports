@@ -13,14 +13,14 @@ v2: - Fix bad op ref seqno (Christoph)
 Cc: Matthew Brost <matthew.brost@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 17817410d14a133266490d9459ca4592ba2ad10b drm-tip-eudebug)
+(backported from commit f229bb0776b3fb9285af6883a30380bbc7003ca0 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c | 45 +++++++++++++++++++++++++++++++++
  1 file changed, 45 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 6d6b2f4e2..ec6e9bc1d 100644
+index 522531282..a5686900e 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -3218,6 +3218,47 @@ void xe_eudebug_debug_metadata_destroy(struct xe_file *xef, struct xe_debug_meta
@@ -83,5 +83,5 @@ index 6d6b2f4e2..ec6e9bc1d 100644
  
  	xa_for_each(&xef->exec_queue.xa, i, q) {
 -- 
-2.34.1
+2.43.0
 

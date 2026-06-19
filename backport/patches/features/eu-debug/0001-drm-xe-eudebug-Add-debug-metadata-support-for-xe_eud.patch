@@ -21,7 +21,7 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 4dd91284541685772684148353e6e60003eee573 drm-tip-eudebug)
+(backported from commit 0325306f12bc80defca26b8a4195795d472bb2ae drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_debug_metadata.c |   7 +-
@@ -72,7 +72,7 @@ index 2863ca68e..23419e24a 100644
  
  	return 0;
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 28d43bcdc..6d6b2f4e2 100644
+index 836c048df..522531282 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -20,15 +20,18 @@
@@ -622,10 +622,10 @@ index 0e00b4202..461ce00e7 100644
 +
  #endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index b46803dba..61c31e100 100644
+index 1ecc62bba..549c3e009 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -3866,7 +3866,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -4123,7 +4123,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		if (err)
  			goto unwind_ops;
  
@@ -690,5 +690,5 @@ index b1695cb9e..ffeac4254 100644
  }
  #endif
 -- 
-2.34.1
+2.43.0
 

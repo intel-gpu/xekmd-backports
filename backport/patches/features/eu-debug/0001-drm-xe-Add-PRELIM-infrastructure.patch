@@ -14,7 +14,7 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 7462a9fb677ebd93b0008d53c3fd544daa5ffb17 drm-tip-eudebug)
+(backported from commit bee22cd9bda2892832a7ed05a545fdffd42ddad2 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  Documentation/gpu/driver-uapi.rst |  5 ++
@@ -41,10 +41,10 @@ index 1f15a8ca1..ccc6c5cd5 100644
  ================
  
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index e230a254f..61da17495 100644
+index 6be605889..689d7ed8a 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -194,6 +194,14 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -195,6 +195,14 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  	xe_file_put(xef);
  }
  
@@ -60,17 +60,17 @@ index e230a254f..61da17495 100644
  	DRM_IOCTL_DEF_DRV(XE_DEVICE_QUERY, xe_query_ioctl, DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_GEM_CREATE, xe_gem_create_ioctl, DRM_RENDER_ALLOW),
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index e32998921..ee48de8bf 100644
+index 586e25683..28df35626 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
-@@ -2623,6 +2623,7 @@ struct drm_xe_debug_metadata_destroy {
+@@ -2702,6 +2702,7 @@ struct drm_xe_debug_metadata_destroy {
  };
  
  #include "xe_drm_eudebug.h"
 +#include "xe_drm_prelim.h"
  
- /**
-  * DOC: Xe DRM RAS
+ #if defined(__cplusplus)
+ }
 diff --git a/include/uapi/drm/xe_drm_prelim.h b/include/uapi/drm/xe_drm_prelim.h
 new file mode 100644
 index 000000000..31cfbdcb5

@@ -8,17 +8,17 @@ Inside xe_vma_create() assert that attr isn't NULL, since it's
 dereferenced later on in the function.
 
 Signed-off-by: Jan Maslak <jan.maslak@intel.com>
-(backported from commit d4bfdaa650acd32c5a8be18c5b01890550ba200a drm-tip-eudebug)
+(backported from commit 53dcfd28fd15443fae784d76376275e858bcbb80 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_vm.c | 1 +
  1 file changed, 1 insertion(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index ca7c35e84..dce2f45bb 100644
+index 51143f8c2..e4eeb2544 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -1004,6 +1004,7 @@ static struct xe_vma *xe_vma_create(struct xe_vm *vm,
+@@ -1081,6 +1081,7 @@ static struct xe_vma *xe_vma_create(struct xe_vm *vm,
  
  	xe_assert(vm->xe, start < end);
  	xe_assert(vm->xe, end < vm->size);
@@ -27,5 +27,5 @@ index ca7c35e84..dce2f45bb 100644
  	/*
  	 * Allocate and ensure that the xe_vma_is_userptr() return
 -- 
-2.34.1
+2.43.0
 

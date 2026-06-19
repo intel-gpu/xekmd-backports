@@ -35,7 +35,7 @@ Signed-off-by: Andrzej Hajda <andrzej.hajda@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com> #v3
 Signed-off-by: Jan Maslak <jan.maslak@intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit d1b9a770d6a9d9663f723d8dfc3455f00e0ea641 drm-tip-eudebug)
+(backported from commit 431490a44aa690dc3cc3c220cbf5f834cd27a94b drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c       | 297 ++++++++++++++++++++++++--
@@ -559,10 +559,10 @@ index e05dabfcd..69112dbd1 100644
  					  SYNC_PARSE_FLAG_EXEC |
  					  (xe_vm_in_lr_mode(vm) ?
 diff --git a/drivers/gpu/drm/xe/xe_oa.c b/drivers/gpu/drm/xe/xe_oa.c
-index 4dd3f2993..8d4cf7a0d 100644
+index d908f4e03..a0fd547d2 100644
 --- a/drivers/gpu/drm/xe/xe_oa.c
 +++ b/drivers/gpu/drm/xe/xe_oa.c
-@@ -1416,7 +1416,8 @@ static int xe_oa_parse_syncs(struct xe_oa *oa,
+@@ -1415,7 +1415,8 @@ static int xe_oa_parse_syncs(struct xe_oa *oa,
  	}
  
  	for (num_syncs = 0; num_syncs < param->num_syncs; num_syncs++) {
@@ -573,7 +573,7 @@ index 4dd3f2993..8d4cf7a0d 100644
  					  stream->ufence_syncobj,
  					  ++stream->ufence_timeline_value, 0);
 diff --git a/drivers/gpu/drm/xe/xe_sync.c b/drivers/gpu/drm/xe/xe_sync.c
-index eb136390d..dfcd60141 100644
+index 24d6d9af2..e715ee0cc 100644
 --- a/drivers/gpu/drm/xe/xe_sync.c
 +++ b/drivers/gpu/drm/xe/xe_sync.c
 @@ -15,27 +15,18 @@
@@ -660,7 +660,7 @@ index eb136390d..dfcd60141 100644
  			struct xe_sync_entry *sync,
  			struct drm_xe_sync __user *sync_user,
  			struct drm_syncobj *ufence_syncobj,
-@@ -194,8 +204,9 @@ int xe_sync_entry_parse(struct xe_device *xe, struct xe_file *xef,
+@@ -200,8 +210,9 @@ int xe_sync_entry_parse(struct xe_device *xe, struct xe_file *xef,
  		if (exec) {
  			sync->addr = sync_in.addr;
  		} else {
@@ -747,10 +747,10 @@ index b88f1833e..33a93a0fa 100644
  struct xe_sync_entry {
  	struct drm_syncobj *syncobj;
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 4c98c152b..77e5f6127 100644
+index 264485830..332b5699d 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -3728,7 +3728,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -3985,7 +3985,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  	for (num_syncs = 0; num_syncs < args->num_syncs; num_syncs++) {
  		struct xe_exec_queue *__q = q ?: vm->q[0];
  
@@ -759,7 +759,7 @@ index 4c98c152b..77e5f6127 100644
  					  &syncs_user[num_syncs],
  					  __q->ufence_syncobj,
  					  ++__q->ufence_timeline_value,
-@@ -3753,6 +3753,8 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -4010,6 +4010,8 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		goto free_syncs;
  	}
  
@@ -768,7 +768,7 @@ index 4c98c152b..77e5f6127 100644
  	xe_vma_ops_init(&vops, vm, q, syncs, num_syncs);
  	if (args->num_binds > 1)
  		vops.flags |= XE_VMA_OPS_ARRAY_OF_BINDS;
-@@ -3811,10 +3813,11 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -4068,10 +4070,11 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		dma_fence_put(fence);
  
  unwind_ops:
@@ -822,5 +822,5 @@ index 505529bc1..d597648ec 100644
  }
  #endif
 -- 
-2.34.1
+2.43.0
 

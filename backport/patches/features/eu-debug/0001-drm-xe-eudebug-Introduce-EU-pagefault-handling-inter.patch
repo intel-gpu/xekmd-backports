@@ -69,7 +69,7 @@ Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Jan Maslak <jan.maslak@intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Reviewed-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
-(backported from commit 598f6e1c0690edb09dccd7bb9134daf277c07059 drm-tip-eudebug)
+(backported from commit 7a0c384f114ce8ff2d2eac1ac55af1fb2c28d6f9 drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c       | 510 +++++++++++++++++++++++++-
@@ -79,7 +79,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  4 files changed, 632 insertions(+), 13 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 6d8373d67..66a0baebc 100644
+index 3dcdc9857..e84183d96 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -237,10 +237,17 @@ static void xe_eudebug_free(struct kref *ref)
@@ -895,5 +895,5 @@ index ffeac4254..4cf516fc8 100644
  }
  #endif
 -- 
-2.34.1
+2.43.0
 

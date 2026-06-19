@@ -26,7 +26,7 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 5e738e59cd674e2aa4a9478371ccf1eaa9e677f0 drm-tip-eudebug)
+(backported from commit 9f71a01d99d2bc728a5eea70c16fc09a1c3e888f drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h  |   2 +
@@ -38,14 +38,14 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  6 files changed, 596 insertions(+), 25 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index c0855a0eb..fbbe24128 100644
+index 38a2a0603..d55576ba8 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -525,6 +525,8 @@
+@@ -538,6 +538,8 @@
  #define   THREAD_EX_ARB_MODE			REG_GENMASK(3, 2)
  #define   THREAD_EX_ARB_MODE_RR_AFTER_DEP	REG_FIELD_PREP(THREAD_EX_ARB_MODE, 0x2)
  
-+#define EU_ATT_CLR(i)				XE_REG_MCR(0xe490 + (i) * 4)
++#define EU_ATT_CLR(i)                          XE_REG_MCR(0xe490 + (i) * 4)
 +
  #define ROW_CHICKEN3				XE_REG_MCR(0xe49c, XE_REG_OPTION_MASKED)
  #define   XE2_EUPEND_CHK_FLUSH_DIS		REG_BIT(14)
@@ -858,5 +858,5 @@ index eff924361..3315aa887 100644
  }
  #endif
 -- 
-2.34.1
+2.43.0
 

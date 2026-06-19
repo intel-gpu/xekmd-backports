@@ -23,7 +23,7 @@ Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Acked-by: Matthew Brost <matthew.brost@intel.com> #locking
 Acked-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 515c9cda514d7de4a8b3ce52942d964405824033 drm-tip-eudebug)
+(backported from commit 72d7c76597410b0add2159092c1ab3283560d1dc drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_device.c        |  10 +-
@@ -34,10 +34,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  5 files changed, 185 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index bc8cb720d..57180ad24 100644
+index 1503a5448..62ae80f6b 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -229,8 +229,11 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+@@ -232,8 +232,11 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
  
  	ACQUIRE(xe_pm_runtime_ioctl, pm)(xe);
  	ret = ACQUIRE_ERR(xe_pm_runtime_ioctl, &pm);
@@ -50,7 +50,7 @@ index bc8cb720d..57180ad24 100644
  
  	return ret;
  }
-@@ -247,8 +250,11 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
+@@ -250,8 +253,11 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
  
  	ACQUIRE(xe_pm_runtime_ioctl, pm)(xe);
  	ret = ACQUIRE_ERR(xe_pm_runtime_ioctl, &pm);
@@ -64,7 +64,7 @@ index bc8cb720d..57180ad24 100644
  	return ret;
  }
 diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
-index 374014379..4f1ecacea 100644
+index e4b9de8d8..5ca7f7332 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
 @@ -7,6 +7,7 @@
@@ -75,7 +75,7 @@ index 374014379..4f1ecacea 100644
  
  #include "xe_device_types.h"
  #include "xe_gt_types.h"
-@@ -218,4 +219,37 @@ bool xe_is_xe_file(const struct file *file);
+@@ -225,4 +226,37 @@ struct xe_vm *xe_device_asid_to_vm(struct xe_device *xe, u32 asid);
  #define LNL_FLUSH_WORK(wrk__) \
  	flush_work(wrk__)
  
@@ -114,10 +114,10 @@ index 374014379..4f1ecacea 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index a39f26144..2915563a5 100644
+index 08fb5543a..4ed01d81c 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -737,6 +737,12 @@ struct xe_device {
+@@ -575,6 +575,12 @@ struct xe_device {
  
  		/** @eudebug.available: is the debugging functionality available */
  		bool available;
@@ -390,5 +390,5 @@ index 52d4205e0..be94e4b9a 100644
  	struct {
  		/** @lock: guards access to fifo */
 -- 
-2.34.1
+2.43.0
 

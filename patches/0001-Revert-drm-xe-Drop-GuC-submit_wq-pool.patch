@@ -9,13 +9,14 @@ GuC submit_wq pool hack.
 V1: Rebase to v6.17.1-251107.1
 V2: Rebase to v6.17.13.36 [Akanksha]
 V3: Restore the missing alloc_submit_wq(guc) call [Raju]
+V4: Restore missing submit_wq assignment in guc_exec_queue_init [Varun]
 
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/gpu/drm/xe/xe_guc_submit.c | 63 ++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_guc_submit.c | 67 +++++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_guc_types.h  |  9 ++++
- 2 files changed, 72 insertions(+)
+ 2 files changed, 76 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
 index fb916dd..ef95cfe 100644
@@ -105,6 +106,7 @@ index fb916dd..ef95cfe 100644
  	err = drmm_add_action_or_reset(&xe->drm, guc_submit_sw_fini, guc);
  	if (err)
  		return err;
+
 diff --git a/drivers/gpu/drm/xe/xe_guc_types.h b/drivers/gpu/drm/xe/xe_guc_types.h
 index c7b9642..74e4c73 100644
 --- a/drivers/gpu/drm/xe/xe_guc_types.h
@@ -125,6 +127,22 @@ index c7b9642..74e4c73 100644
  		/** @submission_state.enabled: submission is enabled */
  		bool enabled;
  		/**
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index fb916dd..ef95cfe 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -1943,6 +2006,10 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
+ 	timeout = (q->vm && xe_vm_in_lr_mode(q->vm)) ? MAX_SCHEDULE_TIMEOUT :
+ 		  msecs_to_jiffies(q->sched_props.job_timeout_ms);
+ 
++#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
++	submit_wq = get_submit_wq(guc);
++#endif
++
+ 	/*
+ 	 * Use primary queue's submit_wq for all secondary queues of a
+ 	 * multi queue group. This serialization avoids any locking around
+
 -- 
 2.43.0
 

@@ -56,7 +56,7 @@ index fcb1e0f19..6c3aae821 100644
  
  	h_c = find_handle(d->res, XE_EUDEBUG_RES_TYPE_CLIENT, xef);
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 343f7e29e..58502a797 100644
+index 49f569bb3..7d9418cd8 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -334,8 +334,8 @@ static void __xe_exec_queue_fini(struct xe_exec_queue *q)
@@ -140,12 +140,12 @@ index 343f7e29e..58502a797 100644
  
  	idx = array_index_nospec(ext.property, ARRAY_SIZE(exec_queue_set_property_funcs));
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.h b/drivers/gpu/drm/xe/xe_exec_queue.h
-index a82d99bd7..f7babd1e2 100644
+index 0225426c5..fb090704d 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.h
-@@ -179,4 +179,6 @@ static inline bool xe_exec_queue_idle_skip_suspend(struct xe_exec_queue *q)
- 	return !xe_exec_queue_is_parallel(q) && xe_exec_queue_is_idle(q);
- }
+@@ -162,4 +162,6 @@ int xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch);
+ struct xe_lrc *xe_exec_queue_lrc(struct xe_exec_queue *q);
+ struct xe_lrc *xe_exec_queue_get_lrc(struct xe_exec_queue *q, u16 idx);
  
 +int xe_exec_queue_is_debuggable(struct xe_exec_queue *q);
 +
@@ -169,10 +169,10 @@ index 8ce78e0b1..3cde42045 100644
  		/** @multi_gt_list: list head for VM bind engines if multi-GT */
  		struct list_head multi_gt_list;
 diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
-index 9d12a0d2f..4dbdb893c 100644
+index 4af9f0d7c..2fa823220 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.c
 +++ b/drivers/gpu/drm/xe/xe_lrc.c
-@@ -1656,6 +1656,16 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe, struct xe_v
+@@ -1663,6 +1663,16 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe, struct xe_v
  	if (vm && vm->xef)
  		xe_drm_client_add_bo(vm->xef->client, lrc->bo);
  

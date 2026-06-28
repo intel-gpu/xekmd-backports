@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Thu, 26 Mar 2026 21:46:28 +0530
+Subject: drm/xe/xe3p_lpg: Add Wa_18044193044
+
+Add engine workaround Wa_18044193044 for graphics version
+35.10 stepping A0..B0.
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Link: https://patch.msgid.link/20260326161628.3566067-1-varun.gupta@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit c027f1a19180ea4e5aa29bab4e0871a21bb96c05 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_gt_regs.h | 1 +
+ drivers/gpu/drm/xe/xe_wa.c           | 5 +++++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+index 4702c29556d3..91d377dcf974 100644
+--- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+@@ -565,6 +565,7 @@
+ #define   DIS_ATOMIC_CHAINING_TYPED_WRITES	REG_BIT(3)
+ 
+ #define TDL_CHICKEN				XE_REG_MCR(0xe5f4, XE_REG_OPTION_MASKED)
++#define   BIT_APQ_OPT_DIS			REG_BIT(14)
+ #define   QID_WAIT_FOR_THREAD_NOT_RUN_DISABLE	REG_BIT(12)
+ #define   EUSTALL_PERF_SAMPLING_DISABLE		REG_BIT(5)
+ 
+diff --git a/drivers/gpu/drm/xe/xe_wa.c b/drivers/gpu/drm/xe/xe_wa.c
+index 33df43d0bede..343389ceae01 100644
+--- a/drivers/gpu/drm/xe/xe_wa.c
++++ b/drivers/gpu/drm/xe/xe_wa.c
+@@ -601,6 +601,11 @@ static const struct xe_rtp_entry_sr engine_was[] = {
+ 		       FUNC(xe_rtp_match_first_render_or_compute)),
+ 	  XE_RTP_ACTIONS(SET(ROW_CHICKEN5, CPSS_AWARE_DIS))
+ 	},
++	{ XE_RTP_NAME("18044193044"),
++	  XE_RTP_RULES(GRAPHICS_VERSION(3510), GRAPHICS_STEP(A0, B0),
++		       FUNC(xe_rtp_match_first_render_or_compute)),
++	  XE_RTP_ACTIONS(SET(TDL_CHICKEN, BIT_APQ_OPT_DIS))
++	},
+ };
+ 
+ static const struct xe_rtp_entry_sr lrc_was[] = {
+-- 
+2.43.0
+

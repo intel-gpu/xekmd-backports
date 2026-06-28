@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Mon, 11 May 2026 19:28:38 +0200
+Subject: drm/xe/memirq: Enable GT_MI_USER_INTERRUPT only
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We only expect and handle the GT_MI_USER_INTERRUPT from the
+engines, there is no point in enabling other interrupts, like
+GT_CONTEXT_SWITCH_INTERRUPT, if we don't intent to handle them.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Michał Winiarski <michal.winiarski@intel.com>
+Link: https://patch.msgid.link/20260511172838.2299-3-michal.wajdeczko@intel.com
+(cherry-picked from commit 2ddedd4b7b7c329dd65358025cba8652675bec3d drm-tip)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_memirq.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_memirq.c b/drivers/gpu/drm/xe/xe_memirq.c
+index 1aaa80d9f04a..609e0f3220cc 100644
+--- a/drivers/gpu/drm/xe/xe_memirq.c
++++ b/drivers/gpu/drm/xe/xe_memirq.c
+@@ -242,7 +242,11 @@ static int memirq_alloc_pages(struct xe_memirq *memirq)
+ 
+ static void memirq_set_enable(struct xe_memirq *memirq, bool enable)
+ {
+-	iosys_map_wr(&memirq->mask, 0, u32, enable ? GENMASK(15, 0) : 0);
++	/*
++	 * We only care about the GT_MI_USER_INTERRUPT from the engines and
++	 * the GuC does not look at the ENABLE mask at all.
++	 */
++	iosys_map_wr(&memirq->mask, 0, u32, enable ? GT_MI_USER_INTERRUPT : 0);
+ 
+ 	memirq->enabled = enable;
+ }
+-- 
+2.43.0
+

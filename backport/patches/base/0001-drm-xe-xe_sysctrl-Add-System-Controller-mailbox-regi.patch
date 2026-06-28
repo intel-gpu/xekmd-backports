@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Anoop Vijay <anoop.c.vijay@intel.com>
+Date: Fri, 27 Mar 2026 06:18:39 -0700
+Subject: drm/xe/xe_sysctrl: Add System Controller mailbox
+ register definitions
+
+Add register definitions for System Controller mailbox interface,
+including control, data, and protocol-related fields, along with base
+address and BAR configuration required by the driver.
+
+No functional changes. This patch introduces register definitions only.
+
+Signed-off-by: Anoop Vijay <anoop.c.vijay@intel.com>
+Reviewed-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Signed-off-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Link: https://patch.msgid.link/20260327131837.2192929-11-anoop.c.vijay@intel.com
+(cherry-picked from commit 281a79f78dfedf10f6c7de4334434c38eb5459dd drm-tip)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_sysctrl_regs.h | 36 +++++++++++++++++++++++
+ 1 file changed, 36 insertions(+)
+ create mode 100644 drivers/gpu/drm/xe/regs/xe_sysctrl_regs.h
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_sysctrl_regs.h b/drivers/gpu/drm/xe/regs/xe_sysctrl_regs.h
+new file mode 100644
+index 000000000000..59f3f3ec59a6
+--- /dev/null
++++ b/drivers/gpu/drm/xe/regs/xe_sysctrl_regs.h
+@@ -0,0 +1,36 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2026 Intel Corporation
++ */
++
++#ifndef _XE_SYSCTRL_REGS_H_
++#define _XE_SYSCTRL_REGS_H_
++
++#include "xe_regs.h"
++
++#define SYSCTRL_BASE_OFFSET			0xdb000
++#define SYSCTRL_BASE				(SOC_BASE + SYSCTRL_BASE_OFFSET)
++#define SYSCTRL_MAILBOX_INDEX			0x03
++#define SYSCTRL_BAR_LENGTH			0x1000
++
++#define SYSCTRL_MB_CTRL				XE_REG(0x10)
++#define   SYSCTRL_MB_CTRL_RUN_BUSY		REG_BIT(31)
++#define   SYSCTRL_MB_CTRL_IRQ			REG_BIT(30)
++#define   SYSCTRL_MB_CTRL_RUN_BUSY_OUT		REG_BIT(29)
++#define   SYSCTRL_MB_CTRL_PARAM3_MASK		REG_GENMASK(28, 24)
++#define   SYSCTRL_MB_CTRL_PARAM2_MASK		REG_GENMASK(23, 16)
++#define   SYSCTRL_MB_CTRL_PARAM1_MASK		REG_GENMASK(15, 8)
++#define   SYSCTRL_MB_CTRL_COMMAND_MASK		REG_GENMASK(7, 0)
++#define   SYSCTRL_MB_CTRL_CMD			REG_FIELD_PREP(SYSCTRL_MB_CTRL_COMMAND_MASK, 5)
++
++#define SYSCTRL_MB_DATA0			XE_REG(0x14)
++#define SYSCTRL_MB_DATA1			XE_REG(0x18)
++#define SYSCTRL_MB_DATA2			XE_REG(0x1c)
++#define SYSCTRL_MB_DATA3			XE_REG(0x20)
++
++#define SYSCTRL_FRAME_PHASE			REG_BIT(24)
++#define SYSCTRL_FRAME_CURRENT_MASK		REG_GENMASK(21, 16)
++#define SYSCTRL_FRAME_TOTAL_MASK		REG_GENMASK(13, 8)
++#define SYSCTRL_FRAME_COMMAND_MASK		REG_GENMASK(7, 0)
++
++#endif
+-- 
+2.43.0
+

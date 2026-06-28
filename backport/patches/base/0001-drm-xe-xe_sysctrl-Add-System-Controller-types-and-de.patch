@@ -1,0 +1,120 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Anoop Vijay <anoop.c.vijay@intel.com>
+Date: Fri, 27 Mar 2026 06:18:38 -0700
+Subject: drm/xe/xe_sysctrl: Add System Controller types and
+ device integration
+
+Add foundational type definitions for System Controller (sysctrl) support
+and integrate them into the xe_device structure. Introduce a capability
+flag in device descriptor and runtime information to record sysctrl
+presence on supported platforms.
+
+System Controller is a separate firmware-managed entity responsible for
+selected platform-level control and coordination tasks on Intel Xe3p
+discrete GPU platforms. The driver communicates with it via a mailbox
+interface for delegated operations.
+
+This commit introduces core data structures required for sysctrl support,
+including MMIO region definitions, a command mutex, and state tracking
+required for mailbox communication.
+
+No functional changes. This patch provides preparatory infrastructure
+for System Controller support.
+
+Signed-off-by: Anoop Vijay <anoop.c.vijay@intel.com>
+Reviewed-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Signed-off-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Link: https://patch.msgid.link/20260327131837.2192929-10-anoop.c.vijay@intel.com
+(cherry-picked from commit bb2447ef6aee314f303b1a8e0ede6b98c8f6a529 drm-tip)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device_types.h  |  6 +++++
+ drivers/gpu/drm/xe/xe_pci_types.h     |  1 +
+ drivers/gpu/drm/xe/xe_sysctrl_types.h | 32 +++++++++++++++++++++++++++
+ 3 files changed, 39 insertions(+)
+ create mode 100644 drivers/gpu/drm/xe/xe_sysctrl_types.h
+
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index 615218d775b1..150c76b2acaf 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -27,6 +27,7 @@
+ #include "xe_sriov_vf_ccs_types.h"
+ #include "xe_step_types.h"
+ #include "xe_survivability_mode_types.h"
++#include "xe_sysctrl_types.h"
+ #include "xe_tile_types.h"
+ #include "xe_validation.h"
+ 
+@@ -196,6 +197,8 @@ struct xe_device {
+ 		u8 has_soc_remapper_telem:1;
+ 		/** @info.has_sriov: Supports SR-IOV */
+ 		u8 has_sriov:1;
++		/** @info.has_sysctrl: Supports System Controller */
++		u8 has_sysctrl:1;
+ 		/** @info.has_usm: Device has unified shared memory support */
+ 		u8 has_usm:1;
+ 		/** @info.has_64bit_timestamp: Device supports 64-bit timestamps */
+@@ -508,6 +511,9 @@ struct xe_device {
+ 	/** @i2c: I2C host controller */
+ 	struct xe_i2c *i2c;
+ 
++	/** @sc: System Controller */
++	struct xe_sysctrl sc;
++
+ 	/** @atomic_svm_timeslice_ms: Atomic SVM fault timeslice MS */
+ 	u32 atomic_svm_timeslice_ms;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
+index 8eee4fb1c57c..08386c5eca27 100644
+--- a/drivers/gpu/drm/xe/xe_pci_types.h
++++ b/drivers/gpu/drm/xe/xe_pci_types.h
+@@ -57,6 +57,7 @@ struct xe_device_desc {
+ 	u8 has_soc_remapper_sysctrl:1;
+ 	u8 has_soc_remapper_telem:1;
+ 	u8 has_sriov:1;
++	u8 has_sysctrl:1;
+ 	u8 needs_scratch:1;
+ 	u8 skip_guc_pc:1;
+ 	u8 skip_mtcfg:1;
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_types.h b/drivers/gpu/drm/xe/xe_sysctrl_types.h
+new file mode 100644
+index 000000000000..8217f6befe70
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_sysctrl_types.h
+@@ -0,0 +1,32 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2026 Intel Corporation
++ */
++
++#ifndef _XE_SYSCTRL_TYPES_H_
++#define _XE_SYSCTRL_TYPES_H_
++
++#include <linux/mutex.h>
++#include <linux/types.h>
++
++struct xe_mmio;
++
++/**
++ * struct xe_sysctrl - System Controller driver context
++ *
++ * This structure maintains the runtime state for System Controller
++ * communication. All fields are initialized during xe_sysctrl_init()
++ * and protected appropriately for concurrent access.
++ */
++struct xe_sysctrl {
++	/** @mmio: MMIO region for system control registers */
++	struct xe_mmio *mmio;
++
++	/** @cmd_lock: Mutex protecting mailbox command operations */
++	struct mutex cmd_lock;
++
++	/** @phase_bit: Message boundary phase toggle bit (0 or 1) */
++	bool phase_bit;
++};
++
++#endif
+-- 
+2.43.0
+

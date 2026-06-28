@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Mon, 18 May 2026 21:25:40 +0200
+Subject: drm/xe/memirq: Make page layout macros private
+
+There is no need to expose the macros describing memory-based
+interrupts page layouts in the .h file as we only use them in
+the private code. Move them to the .c file near the kernel-doc.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Ilia Levi <ilia.levi@intel.com>
+Link: https://patch.msgid.link/20260518192547.600-3-michal.wajdeczko@intel.com
+(cherry-picked from commit e89b59652ccb0987c8f4647b4e7062516880756d drm-tip)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_memirq.c       | 7 +++++++
+ drivers/gpu/drm/xe/xe_memirq_types.h | 7 -------
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_memirq.c b/drivers/gpu/drm/xe/xe_memirq.c
+index 579af47edc61..9e8b62d35d67 100644
+--- a/drivers/gpu/drm/xe/xe_memirq.c
++++ b/drivers/gpu/drm/xe/xe_memirq.c
+@@ -152,6 +152,13 @@ static const char *guc_name(struct xe_guc *guc)
+  *
+  */
+ 
++/* ISR */
++#define XE_MEMIRQ_STATUS_OFFSET(inst)	((inst) * SZ_4K + 0x0)
++/* IIR */
++#define XE_MEMIRQ_SOURCE_OFFSET(inst)	((inst) * SZ_4K + 0x400)
++/* IMR */
++#define XE_MEMIRQ_ENABLE_OFFSET		0x440
++
+ static inline bool hw_reports_to_instance_zero(struct xe_memirq *memirq)
+ {
+ 	/*
+diff --git a/drivers/gpu/drm/xe/xe_memirq_types.h b/drivers/gpu/drm/xe/xe_memirq_types.h
+index 9d0f6c1cdb9d..02ac938cadb4 100644
+--- a/drivers/gpu/drm/xe/xe_memirq_types.h
++++ b/drivers/gpu/drm/xe/xe_memirq_types.h
+@@ -10,13 +10,6 @@
+ 
+ struct xe_bo;
+ 
+-/* ISR */
+-#define XE_MEMIRQ_STATUS_OFFSET(inst)	((inst) * SZ_4K + 0x0)
+-/* IIR */
+-#define XE_MEMIRQ_SOURCE_OFFSET(inst)	((inst) * SZ_4K + 0x400)
+-/* IMR */
+-#define XE_MEMIRQ_ENABLE_OFFSET		0x440
+-
+ /**
+  * struct xe_memirq - Data used by the `Memory Based Interrupts`_.
+  *
+-- 
+2.43.0
+

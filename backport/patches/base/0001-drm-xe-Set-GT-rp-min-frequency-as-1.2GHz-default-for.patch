@@ -1,0 +1,89 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
+Date: Thu, 26 Mar 2026 12:04:09 +0530
+Subject: drm/xe: Set GT rp min frequency as 1.2GHz default for
+ BMG/CRI
+
+ While previously applied only to both tiles GT0(Graphics) and Media(GT1)
+ the BMG G21(Battle image) platform via workaround Wa_14022085890,
+ this 1.2 GHz minimum is now the default for GT0(Graphics) tile
+ of BMG and CRI platforms.
+
+ Setting this frequency floor(1.2GHz) default is critical in multi GPU
+ environment for supporting effective Peer-to-Peer(P2P) transactions.
+
+v2:
+- Fix Indentation(Thomas)
+- Add comment about power impact(Stuart)
+
+v3:(Thomas/Ankur/Matt Roper)
+- Add setting frequency to only GT0(Graphics) Tile of BMG/CRI
+
+v4:(Stuart)
+- Move WA check to pc_needs_min_freq_change function
+
+Signed-off-by: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
+Reviewed-by: Vinay Belgaumkar <vinay.belgaumkar@intel.com>
+Link: https://patch.msgid.link/20260326063407.985568-4-naresh.kumar.g@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit d0672008cde3a8616c517d53d657300dce3c36a7 drm-tip)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_pc.c | 32 ++++++++++++++++++++++++++++++--
+ 1 file changed, 30 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_pc.c b/drivers/gpu/drm/xe/xe_guc_pc.c
+index bb8c4e793492..7ecd91ad6192 100644
+--- a/drivers/gpu/drm/xe/xe_guc_pc.c
++++ b/drivers/gpu/drm/xe/xe_guc_pc.c
+@@ -890,9 +890,26 @@ void xe_guc_pc_init_early(struct xe_guc_pc *pc)
+ 	pc_init_fused_rp_values(pc);
+ }
+ 
++static bool pc_needs_min_freq_change(struct xe_guc_pc *pc)
++{
++	struct xe_device *xe = pc_to_xe(pc);
++	struct xe_gt *gt = pc_to_gt(pc);
++
++	if (XE_DEVICE_WA(xe, 14022085890))
++		return true;
++
++	if (xe_gt_is_media_type(gt))
++		return false;
++
++	if (xe->info.platform == XE_BATTLEMAGE ||
++	    xe->info.platform == XE_CRESCENTISLAND)
++		return true;
++
++	return false;
++}
++
+ static int pc_adjust_freq_bounds(struct xe_guc_pc *pc)
+ {
+-	struct xe_tile *tile = gt_to_tile(pc_to_gt(pc));
+ 	int ret;
+ 
+ 	lockdep_assert_held(&pc->freq_lock);
+@@ -919,7 +936,18 @@ static int pc_adjust_freq_bounds(struct xe_guc_pc *pc)
+ 	if (pc_get_min_freq(pc) > pc->rp0_freq)
+ 		ret = pc_set_min_freq(pc, pc->rp0_freq);
+ 
+-	if (XE_DEVICE_WA(tile_to_xe(tile), 14022085890))
++	/*
++	 * Setting GT RP min frequency to 1.2GHz by default for
++	 * GT0(Graphics) Tile of BMG and CRI.
++	 *
++	 * While BMG G21 WA will apply min frequency for
++	 * both GT0(Graphics) and GT1(Media) Tile.
++	 *
++	 * This is an active frequency, so if the device is idle
++	 * we aren't expecting high power output across board
++	 *
++	 */
++	if (pc_needs_min_freq_change(pc))
+ 		ret = pc_set_min_freq(pc, max(BMG_MIN_FREQ, pc_get_min_freq(pc)));
+ 
+ out:
+-- 
+2.43.0
+

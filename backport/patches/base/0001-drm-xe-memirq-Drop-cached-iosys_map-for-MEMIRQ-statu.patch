@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Mon, 18 May 2026 21:25:47 +0200
+Subject: drm/xe/memirq: Drop cached iosys_map for MEMIRQ status
+
+Since addition of the MSI-X support, we mostly rely on the offset
+calculations done by XE_MEMIRQ_STATUS_OFFSET. We don't use this
+separate map pointing to the first status page anymore.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Ilia Levi <ilia.levi@intel.com>
+Link: https://patch.msgid.link/20260518192547.600-10-michal.wajdeczko@intel.com
+(cherry-picked from commit 8d8395e943129b457403030d1112a1f9e48b6c27 drm-tip)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_memirq.c       | 2 --
+ drivers/gpu/drm/xe/xe_memirq_types.h | 2 --
+ 2 files changed, 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_memirq.c b/drivers/gpu/drm/xe/xe_memirq.c
+index 4909dafe182d..9dfe965cb46e 100644
+--- a/drivers/gpu/drm/xe/xe_memirq.c
++++ b/drivers/gpu/drm/xe/xe_memirq.c
+@@ -219,11 +219,9 @@ static int memirq_alloc_pages(struct xe_memirq *memirq)
+ 
+ 	memirq->bo = bo;
+ 	memirq->source = IOSYS_MAP_INIT_OFFSET(&bo->vmap, XE_MEMIRQ_SOURCE_OFFSET(0));
+-	memirq->status = IOSYS_MAP_INIT_OFFSET(&bo->vmap, XE_MEMIRQ_STATUS_OFFSET(0));
+ 	memirq->num_pages = num_pages;
+ 
+ 	memirq_assert(memirq, !memirq->source.is_iomem);
+-	memirq_assert(memirq, !memirq->status.is_iomem);
+ 
+ 	memirq_debug(memirq, "pages: count %u size %zu\n", num_pages, bo_size);
+ 	memirq_debug(memirq, "page0: source %#x status %#x mask %#x\n",
+diff --git a/drivers/gpu/drm/xe/xe_memirq_types.h b/drivers/gpu/drm/xe/xe_memirq_types.h
+index 4ea3d1976d4f..c2b0b33d55cd 100644
+--- a/drivers/gpu/drm/xe/xe_memirq_types.h
++++ b/drivers/gpu/drm/xe/xe_memirq_types.h
+@@ -16,14 +16,12 @@ struct xe_bo;
+  * @bo: buffer object with `Memory Based Interrupts Page Layout`_.
+  * @num_pages: number of per-instance source/status pages.
+  * @source: iosys pointer to `Interrupt Source Report Page`_.
+- * @status: iosys pointer to `Interrupt Status Report Page`_.
+  * @enabled: internal flag used to control processing of the interrupts.
+  */
+ struct xe_memirq {
+ 	struct xe_bo *bo;
+ 	unsigned int num_pages;
+ 	struct iosys_map source;
+-	struct iosys_map status;
+ 	bool enabled;
+ };
+ 
+-- 
+2.43.0
+

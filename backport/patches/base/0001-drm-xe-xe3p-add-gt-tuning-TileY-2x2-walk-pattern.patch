@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Clint Taylor <clinton.a.taylor@intel.com>
+Date: Mon, 13 Apr 2026 13:08:25 -0700
+Subject: drm/xe/xe3p: add gt tuning TileY 2x2 walk pattern
+
+Apply engine tuning for TileY 2x2 walk pattern, starting with IP
+Xe3p_LPG.
+
+v2: move to xe tunings (MattR)
+
+Bspec: 72161, 73720
+Signed-off-by: Clint Taylor <clinton.a.taylor@intel.com>
+Link: https://patch.msgid.link/20260413200825.4054940-1-clinton.a.taylor@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit 36acdfbc2cad67f550021725d6550bb0d4973217 drm-tip)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_gt_regs.h | 3 +++
+ drivers/gpu/drm/xe/xe_tuning.c       | 5 +++++
+ 2 files changed, 8 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+index 353fe0bd49bf..4702c29556d3 100644
+--- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+@@ -537,6 +537,9 @@
+ #define   SLM_WMTP_RESTORE			REG_BIT(11)
+ #define   RES_CHK_SPR_DIS			REG_BIT(6)
+ 
++#define TDL_TSL_CHICKEN2			XE_REG_MCR(0xe4cc, XE_REG_OPTION_MASKED)
++#define   TILEY_LOCALID				REG_BIT(2)
++
+ #define ROW_CHICKEN				XE_REG_MCR(0xe4f0, XE_REG_OPTION_MASKED)
+ #define   UGM_BACKUP_MODE			REG_BIT(13)
+ #define   MDQ_ARBITRATION_MODE			REG_BIT(12)
+diff --git a/drivers/gpu/drm/xe/xe_tuning.c b/drivers/gpu/drm/xe/xe_tuning.c
+index eee70daea53e..9a1b3862e192 100644
+--- a/drivers/gpu/drm/xe/xe_tuning.c
++++ b/drivers/gpu/drm/xe/xe_tuning.c
+@@ -124,6 +124,11 @@ static const struct xe_rtp_entry_sr engine_tunings[] = {
+ 			     GHWSP_CSB_REPORT_DIS,
+ 			     XE_RTP_ACTION_FLAG(ENGINE_BASE)))
+ 	},
++	{ XE_RTP_NAME("Tuning: TileY 2x2 Walk"),
++	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(3510, XE_RTP_END_VERSION_UNDEFINED),
++		       FUNC(xe_rtp_match_first_render_or_compute)),
++	  XE_RTP_ACTIONS(SET(TDL_TSL_CHICKEN2, TILEY_LOCALID))
++	},
+ };
+ 
+ static const struct xe_rtp_entry_sr lrc_tunings[] = {
+-- 
+2.43.0
+

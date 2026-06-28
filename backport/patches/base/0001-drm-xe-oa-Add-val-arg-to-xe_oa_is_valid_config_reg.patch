@@ -1,0 +1,75 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ashutosh Dixit <ashutosh.dixit@intel.com>
+Date: Thu, 30 Apr 2026 09:14:58 -0700
+Subject: drm/xe/oa: Add val arg to xe_oa_is_valid_config_reg
+
+Add val arg to xe_oa_is_valid_config_reg so that register values can also
+be verified, in addition to register address. Value verification is needed
+to implement MERTOA Wa_14026779378.
+
+Reviewed-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Signed-off-by: Ashutosh Dixit <ashutosh.dixit@intel.com>
+Link: https://patch.msgid.link/20260430161459.2892545-4-ashutosh.dixit@intel.com
+(cherry-picked from commit 8555fb84749c16d799caad0c5997c183bcefd0da drm-tip)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_oa.c | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_oa.c b/drivers/gpu/drm/xe/xe_oa.c
+index 3d70a5e0c213..43bcb8f0975d 100644
+--- a/drivers/gpu/drm/xe/xe_oa.c
++++ b/drivers/gpu/drm/xe/xe_oa.c
+@@ -2251,7 +2251,7 @@ static bool xe_oa_is_valid_mux_addr(struct xe_oa *oa, u32 addr)
+ 		return xe_oa_reg_in_range_table(addr, gen12_oa_mux_regs);
+ }
+ 
+-static bool xe_oa_is_valid_config_reg_addr(struct xe_oa *oa, u32 addr)
++static bool xe_oa_is_valid_config_reg(struct xe_oa *oa, u32 addr, u32 val)
+ {
+ 	return xe_oa_is_valid_flex_addr(oa, addr) ||
+ 		xe_oa_is_valid_b_counter_addr(oa, addr) ||
+@@ -2259,7 +2259,7 @@ static bool xe_oa_is_valid_config_reg_addr(struct xe_oa *oa, u32 addr)
+ }
+ 
+ static struct xe_oa_reg *
+-xe_oa_alloc_regs(struct xe_oa *oa, bool (*is_valid)(struct xe_oa *oa, u32 addr),
++xe_oa_alloc_regs(struct xe_oa *oa, bool (*is_valid)(struct xe_oa *oa, u32 addr, u32 val),
+ 		 u32 __user *regs, u32 n_regs)
+ {
+ 	struct xe_oa_reg *oa_regs;
+@@ -2277,16 +2277,16 @@ xe_oa_alloc_regs(struct xe_oa *oa, bool (*is_valid)(struct xe_oa *oa, u32 addr),
+ 		if (err)
+ 			goto addr_err;
+ 
+-		if (!is_valid(oa, addr)) {
+-			drm_dbg(&oa->xe->drm, "Invalid oa_reg address: %X\n", addr);
+-			err = -EINVAL;
+-			goto addr_err;
+-		}
+-
+ 		err = get_user(value, regs + 1);
+ 		if (err)
+ 			goto addr_err;
+ 
++		if (!is_valid(oa, addr, value)) {
++			drm_dbg(&oa->xe->drm, "Invalid oa_reg addr/value: %#x %#x\n", addr, value);
++			err = -EINVAL;
++			goto addr_err;
++		}
++
+ 		oa_regs[i].addr = XE_REG(addr);
+ 		oa_regs[i].value = value;
+ 
+@@ -2385,7 +2385,7 @@ int xe_oa_add_config_ioctl(struct drm_device *dev, u64 data, struct drm_file *fi
+ 	memcpy(oa_config->uuid, arg->uuid, sizeof(arg->uuid));
+ 
+ 	oa_config->regs_len = arg->n_regs;
+-	regs = xe_oa_alloc_regs(oa, xe_oa_is_valid_config_reg_addr,
++	regs = xe_oa_alloc_regs(oa, xe_oa_is_valid_config_reg,
+ 				u64_to_user_ptr(arg->regs_ptr),
+ 				arg->n_regs);
+ 	if (IS_ERR(regs)) {
+-- 
+2.43.0
+

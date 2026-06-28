@@ -23,11 +23,11 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  2 files changed, 5 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 315f355e2..b762e2ff2 100644
+index 5fe12e5d6af9..47582c959263 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -539,6 +539,7 @@
- #define   RES_CHK_SPR_DIS			REG_BIT(6)
+@@ -555,6 +555,7 @@
+ #define   TILEY_LOCALID				REG_BIT(2)
  
  #define ROW_CHICKEN				XE_REG_MCR(0xe4f0, XE_REG_OPTION_MASKED)
 +#define   CHICK_HANG_SEND_EXCEPTION		REG_BIT(15)
@@ -35,20 +35,20 @@ index 315f355e2..b762e2ff2 100644
  #define   MDQ_ARBITRATION_MODE			REG_BIT(12)
  #define   STALL_DOP_GATING_DISABLE		REG_BIT(5)
 diff --git a/drivers/gpu/drm/xe/xe_tuning.c b/drivers/gpu/drm/xe/xe_tuning.c
-index 316f5e2b2..614a1a99f 100644
+index 9a1b3862e192..90d6c99134d4 100644
 --- a/drivers/gpu/drm/xe/xe_tuning.c
 +++ b/drivers/gpu/drm/xe/xe_tuning.c
-@@ -123,6 +123,10 @@ static const struct xe_rtp_entry_sr engine_tunings[] = {
- 			     GHWSP_CSB_REPORT_DIS,
- 			     XE_RTP_ACTION_FLAG(ENGINE_BASE)))
+@@ -129,6 +129,10 @@ static const struct xe_rtp_entry_sr engine_tunings[] = {
+ 		       FUNC(xe_rtp_match_first_render_or_compute)),
+ 	  XE_RTP_ACTIONS(SET(TDL_TSL_CHICKEN2, TILEY_LOCALID))
  	},
 +	{ XE_RTP_NAME("Tuning: disable EU thread hang on exception"),
 +	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(3500, XE_RTP_END_VERSION_UNDEFINED)),
 +	  XE_RTP_ACTIONS(CLR(ROW_CHICKEN, CHICK_HANG_SEND_EXCEPTION))
-+	  },
++	},
  };
  
  static const struct xe_rtp_entry_sr lrc_tunings[] = {
 -- 
-2.34.1
+2.43.0
 

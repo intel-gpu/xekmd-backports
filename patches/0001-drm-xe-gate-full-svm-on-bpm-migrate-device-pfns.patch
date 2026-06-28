@@ -1,0 +1,89 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Tue, 17 Jun 2026 00:00:00 +0530
+Subject: drm/xe: gate full SVM paths on migrate_device_pfns availability
+
+Some target kernels can expose DRM_XE_GPUSVM while missing the
+migrate_device_pfns-based migration support expected by the full SVM path.
+Without guarding these codepaths, Xe may advertise or enter full-SVM
+flows on partial pagemap API targets.
+
+When BPM_MIGRATE_DEVICE_PFNS_NOT_PRESENT is set:
+- gate full-SVM enablement in xe_svm.h
+- avoid tile-local pagemap cache lookups that assume full pagemap API
+- expose CPU_ADDR_MIRROR capability only when the effective path is valid
+
+Reference:
+        f86ad0ed620c
+        drm/gpusvm, drm/pagemap: Move migration functionality to drm_pagemap
+        77613a2e1008
+        drm/xe/uapi: Add DRM_XE_QUERY_CONFIG_FLAG_HAS_CPU_ADDR_MIRROR
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+diff --git a/drivers/gpu/drm/xe/xe_query.c b/drivers/gpu/drm/xe/xe_query.c
+index 7fcf96d..ee756fc 100644
+--- a/drivers/gpu/drm/xe/xe_query.c
++++ b/drivers/gpu/drm/xe/xe_query.c
+@@ -335,9 +335,11 @@ static int query_config(struct xe_device *xe, struct drm_xe_device_query *query)
+ 	if (xe->mem.vram)
+ 		config->info[DRM_XE_QUERY_CONFIG_FLAGS] |=
+ 			DRM_XE_QUERY_CONFIG_FLAG_HAS_VRAM;
+-	if (xe->info.has_usm && IS_ENABLED(CONFIG_DRM_XE_GPUSVM))
++#if IS_ENABLED(CONFIG_DRM_XE_GPUSVM) && !defined(BPM_MIGRATE_DEVICE_PFNS_NOT_PRESENT)
++	if (xe->info.has_usm)
+ 		config->info[DRM_XE_QUERY_CONFIG_FLAGS] |=
+ 			DRM_XE_QUERY_CONFIG_FLAG_HAS_CPU_ADDR_MIRROR;
++#endif
+ 	if (GRAPHICS_VER(xe) >= 20)
+ 		config->info[DRM_XE_QUERY_CONFIG_FLAGS] |=
+ 			DRM_XE_QUERY_CONFIG_FLAG_HAS_NO_COMPRESSION_HINT;
+diff --git a/drivers/gpu/drm/xe/xe_svm.h b/drivers/gpu/drm/xe/xe_svm.h
+index 80ffec1..cbd8156 100644
+--- a/drivers/gpu/drm/xe/xe_svm.h
++++ b/drivers/gpu/drm/xe/xe_svm.h
+@@ -6,7 +6,11 @@
+ #ifndef _XE_SVM_H_
+ #define _XE_SVM_H_
+ 
+-#if IS_ENABLED(CONFIG_DRM_XE_GPUSVM)
++/*
++ * Full Xe SVM needs migrate_device_pfns-backed pagemap migration support.
++ * Keep drm_gpusvm userptr path available even when full-SVM is disabled.
++ */
++#if IS_ENABLED(CONFIG_DRM_XE_GPUSVM) && !defined(BPM_MIGRATE_DEVICE_PFNS_NOT_PRESENT)
+ 
+ #include <drm/drm_pagemap.h>
+ #include <drm/drm_gpusvm.h>
+@@ -388,7 +392,7 @@ static inline struct drm_pagemap *xe_drm_pagemap_from_fd(int fd, u32 region_inst
+ }
+ 
+ #define xe_svm_range_has_dma_mapping(...) false
+-#endif /* CONFIG_DRM_XE_GPUSVM */
++#endif /* CONFIG_DRM_XE_GPUSVM && !BPM_MIGRATE_DEVICE_PFNS_NOT_PRESENT */
+ 
+ #if IS_ENABLED(CONFIG_DRM_GPUSVM) /* Need to support userptr without XE_GPUSVM */
+ #define xe_svm_assert_in_notifier(vm__) \
+diff --git a/drivers/gpu/drm/xe/xe_tile.c b/drivers/gpu/drm/xe/xe_tile.c
+index 31d3a77..dfe0db8 100644
+--- a/drivers/gpu/drm/xe/xe_tile.c
++++ b/drivers/gpu/drm/xe/xe_tile.c
+@@ -233,6 +233,10 @@ void xe_tile_migrate_wait(struct xe_tile *tile)
+  */
+ struct drm_pagemap *xe_tile_local_pagemap(struct xe_tile *tile)
+ {
++	/* Full pagemap cache helpers are not usable on partial pagemap targets. */
++#if defined(BPM_MIGRATE_DEVICE_PFNS_NOT_PRESENT)
++	return NULL;
++#else
+ 	struct drm_pagemap *dpagemap =
+ 		drm_pagemap_get_from_cache_if_active(xe_tile_to_vr(tile)->dpagemap_cache);
+ 
+@@ -242,6 +246,7 @@ struct drm_pagemap *xe_tile_local_pagemap(struct xe_tile *tile)
+ 	}
+ 
+ 	return dpagemap;
++#endif
+ }
+ #endif
+ 

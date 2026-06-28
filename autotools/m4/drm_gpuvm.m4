@@ -64,3 +64,22 @@ AC_DEFUN([AC_DRM_GPUVM_MADVISE_OPS_CREATE_NOT_PRESENT], [
 		])
 	])
 ])
+dnl #
+dnl # v7.0-000a45dce7ad
+dnl # drm/gpuvm: Pass map arguments through a struct
+dnl #
+AC_DEFUN([AC_DRM_GPUVM_SM_MAP_OPS_CREATE_MAP_REQ_NOT_PRESENT], [
+	AC_KERNEL_DO_BACKGROUND([
+		AC_KERNEL_TRY_COMPILE([
+			#include <drm/drm_gpuvm.h>
+		],[
+			struct drm_gpuva_ops *ops;
+			ops = drm_gpuvm_sm_map_ops_create(NULL,
+				(const struct drm_gpuvm_map_req *)NULL);
+		],[
+		],[
+			AC_DEFINE(BPM_DRM_GPUVM_SM_MAP_OPS_CREATE_MAP_REQ_NOT_PRESENT, 1,
+				[drm_gpuvm_sm_map_ops_create() is not present])
+		])
+	])
+])

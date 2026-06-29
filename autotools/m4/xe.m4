@@ -96,6 +96,8 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([linux/workqueue_types.h])
 	dnl # v6.8-d84f31791517 locking/mutex: split out mutex_types.h
 	AC_KERNEL_CHECK_HEADERS([linux/mutex_types.h])
+	dnl # v6.12-5f60d5f6bbc1 move asm/unaligned.h to linux/unaligned.h
+	AC_KERNEL_CHECK_HEADERS([linux/unaligned.h])
 
 	AC_KERNEL_WAIT
 ])

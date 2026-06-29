@@ -203,6 +203,8 @@ dnl # Macros to check for header availability
 	dnl # v5.17-a1a98689301b drm: Add privacy-screen class (v4)
 	AC_KERNEL_CHECK_HEADERS([drm/drm_privacy_screen_machine.h])
 	AC_KERNEL_CHECK_HEADERS([linux/dma-iommu.h])
+	dnl # v6.12-5f60d5f6bbc1 move asm/unaligned.h to linux/unaligned.h
+	AC_KERNEL_CHECK_HEADERS([linux/unaligned.h])
 
 	AC_KERNEL_WAIT
 ])

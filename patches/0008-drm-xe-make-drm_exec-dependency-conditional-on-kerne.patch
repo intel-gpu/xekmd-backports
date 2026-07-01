@@ -6,13 +6,16 @@ Subject: drm/xe: make drm_exec dependency conditional on kernel
 
 make drm_exec dependency conditional on kernel version
 
+v2: Fix hunk failure
+
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
 ---
  drivers/gpu/drm/xe/Kconfig | 7 ++++++-
  1 file changed, 6 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/Kconfig b/drivers/gpu/drm/xe/Kconfig
-index dfc99fc..baa1e58 100644
+index 9b5982d..88dd7a7 100644
 --- a/drivers/gpu/drm/xe/Kconfig
 +++ b/drivers/gpu/drm/xe/Kconfig
 @@ -1,4 +1,9 @@
@@ -25,14 +28,15 @@ index dfc99fc..baa1e58 100644
  config DRM_GPUVM
  	tristate "Enable Xe-specific DRM GPUVM support"
  	depends on DRM
-@@ -46,7 +51,7 @@ config DRM_XE
+@@ -53,7 +58,7 @@ config DRM_XE
  	select VMAP_PFN
  	select DRM_TTM
  	select DRM_TTM_HELPER
 -	select DRM_EXEC
 +	select DRM_EXEC if BUILD_XE_DRM_EXEC
+ 	select DRM_GPUSVM if !UML
  	select DRM_GPUVM if BUILD_XE_DRM_GPUVM
  	select DRM_SCHED
- 	select MMU_NOTIFIER
 -- 
 2.43.0
+

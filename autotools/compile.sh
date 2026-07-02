@@ -19,7 +19,7 @@ show_help() {
         echo "  help      - Show this help message"
         echo ""
         echo "Examples:"
-        echo "  $0 configure                         # configure only"
+        echo "  $0 configure /path/to/kernel/headers # configure only"
         echo "  $0 compile /path/to/kernel/headers   # Use custom headers and compile"
         echo "  $0 clean                             # Clean all build artifacts"
         echo "  $0 help                              # Show this help"
@@ -35,6 +35,9 @@ if [ ! -z "$1" ]; then
                         ;;
                 configure)
                         ACTION="$1"
+			if [ ! -z "$2" ]; then
+				HEADERS="$2"
+			fi
                         ;;
                 compile)
                         ACTION="$1"

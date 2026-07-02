@@ -114,4 +114,18 @@ static inline void follow_pfnmap_end(struct follow_pfnmap_args *args)
 #endif
 #endif
 
-#endif /* __BACKPORT_LINUX_MM_H__ */
+#ifdef BPM_NUM_PAGES_CONTIGUOUS_NOT_PRESENT
+#ifdef SECTION_IN_PAGE_FLAGS
+static inline unsigned long memdesc_section(memdesc_flags_t mdf)
+{
+	return (mdf.f >> SECTIONS_PGSHIFT) & SECTIONS_MASK;
+}
+#else /* !SECTION_IN_PAGE_FLAGS */
+static inline unsigned long memdesc_section(memdesc_flags_t mdf)
+{
+	return 0;
+}
+#endif /* SECTION_IN_PAGE_FLAGS */
+#endif /* BPM_NUM_PAGES_CONTIGUOUS_NOT_PRESENT */
+
+#endif /* __BACKPORT_LINUX_MM_H */

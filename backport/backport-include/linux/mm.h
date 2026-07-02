@@ -128,4 +128,45 @@ static inline unsigned long memdesc_section(memdesc_flags_t mdf)
 #endif /* SECTION_IN_PAGE_FLAGS */
 #endif /* BPM_NUM_PAGES_CONTIGUOUS_NOT_PRESENT */
 
+/*
+ * Device coherent pages are not supported before kernel 5.19.
+ * is_device_coherent_page() checks if a page is backed by device coherent memory.
+ */
+#ifdef BPM_IS_DEVICE_COHERENT_PAGE_NOT_PRESENT
+static inline bool is_device_coherent_page(const struct page *page)
+{
+	return false;
+}
+#endif
+
+/* Additional folio backports for kernel 5.15 - map folios to pages */
+#ifdef BPM_FOLIO_PUT_NOT_PRESENT
+#ifndef page_folio
+#define page_folio(page) ((struct folio *)(page))
+#endif
+
+#ifndef folio_order
+#define folio_order(folio) compound_order((struct page *)(folio))
+#endif
+
+#ifndef folio_page
+#define folio_page(folio, n) (nth_page((struct page *)(folio), n))
+#endif
+
+#ifndef folio_trylock
+#define folio_trylock(folio) trylock_page((struct page *)(folio))
+#endif
+
+#ifndef vma_alloc_folio
+#define vma_alloc_folio(gfp, order, vma, addr, hugepage) \
+	((struct folio *)((order) == 0 ? \
+		alloc_page_vma((gfp), (vma), (addr)) : \
+		alloc_pages_vma((gfp), (order), (vma), (addr), numa_node_id(), (hugepage))))
+#endif
+
+#ifndef folio_alloc
+#define folio_alloc(gfp, order) ((struct folio *)alloc_pages((gfp), (order)))
+#endif
+#endif /* BPM_FOLIO_PUT_NOT_PRESENT */
+
 #endif /* __BACKPORT_LINUX_MM_H */

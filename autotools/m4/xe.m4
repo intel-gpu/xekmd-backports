@@ -144,6 +144,7 @@ dnl # SVM-related probes
 	AC_VMF_INSERT_PFN_ARG_PFN_T_NOT_PRESENT
 	AC_FOLLOW_PFNMAP_ARGS_ADDR_MASK_NOT_PRESENT
 	AC_PCIM_P2PDMA_NOT_PRESENT
+	AC_PARSE_INT_ARRAY_USER_NOT_PRESENT
 
 dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/i915_gsc_proxy_mei_interface.h])

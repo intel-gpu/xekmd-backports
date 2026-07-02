@@ -139,6 +139,7 @@ dnl # SVM-related probes
 	AC_IRQ_BYPASS_REGISTER_PRODUCER_IRQ_NOT_PRESENT
 	AC_TIMER_DELETE_NOT_PRESENT
 	AC_PMD_ORDER_NOT_PRESENT
+	AC_VMF_INSERT_PFN_ARG_PFN_T_NOT_PRESENT
 
 dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/i915_gsc_proxy_mei_interface.h])

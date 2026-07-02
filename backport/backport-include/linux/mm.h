@@ -33,6 +33,15 @@ extern int access_remote_vm(struct mm_struct *mm, unsigned long addr,
 #define folio_set_reclaim(folio) SetPageReclaim((struct page *)(folio))
 #define folio_clear_reclaim(folio) ClearPageReclaim((struct page *)(folio))
 #define folio_test_writeback(folio) PageWriteback((struct page *)(folio))
+#define page_folio(page) ((struct folio *)(page))
+#define folio_page(folio, n) (nth_page((struct page *)(folio), n))
+#define folio_alloc(gfp, order) ((struct folio *)alloc_pages((gfp), (order)))
+#define folio_order(folio) compound_order((struct page *)(folio))
+#define folio_trylock(folio) trylock_page((struct page *)(folio))
+#define vma_alloc_folio(gfp, order, vma, addr, hugepage) \
+        ((struct folio *)((order) == 0 ? \
+                alloc_page_vma((gfp), (vma), (addr)) : \
+                alloc_pages_vma((gfp), (order), (vma), (addr), numa_node_id(), (hugepage))))
 #endif
 
 #ifdef BPM_PIN_USER_PAGES_REMOTE_ARG6_NOT_PRESENT
@@ -127,5 +136,16 @@ static inline unsigned long memdesc_section(memdesc_flags_t mdf)
 }
 #endif /* SECTION_IN_PAGE_FLAGS */
 #endif /* BPM_NUM_PAGES_CONTIGUOUS_NOT_PRESENT */
+
+/*
+ * Device coherent pages are not supported before kernel 5.19.
+ * is_device_coherent_page() checks if a page is backed by device coherent memory.
+ */
+#ifdef BPM_IS_DEVICE_COHERENT_PAGE_NOT_PRESENT
+static inline bool is_device_coherent_page(const struct page *page)
+{
+	return false;
+}
+#endif
 
 #endif /* __BACKPORT_LINUX_MM_H */

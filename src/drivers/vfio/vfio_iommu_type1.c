@@ -547,7 +547,11 @@ static int follow_fault_pfn(struct vm_area_struct *vma, struct mm_struct *mm,
 		ret = -EFAULT;
 	} else {
 		*pfn = args.pfn;
+#ifdef BPM_FOLLOW_PFNMAP_ARGS_ADDR_MASK_NOT_PRESENT
+		*addr_mask = PAGE_MASK;
+#else
 		*addr_mask = args.addr_mask;
+#endif
 	}
 
 	follow_pfnmap_end(&args);

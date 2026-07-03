@@ -1111,7 +1111,7 @@ struct drm_xe_vm_bind_op {
 #define DRM_XE_VM_BIND_FLAG_DUMPABLE	(1 << 3)
 #define DRM_XE_VM_BIND_FLAG_CHECK_PXP	(1 << 4)
 #define DRM_XE_VM_BIND_FLAG_CPU_ADDR_MIRROR	(1 << 5)
-#define DRM_XE_VM_BIND_FLAG_DECOMPRESS	(1 << 6)
+#define DRM_XE_VM_BIND_FLAG_DECOMPRESS	(1 << 7)
 	/** @flags: Bind flags */
 	__u32 flags;
 

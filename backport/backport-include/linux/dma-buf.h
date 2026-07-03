@@ -24,4 +24,12 @@ MODULE_IMPORT_NS("DMA_BUF");
 #endif
 #endif
 
+#if !BPM_DMA_BUF_ATTACH_OPS_INVALIDATE_MAPPINGS_NOT_PRESENT
+/*
+ * In kernels before the rename, dma_buf_attach_ops used 'move_notify'
+ * instead of 'invalidate_mappings'. Map the new name to the old one.
+ */
+#define invalidate_mappings move_notify
+#endif
+
 #endif /*__BACKPORT_DMA_BUF_H__*/

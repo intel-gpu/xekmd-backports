@@ -24,4 +24,11 @@ MODULE_IMPORT_NS("DMA_BUF");
 #endif
 #endif
 
+#ifdef BPM_DMA_BUF_INVALIDATE_MAPPINGS_NOT_PRESENT
+static inline void dma_buf_invalidate_mappings(struct dma_buf *dma_buf)
+{
+    dma_buf_move_notify(dma_buf);
+}
+#endif /* BPM_DMA_BUF_INVALIDATE_MAPPINGS_NOT_PRESENT */
+
 #endif /*__BACKPORT_DMA_BUF_H__*/

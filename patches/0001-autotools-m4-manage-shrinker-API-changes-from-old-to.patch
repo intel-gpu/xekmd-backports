@@ -9,6 +9,7 @@ register_shrinker() to shrinker_alloc()/shrinker_register()/shrinker_free()
 in newer kernels.
 Use m4 macro to detect API availability and provide compatibility.
 
+v3: Fix Hunk Failure on 7.1rebase     [Akanksha]
 v2:
 Fix Hunk failure
 
@@ -18,6 +19,7 @@ support register_shrinker signature for multiple kernels[Raju]
 Reference:
     d35b5c98c1f1 drm/ttm: dynamically allocate the drm-ttm_pool shrinker
 
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
 ---
@@ -51,19 +53,23 @@ index baf27c7..72ae044 100644
  static DECLARE_RWSEM(pool_shrink_rwsem);
  
  /* Allocate pages of size 1 << order with the given gfp_flags */
-@@ -1284,9 +1297,15 @@ static int ttm_pool_debugfs_shrink_show(struct seq_file *m, void *data)
+@@ -1284,13 +1297,19 @@ static int ttm_pool_debugfs_shrink_show(struct seq_file *m, void *data)
  	unsigned long count;
+ 	int nid;
  
  	fs_reclaim_acquire(GFP_KERNEL);
+ 	for_each_node(nid) {
+ 		sc.nid = nid;
 +#ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
-+	count = ttm_pool_shrinker_count(&mm_shrinker, &sc);
-+	seq_printf(m, "%lu/%lu\n", count,
-+		   ttm_pool_shrinker_scan(&mm_shrinker, &sc));
++		count = ttm_pool_shrinker_count(&mm_shrinker, &sc);
++		seq_printf(m, "%d: %lu/%lu\n", nid, count,
++			   ttm_pool_shrinker_scan(&mm_shrinker, &sc));
 +#else
- 	count = ttm_pool_shrinker_count(mm_shrinker, &sc);
- 	seq_printf(m, "%lu/%lu\n", count,
- 		   ttm_pool_shrinker_scan(mm_shrinker, &sc));
+ 		count = ttm_pool_shrinker_count(mm_shrinker, &sc);
+ 		seq_printf(m, "%d: %lu/%lu\n", nid, count,
+ 			   ttm_pool_shrinker_scan(mm_shrinker, &sc));
 +#endif
+ 	}
  	fs_reclaim_release(GFP_KERNEL);
  
  	return 0;
@@ -78,7 +84,7 @@ index baf27c7..72ae044 100644
 +	register_shrinker(&mm_shrinker, "drm-ttm_pool");
 +#endif
 +#else
- 	mm_shrinker = shrinker_alloc(0, "drm-ttm_pool");
+ 	mm_shrinker = shrinker_alloc(SHRINKER_NUMA_AWARE, "drm-ttm_pool");
  	if (!mm_shrinker)
  		return -ENOMEM;
 @@ -1344,6 +1370,7 @@ int ttm_pool_mgr_init(unsigned long num_pages)

@@ -15,3 +15,22 @@ AC_DEFUN([AC_DEV_PAGEMAP_OPS_FOLIO_FREE_NOT_PRESENT], [
 		])
 	])
 ])
+
+dnl #
+dnl # 2e03c0c5c59a
+dnl # drm/pagemap: Add helper to access zone_device_data
+dnl #
+AC_DEFUN([AC_FOLIO_ZONE_DEVICE_DATA_NOT_PRESENT], [
+       AC_KERNEL_DO_BACKGROUND([
+               AC_KERNEL_TRY_COMPILE([
+                       #include <linux/memremap.h>
+               ],[
+                       struct folio *folio = NULL;
+                       (void)folio_zone_device_data(folio);
+               ],[
+               ],[
+                       AC_DEFINE(BPM_FOLIO_ZONE_DEVICE_DATA_NOT_PRESENT, 1,
+                               [folio_zone_device_data() is not available])
+               ])
+       ])
+])

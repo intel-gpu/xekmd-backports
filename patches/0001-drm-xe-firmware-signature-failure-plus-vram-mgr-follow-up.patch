@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Pravalika Gurram <pravalika.gurram@intel.com>
+Date: Tue, 7 Jul 2026 18:54:21 +0530
+Subject: drm/xe: Handle DRM_BUDDY_CONTIGUOUS_ALLOCATION flag with fallback for older kernels
+
+On older kernels CONTIGUOUS_ALLOCATION flag is not present, to handle its usage
+provided a fallback: round up the allocation size to the next power
+of two and trim the resulting blocks via drm_buddy_block_trim() to
+satisfy contiguous allocation requests.
+
+Reference:
+	dc2fc00ba94de 
+	drm/xe: Use DRM_BUDDY_CONTIGUOUS_ALLOCATION for contiguous allocations
+
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+1 file changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
+--- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
++++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
+@@ -81,9 +81,10 @@
+ 
+ 	if (place->flags & TTM_PL_FLAG_TOPDOWN)
+ 		vres->flags |= GPU_BUDDY_TOPDOWN_ALLOCATION;
+-
++#ifndef BPM_DRM_BUDDY_CONTIGUOUS_ALLOCATION_NOT_PRESENT
+ 	if (place->flags & TTM_PL_FLAG_CONTIGUOUS)
+ 		vres->flags |= GPU_BUDDY_CONTIGUOUS_ALLOCATION;
++#endif
+ 
+ 	if (place->fpfn || lpfn != man->size >> PAGE_SHIFT)
+ 		vres->flags |= GPU_BUDDY_RANGE_ALLOCATION;
+@@ -114,11 +115,27 @@
+ 		goto error_unlock;
+ 	}
+ 
++#ifdef BPM_DRM_BUDDY_CONTIGUOUS_ALLOCATION_NOT_PRESENT
++	if (place->fpfn + (size >> PAGE_SHIFT) != lpfn &&
++	    place->flags & TTM_PL_FLAG_CONTIGUOUS) {
++		size = roundup_pow_of_two(size);
++		min_page_size = size;
++
++		lpfn = max_t(unsigned long, place->fpfn + (size >> PAGE_SHIFT), lpfn);
++	}
++#endif
++
+ 	err = gpu_buddy_alloc_blocks(mm, (u64)place->fpfn << PAGE_SHIFT,
+ 				     (u64)lpfn << PAGE_SHIFT, size,
+ 				     min_page_size, &vres->blocks, vres->flags);
+ 	if (err)
+ 		goto error_unlock;
++#ifdef BPM_DRM_BUDDY_CONTIGUOUS_ALLOCATION_NOT_PRESENT
++	if (place->flags & TTM_PL_FLAG_CONTIGUOUS) {
++		if (!drm_buddy_block_trim(mm, NULL, vres->base.size, &vres->blocks))
++			size = vres->base.size;
++	}
++#endif
+ 
+ 	if (lpfn <= mgr->visible_size >> PAGE_SHIFT) {
+ 		vres->used_visible_size = size;
+-- 
+2.43.0

@@ -1,0 +1,295 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Pravalika Gurram <pravalika.gurram@intel.com>
+Date: Mon, 07 Jul 2026 00:00:00 +0530
+Subject: drm/xe: Add BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT guards for single-pass compat
+
+Guard two-pass MMU interval notifier code with BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+in xe_tlb_inval, xe_vm_types, xe_vm, and xe_vm_madvise so that older kernels
+without the two-pass interface can still compile.  Add xe_vm_range_tilemask_tlb_inval()
+as the single-pass fallback.
+
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_tlb_inval_types.h |   4 ++++
+ drivers/gpu/drm/xe/xe_tlb_inval.h |   2 ++
+ drivers/gpu/drm/xe/xe_tlb_inval.c |   2 ++
+ drivers/gpu/drm/xe/xe_vm_types.h |   2 ++
+ drivers/gpu/drm/xe/xe_vm.h |   7 +++++++
+ drivers/gpu/drm/xe/xe_vm_madvise.c |   7 +++++++
+ drivers/gpu/drm/xe/xe_vm.c | 129 ++++++++++++++++++++
+ 7 files changed, 153 insertions(+), 0 deletions(-)
+
+--- a/drivers/gpu/drm/xe/xe_tlb_inval_types.h
++++ b/drivers/gpu/drm/xe/xe_tlb_inval_types.h
+@@ -9,7 +9,9 @@
+ #include <linux/workqueue.h>
+ #include <linux/dma-fence.h>
+ 
++#ifndef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+ #include "xe_device_types.h"
++#endif
+ 
+ struct drm_suballoc;
+ struct xe_tlb_inval;
+@@ -134,6 +136,7 @@
+ 	ktime_t inval_time;
+ };
+ 
++#ifndef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+ /**
+  * struct xe_tlb_inval_batch - Batch of TLB invalidation fences
+  *
+@@ -145,5 +148,6 @@
+ 	/** @num_fences: number of valid entries in @fence */
+ 	unsigned int num_fences;
+ };
++#endif /* !BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT */
+ 
+ #endif
+--- a/drivers/gpu/drm/xe/xe_tlb_inval.h
++++ b/drivers/gpu/drm/xe/xe_tlb_inval.h
+@@ -45,10 +45,12 @@
+ 
+ bool xe_tlb_inval_idle(struct xe_tlb_inval *tlb_inval);
+ 
++#ifndef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+ int xe_tlb_inval_range_tilemask_submit(struct xe_device *xe, u32 asid,
+ 				       u64 start, u64 end, u8 tile_mask,
+ 				       struct xe_tlb_inval_batch *batch);
+ 
+ void xe_tlb_inval_batch_wait(struct xe_tlb_inval_batch *batch);
++#endif /* !BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT */
+ 
+ #endif	/* _XE_TLB_INVAL_ */
+--- a/drivers/gpu/drm/xe/xe_tlb_inval.c
++++ b/drivers/gpu/drm/xe/xe_tlb_inval.c
+@@ -487,6 +487,7 @@
+ 	return list_is_singular(&tlb_inval->pending_fences);
+ }
+ 
++#ifndef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+ /**
+  * xe_tlb_inval_batch_wait() - Wait for all fences in a TLB invalidation batch
+  * @batch: Batch of TLB invalidation fences to wait on
+@@ -570,3 +571,4 @@
+ 
+ 	return err;
+ }
++#endif
+--- a/drivers/gpu/drm/xe/xe_vm_types.h
++++ b/drivers/gpu/drm/xe/xe_vm_types.h
+@@ -18,7 +18,9 @@
+ #include "xe_device_types.h"
+ #include "xe_pt_types.h"
+ #include "xe_range_fence.h"
++#ifndef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+ #include "xe_tlb_inval_types.h"
++#endif
+ #include "xe_userptr.h"
+ 
+ struct drm_pagemap;
+--- a/drivers/gpu/drm/xe/xe_vm.h
++++ b/drivers/gpu/drm/xe/xe_vm.h
+@@ -250,9 +250,16 @@
+ struct dma_fence *xe_vm_range_unbind(struct xe_vm *vm,
+ 				     struct xe_svm_range *range);
+ 
++#ifdef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
++int xe_vm_range_tilemask_tlb_inval(struct xe_vm *vm, u64 start,
++               u64 end, u8 tile_mask);
++#endif
++
+ int xe_vm_invalidate_vma(struct xe_vma *vma);
+ 
++#ifndef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+ int xe_vm_invalidate_vma_submit(struct xe_vma *vma, struct xe_tlb_inval_batch *batch);
++#endif
+ 
+ int xe_vm_validate_protected(struct xe_vm *vm);
+ 
+--- a/drivers/gpu/drm/xe/xe_vm_madvise.c
++++ b/drivers/gpu/drm/xe/xe_vm_madvise.c
+@@ -316,20 +316,27 @@
+ static int xe_vm_invalidate_madvise_range(struct xe_vm *vm, u64 start, u64 end)
+ {
+ 	u8 tile_mask = xe_zap_ptes_in_madvise_range(vm, start, end);
++#ifndef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+ 	struct xe_tlb_inval_batch batch;
+ 	int err;
++#endif
+ 
+ 	if (!tile_mask)
+ 		return 0;
+ 
+ 	xe_device_wmb(vm->xe);
+ 
++#ifndef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+ 	err = xe_tlb_inval_range_tilemask_submit(vm->xe, vm->usm.asid, start, end,
+ 						 tile_mask, &batch);
+ 	if (!err)
+ 		xe_tlb_inval_batch_wait(&batch);
+ 
+ 	return err;
++#else
++	return xe_vm_range_tilemask_tlb_inval(vm, start, end, tile_mask);
++#endif
++
+ }
+ 
+ static bool madvise_args_are_sane(struct xe_device *xe, const struct drm_xe_madvise *args)
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -4424,6 +4424,7 @@
+ 	dma_resv_unlock(xe_vm_resv(vm));
+ }
+ 
++#ifndef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+ /**
+  * xe_vm_invalidate_vma_submit - Submit a job to invalidate GPU mappings for
+  * VMA.
+@@ -4490,7 +4491,71 @@
+ 	WRITE_ONCE(vma->tile_invalidated, vma->tile_mask);
+ 	return ret;
+ }
++#endif
+ 
++#ifdef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
++/**
++ * xe_vm_range_tilemask_tlb_inval - Issue a TLB invalidation on this tilemask for an
++ * address range
++ * @vm: The VM
++ * @start: start address
++ * @end: end address
++ * @tile_mask: mask for which gt's issue tlb invalidation
++ *
++ * Issue a range based TLB invalidation for gt's in tilemask
++ *
++ * Returns 0 for success, negative error code otherwise.
++ */
++int xe_vm_range_tilemask_tlb_inval(struct xe_vm *vm, u64 start,
++               u64 end, u8 tile_mask)
++{
++       struct xe_tlb_inval_fence
++               fence[XE_MAX_TILES_PER_DEVICE * XE_MAX_GT_PER_TILE];
++       struct xe_tile *tile;
++       u32 fence_id = 0;
++       u8 id;
++       int err;
++
++       if (!tile_mask)
++               return 0;
++
++       for_each_tile(tile, vm->xe, id) {
++               if (!(tile_mask & BIT(id)))
++                       continue;
++
++               xe_tlb_inval_fence_init(&tile->primary_gt->tlb_inval,
++                               &fence[fence_id], true);
++
++               err = xe_tlb_inval_range(&tile->primary_gt->tlb_inval,
++                               &fence[fence_id], start, end,
++                               vm->usm.asid, NULL);
++               if (err)
++                       goto wait;
++               ++fence_id;
++
++               if (!tile->media_gt)
++                       continue;
++
++               xe_tlb_inval_fence_init(&tile->media_gt->tlb_inval,
++                               &fence[fence_id], true);
++
++               err = xe_tlb_inval_range(&tile->media_gt->tlb_inval,
++                               &fence[fence_id], start, end,
++                               vm->usm.asid, NULL);
++               if (err)
++                       goto wait;
++               ++fence_id;
++       }
++
++wait:
++       for (id = 0; id < fence_id; ++id)
++               xe_tlb_inval_fence_wait(&fence[id]);
++
++       return err;
++}
++#endif
++
++#ifndef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+ /**
+  * xe_vm_invalidate_vma - invalidate GPU mappings for VMA without a lock
+  * @vma: VMA to invalidate
+@@ -4513,6 +4578,70 @@
+ 	xe_tlb_inval_batch_wait(&batch);
+ 	return ret;
+ }
++#else
++/**
++ * xe_vm_invalidate_vma - invalidate GPU mappings for VMA without a lock
++ * @vma: VMA to invalidate
++ *
++ * Walks a list of page tables leaves which it memset the entries owned by this
++ * VMA to zero, invalidates the TLBs, and block until TLBs invalidation is
++ * complete.
++ *
++ * Returns 0 for success, negative error code otherwise.
++ */
++int xe_vm_invalidate_vma(struct xe_vma *vma)
++{
++        struct xe_device *xe = xe_vma_vm(vma)->xe;
++        struct xe_vm *vm = xe_vma_vm(vma);
++        struct xe_tile *tile;
++        u8 tile_mask = 0;
++        int ret = 0;
++        u8 id;
++
++        xe_assert(xe, !xe_vma_is_null(vma));
++        xe_assert(xe, !xe_vma_is_cpu_addr_mirror(vma));
++        trace_xe_vma_invalidate(vma);
++
++        vm_dbg(&vm->xe->drm,
++               "INVALIDATE: addr=0x%016llx, range=0x%016llx",
++                xe_vma_start(vma), xe_vma_size(vma));
++
++        /*
++         * Check that we don't race with page-table updates, tile_invalidated
++         * update is safe
++         */
++        if (IS_ENABLED(CONFIG_PROVE_LOCKING)) {
++                if (xe_vma_is_userptr(vma)) {
++                        lockdep_assert(lockdep_is_held_type(&vm->svm.gpusvm.notifier_lock, 0) ||
++                                       (lockdep_is_held_type(&vm->svm.gpusvm.notifier_lock, 1) &&
++                                        lockdep_is_held(&xe_vm_resv(vm)->lock.base)));
++
++                        WARN_ON_ONCE(!mmu_interval_check_retry
++                                     (&to_userptr_vma(vma)->userptr.notifier,
++                                      to_userptr_vma(vma)->userptr.pages.notifier_seq));
++                        WARN_ON_ONCE(!dma_resv_test_signaled(xe_vm_resv(vm),
++                                                             DMA_RESV_USAGE_BOOKKEEP));
++
++                } else {
++                        xe_bo_assert_held(xe_vma_bo(vma));
++                }
++        }
++
++        for_each_tile(tile, xe, id)
++                if (xe_pt_zap_ptes(tile, vma))
++                        tile_mask |= BIT(id);
++
++        xe_device_wmb(xe);
++
++        ret = xe_vm_range_tilemask_tlb_inval(xe_vma_vm(vma), xe_vma_start(vma),
++                                             xe_vma_end(vma), tile_mask);
++
++        /* WRITE_ONCE pairs with READ_ONCE in xe_vm_has_valid_gpu_mapping() */
++        WRITE_ONCE(vma->tile_invalidated, vma->tile_mask);
++
++        return ret;
++}
++#endif
+ 
+ int xe_vm_validate_protected(struct xe_vm *vm)
+ {
+
+-- 
+2.43.0

@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Pravalika Gurram <pravalika.gurram@intel.com>
+Date: Mon, 29 Jun 2026 12:48:06 +0530
+Subject: drm/xe/svm: Add single-pass MMU notifier fallback and fix config guards
+
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_svm.c | 9 +++++++++
+ 1 file changed, 9 insertions(+), 0 deletions(-)
+
+--- a/drivers/gpu/drm/xe/xe_svm.c
++++ b/drivers/gpu/drm/xe/xe_svm.c
+@@ -19,7 +19,9 @@
+ #include "xe_pt.h"
+ #include "xe_svm.h"
+ #include "xe_tile.h"
++#ifndef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+ #include "xe_tlb_inval.h"
++#endif
+ #include "xe_ttm_vram_mgr.h"
+ #include "xe_vm.h"
+ #include "xe_vm_types.h"
+@@ -226,7 +228,9 @@
+ 			      const struct mmu_notifier_range *mmu_range)
+ {
+ 	struct xe_vm *vm = gpusvm_to_vm(gpusvm);
++#ifndef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+ 	struct xe_tlb_inval_batch batch;
++#endif
+ 	struct xe_device *xe = vm->xe;
+ 	struct drm_gpusvm_range *r, *first;
+ 	struct xe_tile *tile;
+@@ -278,10 +282,15 @@
+ 
+ 	xe_device_wmb(xe);
+ 
++#ifndef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+ 	err = xe_tlb_inval_range_tilemask_submit(xe, vm->usm.asid, adj_start, adj_end,
+ 						 tile_mask, &batch);
+ 	if (!WARN_ON_ONCE(err))
+ 		xe_tlb_inval_batch_wait(&batch);
++#else
++	err = xe_vm_range_tilemask_tlb_inval(vm, adj_start, adj_end, tile_mask);
++	WARN_ON_ONCE(err);
++#endif
+ 
+ range_notifier_event_end:
+ 	r = first;
+-- 
+2.43.0

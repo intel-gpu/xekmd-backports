@@ -60,4 +60,8 @@ dma_fence_check_and_signal_locked(struct dma_fence *fence)
 }
 #endif /* BPM_DMA_FENCE_CHECK_AND_SIGNAL_LOCKED_NOT_PRESENT */
 
+#ifdef BPM_DMA_FENCE_EXTERN_LOCK_NOT_PRESENT
+#define extern_lock lock
+#endif   /* BPM_DMA_FENCE_EXTERN_LOCK_NOT_PRESENT */
+
 #endif /* __BACKPORT_LINUX_DMA_FENCE_H */

@@ -1,0 +1,192 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Mon, 07 Jul 2026 00:00:00 +0530
+Subject: drm/pagemap: Add BPM compat guards for older kernels
+
+v2: Add non-folio compatibility and disable THP migration [Pravalika]
+
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/gpu/drm/drm_pagemap.c | 49 ++++++++++++++++++++++++++--
+ 1 file changed, 48 insertions(+), 1 deletions(-)
+
+--- a/drivers/gpu/drm/drm_pagemap.c
++++ b/drivers/gpu/drm/drm_pagemap.c
+@@ -210,9 +210,13 @@
+ 					unsigned int order,
+ 					struct drm_pagemap_zdd *zdd)
+ {
++#ifdef BPM_ZONE_DEVICE_PAGE_INIT_3ARGS_NOT_PRESENT
++	zone_device_page_init(page);
++#else
+ 	zone_device_folio_init((struct folio *)page, zdd->dpagemap->pagemap,
+ 			       order);
+ 	folio_set_zone_device_data(page_folio(page), drm_pagemap_zdd_get(zdd));
++#endif
+ }
+ 
+ /**
+@@ -455,6 +459,7 @@
+ 	return ret;
+ }
+ 
++#ifndef BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT
+ /**
+  * drm_pagemap_cpages() - Count collected pages
+  * @migrate_pfn: Array of migrate_pfn entries to account
+@@ -489,6 +494,7 @@
+ 
+ 	return cpages;
+ }
++#endif /* BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT */
+ 
+ /**
+  * drm_pagemap_migrate_to_devmem() - Migrate a struct mm_struct range to device memory
+@@ -526,8 +532,13 @@
+ 		.start		= start,
+ 		.end		= end,
+ 		.pgmap_owner	= pagemap->owner,
++#ifdef BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT
++		.flags		= MIGRATE_VMA_SELECT_SYSTEM | MIGRATE_VMA_SELECT_DEVICE_COHERENT |
++		MIGRATE_VMA_SELECT_DEVICE_PRIVATE,
++#else
+ 		.flags		= MIGRATE_VMA_SELECT_SYSTEM | MIGRATE_VMA_SELECT_DEVICE_COHERENT |
+ 		MIGRATE_VMA_SELECT_DEVICE_PRIVATE | MIGRATE_VMA_SELECT_COMPOUND,
++#endif
+ 	};
+ 	unsigned long i, npages = npages_in_range(start, end);
+ 	unsigned long own_pages = 0, migrated_pages = 0;
+@@ -592,8 +603,12 @@
+ 		goto err_free;
+ 	}
+ 
++#ifdef BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT
++	if (migrate.cpages != npages) {
++#else
+ 	if (migrate.cpages != npages &&
+ 	    drm_pagemap_cpages(migrate.src, npages) != npages) {
++#endif
+ 		/*
+ 		 * Some pages to migrate. But we want to migrate all or
+ 		 * nothing. Raced or unknown device pages.
+@@ -666,6 +681,7 @@
+ 		}
+ 		migrate.dst[i] = migrate_pfn(migrate.dst[i]);
+ 
++#ifndef BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT
+ 		if (migrate.src[i] & MIGRATE_PFN_COMPOUND) {
+ 			drm_WARN_ONCE(dpagemap->drm, src_page &&
+ 				      folio_order(page_folio(src_page)) != HPAGE_PMD_ORDER,
+@@ -677,6 +693,7 @@
+ 			for (j = 1; j < NR_PAGES(order) && i + j < npages; j++)
+ 				migrate.dst[i + j] = 0;
+ 		}
++#endif /* BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT */
+ 
+ 		drm_pagemap_get_devmem_page(page, order, zdd);
+ 
+@@ -791,7 +808,11 @@
+ 
+ 		/* TODO: Support fallback to single pages if THP allocation fails */
+ 		if (vas)
++#ifdef BPM_VMA_ALLOC_FOLIO_4ARGS_NOT_PRESENT
++			folio = vma_alloc_folio(GFP_HIGHUSER, order, vas, addr, false);
++#else
+ 			folio = vma_alloc_folio(GFP_HIGHUSER, order, vas, addr);
++#endif
+ 		else
+ 			folio = folio_alloc(GFP_HIGHUSER, order);
+ 
+@@ -801,8 +822,10 @@
+ 		page = folio_page(folio, 0);
+ 		mpfn[i] = migrate_pfn(page_to_pfn(page));
+ 
++#ifndef BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT
+ 		if (order)
+ 			mpfn[i] |= MIGRATE_PFN_COMPOUND;
++#endif
+ next:
+ 		if (page)
+ 			addr += page_size(page);
+@@ -1042,10 +1065,14 @@
+ 	if (err)
+ 		goto err_free;
+ 
++#ifdef BPM_MIGRATE_DEVICE_PFNS_NOT_PRESENT
++	err = -EOPNOTSUPP;
++	goto err_free;
++#else
+ 	err = migrate_device_pfns(src, npages);
+ 	if (err)
+ 		goto err_free;
+-
++#endif
+ 	err = drm_pagemap_migrate_populate_ram_pfn(NULL, NULL, npages, &mpages,
+ 						   src, dst, 0);
+ 	if (err || !mpages)
+@@ -1118,9 +1145,14 @@
+ 	struct migrate_vma migrate = {
+ 		.vma		= vas,
+ 		.pgmap_owner	= page_pgmap(page)->owner,
++#ifdef BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT
++		.flags		= MIGRATE_VMA_SELECT_DEVICE_PRIVATE |
++				  MIGRATE_VMA_SELECT_DEVICE_COHERENT,
++#else
+ 		.flags		= MIGRATE_VMA_SELECT_DEVICE_PRIVATE |
+ 				  MIGRATE_VMA_SELECT_DEVICE_COHERENT |
+ 				  MIGRATE_VMA_SELECT_COMPOUND,
++#endif
+ 		.fault_page	= page,
+ 	};
+ 	struct drm_pagemap_migrate_details mdetails = {};
+@@ -1222,12 +1254,19 @@
+  * This function is a callback used to put the GPU SVM zone device data
+  * associated with a page when it is being released.
+  */
++#ifdef BPM_DEV_PAGEMAP_OPS_FOLIO_FREE_NOT_PRESENT
++static void drm_pagemap_folio_free(struct page *page)
++{
++	drm_pagemap_zdd_put(page->zone_device_data);
++}
++#else
+ static void drm_pagemap_folio_free(struct folio *folio)
+ {
+ 	struct page *page = folio_page(folio, 0);
+ 
+ 	drm_pagemap_zdd_put(drm_pagemap_page_zone_device_data(page));
+ }
++#endif
+ 
+ /**
+  * drm_pagemap_migrate_to_ram() - Migrate a virtual range to RAM (page fault handler)
+@@ -1252,6 +1291,7 @@
+ 	return err ? VM_FAULT_SIGBUS : 0;
+ }
+ 
++#ifndef BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT
+ static void drm_pagemap_folio_split(struct folio *orig_folio, struct folio *new_folio)
+ {
+ 	struct drm_pagemap_zdd *zdd;
+@@ -1263,11 +1303,18 @@
+ 	zdd = folio_zone_device_data(orig_folio);
+ 	folio_set_zone_device_data(new_folio, drm_pagemap_zdd_get(zdd));
+ }
++#endif /* BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT */
+ 
+ static const struct dev_pagemap_ops drm_pagemap_pagemap_ops = {
++#ifdef BPM_DEV_PAGEMAP_OPS_FOLIO_FREE_NOT_PRESENT
++	.page_free = drm_pagemap_folio_free,
++#else
+ 	.folio_free = drm_pagemap_folio_free,
++#endif
+ 	.migrate_to_ram = drm_pagemap_migrate_to_ram,
++#ifndef BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT
+ 	.folio_split = drm_pagemap_folio_split,
++#endif
+ };
+ 
+ /**
+
+-- 
+2.43.0

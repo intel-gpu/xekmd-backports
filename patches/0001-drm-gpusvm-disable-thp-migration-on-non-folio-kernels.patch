@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Pravalika Gurram <pravalika.gurram@intel.com>
+Date: Sun, 21 Jun 2026 20:06:01 +0530
+Subject: drm/gpusvm: disable THP migration on non-folio kernels
+
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/drm_gpusvm.c  |  12 ++-
+ 1 file changed, 11 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/gpu/drm/drm_gpusvm.c b/drivers/gpu/drm/drm_gpusvm.c
+index 4b928fd..68dcbf3 100644
+--- a/drivers/gpu/drm/drm_gpusvm.c
++++ b/drivers/gpu/drm/drm_gpusvm.c
+@@ -1488,15 +1488,25 @@ map_pages:
+ 		order = drm_gpusvm_hmm_pfn_to_order(pfns[i], i, npages);
+ 		if (is_device_private_page(page) ||
+ 		    is_device_coherent_page(page)) {
++#ifndef BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT
+ 			struct drm_pagemap_zdd *__zdd =
+ 				drm_pagemap_page_zone_device_data(page);
+-
++#endif
++#ifdef BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT
++			if (!ctx->allow_mixed &&
++			    zdd != page->zone_device_data && i > 0) {
++#else
+ 			if (!ctx->allow_mixed &&
+ 			    zdd != __zdd && i > 0) {
++#endif
+ 				err = -EOPNOTSUPP;
+ 				goto err_unmap;
+ 			}
++#ifdef BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT
++			zdd = page->zone_device_data;
++#else
+ 			zdd = __zdd;
++#endif
+ 			if (pagemap != page_pgmap(page)) {
+ 				if (pagemap) {
+ 					err = -EOPNOTSUPP;
+-- 
+2.43.0
+

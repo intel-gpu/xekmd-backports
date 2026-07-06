@@ -11,16 +11,32 @@ with kernel's existing namespace handling.
 
 V1: Rebase to 6.17
 
+V2: fix VSC_TP namespace import for mei-vsc
+
 Reference:
     cdd30ebb1b9f
     module: Convert symbol namespace to string literal
 
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
+ drivers/misc/mei/platform-vsc.c            | 4 ++++
  drivers/platform/x86/intel/pmt/crashlog.c  | 4 ++++
  drivers/platform/x86/intel/pmt/telemetry.c | 5 +++++
- 2 files changed, 9 insertions(+)
+ 3 files changed, 13 insertions(+)
 
+diff --git a/drivers/misc/mei/platform-vsc.c b/drivers/misc/mei/platform-vsc.c
+index 9787b9c..cfc9646 100644
+--- a/drivers/misc/mei/platform-vsc.c
++++ b/drivers/misc/mei/platform-vsc.c
+@@ -456,4 +456,8 @@ MODULE_AUTHOR("Wentong Wu <wentong.wu@intel.com>");
+ MODULE_AUTHOR("Zhifeng Wang <zhifeng.wang@intel.com>");
+ MODULE_DESCRIPTION("Intel Visual Sensing Controller Interface");
+ MODULE_LICENSE("GPL");
++#ifdef BPM_MODULE_IMPORT_TO_STRING_LITERAL_PRESENT
++MODULE_IMPORT_NS(VSC_TP);
++#else
+ MODULE_IMPORT_NS("VSC_TP");
++#endif
 diff --git a/drivers/platform/x86/intel/pmt/crashlog.c b/drivers/platform/x86/intel/pmt/crashlog.c
 index b0393c9..9a581d3 100644
 --- a/drivers/platform/x86/intel/pmt/crashlog.c
@@ -35,7 +51,7 @@ index b0393c9..9a581d3 100644
  MODULE_IMPORT_NS("INTEL_PMT");
 +#endif
 diff --git a/drivers/platform/x86/intel/pmt/telemetry.c b/drivers/platform/x86/intel/pmt/telemetry.c
-index a4dfca6..f70a305 100644
+index a52803b..03d2609 100644
 --- a/drivers/platform/x86/intel/pmt/telemetry.c
 +++ b/drivers/platform/x86/intel/pmt/telemetry.c
 @@ -438,5 +438,10 @@ module_exit(pmt_telem_exit);
@@ -51,4 +67,3 @@ index a4dfca6..f70a305 100644
 +#endif
 -- 
 2.43.0
-

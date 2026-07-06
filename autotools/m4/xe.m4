@@ -79,6 +79,8 @@ AC_DEFUN([AC_XE_CONFIG], [
 	AC_DRM_WEDGE_TASK_INFO_NOT_PRESENT
 	AC_DRM_GEM_GPUVA_MUTEX_NOT_PRESENT
 	AC_DRM_GEM_GPUVA_LOCK_DEP_MAP_NOT_PRESENT
+	AC_MEI_CL_DEVICE_MATCH_CONST_ARG_NOT_PRESENT
+	AC_PF_DRIVER_REMOVE_RETURN_VOID_NOT_PRESENT
 
 dnl # SVM-related probes
 	AC_SHRINKER_ALLOC_NOT_PRESENT
@@ -95,6 +97,8 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([linux/workqueue_types.h])
 	dnl # v6.8-d84f31791517 locking/mutex: split out mutex_types.h
 	AC_KERNEL_CHECK_HEADERS([linux/mutex_types.h])
+	dnl # v6.12-5f60d5f6bbc1 move asm/unaligned.h to linux/unaligned.h
+	AC_KERNEL_CHECK_HEADERS([linux/unaligned.h])
 
 	AC_KERNEL_WAIT
 ])

@@ -87,6 +87,46 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
 	BUILT_MODULE_LOCATION[11]="src/drivers/vfio/pci/xe"
 	DEST_MODULE_LOCATION[11]="/updates"
 
+	BUILT_MODULE_NAME[12]="mei"
+	BUILT_MODULE_LOCATION[12]="src/drivers/misc/mei"
+	DEST_MODULE_LOCATION[12]="/updates"
+	
+	BUILT_MODULE_NAME[13]="mei-me"
+	BUILT_MODULE_LOCATION[13]="src/drivers/misc/mei"
+	DEST_MODULE_LOCATION[13]="/updates"
+	
+	BUILT_MODULE_NAME[14]="mei-gsc"
+	BUILT_MODULE_LOCATION[14]="src/drivers/misc/mei"
+	DEST_MODULE_LOCATION[14]="/updates"
+	
+	BUILT_MODULE_NAME[15]="mei-txe"
+	BUILT_MODULE_LOCATION[15]="src/drivers/misc/mei"
+	DEST_MODULE_LOCATION[15]="/updates"
+	
+	BUILT_MODULE_NAME[16]="mei_hdcp"
+	BUILT_MODULE_LOCATION[16]="src/drivers/misc/mei/hdcp"
+	DEST_MODULE_LOCATION[16]="/updates"
+	
+	BUILT_MODULE_NAME[17]="mei_pxp"
+	BUILT_MODULE_LOCATION[17]="src/drivers/misc/mei/pxp"
+	DEST_MODULE_LOCATION[17]="/updates"
+	
+	BUILT_MODULE_NAME[18]="mei_gsc_proxy"
+	BUILT_MODULE_LOCATION[18]="src/drivers/misc/mei/gsc_proxy"
+	DEST_MODULE_LOCATION[18]="/updates"
+	
+	BUILT_MODULE_NAME[19]="mei_lb"
+	BUILT_MODULE_LOCATION[19]="src/drivers/misc/mei"
+	DEST_MODULE_LOCATION[19]="/updates"
+	
+	BUILT_MODULE_NAME[20]="mei-vsc"
+	BUILT_MODULE_LOCATION[20]="src/drivers/misc/mei"
+	DEST_MODULE_LOCATION[20]="/updates"
+	
+	BUILT_MODULE_NAME[21]="mei-vsc-hw"
+	BUILT_MODULE_LOCATION[21]="src/drivers/misc/mei"
+	DEST_MODULE_LOCATION[21]="/updates"
+	
 	select_drm_gpuvm() {
 		if [ -z "\$kernelver" ]; then
 			echo "false"
@@ -100,13 +140,13 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
 	}
 
 	if [ "\$(select_drm_gpuvm)" = "true" ]; then
-		BUILT_MODULE_NAME[11]="drm_gpuvm"
-		BUILT_MODULE_LOCATION[11]="src"
-		DEST_MODULE_LOCATION[11]="/updates"
+		BUILT_MODULE_NAME[22]="drm_gpuvm"
+		BUILT_MODULE_LOCATION[22]="src"
+		DEST_MODULE_LOCATION[22]="/updates"
 
-		BUILT_MODULE_NAME[12]="drm_gpusvm_helper"
-		BUILT_MODULE_LOCATION[12]="src"
-		DEST_MODULE_LOCATION[12]="/updates"
+		BUILT_MODULE_NAME[23]="drm_gpusvm_helper"
+		BUILT_MODULE_LOCATION[23]="src"
+		DEST_MODULE_LOCATION[23]="/updates"
 	fi
 
 	# Find out how many CPU cores can be use if we pass appropriate -j option to make.

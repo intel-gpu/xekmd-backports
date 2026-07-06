@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Pravalika Gurram <pravalika.gurram@intel.com>
+Date: Tue, 7 Jul 2026 18:54:21 +0530
+Subject: drm/xe: Fix firmware signature failure on 7.1KV
+
+Guard DRM_BUDDY_CONTIGUOUS_ALLOCATION usage behind BPM macro and add
+size-rounding/block_trim fallback for kernels without the flag.
+
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+1 file changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
+--- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
++++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
+@@ -81,9 +81,10 @@
+ 
+ 	if (place->flags & TTM_PL_FLAG_TOPDOWN)
+ 		vres->flags |= GPU_BUDDY_TOPDOWN_ALLOCATION;
+-
++#ifdef BPM_DRM_BUDDY_CONTIGUOUS_ALLOCATION_PRESENT
+ 	if (place->flags & TTM_PL_FLAG_CONTIGUOUS)
+ 		vres->flags |= GPU_BUDDY_CONTIGUOUS_ALLOCATION;
++#endif
+ 
+ 	if (place->fpfn || lpfn != man->size >> PAGE_SHIFT)
+ 		vres->flags |= GPU_BUDDY_RANGE_ALLOCATION;
+@@ -114,11 +115,27 @@
+ 		goto error_unlock;
+ 	}
+ 
++#ifndef BPM_DRM_BUDDY_CONTIGUOUS_ALLOCATION_PRESENT
++	if (place->fpfn + (size >> PAGE_SHIFT) != lpfn &&
++	    place->flags & TTM_PL_FLAG_CONTIGUOUS) {
++		size = roundup_pow_of_two(size);
++		min_page_size = size;
++
++		lpfn = max_t(unsigned long, place->fpfn + (size >> PAGE_SHIFT), lpfn);
++	}
++#endif
++
+ 	err = gpu_buddy_alloc_blocks(mm, (u64)place->fpfn << PAGE_SHIFT,
+ 				     (u64)lpfn << PAGE_SHIFT, size,
+ 				     min_page_size, &vres->blocks, vres->flags);
+ 	if (err)
+ 		goto error_unlock;
++#ifndef BPM_DRM_BUDDY_CONTIGUOUS_ALLOCATION_PRESENT
++	if (place->flags & TTM_PL_FLAG_CONTIGUOUS) {
++		if (!drm_buddy_block_trim(mm, NULL, vres->base.size, &vres->blocks))
++			size = vres->base.size;
++	}
++#endif
+ 
+ 	if (lpfn <= mgr->visible_size >> PAGE_SHIFT) {
+ 		vres->used_visible_size = size;
+-- 
+2.43.0

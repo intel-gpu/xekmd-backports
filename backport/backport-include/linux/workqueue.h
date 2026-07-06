@@ -17,8 +17,16 @@
 #define disable_work_sync cancel_work_sync
 #endif
 
+#ifdef BPM_SYSTEM_DFL_WQ_NOT_PRESENT
+#define system_dfl_wq system_unbound_wq
+#endif
+
 #ifdef BPM_SYSTEM_PERCPU_WQ_NOT_PRESENT
 #define system_percpu_wq system_wq
+#endif
+
+#ifdef BPM_WQ_PERCPU_NOT_PRESENT
+#define WQ_PERCPU 0
 #endif
 
 #endif /* __BACKPORT_LINUX_WORKQUEUE_H */

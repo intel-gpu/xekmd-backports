@@ -24,12 +24,23 @@ MODULE_IMPORT_NS("DMA_BUF");
 #endif
 #endif
 
-#if !BPM_DMA_BUF_ATTACH_OPS_INVALIDATE_MAPPINGS_NOT_PRESENT
+#ifdef BPM_DMA_BUF_ATTACH_OPS_INVALIDATE_MAPPINGS_NOT_PRESENT
 /*
  * In kernels before the rename, dma_buf_attach_ops used 'move_notify'
  * instead of 'invalidate_mappings'. Map the new name to the old one.
  */
 #define invalidate_mappings move_notify
 #endif
+
+#ifdef BPM_DMA_BUF_INVALIDATE_MAPPINGS_NOT_PRESENT
+/*
+ * dma_buf_invalidate_mappings - notify importers to invalidate their mappings
+ * @dma_buf: buffer whose mappings need to be invalidated
+ *
+ * Not available in kernels older than the version that added this function.
+ * Provide a no-op stub so driver code compiles unchanged.
+ */
+static inline void dma_buf_invalidate_mappings(struct dma_buf *dma_buf) {}
+#endif /* BPM_DMA_BUF_INVALIDATE_MAPPINGS_NOT_PRESENT */
 
 #endif /*__BACKPORT_DMA_BUF_H__*/

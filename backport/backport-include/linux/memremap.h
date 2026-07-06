@@ -13,4 +13,18 @@
 #define zone_device_page_init(...) do { } while (0)
 #endif
 
+#ifdef BPM_FOLIO_ZONE_DEVICE_DATA_NOT_PRESENT
+/*
+ * folio_zone_device_data - return zone_device_data for a device-private folio
+ * @folio: the folio
+ *
+ * Added in v6.7. For older kernels, access zone_device_data via
+ * folio->page.zone_device_data directly.
+ */
+static inline void *folio_zone_device_data(const struct folio *folio)
+{
+	return folio->page.zone_device_data;
+}
+#endif /* BPM_FOLIO_ZONE_DEVICE_DATA_NOT_PRESENT */
+
 #endif /* __BACKPORT_LINUX_MEMREMAP_H */

@@ -53,7 +53,7 @@ index 43877ac2f..2477300cc 100644
  
  	xe_pm_runtime_get(xe);
  
-@@ -303,6 +307,14 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
+@@ -303,21 +307,42 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
  	ss->read.size = __xe_devcoredump_read(NULL, LONG_MAX, 0, coredump);
  
  	if (ss->read.size > XE_DEVCOREDUMP_CHUNK_MAX) {
@@ -68,7 +68,8 @@ index 43877ac2f..2477300cc 100644
  		ss->read.buffer = kvmalloc(XE_DEVCOREDUMP_CHUNK_MAX,
  					   GFP_USER);
  		if (!ss->read.buffer)
-@@ -311,8 +323,13 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
+ 			return;
+ 
  		__xe_devcoredump_read(ss->read.buffer,
  				      XE_DEVCOREDUMP_CHUNK_MAX,
  				      0, coredump);
@@ -80,11 +81,13 @@ index 43877ac2f..2477300cc 100644
  		ss->read.buffer = kvmalloc(ss->read.size, GFP_USER);
 +#endif
  		if (!ss->read.buffer)
- 			goto put_pm;
+ 			return;
  
-@@ -337,2 +354,10 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
+ 		__xe_devcoredump_read(ss->read.buffer, ss->read.size, 0,
+ 				      coredump);
  		xe_devcoredump_snapshot_free(ss);
  	}
++
 +#ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
 +	dev_coredumpv(gt_to_xe(ss->gt)->drm.dev, ss->read.buffer,
 +		      ss->read.size, GFP_KERNEL);
@@ -92,7 +95,6 @@ index 43877ac2f..2477300cc 100644
 +	ss->read.size = 0;
 +	ss->read.chunk_position = 0;
 +#endif
-+
  }
 @@ -413,9 +438,11 @@ void xe_devcoredump(struct xe_exec_queue *q, struct xe_sched_job *job, const cha
  

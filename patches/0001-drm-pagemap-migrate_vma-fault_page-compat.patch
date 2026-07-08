@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Fri, 3 Jul 2026 12:20:00 +0530
+Subject: drm/pagemap: guard migrate_vma fault_page initializer on older kernels
+
+Older kernels (e.g. 5.15) have a smaller struct migrate_vma layout and do not
+provide .fault_page or newer migrate flags used by upstream pagemap migration
+paths.
+
+Use the BPM probe result from autotools to keep the initializer compatible on
+legacy kernels while preserving the full modern initializer when available.
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/gpu/drm/drm_pagemap.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/gpu/drm/drm_pagemap.c b/drivers/gpu/drm/drm_pagemap.c
+index 9b284bf..47486b7 100644
+--- a/drivers/gpu/drm/drm_pagemap.c
++++ b/drivers/gpu/drm/drm_pagemap.c
+@@ -1048,9 +1048,14 @@ static int __drm_pagemap_migrate_to_ram(struct vm_area_struct *vas,
+ 	struct migrate_vma migrate = {
+ 		.vma		= vas,
+ 		.pgmap_owner	= page_pgmap(page)->owner,
++#ifdef BPM_MIGRATE_VMA_FAULT_PAGE_NOT_PRESENT
++		.flags		= MIGRATE_VMA_SELECT_SYSTEM |
++				  MIGRATE_VMA_SELECT_DEVICE_PRIVATE,
++#else
+ 		.flags		= MIGRATE_VMA_SELECT_DEVICE_PRIVATE |
+ 		MIGRATE_VMA_SELECT_DEVICE_COHERENT,
+ 		.fault_page	= page,
++#endif
+ 	};
+ 	struct drm_pagemap_migrate_details mdetails = {};
+ 	struct drm_pagemap_zdd *zdd;
+-- 
+2.43.0
+

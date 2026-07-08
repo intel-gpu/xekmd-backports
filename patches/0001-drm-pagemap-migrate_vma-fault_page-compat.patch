@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Fri, 3 Jul 2026 12:20:00 +0530
+Subject: drm/pagemap: guard migrate_vma fault_page initializer on older kernels
+
+Older kernels (e.g. 5.15) have a smaller struct migrate_vma layout and do not
+provide .fault_page or newer migrate flags used by upstream pagemap migration
+paths.
+
+Use the BPM probe result from autotools to keep the initializer compatible on
+legacy kernels while preserving the full modern initializer when available.
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/gpu/drm/drm_pagemap.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/drm_pagemap.c b/drivers/gpu/drm/drm_pagemap.c
+index 862675ac5..0b3c9643d 100644
+--- a/drivers/gpu/drm/drm_pagemap.c
++++ b/drivers/gpu/drm/drm_pagemap.c
+@@ -1015,63 +1015,68 @@ err_out:
+ 	if (retry_count--) {
+ 		cond_resched();
+ 		goto retry;
+ 	}
+ 
+ 	return err ?: -EBUSY;
+ }
+ EXPORT_SYMBOL_GPL(drm_pagemap_evict_to_ram);
+ 
+ /**
+  * __drm_pagemap_migrate_to_ram() - Migrate GPU SVM range to RAM (internal)
+  * @vas: Pointer to the VM area structure
+  * @page: Pointer to the page for fault handling.
+  * @fault_addr: Fault address
+  * @size: Size of migration
+  *
+  * This internal function performs the migration of the specified GPU SVM range
+  * to RAM. It sets up the migration, populates + dma maps RAM PFNs, and
+  * invokes the driver-specific operations for migration to RAM.
+  *
+  * Return: 0 on success, negative error code on failure.
+  */
+ static int __drm_pagemap_migrate_to_ram(struct vm_area_struct *vas,
+ 					struct page *page,
+ 					unsigned long fault_addr,
+ 					unsigned long size)
+ {
+ 	struct migrate_vma migrate = {
+ 		.vma		= vas,
+ 		.pgmap_owner	= page_pgmap(page)->owner,
++#ifdef BPM_MIGRATE_VMA_FAULT_PAGE_NOT_PRESENT
++		.flags		= MIGRATE_VMA_SELECT_SYSTEM |
++				  MIGRATE_VMA_SELECT_DEVICE_PRIVATE,
++#else
+ 		.flags		= MIGRATE_VMA_SELECT_DEVICE_PRIVATE |
+ 		MIGRATE_VMA_SELECT_DEVICE_COHERENT,
+ 		.fault_page	= page,
++#endif
+ 	};
+ 	struct drm_pagemap_migrate_details mdetails = {};
+ 	struct drm_pagemap_zdd *zdd;
+ 	const struct drm_pagemap_devmem_ops *ops;
+ 	struct device *dev = NULL;
+ 	unsigned long npages, mpages = 0;
+ 	struct page **pages;
+ 	struct drm_pagemap_addr *pagemap_addr;
+ 	unsigned long start, end;
+ 	void *buf;
+ 	int i, err = 0;
+ 
+ 	zdd = page->zone_device_data;
+ 	if (time_before64(get_jiffies_64(), zdd->devmem_allocation->timeslice_expiration))
+ 		return 0;
+ 
+ 	start = ALIGN_DOWN(fault_addr, size);
+ 	end = ALIGN(fault_addr + 1, size);
+ 
+ 	/* Corner where VMA area struct has been partially unmapped */
+ 	if (start < vas->vm_start)
+ 		start = vas->vm_start;
+ 	if (end > vas->vm_end)
+ 		end = vas->vm_end;
+ 
+ 	migrate.start = start;
+ 	migrate.end = end;
+ 	npages = npages_in_range(start, end);
+ 
+ 	buf = kvcalloc(npages, 2 * sizeof(*migrate.src) + sizeof(*pagemap_addr) +

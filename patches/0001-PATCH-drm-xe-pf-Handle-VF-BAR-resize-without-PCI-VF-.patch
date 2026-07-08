@@ -1,0 +1,57 @@
+From 6e7d7a333d54adb20d1630273b62a119a347d7a3 Mon Sep 17 00:00:00 2001
+From: Pravalika Gurram <pravalika.gurram@intel.com>
+Date: Mon, 11 May 2026 18:52:13 +0530
+Subject: [PATCH] drm/xe/pf: Handle VF BAR resize without PCI VF REBAR
+ helpers
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Implement VF BAR resizing via the VF Resizable BAR capability directly
+in PCI config space for kernels that lack PCI VF REBAR helper APIs.
+
+v2 : oot patch is handling kernel-backport, hence removed from this
+patch
+
+Suggested-by: Michał Winiarski <michal.winiarski@intel.com>
+Signed-off-by: Marcin Bernatowicz <marcin.bernatowicz@linux.intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci_sriov.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov.c
+index 1246ffc..98955bd 100644
+--- a/drivers/gpu/drm/xe/xe_pci_sriov.c
++++ b/drivers/gpu/drm/xe/xe_pci_sriov.c
+@@ -81,7 +81,19 @@ static void pf_engine_activity_stats(struct xe_device *xe, unsigned int num_vfs,
+ 					 str_enable_disable(enable), ERR_PTR(ret));
+ 	}
+ }
++#ifndef BPM_PCI_IOV_VF_BAR_FUNCTIONS_NOT_PRESENT
++static int resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
++{
++	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
++	u32 sizes;
+ 
++	sizes = pci_iov_vf_bar_get_sizes(pdev, VF_LMEM_BAR, num_vfs);
++	if (!sizes)
++		return 0;
++
++	return pci_iov_vf_bar_set_size(pdev, VF_LMEM_BAR, __fls(sizes));
++}
++#else
+ /*
+  * Backport-only fallback: program VF REBAR directly when PCI-core helpers
+  * are not available.
+@@ -179,6 +191,7 @@ static int resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
+ 
+ 	return 0;
+ }
++#endif
+ 
+ static int pf_prepare_vfs_enabling(struct xe_device *xe)
+ {
+-- 
+2.43.0
+

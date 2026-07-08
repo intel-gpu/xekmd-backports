@@ -34,6 +34,7 @@ NOSTDINC_FLAGS += \
 endif
 
 subdir-ccflags-y := $(call cc-option, -fno-pie) $(call cc-option, -no-pie)
+subdir-ccflags-y += $(call cc-option, -Wno-declaration-after-statement)
 
 subdir-ccflags-y += -std=gnu11
 

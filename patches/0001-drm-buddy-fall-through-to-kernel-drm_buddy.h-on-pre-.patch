@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Date: Thu, 9 Jul 2026 22:54:05 +0530
+Subject: drm/buddy: fall through to kernel drm_buddy.h on pre-gpu_buddy kernels
+
+The upstream split of the buddy allocator moved the core allocator
+(struct gpu_buddy and the gpu_buddy_* API) into <linux/gpu_buddy.h> and
+left <drm/drm_buddy.h> as a thin, print-only overlay.
+
+On kernels that predate this split the full allocator (struct drm_buddy
+and friends) still lives in the kernel's own <drm/drm_buddy.h>, and
+backport-include/linux/gpu_buddy.h remaps the gpu_buddy_* API onto the
+kernel's drm_buddy_* symbols.
+
+The problem is that the copied print-only overlay shares the include
+guard __DRM_BUDDY_H__ with the kernel's full header.  Because the
+backport include path is searched before the kernel headers, an
+guard and shadows the kernel header.  struct drm_buddy is therefore
+never defined, leaving struct gpu_buddy incomplete:
+
+error: field 'mm' has incomplete type
+
+Guard the print-only overlay behind BPM_GPU_BUDDY_H_AVAILABLE.  When the
+kernel does not natively provide gpu_buddy, fall through via
+drm_buddy (and the drm_buddy_* helpers) become available.
+
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+---
+ include/drm/drm_buddy.h | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/include/drm/drm_buddy.h b/include/drm/drm_buddy.h
+--- a/include/drm/drm_buddy.h
++++ b/include/drm/drm_buddy.h
+@@ -4,6 +4,8 @@
+  */
+ 
+ #ifndef __DRM_BUDDY_H__
++
++#if defined(BPM_GPU_BUDDY_H_AVAILABLE) || defined(CPTCFG_BUILD_XE_DRM_BUDDY)
+ #define __DRM_BUDDY_H__
+ 
+ #include <linux/gpu_buddy.h>
+@@ -15,4 +17,8 @@
+ void drm_buddy_block_print(struct gpu_buddy *mm,
+ 			   struct gpu_buddy_block *block,
+ 			   struct drm_printer *p);
++#else
++#include_next <drm/drm_buddy.h>
++#endif /* BPM_GPU_BUDDY_H_AVAILABLE || CPTCFG_BUILD_XE_DRM_BUDDY */
++
+ #endif
+-- 
+2.43.0

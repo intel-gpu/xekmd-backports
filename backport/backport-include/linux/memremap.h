@@ -14,6 +14,7 @@
 #endif
 
 #ifdef BPM_FOLIO_ZONE_DEVICE_DATA_NOT_PRESENT
+struct folio;
 /*
  * folio_zone_device_data - return zone_device_data for a device-private folio
  * @folio: the folio
@@ -23,7 +24,12 @@
  */
 static inline void *folio_zone_device_data(const struct folio *folio)
 {
+#ifdef BPM_FOLIO_PUT_NOT_PRESENT
+	/* 5.15: no real struct folio; the backport models a folio as a page. */
+	return ((const struct page *)folio)->zone_device_data;
+#else
 	return folio->page.zone_device_data;
+#endif
 }
 #endif /* BPM_FOLIO_ZONE_DEVICE_DATA_NOT_PRESENT */
 

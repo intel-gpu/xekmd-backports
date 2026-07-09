@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Varun Gupta <varun.gupta@intel.com>
-Date: Mon, 07 Jul 2026 00:00:00 +0530
+Date: Tue, 7 Jul 2026 00:00:00 +0530
 Subject: drm/pagemap: Add BPM compat guards for older kernels
 
 v2: Add non-folio compatibility and disable THP migration [Pravalika]
@@ -8,12 +8,14 @@ v2: Add non-folio compatibility and disable THP migration [Pravalika]
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
 ---
- drivers/gpu/drm/drm_pagemap.c | 49 ++++++++++++++++++++++++++--
- 1 file changed, 48 insertions(+), 1 deletions(-)
+ drivers/gpu/drm/drm_pagemap.c | 44 ++++++++++++++++++++++++++++++-
+ 1 file changed, 43 insertions(+), 1 deletion(-)
 
+diff --git a/drivers/gpu/drm/drm_pagemap.c b/drivers/gpu/drm/drm_pagemap.c
+index 5002049..da9b9c3 100644
 --- a/drivers/gpu/drm/drm_pagemap.c
 +++ b/drivers/gpu/drm/drm_pagemap.c
-@@ -210,9 +210,13 @@
+@@ -210,9 +210,13 @@ static void drm_pagemap_get_devmem_page(struct page *page,
  					unsigned int order,
  					struct drm_pagemap_zdd *zdd)
  {
@@ -27,7 +29,7 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  }
  
  /**
-@@ -455,6 +459,7 @@
+@@ -455,6 +459,7 @@ out:
  	return ret;
  }
  
@@ -35,7 +37,7 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  /**
   * drm_pagemap_cpages() - Count collected pages
   * @migrate_pfn: Array of migrate_pfn entries to account
-@@ -489,6 +494,7 @@
+@@ -489,6 +494,7 @@ static int drm_pagemap_cpages(unsigned long *migrate_pfn, unsigned long npages)
  
  	return cpages;
  }
@@ -43,7 +45,7 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  
  /**
   * drm_pagemap_migrate_to_devmem() - Migrate a struct mm_struct range to device memory
-@@ -526,8 +532,13 @@
+@@ -526,8 +532,13 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
  		.start		= start,
  		.end		= end,
  		.pgmap_owner	= pagemap->owner,
@@ -57,7 +59,7 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  	};
  	unsigned long i, npages = npages_in_range(start, end);
  	unsigned long own_pages = 0, migrated_pages = 0;
-@@ -592,8 +603,12 @@
+@@ -592,8 +603,12 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
  		goto err_free;
  	}
  
@@ -70,7 +72,7 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  		/*
  		 * Some pages to migrate. But we want to migrate all or
  		 * nothing. Raced or unknown device pages.
-@@ -666,6 +681,7 @@
+@@ -666,6 +681,7 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
  		}
  		migrate.dst[i] = migrate_pfn(migrate.dst[i]);
  
@@ -78,7 +80,7 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  		if (migrate.src[i] & MIGRATE_PFN_COMPOUND) {
  			drm_WARN_ONCE(dpagemap->drm, src_page &&
  				      folio_order(page_folio(src_page)) != HPAGE_PMD_ORDER,
-@@ -677,6 +693,7 @@
+@@ -677,6 +693,7 @@ int drm_pagemap_migrate_to_devmem(struct drm_pagemap_devmem *devmem_allocation,
  			for (j = 1; j < NR_PAGES(order) && i + j < npages; j++)
  				migrate.dst[i + j] = 0;
  		}
@@ -86,7 +88,7 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  
  		drm_pagemap_get_devmem_page(page, order, zdd);
  
-@@ -791,7 +808,11 @@
+@@ -791,7 +808,11 @@ static int drm_pagemap_migrate_populate_ram_pfn(struct vm_area_struct *vas,
  
  		/* TODO: Support fallback to single pages if THP allocation fails */
  		if (vas)
@@ -98,7 +100,7 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  		else
  			folio = folio_alloc(GFP_HIGHUSER, order);
  
-@@ -801,8 +822,10 @@
+@@ -801,8 +822,10 @@ static int drm_pagemap_migrate_populate_ram_pfn(struct vm_area_struct *vas,
  		page = folio_page(folio, 0);
  		mpfn[i] = migrate_pfn(page_to_pfn(page));
  
@@ -109,7 +111,7 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  next:
  		if (page)
  			addr += page_size(page);
-@@ -1042,10 +1065,14 @@
+@@ -1042,10 +1065,14 @@ retry:
  	if (err)
  		goto err_free;
  
@@ -125,22 +127,7 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  	err = drm_pagemap_migrate_populate_ram_pfn(NULL, NULL, npages, &mpages,
  						   src, dst, 0);
  	if (err || !mpages)
-@@ -1118,9 +1145,14 @@
- 	struct migrate_vma migrate = {
- 		.vma		= vas,
- 		.pgmap_owner	= page_pgmap(page)->owner,
-+#ifdef BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT
-+		.flags		= MIGRATE_VMA_SELECT_DEVICE_PRIVATE |
-+				  MIGRATE_VMA_SELECT_DEVICE_COHERENT,
-+#else
- 		.flags		= MIGRATE_VMA_SELECT_DEVICE_PRIVATE |
- 				  MIGRATE_VMA_SELECT_DEVICE_COHERENT |
- 				  MIGRATE_VMA_SELECT_COMPOUND,
-+#endif
- 		.fault_page	= page,
- 	};
- 	struct drm_pagemap_migrate_details mdetails = {};
-@@ -1222,12 +1254,19 @@
+@@ -1222,12 +1249,19 @@ err_out:
   * This function is a callback used to put the GPU SVM zone device data
   * associated with a page when it is being released.
   */
@@ -160,7 +147,7 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  
  /**
   * drm_pagemap_migrate_to_ram() - Migrate a virtual range to RAM (page fault handler)
-@@ -1252,6 +1291,7 @@
+@@ -1252,6 +1286,7 @@ static vm_fault_t drm_pagemap_migrate_to_ram(struct vm_fault *vmf)
  	return err ? VM_FAULT_SIGBUS : 0;
  }
  
@@ -168,7 +155,7 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  static void drm_pagemap_folio_split(struct folio *orig_folio, struct folio *new_folio)
  {
  	struct drm_pagemap_zdd *zdd;
-@@ -1263,11 +1303,18 @@
+@@ -1263,11 +1298,18 @@ static void drm_pagemap_folio_split(struct folio *orig_folio, struct folio *new_
  	zdd = folio_zone_device_data(orig_folio);
  	folio_set_zone_device_data(new_folio, drm_pagemap_zdd_get(zdd));
  }
@@ -187,6 +174,6 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  };
  
  /**
-
 -- 
 2.43.0
+

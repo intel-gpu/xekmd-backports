@@ -15,7 +15,7 @@
 
 #include_next <drm/drm_suballoc.h>
 
-#ifdef BPM_DRM_SUBALLOC_ALLOC_NOT_PRESENT
+#if defined(BPM_DRM_SUBALLOC_ALLOC_NOT_PRESENT) && !defined(CPTCFG_BUILD_XE_DRM_SUBALLOC_HELPER)
 
 #include <linux/list.h>
 #include <linux/slab.h>
@@ -71,6 +71,6 @@ static inline int drm_suballoc_insert(struct drm_suballoc_manager *sa_manager,
 	return 0;
 }
 
-#endif /* BPM_DRM_SUBALLOC_ALLOC_NOT_PRESENT */
+#endif /* BPM_DRM_SUBALLOC_ALLOC_NOT_PRESENT && !CPTCFG_BUILD_XE_DRM_SUBALLOC_HELPER */
 
 #endif /* __BACKPORT_DRM_SUBALLOC_H__ */

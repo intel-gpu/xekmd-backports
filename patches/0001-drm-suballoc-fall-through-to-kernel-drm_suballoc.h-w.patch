@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Date: Thu, 9 Jul 2026 23:37:05 +0530
+Subject: drm/suballoc: fall through to kernel drm_suballoc.h when helper not built
+
+The copied drm_suballoc.h carries the newer allocator that splits
+drm_suballoc_new() into drm_suballoc_alloc() + drm_suballoc_insert().
+
+On kernels that already ship drm_suballoc (e.g. 6.x) the backport does
+not build its own drm_suballoc helper (BUILD_XE_DRM_SUBALLOC_HELPER is
+only enabled for 5.15/5.16).  In that case the kernel provides everything
+except the alloc()/insert() split, which is emulated with static inline
+wrappers in backport-include/drm/drm_suballoc.h.
+
+Because the backport include path is searched before the kernel headers,
+this copied header shadows the kernel's own <drm/drm_suballoc.h> and
+re-declares drm_suballoc_alloc()/drm_suballoc_insert() as non-static
+prototypes.  Those collide with the shim's static inline definitions:
+
+error: static declaration of 'drm_suballoc_alloc' follows non-static declaration
+
+Guard the copied allocator behind CPTCFG_BUILD_XE_DRM_SUBALLOC_HELPER.
+When the helper is not built, fall through via #include_next to the
+kernel's own <drm/drm_suballoc.h> so the shim can supply the alloc()/
+insert() split without conflicting prototypes.
+
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+---
+ include/drm/drm_suballoc.h | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/include/drm/drm_suballoc.h b/include/drm/drm_suballoc.h
+index 29befdd..c7ed315 100644
+--- a/include/drm/drm_suballoc.h
++++ b/include/drm/drm_suballoc.h
+@@ -4,6 +4,8 @@
+  * Copyright © 2022 Intel Corporation
+  */
+ #ifndef _DRM_SUBALLOC_H_
++
++#ifdef CPTCFG_BUILD_XE_DRM_SUBALLOC_HELPER
+ #define _DRM_SUBALLOC_H_
+ 
+ #include <drm/drm_mm.h>
+@@ -111,4 +113,8 @@ drm_suballoc_dump_debug_info(struct drm_suballoc_manager *sa_manager,
+ 
+ #endif
+ 
++#else
++#include_next <drm/drm_suballoc.h>
++#endif /* CPTCFG_BUILD_XE_DRM_SUBALLOC_HELPER */
++
+ #endif /* _DRM_SUBALLOC_H_ */
+-- 
+2.43.0
+

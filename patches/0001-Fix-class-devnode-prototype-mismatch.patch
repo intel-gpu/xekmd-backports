@@ -1,10 +1,7 @@
-From 140b33dd68b23e9db399c0bd28b0718b69cb52d1 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
-Date: Thu, 23 Apr 2026 22:58:27 +0530
+Date: Fri, 10 Jul 2026 14:42:51 +0530
 Subject: [PATCH] Fix class->devnode prototype mismatch
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
 
 Struct class::devnode as taking const struct device * from 6.2.0 KV.
 while above kernels use struct device *.
@@ -24,14 +21,27 @@ error: assignment to ‘char * (*)(struct device *, umode_t *)’ {aka ‘char *
 
 Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
 ---
- drivers/vfio/group.c | 4 ++++
- 1 file changed, 4 insertions(+)
+ drivers/vfio/group.c     | 8 ++++++++
+ drivers/vfio/vfio_main.c | 4 ++++
+ 2 files changed, 12 insertions(+)
 
 diff --git a/drivers/vfio/group.c b/drivers/vfio/group.c
-index ee4ba06..d33b43f 100644
+index b2299e5..4f1d335 100644
 --- a/drivers/vfio/group.c
 +++ b/drivers/vfio/group.c
-@@ -901,7 +901,11 @@ bool vfio_file_has_dev(struct file *file, struct vfio_device *device)
+@@ -15,7 +15,11 @@
+ #include <linux/anon_inodes.h>
+ #include "vfio.h"
+ 
++#ifdef BPM_CLASS_DEVNODE_CONST_NOT_PRESENT
++static char *vfio_devnode(struct device *dev, umode_t *mode);
++#else
+ static char *vfio_devnode(const struct device *, umode_t *);
++#endif
+ static const struct class vfio_class = {
+ 	.name	= "vfio",
+ 	.devnode = vfio_devnode
+@@ -885,7 +889,11 @@ bool vfio_file_has_dev(struct file *file, struct vfio_device *device)
  }
  EXPORT_SYMBOL_GPL(vfio_file_has_dev);
  
@@ -42,6 +52,22 @@ index ee4ba06..d33b43f 100644
 +#endif
  {
  	return kasprintf(GFP_KERNEL, "vfio/%s", dev_name(dev));
+ }
+diff --git a/drivers/vfio/vfio_main.c b/drivers/vfio/vfio_main.c
+index 6222376..4d42eaf 100644
+--- a/drivers/vfio/vfio_main.c
++++ b/drivers/vfio/vfio_main.c
+@@ -63,7 +63,11 @@ MODULE_PARM_DESC(enable_unsafe_noiommu_mode, "Enable UNSAFE, no-IOMMU mode.  Thi
+ 
+ static DEFINE_XARRAY(vfio_device_set_xa);
+ 
++#ifdef BPM_CLASS_DEVNODE_CONST_NOT_PRESENT
++static char *vfio_device_devnode(struct device *dev, umode_t *mode)
++#else
+ static char *vfio_device_devnode(const struct device *dev, umode_t *mode)
++#endif
+ {
+ 	return kasprintf(GFP_KERNEL, "vfio/devices/%s", dev_name(dev));
  }
 -- 
 2.43.0

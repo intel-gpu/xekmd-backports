@@ -46,7 +46,7 @@ diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vr
  		goto error_unlock;
 +#ifndef BPM_DRM_BUDDY_CONTIGUOUS_ALLOCATION_PRESENT
 +	if (place->flags & TTM_PL_FLAG_CONTIGUOUS) {
-+		if (!drm_buddy_block_trim(mm, NULL, vres->base.size, &vres->blocks))
++		if (!gpu_buddy_block_trim(mm, NULL, vres->base.size, &vres->blocks))
 +			size = vres->base.size;
 +	}
 +#endif

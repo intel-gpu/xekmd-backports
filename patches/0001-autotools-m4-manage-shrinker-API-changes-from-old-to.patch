@@ -20,15 +20,16 @@ Reference:
 
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
  drivers/gpu/drm/ttm/ttm_pool.c | 31 ++++++++++++++++++++++++++++++
  1 file changed, 31 insertions(+)
 
 diff --git a/drivers/gpu/drm/ttm/ttm_pool.c b/drivers/gpu/drm/ttm/ttm_pool.c
-index baf27c7..72ae044 100644
+index 278bbe7..f70b4f7 100644
 --- a/drivers/gpu/drm/ttm/ttm_pool.c
 +++ b/drivers/gpu/drm/ttm/ttm_pool.c
-@@ -126,9 +126,22 @@ static struct ttm_pool_type global_uncached[NR_PAGE_ORDERS];
+@@ -128,9 +128,22 @@ static struct ttm_pool_type global_uncached[NR_PAGE_ORDERS];
  static struct ttm_pool_type global_dma32_write_combined[NR_PAGE_ORDERS];
  static struct ttm_pool_type global_dma32_uncached[NR_PAGE_ORDERS];
  
@@ -50,24 +51,24 @@ index baf27c7..72ae044 100644
 +#endif
  static DECLARE_RWSEM(pool_shrink_rwsem);
  
- /* Allocate pages of size 1 << order with the given gfp_flags */
-@@ -1284,9 +1297,15 @@ static int ttm_pool_debugfs_shrink_show(struct seq_file *m, void *data)
- 	unsigned long count;
- 
+ static int ttm_pool_nid(struct ttm_pool *pool)
+@@ -1347,9 +1360,15 @@ static int ttm_pool_debugfs_shrink_show(struct seq_file *m, void *data)
  	fs_reclaim_acquire(GFP_KERNEL);
+ 	for_each_node(nid) {
+ 		sc.nid = nid;
 +#ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
-+	count = ttm_pool_shrinker_count(&mm_shrinker, &sc);
-+	seq_printf(m, "%lu/%lu\n", count,
-+		   ttm_pool_shrinker_scan(&mm_shrinker, &sc));
++		count = ttm_pool_shrinker_count(&mm_shrinker, &sc);
++		seq_printf(m, "%lu/%lu\n", count,
++			   ttm_pool_shrinker_scan(&mm_shrinker, &sc));
 +#else
- 	count = ttm_pool_shrinker_count(mm_shrinker, &sc);
- 	seq_printf(m, "%lu/%lu\n", count,
- 		   ttm_pool_shrinker_scan(mm_shrinker, &sc));
+ 		count = ttm_pool_shrinker_count(mm_shrinker, &sc);
+ 		seq_printf(m, "%d: %lu/%lu\n", nid, count,
+ 			   ttm_pool_shrinker_scan(mm_shrinker, &sc));
 +#endif
+ 	}
  	fs_reclaim_release(GFP_KERNEL);
  
- 	return 0;
-@@ -1334,6 +1353,13 @@ int ttm_pool_mgr_init(unsigned long num_pages)
+@@ -1422,6 +1441,9 @@ int ttm_pool_mgr_init(unsigned long num_pages)
  #endif
  #endif
  
@@ -78,10 +79,10 @@ index baf27c7..72ae044 100644
 +	register_shrinker(&mm_shrinker, "drm-ttm_pool");
 +#endif
 +#else
- 	mm_shrinker = shrinker_alloc(0, "drm-ttm_pool");
+ 	mm_shrinker = shrinker_alloc(SHRINKER_NUMA_AWARE, "drm-ttm_pool");
  	if (!mm_shrinker)
  		return -ENOMEM;
-@@ -1344,6 +1370,7 @@ int ttm_pool_mgr_init(unsigned long num_pages)
+@@ -1432,6 +1454,7 @@ int ttm_pool_mgr_init(unsigned long num_pages)
  	mm_shrinker->seeks = 1;
  
  	shrinker_register(mm_shrinker);
@@ -89,7 +90,7 @@ index baf27c7..72ae044 100644
  
  	return 0;
  }
-@@ -1365,6 +1392,10 @@ void ttm_pool_mgr_fini(void)
+@@ -1453,6 +1476,10 @@ void ttm_pool_mgr_fini(void)
  		ttm_pool_type_fini(&global_dma32_uncached[i]);
  	}
  

@@ -4,15 +4,16 @@ Date: Tue, 26 May 2026 11:41:55 +0530
 Subject: drm/pagemap: Provide compat for dev_pagemap_ops folio_free
 
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/drm_pagemap.c | 11 +++++++++++
  1 file changed, 11 insertions(+)
 
 diff --git a/drivers/gpu/drm/drm_pagemap.c b/drivers/gpu/drm/drm_pagemap.c
-index b101788..53f8fcf 100644
+index 5002049..08871c5 100644
 --- a/drivers/gpu/drm/drm_pagemap.c
 +++ b/drivers/gpu/drm/drm_pagemap.c
-@@ -1146,10 +1146,17 @@ err_out:
+@@ -1222,12 +1222,19 @@ err_out:
   * This function is a callback used to put the GPU SVM zone device data
   * associated with a page when it is being released.
   */
@@ -24,13 +25,15 @@ index b101788..53f8fcf 100644
 +#else
  static void drm_pagemap_folio_free(struct folio *folio)
  {
- 	drm_pagemap_zdd_put(folio->page.zone_device_data);
+ 	struct page *page = folio_page(folio, 0);
+ 
+ 	drm_pagemap_zdd_put(drm_pagemap_page_zone_device_data(page));
  }
 +#endif
  
  /**
   * drm_pagemap_migrate_to_ram() - Migrate a virtual range to RAM (page fault handler)
-@@ -1175,7 +1182,11 @@ static vm_fault_t drm_pagemap_migrate_to_ram(struct vm_fault *vmf)
+@@ -1265,7 +1272,11 @@ static void drm_pagemap_folio_split(struct folio *orig_folio, struct folio *new_
  }
  
  static const struct dev_pagemap_ops drm_pagemap_pagemap_ops = {
@@ -40,8 +43,8 @@ index b101788..53f8fcf 100644
  	.folio_free = drm_pagemap_folio_free,
 +#endif
  	.migrate_to_ram = drm_pagemap_migrate_to_ram,
+ 	.folio_split = drm_pagemap_folio_split,
  };
- 
 -- 
 2.43.0
 

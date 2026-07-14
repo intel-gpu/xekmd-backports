@@ -55,7 +55,7 @@ index 278bbe7..f70b4f7 100644
  		sc.nid = nid;
 +#ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
 +		count = ttm_pool_shrinker_count(&mm_shrinker, &sc);
-+		seq_printf(m, "%lu/%lu\n", count,
++		seq_printf(m, "%d: %lu/%lu\n", nid, count,
 +			   ttm_pool_shrinker_scan(&mm_shrinker, &sc));
 +#else
  		count = ttm_pool_shrinker_count(mm_shrinker, &sc);

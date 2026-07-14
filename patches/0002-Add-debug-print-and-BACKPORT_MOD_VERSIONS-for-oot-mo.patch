@@ -10,6 +10,7 @@ Add BACKPORT_MOD_VERSIONS to display information
 about oot module version.
 
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
  drivers/platform/x86/intel/pmt/class.c     | 2 ++
  drivers/platform/x86/intel/pmt/crashlog.c  | 2 ++
@@ -81,15 +82,15 @@ diff --git a/drivers/platform/x86/intel/vsec.c b/drivers/platform/x86/intel/vsec
 index db3c031..5d47287 100644
 --- a/drivers/platform/x86/intel/vsec.c
 +++ b/drivers/platform/x86/intel/vsec.c
-@@ -335,6 +335,7 @@ static bool intel_vsec_walk_vsec(struct pci_dev *pdev,
- void intel_vsec_register(struct pci_dev *pdev,
- 			 struct intel_vsec_platform_info *info)
+@@ -599,6 +599,7 @@ static bool intel_vsec_walk_vsec(struct pci_dev *pdev,
+ int intel_vsec_register(struct device *dev,
+ 			const struct intel_vsec_platform_info *info)
  {
 +	printk(KERN_INFO "VSEC Backport init, Module is backported from " CPTCFG_BASE_KERNEL_TAG "\n");
- 	if (!pdev || !info || !info->headers)
- 		return;
+ 	if (!dev || !info || !info->headers)
+ 		return -EINVAL;
  
-@@ -513,6 +514,7 @@ static struct pci_driver intel_vsec_pci_driver = {
+@@ -887,6 +888,7 @@ static struct pci_driver intel_vsec_pci_driver = {
  };
  module_pci_driver(intel_vsec_pci_driver);
  

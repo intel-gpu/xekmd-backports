@@ -23,4 +23,7 @@
 #define system_percpu_wq system_wq
 #endif
 
+#undef WQ_PERCPU
+#define WQ_PERCPU 0
+
 #endif /* __BACKPORT_LINUX_WORKQUEUE_H */

@@ -23,4 +23,11 @@ dma_fence_check_and_signal_locked(struct dma_fence *fence)
 #define extern_lock lock
 #endif   /* BPM_DMA_FENCE_EXTERN_LOCK_NOT_PRESENT */
 
+#ifdef BPM_DMA_FENCE_LOCK_IRQSAVE_AND_IRQRESTORE_NOT_PRESENT
+#define dma_fence_lock_irqsave(fence, flags) \
+	spin_lock_irqsave((fence)->lock, flags)
+#define dma_fence_unlock_irqrestore(fence, flags) \
+	spin_unlock_irqrestore((fence)->lock, flags)
+#endif /* BPM_DMA_FENCE_LOCK_IRQSAVE_AND_IRQRESTORE_NOT_PRESENT */
+
 #endif /* __BACKPORT_LINUX_DMA_FENCE_H */

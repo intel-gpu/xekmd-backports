@@ -25,12 +25,13 @@ index dfc99fc..baa1e58 100644
  config DRM_GPUVM
  	tristate "Enable Xe-specific DRM GPUVM support"
  	depends on DRM
-@@ -46,7 +51,7 @@ config DRM_XE
+@@ -58,8 +63,8 @@ config DRM_XE
  	select VMAP_PFN
  	select DRM_TTM
  	select DRM_TTM_HELPER
 -	select DRM_EXEC
 +	select DRM_EXEC if BUILD_XE_DRM_EXEC
+ 	select DRM_GPUSVM if !UML
  	select DRM_GPUVM if BUILD_XE_DRM_GPUVM
  	select DRM_SCHED
  	select MMU_NOTIFIER

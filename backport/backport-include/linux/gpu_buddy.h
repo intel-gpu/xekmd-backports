@@ -3,7 +3,7 @@
 #ifndef _BACKPORT_LINUX_GPU_BUDDY_H_
 #define _BACKPORT_LINUX_GPU_BUDDY_H_
 
-#ifdef HAVE_LINUX_GPU_BUDDY_H_AVAILABLE
+#if defined(HAVE_LINUX_GPU_BUDDY_H_AVAILABLE) || defined(CPTCFG_BUILD_XE_DRM_BUDDY)
 #include_next <linux/gpu_buddy.h>
 #else
 #include_next <drm/drm_buddy.h>
@@ -30,6 +30,6 @@
 #define gpu_buddy_block_size drm_buddy_block_size
 #define gpu_buddy_print_tree drm_buddy_print_tree
 
-#endif /* HAVE_LINUX_GPU_BUDDY_H_AVAILABLE */
+#endif /* HAVE_LINUX_GPU_BUDDY_H_AVAILABLE || CPTCFG_BUILD_XE_DRM_BUDDY */
 
 #endif /* _BACKPORT_LINUX_GPU_BUDDY_H_ */

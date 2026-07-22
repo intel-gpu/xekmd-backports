@@ -48,6 +48,7 @@ These branches are similar to kernel-backport but are intended for use along wit
 | Branch | Status | Kernel Version | Description |
 |--------|--------|----------------|-------------|
 | **[target-kernel/v6.6](https://github.com/intel-gpu/xekmd-backports/tree/target-kernel/v6.6)** ([README](https://github.com/intel-gpu/xekmd-backports/blob/target-kernel/v6.6/README.md)) | **Active** | v6.6 | Base kernel v6.6 with backport patches required for enabling Xe features |
+| **[target-kernel/v5.15](https://github.com/intel-gpu/xekmd-backports/tree/target-kernel/v5.15)** ([README](https://github.com/intel-gpu/xekmd-backports/blob/target-kernel/v5.15/README.md)) | **Active** | v5.15 | Base kernel v5.15 with backport patches required for enabling Xe features |
 
 **Note:** See each branch's README for detailed information and instructions.
 

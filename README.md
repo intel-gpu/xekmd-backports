@@ -19,7 +19,7 @@ Since it is just for showcasing the capabilities of the next-gen GPUs so quality
 Note: 
 1. Patches present in base will be removed once merged in mainline kernel.
 2. Patches present in features are dynamic in nature, they may change frequently and removed once merged in drm-tip.
-3. Patches present in features will use prelim uapi to aviod conflict in updates, once patches are merged in drm-tip, uapi will change from prelim to normal.
+3. Patches present in features will use prelim uapi to avoid conflict in updates, once patches are merged in drm-tip, uapi will change from prelim to normal.
 4. prelim uapi will be maintained at [drm-uapi-helper](https://github.com/intel-gpu/drm-uapi-helper/tree/xe).
 5. Patches present in oot directory are applied only when using the `-c <oot>` option.
 

@@ -9,6 +9,7 @@
 #endif
 
 #include <drm/drm_gem_ttm_helper.h>
+#include <drm/drm_print.h>
 #include <drm/ttm/ttm_placement.h>
 #include <drm/ttm/ttm_tt.h>
 

@@ -123,6 +123,21 @@ gen_l3_mask_from_pattern(struct xe_device *xe, xe_l3_bank_mask_t dst,
 	}
 }
 
+bool xe_gt_topology_report_l3(struct xe_gt *gt)
+{
+	/*
+	 * No known userspace needs/uses the L3 bank mask reported by
+	 * the media GT, and the hardware itself is known to report bogus
+	 * values on several platforms.  Only report L3 bank mask as part
+	 * of the media GT's topology on pre-Xe3 platforms since that's
+	 * already part of our ABI.
+	 */
+	if (xe_gt_is_media_type(gt) && MEDIA_VER(gt_to_xe(gt)) >= 30)
+		return false;
+
+	return true;
+}
+
 static void
 load_l3_bank_mask(struct xe_gt *gt, xe_l3_bank_mask_t l3_bank_mask)
 {
@@ -130,19 +145,14 @@ load_l3_bank_mask(struct xe_gt *gt, xe_l3_bank_mask_t l3_bank_mask)
 	struct xe_mmio *mmio = &gt->mmio;
 	u32 fuse3 = xe_mmio_read32(mmio, MIRROR_FUSE3);
 
-	/*
-	 * PTL platforms with media version 30.00 do not provide proper values
-	 * for the media GT's L3 bank registers.  Skip the readout since we
-	 * don't have any way to obtain real values.
-	 *
-	 * This may get re-described as an official workaround in the future,
-	 * but there's no tracking number assigned yet so we use a custom
-	 * OOB workaround descriptor.
-	 */
-	if (XE_WA(gt, no_media_l3))
+	if (!xe_gt_topology_report_l3(gt))
 		return;
 
-	if (GRAPHICS_VER(xe) >= 30) {
+	if (GRAPHICS_VER(xe) >= 35) {
+		u32 fuse_val = xe_mmio_read32(mmio, MIRROR_L3BANK_ENABLE);
+
+		bitmap_from_arr32(l3_bank_mask, &fuse_val, 32);
+	} else if (GRAPHICS_VER(xe) >= 30) {
 		xe_l3_bank_mask_t per_node = {};
 		u32 meml3_en = REG_FIELD_GET(XE2_NODE_ENABLE_MASK, fuse3);
 		u32 mirror_l3bank_enable = xe_mmio_read32(mmio, MIRROR_L3BANK_ENABLE);
@@ -195,24 +205,6 @@ load_l3_bank_mask(struct xe_gt *gt, xe_l3_bank_mask_t l3_bank_mask)
 	}
 }
 
-static void
-get_num_dss_regs(struct xe_device *xe, int *geometry_regs, int *compute_regs)
-{
-	if (GRAPHICS_VER(xe) > 20) {
-		*geometry_regs = 3;
-		*compute_regs = 3;
-	} else if (GRAPHICS_VERx100(xe) == 1260) {
-		*geometry_regs = 0;
-		*compute_regs = 2;
-	} else if (GRAPHICS_VERx100(xe) >= 1250) {
-		*geometry_regs = 1;
-		*compute_regs = 1;
-	} else {
-		*geometry_regs = 1;
-		*compute_regs = 0;
-	}
-}
-
 void
 xe_gt_topology_init(struct xe_gt *gt)
 {
@@ -220,29 +212,27 @@ xe_gt_topology_init(struct xe_gt *gt)
 		XELP_GT_GEOMETRY_DSS_ENABLE,
 		XE2_GT_GEOMETRY_DSS_1,
 		XE2_GT_GEOMETRY_DSS_2,
+		XE3P_XPC_GT_GEOMETRY_DSS_3,
 	};
 	static const struct xe_reg compute_regs[] = {
 		XEHP_GT_COMPUTE_DSS_ENABLE,
 		XEHPC_GT_COMPUTE_DSS_ENABLE_EXT,
 		XE2_GT_COMPUTE_DSS_2,
+		XE3P_XPC_GT_COMPUTE_DSS_3,
 	};
-	int num_geometry_regs, num_compute_regs;
-	struct xe_device *xe = gt_to_xe(gt);
 	struct drm_printer p;
-
-	get_num_dss_regs(xe, &num_geometry_regs, &num_compute_regs);
 
 	/*
 	 * Register counts returned shouldn't exceed the number of registers
 	 * passed as parameters below.
 	 */
-	xe_gt_assert(gt, num_geometry_regs <= ARRAY_SIZE(geometry_regs));
-	xe_gt_assert(gt, num_compute_regs <= ARRAY_SIZE(compute_regs));
+	xe_gt_assert(gt, gt->info.num_geometry_xecore_fuse_regs <= ARRAY_SIZE(geometry_regs));
+	xe_gt_assert(gt, gt->info.num_compute_xecore_fuse_regs <= ARRAY_SIZE(compute_regs));
 
 	load_dss_mask(gt, gt->fuse_topo.g_dss_mask,
-		      num_geometry_regs, geometry_regs);
+		      gt->info.num_geometry_xecore_fuse_regs, geometry_regs);
 	load_dss_mask(gt, gt->fuse_topo.c_dss_mask,
-		      num_compute_regs, compute_regs);
+		      gt->info.num_compute_xecore_fuse_regs, compute_regs);
 
 	load_eu_mask(gt, gt->fuse_topo.eu_mask_per_dss, &gt->fuse_topo.eu_type);
 	load_l3_bank_mask(gt, gt->fuse_topo.l3_bank_mask);
@@ -282,8 +272,9 @@ int xe_gt_topology_dump(struct xe_gt *gt, struct drm_printer *p)
 	drm_printf(p, "EU type:             %s\n",
 		   eu_type_to_str(gt->fuse_topo.eu_type));
 
-	drm_printf(p, "L3 bank mask:        %*pb\n", XE_MAX_L3_BANK_MASK_BITS,
-		   gt->fuse_topo.l3_bank_mask);
+	if (xe_gt_topology_report_l3(gt))
+		drm_printf(p, "L3 bank mask:        %*pb\n", XE_MAX_L3_BANK_MASK_BITS,
+			   gt->fuse_topo.l3_bank_mask);
 	return 0;
 }
 
@@ -296,6 +287,13 @@ unsigned int
 xe_dss_mask_group_ffs(const xe_dss_mask_t mask, int groupsize, int groupnum)
 {
 	return find_next_bit(mask, XE_MAX_DSS_FUSE_BITS, groupnum * groupsize);
+}
+
+/* Used to obtain the index of the first L3 bank. */
+unsigned int
+xe_l3_bank_mask_ffs(const xe_l3_bank_mask_t mask)
+{
+	return find_first_bit(mask, XE_MAX_L3_BANK_MASK_BITS);
 }
 
 /**
@@ -312,15 +310,14 @@ xe_dss_mask_group_ffs(const xe_dss_mask_t mask, int groupsize, int groupnum)
  */
 bool xe_gt_topology_has_dss_in_quadrant(struct xe_gt *gt, int quad)
 {
-	struct xe_device *xe = gt_to_xe(gt);
 	xe_dss_mask_t all_dss;
-	int g_dss_regs, c_dss_regs, dss_per_quad, quad_first;
+	int dss_per_quad, quad_first;
 
 	bitmap_or(all_dss, gt->fuse_topo.g_dss_mask, gt->fuse_topo.c_dss_mask,
 		  XE_MAX_DSS_FUSE_BITS);
 
-	get_num_dss_regs(xe, &g_dss_regs, &c_dss_regs);
-	dss_per_quad = 32 * max(g_dss_regs, c_dss_regs) / 4;
+	dss_per_quad = 32 * max(gt->info.num_geometry_xecore_fuse_regs,
+				gt->info.num_compute_xecore_fuse_regs) / 4;
 
 	quad_first = xe_dss_mask_group_ffs(all_dss, dss_per_quad, quad);
 

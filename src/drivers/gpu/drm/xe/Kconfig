@@ -26,6 +26,14 @@ config DRM_GPUVM
 	help
 	  GPU-VM representation providing helpers to manage a GPUs virtual
           address space (Xe-specific backport version)
+config DRM_GPUSVM
+	tristate "Enable Xe-specific DRM GPUSVM support"
+	depends on m
+	depends on DRM
+	default m
+	help
+	  GPU-SVM representation providing helpers to manage shared virtual
+          memory between CPU and GPU (Xe-specific backport version)
 config DRM_XE
 	tristate "Intel Xe2 Graphics"
 	depends on m
@@ -67,12 +75,12 @@ config DRM_XE
 	depends on DRM_TTM
 	depends on DRM_TTM_HELPER
 	select DRM_EXEC if BUILD_XE_DRM_EXEC
+	select DRM_GPUSVM if !UML
 	select DRM_GPUVM if BUILD_XE_DRM_GPUVM
 	depends on DRM_SCHED
 	depends on MMU_NOTIFIER
 	depends on WANT_DEV_COREDUMP
 	depends on AUXILIARY_BUS
-	depends on HMM_MIRROR
 	select REGMAP if I2C
 	help
 	  Driver for Intel Xe2 series GPUs and later. Experimental support
@@ -109,9 +117,10 @@ config DRM_XE_GPUSVM
 	bool "Enable CPU to GPU address mirroring"
 	depends on DRM_XE
 	depends on !UML
-	depends on DEVICE_PRIVATE
+	depends on ZONE_DEVICE
 	default y
-	depends on DRM_GPUSVM
+	depends on DEVICE_PRIVATE
+	select DRM_GPUSVM
 	help
 	  Enable this option if you want support for CPU to GPU address
 	  mirroring.

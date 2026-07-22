@@ -104,11 +104,6 @@ static int resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
 #define PCI_EXT_CAP_ID_VF_REBAR 0x24 /* VF Resizable BAR */
 #endif
 
-static inline resource_size_t pci_rebar_size_to_bytes(int size)
-{
-	return 1ULL << (size + ilog2((resource_size_t)SZ_1M));
-}
-
 /*
  * The real 'struct pci_sriov' is PCI-core internal (drivers/pci/pci.h).
  * This local copy is used only to update pdev->sriov->barsz[].
@@ -319,7 +314,6 @@ static int pf_disable_vfs(struct xe_device *xe)
 int xe_pci_sriov_configure(struct pci_dev *pdev, int num_vfs)
 {
 	struct xe_device *xe = pdev_to_xe_device(pdev);
-	int ret;
 
 	if (!IS_SRIOV_PF(xe))
 		return -ENODEV;
@@ -333,14 +327,11 @@ int xe_pci_sriov_configure(struct pci_dev *pdev, int num_vfs)
 	if (num_vfs && pci_num_vf(pdev))
 		return -EBUSY;
 
-	xe_pm_runtime_get(xe);
+	guard(xe_pm_runtime)(xe);
 	if (num_vfs > 0)
-		ret = pf_enable_vfs(xe, num_vfs);
+		return pf_enable_vfs(xe, num_vfs);
 	else
-		ret = pf_disable_vfs(xe);
-	xe_pm_runtime_put(xe);
-
-	return ret;
+		return pf_disable_vfs(xe);
 }
 
 /**

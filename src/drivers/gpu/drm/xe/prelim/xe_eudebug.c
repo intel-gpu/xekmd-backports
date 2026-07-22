@@ -15,23 +15,26 @@
 
 #include <generated/xe_wa_oob.h>
 
+#include "abi/guc_actions_abi.h"
+
 #include "regs/xe_gt_regs.h"
 #include "regs/xe_engine_regs.h"
 
 #include "xe_assert.h"
 #include "xe_bo.h"
-#include "xe_debug_metadata.h"
+#include "prelim/xe_debug_metadata.h"
 #include "xe_device.h"
-#include "xe_debug_metadata.h"
-#include "xe_eudebug.h"
-#include "xe_eudebug_types.h"
+#include "prelim/xe_debug_metadata.h"
+#include "prelim/xe_eudebug.h"
+#include "prelim/xe_eudebug_types.h"
 #include "xe_exec_queue.h"
 #include "xe_exec_queue_types.h"
 #include "xe_force_wake.h"
 #include "xe_gt.h"
-#include "xe_gt_debug.h"
+#include "prelim/xe_gt_debug.h"
 #include "xe_gt_mcr.h"
-#include "xe_gt_pagefault.h"
+#include "xe_guc_ct.h"
+#include "xe_guc_submit.h"
 #include "xe_guc_exec_queue_types.h"
 #include "xe_hw_engine.h"
 #include "xe_lrc.h"
@@ -43,6 +46,7 @@
 #include "xe_sched_job.h"
 #include "xe_sriov_pf.h"
 #include "xe_sync.h"
+#include "xe_svm.h"
 #include "xe_vm.h"
 #include "xe_wa.h"
 
@@ -317,8 +321,8 @@ static void ufence_signal_worker(struct work_struct *w)
 	struct xe_user_fence * const ufence =
 		container_of(w, struct xe_user_fence, eudebug.worker);
 
-	if (READ_ONCE(ufence->signalled))
-		xe_sync_ufence_signal(ufence);
+	/* Signal ufence now that debugger has acked it or released it */
+	xe_sync_ufence_signal(ufence);
 
 	xe_sync_ufence_put(ufence);
 }
@@ -553,21 +557,6 @@ xe_eudebug_for_task_get(struct xe_device *xe,
 	return d;
 }
 
-static struct task_struct *find_task_get(struct xe_file *xef)
-{
-	struct task_struct *task;
-	struct pid *pid;
-
-	rcu_read_lock();
-	pid = rcu_dereference(xef->drm->pid);
-	task = pid_task(pid, PIDTYPE_PID);
-	if (task)
-		get_task_struct(task);
-	rcu_read_unlock();
-
-	return task;
-}
-
 static struct xe_eudebug *
 _xe_eudebug_get(struct xe_file *xef)
 {
@@ -575,10 +564,9 @@ _xe_eudebug_get(struct xe_file *xef)
 	struct xe_eudebug *d;
 
 	d = NULL;
-	task = find_task_get(xef);
+	task = get_pid_task(xef->pid, PIDTYPE_PID);
 	if (task) {
-		d = xe_eudebug_for_task_get(to_xe_device(xef->drm->minor->dev),
-					    task);
+		d = xe_eudebug_for_task_get(xef->xe, task);
 		put_task_struct(task);
 	}
 
@@ -1162,9 +1150,7 @@ static int do_eu_control(struct xe_eudebug *d,
 
 	ret = -EINVAL;
 	mutex_lock(&d->eu_lock);
-	rcu_read_lock();
-	pf_fence = dma_fence_get_rcu_safe(&d->pf_fence);
-	rcu_read_unlock();
+	pf_fence = dma_fence_get(d->pf_fence);
 
 	while (pf_fence) {
 		mutex_unlock(&d->eu_lock);
@@ -1175,9 +1161,7 @@ static int do_eu_control(struct xe_eudebug *d,
 			goto out_free;
 
 		mutex_lock(&d->eu_lock);
-		rcu_read_lock();
-		pf_fence = dma_fence_get_rcu_safe(&d->pf_fence);
-		rcu_read_unlock();
+		pf_fence = dma_fence_get(d->pf_fence);
 	}
 
 	switch (arg->cmd) {
@@ -1187,10 +1171,15 @@ static int do_eu_control(struct xe_eudebug *d,
 			ret = d->ops->interrupt_all(d, q, lrc);
 		break;
 	case PRELIM_DRM_XE_EUDEBUG_EU_CONTROL_CMD_STOPPED:
-		ret = d->ops->stopped(d, q, lrc, bits, attn_size);
+		if (d->ops->stopped)
+			ret = d->ops->stopped(d, q, lrc, bits, attn_size);
 		break;
 	case PRELIM_DRM_XE_EUDEBUG_EU_CONTROL_CMD_RESUME:
 		ret = d->ops->resume(d, q, lrc, bits, attn_size);
+		break;
+	case PRELIM_DRM_XE_EUDEBUG_EU_CONTROL_CMD_UNLOCK:
+		if (d->ops->unlock)
+			ret = d->ops->unlock(d, q, lrc, bits, attn_size);
 		break;
 	default:
 		break;
@@ -1846,7 +1835,7 @@ static int send_pagefault(struct xe_gt *gt, struct xe_eudebug_pagefault *pf,
 		prelim_xe_gt_eu_attentions_read(gt, &pf->attentions.resolved,
 					 PRELIM_XE_GT_ATTENTION_TIMEOUT_MS);
 
-		if (!xe_eu_attentions_xor_count(&pf->attentions.after,
+		if (!prelim_xe_eu_attentions_xor_count(&pf->attentions.after,
 						&pf->attentions.resolved) &&
 		    !from_attention_scan) {
 			eu_dbg(d, "xe attentions not yet updated\n");
@@ -1996,7 +1985,8 @@ static void attention_scan_cancel(struct xe_device *xe)
 
 static void attention_scan_flush(struct xe_device *xe)
 {
-	mod_delayed_work(system_wq, &xe->eudebug.attention_scan, 0);
+	if (!xe_device_eudebug_uses_guc(xe))
+		mod_delayed_work(system_wq, &xe->eudebug.attention_scan, 0);
 }
 
 static int xe_eu_control_interrupt_all(struct xe_eudebug *d,
@@ -2102,8 +2092,8 @@ static int check_attn_mcr(struct xe_gt *gt, void *data,
 	struct xe_eudebug *d = iter->debugger;
 	unsigned int reg, row;
 
-	for (reg = 0; reg < xe_gt_eu_att_regs(gt); reg++) {
-		for (row = 0; row < XE_GT_EU_ATT_ROWS; row++) {
+	for (reg = 0; reg < prelim_xe_gt_eu_att_regs(gt); reg++) {
+		for (row = 0; row < PRELIM_XE_GT_EU_ATT_ROWS; row++) {
 			u32 val, cur = 0;
 
 			if (iter->i >= iter->size)
@@ -2138,8 +2128,8 @@ static int clear_attn_mcr(struct xe_gt *gt, void *data,
 	struct xe_eudebug *d = iter->debugger;
 	unsigned int reg, row;
 
-	for (reg = 0; reg < xe_gt_eu_att_regs(gt); reg++) {
-		for (row = 0; row < XE_GT_EU_ATT_ROWS; row++) {
+	for (reg = 0; reg < prelim_xe_gt_eu_att_regs(gt); reg++) {
+		for (row = 0; row < PRELIM_XE_GT_EU_ATT_ROWS; row++) {
 			u32 val;
 
 			if (iter->i >= iter->size)
@@ -2252,10 +2242,81 @@ static int xe_eu_control_stopped(struct xe_eudebug *d,
 	return prelim_xe_gt_eu_attention_bitmap(q->gt, bits, bitmask_size);
 }
 
-static struct xe_eudebug_eu_control_ops eu_control = {
+static struct xe_eudebug_eu_control_ops eu_control_direct = {
 	.interrupt_all = xe_eu_control_interrupt_all,
 	.stopped = xe_eu_control_stopped,
 	.resume = xe_eu_control_resume,
+};
+
+static const char *guc_action_to_str(u32 cmd)
+{
+	switch (cmd) {
+	case XE_GUC_EU_KERNEL_DEBUG_INTERRUPT:
+		return "interrupt";
+	case XE_GUC_EU_KERNEL_DEBUG_CLEAR_ATTENTION:
+		return "clear attention";
+	case XE_GUC_EU_KERNEL_DEBUG_INTERRUPT_RESUME:
+		return "interrupt resume (unlock)";
+	case XE_GUC_EU_KERNEL_DEBUG_ENABLE:
+		return "debug enable";
+	default:
+		return "invalid";
+	}
+}
+
+static int guc_action_eu_kernel_debug(struct xe_device *xe, struct xe_exec_queue *q,
+				      struct xe_lrc *lrc, u32 cmd)
+{
+	int ret = 0, i;
+
+	for (i = 0; i < q->width; i++) {
+		if (lrc && q->lrc[i] != lrc)
+			continue;
+
+		drm_dbg(&xe->drm, "Guc debug action '%s' for ctx=%d",
+			guc_action_to_str(cmd), q->guc->id + i);
+
+		ret = xe_guc_action_eu_kernel_debug(&q->gt->uc.guc,
+						    q->guc->id + i,
+						    cmd);
+
+		if (ret)
+			drm_dbg(&xe->drm, "Guc action eu kernel debug failed!\n");
+	}
+
+	return ret ? -EINVAL : 0;
+}
+
+static int xe_eu_control_interrupt_all_guc(struct xe_eudebug *d,
+					   struct xe_exec_queue *q,
+					   struct xe_lrc *lrc)
+{
+	return guc_action_eu_kernel_debug(d->xe, q, lrc,
+					  XE_GUC_EU_KERNEL_DEBUG_INTERRUPT);
+}
+
+static int xe_eu_control_resume_guc(struct xe_eudebug *d,
+				    struct xe_exec_queue *q,
+				    struct xe_lrc *lrc,
+				    u8 *bits, unsigned int bitmask_size)
+{
+	return guc_action_eu_kernel_debug(d->xe, q, lrc,
+					  XE_GUC_EU_KERNEL_DEBUG_CLEAR_ATTENTION);
+}
+
+static int xe_eu_control_unlock_guc(struct xe_eudebug *d,
+				    struct xe_exec_queue *q,
+				    struct xe_lrc *lrc,
+				    u8 *bits, unsigned int bitmask_size)
+{
+	return guc_action_eu_kernel_debug(d->xe, q, lrc,
+					  XE_GUC_EU_KERNEL_DEBUG_INTERRUPT_RESUME);
+}
+
+static struct xe_eudebug_eu_control_ops eu_control_guc = {
+	.interrupt_all = xe_eu_control_interrupt_all_guc,
+	.resume = xe_eu_control_resume_guc,
+	.unlock = xe_eu_control_unlock_guc,
 };
 
 static void discovery_work_fn(struct work_struct *work);
@@ -2319,7 +2380,11 @@ xe_eudebug_connect(struct xe_device *xe,
 		goto err_detach;
 	}
 
-	d->ops = &eu_control;
+	if (xe_device_eudebug_uses_guc(xe))
+		d->ops = &eu_control_guc;
+	else
+		d->ops = &eu_control_direct;
+
 	kref_get(&d->ref);
 	queue_work(xe->eudebug.ordered_wq, &d->discovery_work);
 	attention_scan_flush(xe);
@@ -2380,19 +2445,24 @@ static void xe_eudebug_reinit_hw_engine(struct xe_hw_engine *hwe, bool enable)
 	struct xe_gt *gt = hwe->gt;
 	struct xe_device *xe = gt_to_xe(gt);
 
-	if (!xe_rtp_match_first_render_or_compute(gt, hwe))
+
+	if (!xe_rtp_match_first_render_or_compute(xe, gt, hwe))
 		return;
 
-	if (XE_WA(gt, 18022722726))
+	if (XE_GT_WA(gt, 18022722726))
 		add_sr_entry(hwe, ROW_CHICKEN,
 			     STALL_DOP_GATING_DISABLE, enable);
 
-	if (XE_WA(gt, 14015474168))
+	if (XE_GT_WA(gt, 14015474168))
 		add_sr_entry(hwe, ROW_CHICKEN2,
 			     XEHPC_DISABLE_BTB,
 			     enable);
 
-	if (xe->info.graphics_verx100 >= 1200)
+	if (XE_GT_WA(gt, 14024339748))
+		add_sr_entry(hwe, GADSS_CHICKEN,
+			     GADSS_RDRTN_BROADCAST_DIS, enable);
+
+	if (xe->info.graphics_verx100 >= 1200 && xe->info.graphics_verx100 < 3500)
 		add_sr_entry(hwe, TD_CTL,
 			     TD_CTL_BREAKPOINT_ENABLE |
 			     TD_CTL_FORCE_THREAD_BREAKPOINT_ENABLE |
@@ -2402,6 +2472,10 @@ static void xe_eudebug_reinit_hw_engine(struct xe_hw_engine *hwe, bool enable)
 	if (xe->info.graphics_verx100 >= 1250)
 		add_sr_entry(hwe, TD_CTL,
 			     TD_CTL_GLOBAL_DEBUG_ENABLE, enable);
+
+	if (xe->info.graphics_verx100 >= 3500)
+		add_sr_entry(hwe, TD_CTL,
+			     TD_CTL_ENABLE_EXID_FILTER, enable);
 }
 
 static int xe_eudebug_enable(struct xe_device *xe, bool enable)
@@ -2497,24 +2571,22 @@ static ssize_t prelim_enable_eudebug_store(struct device *dev, struct device_att
 
 static DEVICE_ATTR_RW(prelim_enable_eudebug);
 
-static void prelim_xe_eudebug_sysfs_fini(void *arg)
+static void xe_eudebug_sysfs_fini(void *arg)
 {
 	struct xe_device *xe = arg;
 
 	sysfs_remove_file(&xe->drm.dev->kobj, &dev_attr_prelim_enable_eudebug.attr);
 }
 
-static void prelim_xe_eudebug_fini(struct drm_device *dev, void *__unused)
+static void xe_eudebug_fini(struct drm_device *dev, void *__unused)
 {
 	struct xe_device *xe = to_xe_device(dev);
 
 	attention_scan_cancel(xe);
 	xe_assert(xe, list_empty_careful(&xe->eudebug.list));
 
-	if (xe->eudebug.ordered_wq)
-		destroy_workqueue(xe->eudebug.ordered_wq);
+	destroy_workqueue(xe->eudebug.ordered_wq);
 }
-
 
 void prelim_xe_eudebug_init(struct xe_device *xe)
 {
@@ -2540,12 +2612,11 @@ void prelim_xe_eudebug_init(struct xe_device *xe)
 		return;
 	}
 
-	ret = drmm_add_action_or_reset(&xe->drm, prelim_xe_eudebug_fini, NULL);
+	ret = drmm_add_action_or_reset(&xe->drm, xe_eudebug_fini, NULL);
 	if (ret) {
 		drm_warn(&xe->drm, "eudebug initialization failed: %d, debugger unavailable\n", ret);
 		return;
 	}
-
 
 	ret = sysfs_create_file(&xe->drm.dev->kobj, &dev_attr_prelim_enable_eudebug.attr);
 	if (ret) {
@@ -2553,7 +2624,7 @@ void prelim_xe_eudebug_init(struct xe_device *xe)
 		return;
 	}
 
-	ret = devm_add_action_or_reset(xe->drm.dev, prelim_xe_eudebug_sysfs_fini, xe);
+	ret = devm_add_action_or_reset(xe->drm.dev, xe_eudebug_sysfs_fini, xe);
 	if (ret) {
 		drm_warn(&xe->drm, "eudebug sysfs post-init failed: %d, debugger unavailable\n", ret);
 		return;
@@ -2818,26 +2889,27 @@ static int send_exec_queue_placements_event(struct xe_eudebug *d,
 					    u32 num_placements, u64 *instances,
 					    u64 seqno)
 {
+	struct xe_eudebug_event *event;
 	struct xe_eudebug_event_exec_queue_placements *e;
 	const u32 sz = struct_size(e, instances, num_placements);
-	struct xe_eudebug_event *event;
 
-	event = xe_eudebug_create_event(d,
-					PRELIM_DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE_PLACEMENTS,
-					seqno, PRELIM_DRM_XE_EUDEBUG_EVENT_CREATE, sz);
+	event = xe_eudebug_create_event(d, PRELIM_DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE_PLACEMENTS, seqno,
+					PRELIM_DRM_XE_EUDEBUG_EVENT_CREATE, sz);
 	if (!event)
 		return -ENOMEM;
-	
+
 	e = cast_event(e, event);
 
 	write_member(struct prelim_drm_xe_eudebug_event_exec_queue_placements, e, client_handle,
-				client_handle);
-	write_member(struct prelim_drm_xe_eudebug_event_exec_queue_placements, e, vm_handle, vm_handle);
+		     client_handle);
+	write_member(struct prelim_drm_xe_eudebug_event_exec_queue_placements, e,
+		     vm_handle, vm_handle);
 	write_member(struct prelim_drm_xe_eudebug_event_exec_queue_placements, e, exec_queue_handle,
-				exec_queue_handle);
-	write_member(struct prelim_drm_xe_eudebug_event_exec_queue_placements, e, lrc_handle, lrc_handle);
+		     exec_queue_handle);
+	write_member(struct prelim_drm_xe_eudebug_event_exec_queue_placements, e,
+		     lrc_handle, lrc_handle);
 	write_member(struct prelim_drm_xe_eudebug_event_exec_queue_placements, e, num_placements,
-				num_placements);
+		     num_placements);
 
 	memcpy(e->instances, instances, num_placements * sizeof(*instances));
 
@@ -2845,10 +2917,9 @@ static int send_exec_queue_placements_event(struct xe_eudebug *d,
 }
 
 static int send_exec_queue_placements_events(struct xe_eudebug *d, struct xe_exec_queue *q,
-                                            u64 client_handle, u64 vm_handle,
-                                            u64 exec_queue_handle, u64 *lrc_handles)
+					     u64 client_handle, u64 vm_handle,
+					     u64 exec_queue_handle, u64 *lrc_handles)
 {
-	
 	struct drm_xe_engine_class_instance eci[XE_HW_ENGINE_MAX_INSTANCE] = {};
 	unsigned long mask = q->logical_mask;
 	u32 num_placements = 0;
@@ -2857,8 +2928,8 @@ static int send_exec_queue_placements_events(struct xe_eudebug *d, struct xe_exe
 
 	for_each_set_bit(i, &mask, sizeof(q->logical_mask) * 8) {
 		if (XE_WARN_ON(num_placements == XE_HW_ENGINE_MAX_INSTANCE))
-				break;
-	
+			break;
+
 		eci[num_placements].engine_class = xe_to_user_engine_class[q->class];
 		eci[num_placements].engine_instance = i;
 		eci[num_placements++].gt_id = q->gt->info.id;
@@ -2867,20 +2938,20 @@ static int send_exec_queue_placements_events(struct xe_eudebug *d, struct xe_exe
 	ret = 0;
 	for (i = 0; i < q->width; i++) {
 		seqno = atomic_long_inc_return(&d->events.seqno);
-			
+
 		ret = send_exec_queue_placements_event(d, client_handle, vm_handle,
-											exec_queue_handle, lrc_handles[i],
-											num_placements, (u64 *)eci, seqno);
+						       exec_queue_handle, lrc_handles[i],
+						       num_placements, (u64 *)eci, seqno);
 		if (ret)
-				return ret;
+			return ret;
 
 		/*
-		* Parallel submissions must be logically contiguous,
-		* so the next placement is just q->logical_mask >> 1
-		*/
+		 * Parallel submissions must be logically contiguous,
+		 * so the next placement is just q->logical_mask >> 1
+		 */
 		for (j = 0; j < num_placements; j++) {
-				eci[j].engine_instance++;
-				XE_WARN_ON(eci[j].engine_instance >= XE_HW_ENGINE_MAX_INSTANCE);
+			eci[j].engine_instance++;
+			XE_WARN_ON(eci[j].engine_instance >= XE_HW_ENGINE_MAX_INSTANCE);
 		}
 	}
 
@@ -2888,7 +2959,7 @@ static int send_exec_queue_placements_events(struct xe_eudebug *d, struct xe_exe
 }
 
 static int exec_queue_create_events(struct xe_eudebug *d,
-                                   struct xe_file *xef, struct xe_exec_queue *q)
+				    struct xe_file *xef, struct xe_exec_queue *q)
 {
 	int h_c, h_vm, h_queue;
 	u64 h_lrc[XE_HW_ENGINE_MAX_INSTANCE], seqno;
@@ -2934,9 +3005,10 @@ static int exec_queue_create_events(struct xe_eudebug *d,
 	 * we disconnect
 	 */
 
+
 	ret = send_exec_queue_event(d, PRELIM_DRM_XE_EUDEBUG_EVENT_CREATE,
-				  h_c, h_vm, h_queue, q->class,
-				  q->width, h_lrc, seqno);
+				    h_c, h_vm, h_queue, q->class,
+				    q->width, h_lrc, seqno);
 
 	if (ret)
 		return ret;
@@ -3291,10 +3363,8 @@ static int xe_eudebug_track_ufence(struct xe_eudebug *d,
 	spin_lock(&d->acks.lock);
 	old = rb_find_add(&ack->rb_node,
 			  &d->acks.tree, ack_insert_cmp);
-	if (!old) {
-		kref_get(&f->refcount);
-		ack->ufence = f;
-	}
+	if (!old)
+		ack->ufence = __xe_sync_ufence_get(f);
 	spin_unlock(&d->acks.lock);
 
 	if (old) {
@@ -3393,6 +3463,10 @@ void prelim_xe_eudebug_vm_bind_op_add(struct xe_vm *vm, u32 op, u64 addr, u64 ra
 	if (!xe_vm_in_lr_mode(vm))
 		return;
 
+	d = prelim_xe_eudebug_get(vm->xef);
+	if (!d)
+		return;
+
 	switch (op) {
 	case DRM_XE_VM_BIND_OP_MAP:
 	case DRM_XE_VM_BIND_OP_MAP_USERPTR: {
@@ -3419,10 +3493,6 @@ void prelim_xe_eudebug_vm_bind_op_add(struct xe_vm *vm, u32 op, u64 addr, u64 ra
 	}
 
 	if (!flags)
-		return;
-
-	d = prelim_xe_eudebug_get(vm->xef);
-	if (!d)
 		return;
 
 	xe_eudebug_event_put(d, vm_bind_op(d, vm, flags, 0, addr, range,
@@ -3473,7 +3543,29 @@ static void fill_vm_bind_op_fields(struct xe_vm *vm,
 	op->vm_bind_ref_seqno = ref_seqno;
 }
 
-void prelim_xe_eudebug_vm_bind_end(struct xe_vm *vm, bool has_ufence, int bind_err)
+static void xe_eudebug_ufence_set(struct xe_eudebug *d,
+				  struct xe_user_fence *ufence,
+				  u64 bind_ref)
+{
+	spin_lock_init(&ufence->eudebug.lock);
+	INIT_WORK(&ufence->eudebug.worker, ufence_signal_worker);
+
+	ufence->eudebug.signalled_seqno = 0;
+
+	kref_get(&d->ref);
+	ufence->eudebug.debugger = d;
+
+	ufence->eudebug.bind_ref_seqno = bind_ref;
+}
+
+static void xe_eudebug_ufence_unset(struct xe_user_fence *ufence)
+{
+	prelim_xe_eudebug_put(ufence->eudebug.debugger);
+	ufence->eudebug.debugger = NULL;
+}
+
+void prelim_xe_eudebug_vm_bind_end(struct xe_vm *vm,
+			    struct xe_user_fence *ufence, int bind_err)
 {
 	struct xe_eudebug_event *e;
 	struct xe_eudebug *d;
@@ -3491,15 +3583,22 @@ void prelim_xe_eudebug_vm_bind_end(struct xe_vm *vm, bool has_ufence, int bind_e
 	spin_unlock(&vm->eudebug.lock);
 
 	e = fetch_bind_event(vm);
+
+	/* vm->eudebug.ref_seqno is set only in prelim_xe_eudebug_vm_bind_start()! */
+	if (!ref) {
+		XE_WARN_ON(e);
+		return;
+	}
+
 	if (!e)
 		return;
 
 	d = NULL;
-	if (!bind_err && ref) {
+	if (!bind_err) {
 		d = prelim_xe_eudebug_get(vm->xef);
 		if (d) {
 			if (bind_ops) {
-				fill_vm_bind_fields(vm, e, has_ufence, bind_ops);
+				fill_vm_bind_fields(vm, e, !!ufence, bind_ops);
 			} else {
 				/*
 				 * If there was no ops we are interested in,
@@ -3512,29 +3611,29 @@ void prelim_xe_eudebug_vm_bind_end(struct xe_vm *vm, bool has_ufence, int bind_e
 	}
 
 	while (e) {
-		int err = 0;
-
 		if (d) {
+			int err;
+
 			err = xe_eudebug_queue_event(d, e);
-			if (!err)
-				e = NULL;
+			if (err) {
+				xe_eudebug_disconnect(d, err);
+				prelim_xe_eudebug_put(d);
+				d = NULL;
+			}
+		} else {
+			kfree(e);
 		}
-
-		if (err) {
-			xe_eudebug_disconnect(d, err);
-			prelim_xe_eudebug_put(d);
-			d = NULL;
-		}
-
-		kfree(e);
 
 		e = fetch_bind_event(vm);
-		if (e && ref)
+		if (e)
 			fill_vm_bind_op_fields(vm, e, ref);
 	}
 
-	if (d)
+	if (d) {
+		if (!bind_err && ufence)
+			xe_eudebug_ufence_set(d, ufence, ref);
 		prelim_xe_eudebug_put(d);
+	}
 }
 
 int prelim_xe_eudebug_vm_bind_ufence(struct xe_user_fence *ufence)
@@ -3551,6 +3650,8 @@ int prelim_xe_eudebug_vm_bind_ufence(struct xe_user_fence *ufence)
 		eu_err(d, "error %d on %s", err, __func__);
 		xe_eudebug_disconnect(d, err);
 	}
+
+	xe_eudebug_ufence_unset(ufence);
 
 	return err;
 }
@@ -3721,7 +3822,7 @@ static bool xe_eudebug_task_match(struct xe_eudebug *d, struct xe_file *xef)
 	struct task_struct *task;
 	bool match;
 
-	task = find_task_get(xef);
+	task = get_pid_task(xef->pid, PIDTYPE_PID);
 	if (!task)
 		return false;
 
@@ -3782,42 +3883,6 @@ static void discovery_work_fn(struct work_struct *work)
 	prelim_xe_eudebug_put(d);
 }
 
-void prelim_xe_eudebug_ufence_init(struct xe_user_fence *ufence,
-			    struct xe_file *xef,
-			    struct xe_vm *vm)
-{
-	u64 bind_ref;
-
-	/* Drop if OA */
-	if (!vm)
-		return;
-
-	spin_lock(&vm->eudebug.lock);
-	bind_ref = vm->eudebug.ref_seqno;
-	spin_unlock(&vm->eudebug.lock);
-
-	spin_lock_init(&ufence->eudebug.lock);
-	INIT_WORK(&ufence->eudebug.worker, ufence_signal_worker);
-
-	ufence->eudebug.signalled_seqno = 0;
-
-	if (bind_ref) {
-		ufence->eudebug.debugger = prelim_xe_eudebug_get(xef);
-
-		if (ufence->eudebug.debugger)
-			ufence->eudebug.bind_ref_seqno = bind_ref;
-	}
-}
-
-void prelim_xe_eudebug_ufence_fini(struct xe_user_fence *ufence)
-{
-	if (!ufence->eudebug.debugger)
-		return;
-
-	prelim_xe_eudebug_put(ufence->eudebug.debugger);
-	ufence->eudebug.debugger = NULL;
-}
-
 static int xe_eudebug_vma_access(struct xe_vma *vma,
 				 unsigned long offset_in_vma,
 				 void *buf, unsigned long len, bool write)
@@ -3852,10 +3917,10 @@ static int xe_eudebug_vma_access(struct xe_vma *vma,
 		struct mm_struct *mm = NULL;
 		int ret;
 
-		down_read(&vm->userptr.notifier_lock);
+		xe_svm_notifier_lock(vm);
 		if (mmget_not_zero(userptr->notifier.mm))
 			mm = userptr->notifier.mm;
-		up_read(&vm->userptr.notifier_lock);
+		xe_svm_notifier_unlock(vm);
 
 		if (!mm)
 			return -EFAULT;
@@ -4089,7 +4154,7 @@ static int engine_rcu_flush(struct xe_eudebug *d,
 	mutex_lock(&d->eu_lock);
 	psmi_ctrl = xe_mmio_read32(&gt->mmio, psmi_addr);
 	if (!(psmi_ctrl & IDLE_MSG_DISABLE))
-		xe_mmio_write32(&gt->mmio, psmi_addr, _MASKED_BIT_ENABLE(IDLE_MSG_DISABLE));
+		xe_mmio_write32(&gt->mmio, psmi_addr, REG_MASKED_FIELD_ENABLE(IDLE_MSG_DISABLE));
 
 	/* XXX: Timeout is per operation but in here we flush previous */
 	ret = xe_mmio_wait32(&gt->mmio, RCU_ASYNC_FLUSH,
@@ -4105,7 +4170,7 @@ static int engine_rcu_flush(struct xe_eudebug *d,
 			     timeout_us, NULL, false);
 out:
 	if (!(psmi_ctrl & IDLE_MSG_DISABLE))
-		xe_mmio_write32(&gt->mmio, psmi_addr, _MASKED_BIT_DISABLE(IDLE_MSG_DISABLE));
+		xe_mmio_write32(&gt->mmio, psmi_addr, REG_MASKED_FIELD_ENABLE(IDLE_MSG_DISABLE));
 
 	mutex_unlock(&d->eu_lock);
 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
@@ -4311,6 +4376,7 @@ static int handle_pagefault(struct xe_gt *gt, struct xe_eudebug_pagefault *pf)
 	}
 
 	xe_exec_queue_put(pf->q);
+	xe_vm_put(pf->vm);
 	kfree(pf);
 
 out:
@@ -4355,8 +4421,8 @@ static struct pagefault_fence *pagefault_fence_create(void)
 }
 
 struct xe_eudebug_pagefault *
-prelim_xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm, u64 page_addr,
-			    u8 fault_type, u8 fault_level, u8 access_type)
+prelim_xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm,
+                            struct xe_pagefault *xe_pf)
 {
 	struct pagefault_fence *pf_fence;
 	struct xe_eudebug_pagefault *pf;
@@ -4368,8 +4434,11 @@ prelim_xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm, u64 page_
 	int lrc_idx;
 	u32 td_ctl;
 
+	if (GRAPHICS_VER(gt_to_xe(gt)) >= 35)
+		return NULL;
+
 	down_read(&vm->lock);
-	vma = xe_vm_find_vma_by_addr(vm, page_addr);
+	vma = xe_vm_find_vma_by_addr(vm, xe_pf->consumer.page_addr);
 	up_read(&vm->lock);
 
 	if (vma)
@@ -4406,9 +4475,7 @@ prelim_xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm, u64 page_
 	attention_scan_cancel(gt_to_xe(gt));
 
 	mutex_lock(&d->eu_lock);
-	rcu_read_lock();
-	fence = dma_fence_get_rcu_safe(&d->pf_fence);
-	rcu_read_unlock();
+	fence = dma_fence_get(d->pf_fence);
 
 	if (fence) {
 		/*
@@ -4447,18 +4514,23 @@ prelim_xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm, u64 page_
 				 PRELIM_XE_GT_ATTENTION_TIMEOUT_MS);
 
 	/*
-	 * xe_exec_queue_put() will be called from prelim_xe_eudebug_pagefault_destroy()
+	 * xe_exec_queue_put() will be called from xe_eudebug_pagefault_destroy()
 	 * or handle_pagefault()
 	 */
 	pf->q = q;
 	pf->lrc_idx = lrc_idx;
-	pf->fault.addr = page_addr;
-	pf->fault.type = fault_type;
-	pf->fault.level = fault_level;
-	pf->fault.access = access_type;
+	pf->fault.addr = xe_pf->consumer.page_addr;
+	pf->fault.type = FIELD_GET(XE_PAGEFAULT_TYPE_MASK,
+				   xe_pf->consumer.fault_type_level);
+	pf->fault.level = FIELD_GET(XE_PAGEFAULT_LEVEL_MASK,
+				    xe_pf->consumer.fault_type_level),
+	pf->fault.access = xe_pf->consumer.access_type;
 
 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
 	prelim_xe_eudebug_put(d);
+
+	pf->vm = xe_vm_get(vm);
+	pf->gt = gt;
 
 	return pf;
 
@@ -4477,23 +4549,28 @@ err_put_eudebug:
 }
 
 void
-prelim_xe_eudebug_pagefault_process(struct xe_gt *gt, struct xe_eudebug_pagefault *pf)
-{
-	prelim_xe_gt_eu_attentions_read(gt, &pf->attentions.resolved,
-				 PRELIM_XE_GT_ATTENTION_TIMEOUT_MS);
-
-	if (!xe_eu_attentions_xor_count(&pf->attentions.after,
-					&pf->attentions.resolved))
-		pf->deferred_resolved = true;
-}
-
-void
-prelim_xe_eudebug_pagefault_destroy(struct xe_gt *gt, struct xe_vm *vm,
-			     struct xe_eudebug_pagefault *pf, bool send_event)
+prelim_xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf, bool is_err)
 {
 	struct xe_eudebug *d;
 	unsigned int fw_ref;
+	struct xe_gt *gt;
+	struct xe_vm *vm;
 	u32 td_ctl;
+
+	if (!pf)
+		return;
+
+	gt = pf->gt;
+	vm = pf->vm;
+
+	if (!is_err) {
+		prelim_xe_gt_eu_attentions_read(gt, &pf->attentions.resolved,
+					 PRELIM_XE_GT_ATTENTION_TIMEOUT_MS);
+
+		if (!prelim_xe_eu_attentions_xor_count(&pf->attentions.after,
+						&pf->attentions.resolved))
+			pf->deferred_resolved = true;
+	}
 
 	fw_ref = xe_force_wake_get(gt_to_fw(gt), pf->q->hwe->domain);
 	if (!fw_ref) {
@@ -4507,7 +4584,7 @@ prelim_xe_eudebug_pagefault_destroy(struct xe_gt *gt, struct xe_vm *vm,
 		xe_force_wake_put(gt_to_fw(gt), fw_ref);
 	}
 
-	if (send_event)
+	if (!is_err)
 		handle_pagefault(gt, pf);
 
 	d = _xe_eudebug_get(vm->xef);
@@ -4515,15 +4592,13 @@ prelim_xe_eudebug_pagefault_destroy(struct xe_gt *gt, struct xe_vm *vm,
 		struct dma_fence *fence;
 
 		mutex_lock(&d->eu_lock);
-		rcu_read_lock();
-		fence = dma_fence_get_rcu_safe(&d->pf_fence);
-		rcu_read_unlock();
+		fence = dma_fence_get(d->pf_fence);
 
 		if (fence) {
-			if (send_event)
+			if (!is_err)
 				dma_fence_signal(fence);
 
-			dma_fence_put(fence); /* deref for dma_fence_get_rcu_safe() */
+			dma_fence_put(fence); /* deref for dma_fence_get() */
 			dma_fence_put(fence); /* defef for dma_fence_init() */
 		}
 
@@ -4533,14 +4608,79 @@ prelim_xe_eudebug_pagefault_destroy(struct xe_gt *gt, struct xe_vm *vm,
 		prelim_xe_eudebug_put(d);
 	}
 
-	if (!send_event) {
+	if (is_err) {
 		xe_exec_queue_put(pf->q);
+		xe_vm_put(pf->vm);
 		kfree(pf);
 	}
 
 	attention_scan_flush(gt_to_xe(gt));
 }
 
+static int send_sync_host_event(struct xe_eudebug *d,
+				struct xe_exec_queue *q,
+				struct xe_lrc *lrc)
+{
+	struct xe_eudebug_event_sync_host *es;
+	struct xe_eudebug_event *event;
+	int h_c, h_queue, h_lrc;
+	u64 seqno;
+
+	h_c = find_handle(d->res, XE_EUDEBUG_RES_TYPE_CLIENT, q->vm->xef);
+	if (h_c < 0)
+		return h_c;
+
+	h_queue = find_handle(d->res, XE_EUDEBUG_RES_TYPE_EXEC_QUEUE, q);
+	if (h_queue < 0)
+		return h_queue;
+
+	h_lrc = find_handle(d->res, XE_EUDEBUG_RES_TYPE_LRC, lrc);
+	if (h_lrc < 0)
+		return h_lrc;
+
+	seqno = atomic_long_inc_return(&d->events.seqno);
+
+	event = xe_eudebug_create_event(d, PRELIM_DRM_XE_EUDEBUG_EVENT_SYNC_HOST, seqno,
+					PRELIM_DRM_XE_EUDEBUG_EVENT_STATE_CHANGE,
+					sizeof(*es));
+
+	if (!event)
+		return -ENOSPC;
+
+	es = cast_event(es, event);
+	write_member(struct prelim_drm_xe_eudebug_event_sync_host, es, client_handle, (u64)h_c);
+	write_member(struct prelim_drm_xe_eudebug_event_sync_host, es, exec_queue_handle, (u64)h_queue);
+	write_member(struct prelim_drm_xe_eudebug_event_sync_host, es, lrc_handle, (u64)h_lrc);
+
+	return xe_eudebug_queue_event(d, event);
+}
+
+int prelim_xe_eudebug_sync_host(struct xe_exec_queue *q, struct xe_lrc *lrc)
+{
+	struct xe_device *xe = gt_to_xe(q->gt);
+	struct xe_eudebug *d;
+	int err;
+
+	down_read(&xe->eudebug.discovery_lock);
+
+	d = prelim_xe_eudebug_get(q->vm->xef);
+	if (!d) {
+		up_read(&xe->eudebug.discovery_lock);
+		return -EINVAL;
+	}
+
+	err = send_sync_host_event(d, q, lrc);
+	if (err) {
+		eu_err(d, "error %d on %s, disconnecting", err, __func__);
+		xe_eudebug_disconnect(d, err);
+	}
+
+	prelim_xe_eudebug_put(d);
+	up_read(&xe->eudebug.discovery_lock);
+
+	return err;
+}
+
 #if IS_ENABLED(CPTCFG_DRM_XE_KUNIT_TEST)
-#include "tests/xe_eudebug.c"
+#include "tests/prelim/xe_eudebug.c"
 #endif

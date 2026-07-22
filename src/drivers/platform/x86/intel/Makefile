@@ -15,6 +15,7 @@ obj-$(CPTCFG_INTEL_PMT_CLASS)		+= pmt/
 #obj-$(CONFIG_INTEL_WMI)			+= wmi/
 #obj-$(CONFIG_INTEL_UNCORE_FREQ_CONTROL)	+= uncore-frequency/
 
+
 intel-target-$(CPTCFG_INTEL_VSEC)		+= vsec.o
 
 # Add 'intel' prefix to each module listed in intel-target-*

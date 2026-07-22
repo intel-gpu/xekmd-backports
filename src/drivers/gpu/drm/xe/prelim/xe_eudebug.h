@@ -19,9 +19,10 @@ struct xe_exec_queue;
 struct xe_hw_engine;
 struct xe_user_fence;
 struct prelim_xe_debug_metadata;
-struct xe_eudebug;
 struct drm_gpuva_ops;
+struct xe_pagefault;
 struct xe_eudebug_pagefault;
+struct xe_lrc;
 
 #if IS_ENABLED(CPTCFG_PRELIM_DRM_XE_EUDEBUG)
 
@@ -46,11 +47,9 @@ void prelim_xe_eudebug_vm_init(struct xe_vm *vm);
 void prelim_xe_eudebug_vm_bind_start(struct xe_vm *vm);
 void prelim_xe_eudebug_vm_bind_op_add(struct xe_vm *vm, u32 op, u64 addr, u64 range,
 			       struct drm_gpuva_ops *ops);
-void prelim_xe_eudebug_vm_bind_end(struct xe_vm *vm, bool has_ufence, int err);
+void prelim_xe_eudebug_vm_bind_end(struct xe_vm *vm, struct xe_user_fence *ufence, int err);
 
 int prelim_xe_eudebug_vm_bind_ufence(struct xe_user_fence *ufence);
-void prelim_xe_eudebug_ufence_init(struct xe_user_fence *ufence, struct xe_file *xef, struct xe_vm *vm);
-void prelim_xe_eudebug_ufence_fini(struct xe_user_fence *ufence);
 
 struct xe_eudebug *prelim_xe_eudebug_get(struct xe_file *xef);
 void prelim_xe_eudebug_put(struct xe_eudebug *d);
@@ -59,11 +58,10 @@ void prelim_xe_eudebug_debug_metadata_create(struct xe_file *xef, struct prelim_
 void prelim_xe_eudebug_debug_metadata_destroy(struct xe_file *xef, struct prelim_xe_debug_metadata *m);
 
 struct xe_eudebug_pagefault *prelim_xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm,
-							 u64 page_addr, u8 fault_type,
-							 u8 fault_level, u8 access_type);
-void prelim_xe_eudebug_pagefault_process(struct xe_gt *gt, struct xe_eudebug_pagefault *pf);
-void prelim_xe_eudebug_pagefault_destroy(struct xe_gt *gt, struct xe_vm *vm,
-				  struct xe_eudebug_pagefault *pf, bool send_event);
+							 struct xe_pagefault *xe_pf);
+void prelim_xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf, bool is_err);
+
+int prelim_xe_eudebug_sync_host(struct xe_exec_queue *q, struct xe_lrc *lrc);
 
 #else
 
@@ -88,12 +86,9 @@ static inline void prelim_xe_eudebug_vm_init(struct xe_vm *vm) { }
 static inline void prelim_xe_eudebug_vm_bind_start(struct xe_vm *vm) { }
 static inline void prelim_xe_eudebug_vm_bind_op_add(struct xe_vm *vm, u32 op, u64 addr, u64 range,
 					     struct drm_gpuva_ops *ops) { }
-static inline void prelim_xe_eudebug_vm_bind_end(struct xe_vm *vm, bool has_ufence, int err) { }
+static inline void prelim_xe_eudebug_vm_bind_end(struct xe_vm *vm, struct xe_user_fence *ufence, int err) { }
 
 static inline int prelim_xe_eudebug_vm_bind_ufence(struct xe_user_fence *ufence) { return 0; }
-static inline void prelim_xe_eudebug_ufence_init(struct xe_user_fence *ufence,
-					  struct xe_file *xef, struct xe_vm *vm) { }
-static inline void prelim_xe_eudebug_ufence_fini(struct xe_user_fence *ufence) { }
 
 static inline struct xe_eudebug *prelim_xe_eudebug_get(struct xe_file *xef) { return NULL; }
 static inline void prelim_xe_eudebug_put(struct xe_eudebug *d) { }
@@ -109,23 +104,17 @@ static inline void prelim_xe_eudebug_debug_metadata_destroy(struct xe_file *xef,
 }
 
 static inline struct xe_eudebug_pagefault *
-prelim_xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm, u64 page_addr,
-			    u8 fault_type, u8 fault_level, u8 access_type)
+prelim_xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm, struct xe_pagefault *xe_pf)
 {
 	return NULL;
 }
 
-static inline void
-prelim_xe_eudebug_pagefault_process(struct xe_gt *gt, struct xe_eudebug_pagefault *pf)
+static inline void prelim_xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf,
+						 bool is_err)
 {
 }
 
-static inline void prelim_xe_eudebug_pagefault_destroy(struct xe_gt *gt,
-						struct xe_vm *vm,
-						struct xe_eudebug_pagefault *pf,
-						bool send_event)
-{
-}
+static inline int prelim_xe_eudebug_sync_host(struct xe_exec_queue *q, struct xe_lrc *lrc) { return 0; }
 
 #endif /* CPTCFG_PRELIM_DRM_XE_EUDEBUG */
 

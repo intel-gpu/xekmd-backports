@@ -15,7 +15,6 @@
 #include "abi/guc_klvs_abi.h"
 #include "abi/guc_relay_actions_abi.h"
 #include "regs/xe_gt_regs.h"
-#include "regs/xe_gtt_defs.h"
 
 #include "xe_assert.h"
 #include "xe_device.h"
@@ -32,7 +31,6 @@
 #include "xe_lrc.h"
 #include "xe_memirq.h"
 #include "xe_mmio.h"
-#include "xe_pm.h"
 #include "xe_sriov.h"
 #include "xe_sriov_vf.h"
 #include "xe_sriov_vf_ccs.h"
@@ -490,15 +488,11 @@ u32 xe_gt_sriov_vf_gmdid(struct xe_gt *gt)
 static int vf_get_ggtt_info(struct xe_gt *gt)
 {
 	struct xe_tile *tile = gt_to_tile(gt);
-	struct xe_ggtt *ggtt = tile->mem.ggtt;
 	struct xe_guc *guc = &gt->uc.guc;
 	u64 start, size, ggtt_size;
-	s64 shift;
 	int err;
 
 	xe_gt_assert(gt, IS_SRIOV_VF(gt_to_xe(gt)));
-
-	guard(mutex)(&ggtt->lock);
 
 	err = guc_action_query_single_klv64(guc, GUC_KLV_VF_CFG_GGTT_START_KEY, &start);
 	if (unlikely(err))
@@ -511,8 +505,21 @@ static int vf_get_ggtt_info(struct xe_gt *gt)
 	if (!size)
 		return -ENODATA;
 
+	xe_tile_sriov_vf_ggtt_base_store(tile, start);
 	ggtt_size = xe_tile_sriov_vf_ggtt(tile);
-	if (ggtt_size && ggtt_size != size) {
+	if (!ggtt_size) {
+		/*
+		 * This function is called once during xe_guc_init_noalloc(),
+		 * at which point ggtt_size = 0 and we have to initialize everything,
+		 * and GGTT is not yet initialized.
+		 *
+		 * Return early as there's nothing to fixup.
+		 */
+		xe_tile_sriov_vf_ggtt_store(tile, size);
+		return 0;
+	}
+
+	if (ggtt_size != size) {
 		xe_gt_sriov_err(gt, "Unexpected GGTT reassignment: %lluK != %lluK\n",
 				size / SZ_1K, ggtt_size / SZ_1K);
 		return -EREMCHG;
@@ -521,15 +528,13 @@ static int vf_get_ggtt_info(struct xe_gt *gt)
 	xe_gt_sriov_dbg_verbose(gt, "GGTT %#llx-%#llx = %lluK\n",
 				start, start + size - 1, size / SZ_1K);
 
-	shift = start - (s64)xe_tile_sriov_vf_ggtt_base(tile);
-	xe_tile_sriov_vf_ggtt_base_store(tile, start);
-	xe_tile_sriov_vf_ggtt_store(tile, size);
-
-	if (shift && shift != start) {
-		xe_gt_sriov_info(gt, "Shifting GGTT base by %lld to 0x%016llx\n",
-				 shift, start);
-		xe_tile_sriov_vf_fixup_ggtt_nodes_locked(gt_to_tile(gt), shift);
-	}
+	/*
+	 * This function can be called repeatedly from post migration fixups,
+	 * at which point we inform the GGTT of the new base address.
+	 * xe_ggtt_shift_nodes() may be called multiple times for each migration,
+	 * but will be a noop if the base is unchanged.
+	 */
+	xe_ggtt_shift_nodes(tile->mem.ggtt, start);
 
 	return 0;
 }
@@ -607,6 +612,52 @@ static void vf_cache_gmdid(struct xe_gt *gt)
 	gt->sriov.vf.runtime.gmdid = xe_gt_sriov_vf_gmdid(gt);
 }
 
+static int vf_query_sched_groups(struct xe_gt *gt)
+{
+	struct xe_guc *guc = &gt->uc.guc;
+	struct xe_uc_fw_version guc_version;
+	u32 value = 0;
+	int err;
+
+	xe_gt_sriov_vf_guc_versions(gt, NULL, &guc_version);
+
+	if (MAKE_GUC_VER_STRUCT(guc_version) < MAKE_GUC_VER(1, 26, 0))
+		return 0;
+
+	err = guc_action_query_single_klv32(guc,
+					    GUC_KLV_GLOBAL_CFG_GROUP_SCHEDULING_AVAILABLE_KEY,
+					    &value);
+	if (unlikely(err)) {
+		xe_gt_sriov_err(gt, "Failed to obtain sched groups status (%pe)\n",
+				ERR_PTR(err));
+		return err;
+	}
+
+	/* valid values are 0 (disabled) and 1 (enabled) */
+	if (value > 1) {
+		xe_gt_sriov_err(gt, "Invalid sched groups status %u\n", value);
+		return -EPROTO;
+	}
+
+	xe_gt_sriov_dbg(gt, "sched groups %s\n", str_enabled_disabled(value));
+	return value;
+}
+
+static int vf_cache_sched_groups_status(struct xe_gt *gt)
+{
+	int ret;
+
+	xe_gt_assert(gt, IS_SRIOV_VF(gt_to_xe(gt)));
+
+	ret = vf_query_sched_groups(gt);
+	if (ret < 0)
+		return ret;
+
+	gt->sriov.vf.runtime.uses_sched_groups = ret;
+
+	return 0;
+}
+
 /**
  * xe_gt_sriov_vf_query_config - Query SR-IOV config data over MMIO.
  * @gt: the &xe_gt
@@ -636,10 +687,31 @@ int xe_gt_sriov_vf_query_config(struct xe_gt *gt)
 	if (unlikely(err))
 		return err;
 
+	err = vf_cache_sched_groups_status(gt);
+	if (unlikely(err))
+		return err;
+
 	if (has_gmdid(xe))
 		vf_cache_gmdid(gt);
 
 	return 0;
+}
+
+/**
+ * xe_gt_sriov_vf_sched_groups_enabled() - Check if PF has enabled multiple
+ * scheduler groups
+ * @gt: the &xe_gt
+ *
+ * This function is for VF use only.
+ *
+ * Return: true if shed groups were enabled, false otherwise.
+ */
+bool xe_gt_sriov_vf_sched_groups_enabled(struct xe_gt *gt)
+{
+	xe_gt_assert(gt, IS_SRIOV_VF(gt_to_xe(gt)));
+	xe_gt_assert(gt, gt->sriov.vf.guc_version.major);
+
+	return gt->sriov.vf.runtime.uses_sched_groups;
 }
 
 /**
@@ -788,7 +860,7 @@ static void vf_start_migration_recovery(struct xe_gt *gt)
 		gt->sriov.vf.migration.recovery_queued = true;
 		WRITE_ONCE(gt->sriov.vf.migration.recovery_inprogress, true);
 		WRITE_ONCE(gt->sriov.vf.migration.ggtt_need_fixes, true);
-		smp_wmb();	/* Ensure above writes visable before wake */
+		smp_wmb();	/* Ensure above writes visible before wake */
 
 		xe_guc_ct_wake_waiters(&gt->uc.guc.ct);
 
@@ -1065,13 +1137,15 @@ void xe_gt_sriov_vf_write32(struct xe_gt *gt, struct xe_reg reg, u32 val)
 }
 
 /**
- * xe_gt_sriov_vf_print_config - Print VF self config.
+ * xe_gt_sriov_vf_print_config() - Print VF self config.
  * @gt: the &xe_gt
  * @p: the &drm_printer
  *
  * This function is for VF use only.
+ *
+ * Return: always 0.
  */
-void xe_gt_sriov_vf_print_config(struct xe_gt *gt, struct drm_printer *p)
+int xe_gt_sriov_vf_print_config(struct xe_gt *gt, struct drm_printer *p)
 {
 	struct xe_gt_sriov_vf_selfconfig *config = &gt->sriov.vf.self_config;
 	struct xe_device *xe = gt_to_xe(gt);
@@ -1098,16 +1172,20 @@ void xe_gt_sriov_vf_print_config(struct xe_gt *gt, struct drm_printer *p)
 
 	drm_printf(p, "GuC contexts:\t%u\n", config->num_ctxs);
 	drm_printf(p, "GuC doorbells:\t%u\n", config->num_dbs);
+
+	return 0;
 }
 
 /**
- * xe_gt_sriov_vf_print_runtime - Print VF's runtime regs received from PF.
+ * xe_gt_sriov_vf_print_runtime() - Print VF's runtime regs received from PF.
  * @gt: the &xe_gt
  * @p: the &drm_printer
  *
  * This function is for VF use only.
+ *
+ * Return: always 0.
  */
-void xe_gt_sriov_vf_print_runtime(struct xe_gt *gt, struct drm_printer *p)
+int xe_gt_sriov_vf_print_runtime(struct xe_gt *gt, struct drm_printer *p)
 {
 	struct vf_runtime_reg *vf_regs = gt->sriov.vf.runtime.regs;
 	unsigned int size = gt->sriov.vf.runtime.num_regs;
@@ -1116,16 +1194,20 @@ void xe_gt_sriov_vf_print_runtime(struct xe_gt *gt, struct drm_printer *p)
 
 	for (; size--; vf_regs++)
 		drm_printf(p, "%#x = %#x\n", vf_regs->offset, vf_regs->value);
+
+	return 0;
 }
 
 /**
- * xe_gt_sriov_vf_print_version - Print VF ABI versions.
+ * xe_gt_sriov_vf_print_version() - Print VF ABI versions.
  * @gt: the &xe_gt
  * @p: the &drm_printer
  *
  * This function is for VF use only.
+ *
+ * Return: always 0.
  */
-void xe_gt_sriov_vf_print_version(struct xe_gt *gt, struct drm_printer *p)
+int xe_gt_sriov_vf_print_version(struct xe_gt *gt, struct drm_printer *p)
 {
 	struct xe_device *xe = gt_to_xe(gt);
 	struct xe_uc_fw_version *guc_version = &gt->sriov.vf.guc_version;
@@ -1155,6 +1237,8 @@ void xe_gt_sriov_vf_print_version(struct xe_gt *gt, struct drm_printer *p)
 		   GUC_RELAY_VERSION_LATEST_MAJOR, GUC_RELAY_VERSION_LATEST_MINOR);
 	drm_printf(p, "\thandshake:\t%u.%u\n",
 		   pf_version->major, pf_version->minor);
+
+	return 0;
 }
 
 static bool vf_post_migration_shutdown(struct xe_gt *gt)
@@ -1174,7 +1258,7 @@ static bool vf_post_migration_shutdown(struct xe_gt *gt)
 	}
 
 	xe_guc_ct_flush_and_stop(&gt->uc.guc.ct);
-	xe_guc_submit_pause(&gt->uc.guc);
+	xe_guc_submit_pause_vf(&gt->uc.guc);
 	xe_tlb_inval_reset(&gt->tlb_inval);
 
 	return false;
@@ -1222,12 +1306,12 @@ static void vf_post_migration_rearm(struct xe_gt *gt)
 	xe_irq_resume(gt_to_xe(gt));
 
 	xe_guc_ct_restart(&gt->uc.guc.ct);
-	xe_guc_submit_unpause_prepare(&gt->uc.guc);
+	xe_guc_submit_unpause_prepare_vf(&gt->uc.guc);
 }
 
 static void vf_post_migration_kickstart(struct xe_gt *gt)
 {
-	xe_guc_submit_unpause(&gt->uc.guc);
+	xe_guc_submit_unpause_vf(&gt->uc.guc);
 }
 
 static void vf_post_migration_abort(struct xe_gt *gt)
@@ -1288,7 +1372,6 @@ static void vf_post_migration_recovery(struct xe_gt *gt)
 
 	xe_gt_sriov_dbg(gt, "migration recovery in progress\n");
 
-	xe_pm_runtime_get(xe);
 	retry = vf_post_migration_shutdown(gt);
 	if (retry)
 		goto queue;
@@ -1327,12 +1410,10 @@ static void vf_post_migration_recovery(struct xe_gt *gt)
 
 	vf_post_migration_kickstart(gt);
 
-	xe_pm_runtime_put(xe);
 	xe_gt_sriov_notice(gt, "migration recovery ended\n");
 	return;
 fail:
 	vf_post_migration_abort(gt);
-	xe_pm_runtime_put(xe);
 	xe_gt_sriov_err(gt, "migration recovery failed (%pe)\n", ERR_PTR(err));
 	xe_device_declare_wedged(xe);
 	return;
@@ -1340,7 +1421,6 @@ fail:
 queue:
 	xe_gt_sriov_info(gt, "Re-queuing migration recovery\n");
 	queue_work(gt->ordered_wq, &gt->sriov.vf.migration.worker);
-	xe_pm_runtime_put(xe);
 }
 
 static void migration_worker_func(struct work_struct *w)

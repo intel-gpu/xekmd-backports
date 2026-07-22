@@ -4,6 +4,11 @@
 
 #include_next <linux/mm.h>
 
+#ifdef BPM_ACCESS_REMOTE_VM_NOT_PRESENT
+extern int access_remote_vm(struct mm_struct *mm, unsigned long addr,
+        void *buf, int len, unsigned int gup_flags);
+#endif
+
 #ifdef BPM_VM_FLAGS_SET_NOT_PRESENT
 #define vm_flags_set(vma, flags)	((vma)->vm_flags |= (flags))
 
@@ -109,4 +114,4 @@ static inline void follow_pfnmap_end(struct follow_pfnmap_args *args)
 #endif
 #endif
 
-#endif /* __BACKPORT_LINUX_MM_H */
+#endif /* __BACKPORT_LINUX_MM_H__ */

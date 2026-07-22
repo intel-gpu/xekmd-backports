@@ -14,7 +14,7 @@ struct xe_file;
 
 #if IS_ENABLED(CPTCFG_PRELIM_DRM_XE_EUDEBUG)
 
-#include "xe_debug_metadata_types.h"
+#include "prelim/xe_debug_metadata_types.h"
 #include "xe_vm_types.h"
 
 struct prelim_xe_debug_metadata *prelim_xe_debug_metadata_get(struct xe_file *xef, u32 id);
@@ -28,17 +28,20 @@ int prelim_xe_debug_metadata_destroy_ioctl(struct drm_device *dev,
 				    void *data,
 				    struct drm_file *file);
 
-static inline void xe_eudebug_move_vma_metadata(struct xe_eudebug_vma_metadata *from,
-						struct xe_eudebug_vma_metadata *to)
-{
-	list_splice_tail_init(&from->list, &to->list);
-}
+void prelim_xe_eudebug_op_metadata_init(struct xe_vma_op *op);
+void prelim_xe_eudebug_vma_metadata_init(struct xe_vma *vma);
+void prelim_xe_eudebug_move_op_metadata(struct xe_vma_op *from,
+				 struct xe_vma *to);
+void prelim_xe_eudebug_move_vma_metadata(struct xe_vma *from,
+				  struct xe_vma *to);
 
-int xe_eudebug_copy_vma_metadata(struct xe_eudebug_vma_metadata *from,
-				 struct xe_eudebug_vma_metadata *to);
-void xe_eudebug_free_vma_metadata(struct xe_eudebug_vma_metadata *mdata);
+int prelim_xe_eudebug_copy_op_metadata(struct xe_vma_op *from,
+				struct xe_vma *to);
 
-int vm_bind_op_ext_attach_debug(struct xe_device *xe,
+void prelim_xe_eudebug_free_op_metadata(struct xe_vma_op *op);
+void prelim_xe_eudebug_free_vma_metadata(struct xe_vma *vma);
+
+int prelim_vm_bind_op_ext_attach_debug(struct xe_device *xe,
 				struct xe_file *xef,
 				struct drm_gpuva_ops *ops,
 				u32 operation, u64 extension);
@@ -52,7 +55,7 @@ struct xe_device;
 struct xe_eudebug_vma_metadata;
 struct drm_gpuva_ops;
 
-static inline struct prelim_xe_debug_metadata *xe_debug_metadata_get(struct xe_file *xef, u32 id)
+static inline struct prelim_xe_debug_metadata *prelim_xe_debug_metadata_get(struct xe_file *xef, u32 id)
 {
 	return NULL;
 }
@@ -73,22 +76,24 @@ static inline int prelim_xe_debug_metadata_destroy_ioctl(struct drm_device *dev,
 	return -EOPNOTSUPP;
 }
 
-static inline void xe_eudebug_move_vma_metadata(struct xe_eudebug_vma_metadata *from,
-						struct xe_eudebug_vma_metadata *to)
-{
-}
+static inline void prelim_xe_eudebug_op_metadata_init(struct xe_vma_op *op) { }
+static inline void prelim_xe_eudebug_vma_metadata_init(struct xe_vma *vma) { }
 
-static inline int xe_eudebug_copy_vma_metadata(struct xe_eudebug_vma_metadata *from,
-					       struct xe_eudebug_vma_metadata *to)
+static inline void prelim_xe_eudebug_move_op_metadata(struct xe_vma_op *from,
+					       struct xe_vma *to) { }
+static inline void prelim_xe_eudebug_move_vma_metadata(struct xe_vma *from,
+						struct xe_vma *to) { }
+
+static inline int prelim_xe_eudebug_copy_op_metadata(struct xe_vma_op *from,
+					      struct xe_vma *to)
 {
 	return 0;
 }
 
-static inline void xe_eudebug_free_vma_metadata(struct xe_eudebug_vma_metadata *mdata)
-{
-}
+static inline void prelim_xe_eudebug_free_op_metadata(struct xe_vma_op *op) { }
+static inline void prelim_xe_eudebug_free_vma_metadata(struct xe_vma *vma) { }
 
-static inline int vm_bind_op_ext_attach_debug(struct xe_device *xe,
+static inline int prelim_vm_bind_op_ext_attach_debug(struct xe_device *xe,
 					      struct xe_file *xef,
 					      struct drm_gpuva_ops *ops,
 					      u32 operation, u64 extension)

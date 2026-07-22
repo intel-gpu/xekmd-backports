@@ -8,6 +8,7 @@
 
 #include <drm/drm_gpusvm.h>
 #include <drm/drm_gpuvm.h>
+#include <drm/drm_pagemap_util.h>
 
 #include <linux/dma-resv.h>
 #include <linux/kref.h>
@@ -17,8 +18,15 @@
 #include "xe_device_types.h"
 #include "xe_pt_types.h"
 #include "xe_range_fence.h"
+#ifndef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+#include "xe_tlb_inval_types.h"
+#endif
+#include "xe_userptr.h"
+
+struct drm_pagemap;
 
 struct xe_bo;
+struct xe_pagefault;
 struct xe_svm_range;
 struct xe_sync_entry;
 struct xe_user_fence;
@@ -45,38 +53,63 @@ struct xe_vm_pgtable_update_op;
 #define XE_VMA_PTE_COMPACT	(DRM_GPUVA_USERBITS << 7)
 #define XE_VMA_DUMPABLE		(DRM_GPUVA_USERBITS << 8)
 #define XE_VMA_SYSTEM_ALLOCATOR	(DRM_GPUVA_USERBITS << 9)
+#define XE_VMA_MADV_AUTORESET	(DRM_GPUVA_USERBITS << 10)
 
-/** struct xe_userptr - User pointer */
-struct xe_userptr {
-	/** @invalidate_link: Link for the vm::userptr.invalidated list */
-	struct list_head invalidate_link;
-	/** @userptr: link into VM repin list if userptr. */
-	struct list_head repin_link;
+/**
+ * struct xe_vma_mem_attr - memory attributes associated with vma
+ */
+struct xe_vma_mem_attr {
+	/** @preferred_loc: preferred memory_location */
+	struct xe_vma_preferred_loc {
+		/** @preferred_loc.migration_policy: Pages migration policy */
+		u32 migration_policy;
+
+		/**
+		 * @preferred_loc.devmem_fd: used for determining pagemap_fd
+		 * requested by user DRM_XE_PREFERRED_LOC_DEFAULT_SYSTEM and
+		 * DRM_XE_PREFERRED_LOC_DEFAULT_DEVICE mean system memory or
+		 * closest device memory respectively.
+		 */
+		u32 devmem_fd;
+		/**
+		 * @preferred_loc.dpagemap: Reference-counted pointer to the drm_pagemap preferred
+		 * for migration on a SVM page-fault. The pointer is protected by the
+		 * vm lock, and is %NULL if @devmem_fd should be consulted for special
+		 * values.
+		 */
+		struct drm_pagemap *dpagemap;
+	} preferred_loc;
+
 	/**
-	 * @notifier: MMU notifier for user pointer (invalidation call back)
+	 * @atomic_access: The atomic access type for the vma
+	 * See %DRM_XE_VMA_ATOMIC_UNDEFINED, %DRM_XE_VMA_ATOMIC_DEVICE,
+	 * %DRM_XE_VMA_ATOMIC_GLOBAL, and %DRM_XE_VMA_ATOMIC_CPU for possible
+	 * values. These are defined in uapi/drm/xe_drm.h.
 	 */
-	struct mmu_interval_notifier notifier;
-	/** @sgt: storage for a scatter gather table */
-	struct sg_table sgt;
-	/** @sg: allocated scatter gather table */
-	struct sg_table *sg;
-	/** @notifier_seq: notifier sequence number */
-	unsigned long notifier_seq;
-	/** @unmap_mutex: Mutex protecting dma-unmapping */
-	struct mutex unmap_mutex;
+	u32 atomic_access;
+
 	/**
-	 * @initial_bind: user pointer has been bound at least once.
-	 * write: vm->userptr.notifier_lock in read mode and vm->resv held.
-	 * read: vm->userptr.notifier_lock in write mode or vm->resv held.
+	 * @default_pat_index: The pat index for VMA set during first bind by user.
 	 */
-	bool initial_bind;
-	/** @mapped: Whether the @sgt sg-table is dma-mapped. Protected by @unmap_mutex. */
-	bool mapped;
-#if IS_ENABLED(CPTCFG_DRM_XE_USERPTR_INVAL_INJECT)
-	u32 divisor;
-#endif
+	u16 default_pat_index;
+
+	/**
+	 * @pat_index: The pat index to use when encoding the PTEs for this vma.
+	 * same as default_pat_index unless overwritten by madvise.
+	 */
+	u16 pat_index;
+
+	/**
+	 * @purgeable_state: Purgeable hint for this VMA mapping
+	 *
+	 * Per-VMA purgeable state from madvise. Valid states are WILLNEED (0)
+	 * or DONTNEED (1). Shared BOs require all VMAs to be DONTNEED before
+	 * the BO can be purged. PURGED state exists only at BO level.
+	 *
+	 * Protected by BO dma-resv lock. Set via DRM_IOCTL_XE_MADVISE.
+	 */
+	u32 purgeable_state;
 };
-
 
 #if IS_ENABLED(CPTCFG_PRELIM_DRM_XE_EUDEBUG)
 struct xe_eudebug_vma_metadata {
@@ -111,10 +144,10 @@ struct xe_vma {
 
 	/**
 	 * @tile_invalidated: Tile mask of binding are invalidated for this VMA.
-	 * protected by BO's resv and for userptrs, vm->userptr.notifier_lock in
-	 * write mode for writing or vm->userptr.notifier_lock in read mode and
+	 * protected by BO's resv and for userptrs, vm->svm.gpusvm.notifier_lock in
+	 * write mode for writing or vm->svm.gpusvm.notifier_lock in read mode and
 	 * the vm->resv. For stable reading, BO's resv or userptr
-	 * vm->userptr.notifier_lock in read mode is required. Can be
+	 * vm->svm.gpusvm.notifier_lock in read mode is required. Can be
 	 * opportunistically read with READ_ONCE outside of locks.
 	 */
 	u8 tile_invalidated;
@@ -125,7 +158,7 @@ struct xe_vma {
 	/**
 	 * @tile_present: Tile mask of binding are present for this VMA.
 	 * protected by vm->lock, vm->resv and for userptrs,
-	 * vm->userptr.notifier_lock for writing. Needs either for reading,
+	 * vm->svm.gpusvm.notifier_lock for writing. Needs either for reading,
 	 * but if reading is done under the vm->lock only, it needs to be held
 	 * in write mode.
 	 */
@@ -135,15 +168,22 @@ struct xe_vma {
 	u8 tile_staged;
 
 	/**
-	 * @pat_index: The pat index to use when encoding the PTEs for this vma.
+	 * @skip_invalidation: Used in madvise to avoid invalidation
+	 * if mem attributes doesn't change
 	 */
-	u16 pat_index;
+	bool skip_invalidation;
 
 	/**
 	 * @ufence: The user fence that was provided with MAP.
 	 * Needs to be signalled before UNMAP can be processed.
 	 */
 	struct xe_user_fence *ufence;
+
+	/**
+	 * @attr: The attributes of vma which determines the migration policy
+	 * and encoding of the PTEs for this vma.
+	 */
+	struct xe_vma_mem_attr attr;
 
 	struct {
 		/** @metadata: List of vma debug metadata */
@@ -162,6 +202,24 @@ struct xe_userptr_vma {
 };
 
 struct xe_device;
+
+/**
+ * struct xe_vm_fault_entry - Elements of vm->faults.list
+ * @list: link into @xe_vm.faults.list
+ * @address: address of the fault
+ * @address_precision: precision of faulted address
+ * @access_type: type of address access that resulted in fault
+ * @fault_type: type of fault reported
+ * @fault_level: fault level of the fault
+ */
+struct xe_vm_fault_entry {
+	struct list_head list;
+	u64 address;
+	u32 address_precision;
+	u8 access_type;
+	u8 fault_type;
+	u8 fault_level;
+};
 
 struct xe_vm {
 	/** @gpuvm: base GPUVM used to track VMAs */
@@ -189,6 +247,9 @@ struct xe_vm {
 			 */
 			struct work_struct work;
 		} garbage_collector;
+		struct xe_pagemap *pagemaps[XE_MAX_TILES_PER_DEVICE];
+		/** @svm.peer: Used for pagemap connectivity computations. */
+		struct drm_pagemap_peer peer;
 	} svm;
 
 	struct xe_device *xe;
@@ -217,6 +278,7 @@ struct xe_vm {
 #define XE_VM_FLAG_TILE_ID(flags)	FIELD_GET(GENMASK(7, 6), flags)
 #define XE_VM_FLAG_SET_TILE_ID(tile)	FIELD_PREP(GENMASK(7, 6), (tile)->id)
 #define XE_VM_FLAG_GSC			BIT(8)
+#define XE_VM_FLAG_NO_VM_OVERCOMMIT     BIT(9)
 	unsigned long flags;
 
 	/**
@@ -253,33 +315,7 @@ struct xe_vm {
 	const struct xe_pt_ops *pt_ops;
 
 	/** @userptr: user pointer state */
-	struct {
-		/**
-		 * @userptr.repin_list: list of VMAs which are user pointers,
-		 * and needs repinning. Protected by @lock.
-		 */
-		struct list_head repin_list;
-		/**
-		 * @notifier_lock: protects notifier in write mode and
-		 * submission in read mode.
-		 */
-		struct rw_semaphore notifier_lock;
-		/**
-		 * @userptr.invalidated_lock: Protects the
-		 * @userptr.invalidated list.
-		 */
-		spinlock_t invalidated_lock;
-		/**
-		 * @userptr.invalidated: List of invalidated userptrs, not yet
-		 * picked
-		 * up for revalidation. Protected from access with the
-		 * @invalidated_lock. Removing items from the list
-		 * additionally requires @lock in write mode, and adding
-		 * items to the list requires either the @userptr.notifier_lock in
-		 * write mode, OR @lock in write mode.
-		 */
-		struct list_head invalidated;
-	} userptr;
+	struct xe_userptr_vm userptr;
 
 	/** @preempt: preempt state */
 	struct {
@@ -309,6 +345,22 @@ struct xe_vm {
 		struct list_head pm_activate_link;
 	} preempt;
 
+	/** @exec_queues: Manages list of exec queues attached to this VM, protected by lock. */
+	struct {
+		/**
+		 * @exec_queues.list: list of exec queues attached to this VM,
+		 * per GT
+		 */
+		struct list_head list[XE_MAX_TILES_PER_DEVICE * XE_MAX_GT_PER_TILE];
+		/**
+		 * @exec_queues.count: count of exec queues attached to this VM,
+		 * per GT
+		 */
+		int count[XE_MAX_TILES_PER_DEVICE * XE_MAX_GT_PER_TILE];
+		/** @exec_queues.lock: lock to protect exec_queues list */
+		struct rw_semaphore lock;
+	} exec_queues;
+
 	/** @um: unified memory state */
 	struct {
 		/** @asid: address space ID, unique to each VM */
@@ -325,6 +377,16 @@ struct xe_vm {
 		/** @capture_once: capture only one error per VM */
 		bool capture_once;
 	} error_capture;
+
+	/** @faults: List of all faults associated with this VM */
+	struct {
+		/** @faults.lock: lock protecting @faults.list */
+		spinlock_t lock;
+		/** @faults.list: list of xe_vm_fault_entry entries */
+		struct list_head list;
+		/** @faults.len: length of @faults.list */
+		unsigned int len;
+	} faults;
 
 	/**
 	 * @validation: Validation data only valid with the vm resv held.
@@ -357,7 +419,7 @@ struct xe_vm {
 	u64 tlb_flush_seqno;
 	/** @batch_invalidate_tlb: Always invalidate TLB before batch start */
 	bool batch_invalidate_tlb;
-	/** @xef: XE file handle for tracking this VM's drm client */
+	/** @xef: Xe file handle for tracking this VM's drm client */
 	struct xe_file *xef;
 
 #if IS_ENABLED(CPTCFG_PRELIM_DRM_XE_EUDEBUG)
@@ -378,17 +440,10 @@ struct xe_vm {
 struct xe_vma_op_map {
 	/** @vma: VMA to map */
 	struct xe_vma *vma;
+	unsigned int vma_flags;
 	/** @immediate: Immediate bind */
 	bool immediate;
 	/** @read_only: Read only */
-	bool read_only;
-	/** @is_null: is NULL binding */
-	bool is_null;
-	/** @is_cpu_addr_mirror: is CPU address mirror binding */
-	bool is_cpu_addr_mirror;
-	/** @dumpable: whether BO is dumped on GPU hang */
-	bool dumpable;
-	/** @invalidate: invalidate the VMA before bind */
 	bool invalidate_on_bind;
 	/** @request_decompress: schedule decompression for GPU map */
 	bool request_decompress;
@@ -448,8 +503,11 @@ struct xe_vma_op_prefetch_range {
 	struct xarray range;
 	/** @ranges_count: number of svm ranges to map */
 	u32 ranges_count;
-	/** @region: memory region to prefetch to */
-	u32 region;
+	/**
+	 * @dpagemap: Pointer to the dpagemap structure containing memory to prefetch.
+	 * NULL if prefetch requested region is smem
+	 */
+	struct drm_pagemap *dpagemap;
 };
 
 /** enum xe_vma_op_flags - flags for VMA operation */
@@ -518,6 +576,7 @@ struct xe_vma_ops {
 #define XE_VMA_OPS_FLAG_MADVISE          BIT(1)
 #define XE_VMA_OPS_ARRAY_OF_BINDS	 BIT(2)
 #define XE_VMA_OPS_FLAG_SKIP_TLB_WAIT	 BIT(3)
+#define XE_VMA_OPS_FLAG_ALLOW_SVM_UNMAP  BIT(4)
 	u32 flags;
 #ifdef TEST_VM_OPS_ERROR
 	/** @inject_error: inject error to test error handling */

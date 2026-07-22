@@ -46,11 +46,11 @@ bool xe_sriov_pf_migration_supported(struct xe_device *xe)
 {
 	xe_assert(xe, IS_SRIOV_PF(xe));
 
-	return !xe->sriov.pf.migration.disabled;
+	return IS_ENABLED(CPTCFG_DRM_XE_DEBUG) || !xe->sriov.pf.migration.disabled;
 }
 
 /**
- * xe_sriov_pf_migration_disable - Turn off SR-IOV VF migration support on PF.
+ * xe_sriov_pf_migration_disable() - Turn off SR-IOV VF migration support on PF.
  * @xe: the &xe_device instance.
  * @fmt: format string for the log message, to be combined with following VAs.
  */
@@ -64,7 +64,10 @@ void xe_sriov_pf_migration_disable(struct xe_device *xe, const char *fmt, ...)
 	va_start(va_args, fmt);
 	vaf.fmt = fmt;
 	vaf.va  = &va_args;
-	xe_sriov_notice(xe, "migration disabled: %pV\n", &vaf);
+	xe_sriov_notice(xe, "migration %s: %pV\n",
+			IS_ENABLED(CPTCFG_DRM_XE_DEBUG) ?
+			"missing prerequisite" : "disabled",
+			&vaf);
 	va_end(va_args);
 
 	xe->sriov.pf.migration.disabled = true;
@@ -171,8 +174,6 @@ pf_migration_consume(struct xe_device *xe, unsigned int vfid)
  * Return: Pointer to &xe_sriov_packet on success,
  *	   NULL if ring is empty and no more migration data is expected,
  *	   ERR_PTR value in case of error.
- *
- * Return: 0 on success or a negative error code on failure.
  */
 struct xe_sriov_packet *
 xe_sriov_pf_migration_save_consume(struct xe_device *xe, unsigned int vfid)

@@ -2,7 +2,7 @@
 /*
  * Copyright © 2023 Intel Corporation
  */
-#include "xe_debug_metadata.h"
+#include "prelim/xe_debug_metadata.h"
 
 #include <drm/drm_device.h>
 #include <drm/drm_file.h>
@@ -12,16 +12,6 @@
 #include "prelim/xe_eudebug.h"
 #include "xe_macros.h"
 #include "xe_vm.h"
-
-void xe_eudebug_free_vma_metadata(struct xe_eudebug_vma_metadata *mdata)
-{
-	struct xe_vma_debug_metadata *vmad, *tmp;
-
-	list_for_each_entry_safe(vmad, tmp, &mdata->list, link) {
-		list_del(&vmad->link);
-		kfree(vmad);
-	}
-}
 
 static struct xe_vma_debug_metadata *
 vma_new_debug_metadata(u32 metadata_id, u64 cookie)
@@ -40,20 +30,75 @@ vma_new_debug_metadata(u32 metadata_id, u64 cookie)
 	return vmad;
 }
 
-int xe_eudebug_copy_vma_metadata(struct xe_eudebug_vma_metadata *from,
-				 struct xe_eudebug_vma_metadata *to)
+static inline void __eudebug_metadata_init(struct xe_eudebug_vma_metadata *mdata)
+{
+	INIT_LIST_HEAD(&mdata->list);
+}
+
+void prelim_xe_eudebug_vma_metadata_init(struct xe_vma *vma)
+{
+	__eudebug_metadata_init(&vma->eudebug.metadata);
+}
+
+void prelim_xe_eudebug_op_metadata_init(struct xe_vma_op *op)
+{
+	__eudebug_metadata_init(&op->map.eudebug.metadata);
+}
+
+static inline void __move_eudebug_metadata(struct xe_eudebug_vma_metadata *from,
+					   struct xe_eudebug_vma_metadata *to)
+{
+	list_splice_tail_init(&from->list, &to->list);
+}
+
+void prelim_xe_eudebug_move_op_metadata(struct xe_vma_op *from,
+				 struct xe_vma *to)
+{
+	__move_eudebug_metadata(&from->map.eudebug.metadata,
+				&to->eudebug.metadata);
+}
+
+void prelim_xe_eudebug_move_vma_metadata(struct xe_vma *from,
+				  struct xe_vma *to)
+{
+	__move_eudebug_metadata(&from->eudebug.metadata,
+				&to->eudebug.metadata);
+}
+
+int prelim_xe_eudebug_copy_op_metadata(struct xe_vma_op *from,
+				struct xe_vma *to)
 {
 	struct xe_vma_debug_metadata *vmad, *vma;
 
-	list_for_each_entry(vmad, &from->list, link) {
+	list_for_each_entry(vmad, &from->remap.prev->eudebug.metadata.list, link) {
 		vma = vma_new_debug_metadata(vmad->metadata_id, vmad->cookie);
 		if (IS_ERR(vma))
 			return PTR_ERR(vma);
 
-		list_add_tail(&vmad->link, &to->list);
+		list_add_tail(&vmad->link, &to->eudebug.metadata.list);
 	}
 
 	return 0;
+}
+
+static void __eudebug_free_vma_metadata(struct xe_eudebug_vma_metadata *mdata)
+{
+	struct xe_vma_debug_metadata *vmad, *tmp;
+
+	list_for_each_entry_safe(vmad, tmp, &mdata->list, link) {
+		list_del(&vmad->link);
+		kfree(vmad);
+	}
+}
+
+void prelim_xe_eudebug_free_op_metadata(struct xe_vma_op *op)
+{
+	__eudebug_free_vma_metadata(&op->map.eudebug.metadata);
+}
+
+void prelim_xe_eudebug_free_vma_metadata(struct xe_vma *vma)
+{
+	__eudebug_free_vma_metadata(&vma->eudebug.metadata);
 }
 
 static int vma_new_debug_metadata_op(struct xe_vma_op *op,
@@ -71,7 +116,7 @@ static int vma_new_debug_metadata_op(struct xe_vma_op *op,
 	return 0;
 }
 
-int vm_bind_op_ext_attach_debug(struct xe_device *xe,
+int prelim_vm_bind_op_ext_attach_debug(struct xe_device *xe,
 				struct xe_file *xef,
 				struct drm_gpuva_ops *ops,
 				u32 operation, u64 extension)
@@ -119,7 +164,7 @@ int vm_bind_op_ext_attach_debug(struct xe_device *xe,
 	return 0;
 }
 
-static void prelim_xe_debug_metadata_release(struct kref *ref)
+static void xe_debug_metadata_release(struct kref *ref)
 {
 	struct prelim_xe_debug_metadata *mdata = container_of(ref, struct prelim_xe_debug_metadata, refcount);
 
@@ -129,7 +174,7 @@ static void prelim_xe_debug_metadata_release(struct kref *ref)
 
 void prelim_xe_debug_metadata_put(struct prelim_xe_debug_metadata *mdata)
 {
-	kref_put(&mdata->refcount, prelim_xe_debug_metadata_release);
+	kref_put(&mdata->refcount, xe_debug_metadata_release);
 }
 
 struct prelim_xe_debug_metadata *prelim_xe_debug_metadata_get(struct xe_file *xef, u32 id)

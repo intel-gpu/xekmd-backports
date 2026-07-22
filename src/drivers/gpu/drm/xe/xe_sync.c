@@ -27,8 +27,6 @@ static void user_fence_destroy(struct kref *kref)
 
 	mmdrop(ufence->mm);
 
-	prelim_xe_eudebug_ufence_fini(ufence);
-
 	kfree(ufence);
 }
 
@@ -55,7 +53,7 @@ static struct xe_user_fence *user_fence_create(struct xe_device *xe,
 	if (get_user(prefetch_val, ptr))
 		return ERR_PTR(-EFAULT);
 
-	ufence = kzalloc(sizeof(*ufence), GFP_KERNEL);
+	ufence = kzalloc_obj(*ufence);
 	if (!ufence)
 		return ERR_PTR(-ENOMEM);
 
@@ -66,14 +64,12 @@ static struct xe_user_fence *user_fence_create(struct xe_device *xe,
 	ufence->mm = current->mm;
 	mmgrab(ufence->mm);
 
-	prelim_xe_eudebug_ufence_init(ufence, xef, vm);
-
 	return ufence;
 }
 
 void xe_sync_ufence_signal(struct xe_user_fence *ufence)
 {
-	XE_WARN_ON(!ufence->signalled);
+	XE_WARN_ON(ufence->signalled);
 
 	WRITE_ONCE(ufence->signalled, 1);
 	if (mmget_not_zero(ufence->mm)) {
@@ -86,6 +82,10 @@ void xe_sync_ufence_signal(struct xe_user_fence *ufence)
 		drm_dbg(&ufence->xe->drm, "mmget_not_zero() failed, ufence wasn't signaled\n");
 	}
 
+	/*
+	 * Wake up waiters only after updating the ufence state, allowing the UMD
+	 * to safely reuse the same ufence without encountering -EBUSY errors.
+	 */
 	wake_up_all(&ufence->xe->ufence_wq);
 }
 
@@ -95,12 +95,9 @@ static void user_fence_worker(struct work_struct *w)
 	int ret;
 
 	/*
-	 * Wake up waiters only after updating the ufence state, allowing the UMD
-	 * to safely reuse the same ufence without encountering -EBUSY errors.
+	 * Debugger might want to track this ufence and delay the signalling.
+	 * If not, signal it immediately.
 	 */
-	WRITE_ONCE(ufence->signalled, 1);
-
-	/* Lets see if debugger wants to track this */
 	ret = prelim_xe_eudebug_vm_bind_ufence(ufence);
 	if (ret)
 		xe_sync_ufence_signal(ufence);
@@ -213,7 +210,7 @@ int xe_sync_entry_parse(struct xe_device *xe, struct xe_file *xef,
 		if (exec) {
 			sync->addr = sync_in.addr;
 		} else {
-			sync->ufence_timeline_value = ufence_timeline_value;
+                        sync->ufence_timeline_value = ufence_timeline_value;
 			sync->ufence = user_fence_create(xe, xef, vm,
 							 sync_in.addr,
 							 sync_in.timeline_value);
@@ -252,6 +249,32 @@ int xe_sync_entry_add_deps(struct xe_sync_entry *sync, struct xe_sched_job *job)
 						     dma_fence_get(sync->fence));
 
 	return 0;
+}
+
+/**
+ * xe_sync_entry_wait() - Wait on in-sync
+ * @sync: Sync object
+ *
+ * If the sync is in an in-sync, wait on the sync to signal.
+ *
+ * Return: 0 on success, -ERESTARTSYS on failure (interruption)
+ */
+int xe_sync_entry_wait(struct xe_sync_entry *sync)
+{
+	return xe_sync_needs_wait(sync) ?
+		dma_fence_wait(sync->fence, true) : 0;
+}
+
+/**
+ * xe_sync_needs_wait() - Sync needs a wait (input dma-fence not signaled)
+ * @sync: Sync object
+ *
+ * Return: True if sync needs a wait, False otherwise
+ */
+bool xe_sync_needs_wait(struct xe_sync_entry *sync)
+{
+	return sync->fence &&
+	       !test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &sync->fence->flags);
 }
 
 void xe_sync_entry_signal(struct xe_sync_entry *sync, struct dma_fence *fence)
@@ -337,11 +360,13 @@ xe_sync_in_fence_get(struct xe_sync_entry *sync, int num_sync,
 		struct xe_tile *tile;
 		u8 id;
 
-		for_each_tile(tile, vm->xe, id)
-			num_fence += (1 + XE_MAX_GT_PER_TILE);
+		for_each_tile(tile, vm->xe, id) {
+			num_fence++;
+			for_each_tlb_inval(i)
+				num_fence++;
+		}
 
-		fences = kmalloc_array(num_fence, sizeof(*fences),
-				       GFP_KERNEL);
+		fences = kmalloc_objs(*fences, num_fence);
 		if (!fences)
 			return ERR_PTR(-ENOMEM);
 

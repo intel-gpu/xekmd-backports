@@ -27,6 +27,8 @@ struct xe_gt_sriov_vf_selfconfig {
 struct xe_gt_sriov_vf_runtime {
 	/** @gmdid: cached value of the GDMID register. */
 	u32 gmdid;
+	/** @uses_sched_groups: whether PF enabled sched groups or not. */
+	bool uses_sched_groups;
 	/** @regs_size: size of runtime register array. */
 	u32 regs_size;
 	/** @num_regs: number of runtime registers in the array. */
@@ -52,6 +54,8 @@ struct xe_gt_sriov_vf_migration {
 	wait_queue_head_t wq;
 	/** @scratch: Scratch memory for VF recovery */
 	void *scratch;
+	/** @fixups_complete_count: Counts completed fixups stages */
+	atomic_t fixups_complete_count;
 	/** @debug: Debug hooks for delaying migration */
 	struct {
 		/**
@@ -60,8 +64,6 @@ struct xe_gt_sriov_vf_migration {
 		 */
 		u8 resfix_stoppers;
 	} debug;
-	/** @fixups_complete_count: Counts completed fixups stages */
-	atomic_t fixups_complete_count;
 	/**
 	 * @resfix_marker: Marker sent on start and on end of post-migration
 	 * steps.

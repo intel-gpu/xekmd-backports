@@ -60,11 +60,11 @@ pmt_memcpy64_fromio(void *to, const u64 __iomem *from, size_t count)
 	return count;
 }
 
-int pmt_telem_read_mmio(struct pci_dev *pdev, struct pmt_callbacks *cb, u32 guid, void *buf,
+int pmt_telem_read_mmio(struct device *dev, struct pmt_callbacks *cb, u32 guid, void *buf,
 			void __iomem *addr, loff_t off, u32 count)
 {
 	if (cb && cb->read_telem)
-		return cb->read_telem(pdev, guid, buf, off, count);
+		return cb->read_telem(dev, guid, buf, off, count);
 
 	addr += off;
 
@@ -81,7 +81,7 @@ EXPORT_SYMBOL_NS_GPL(pmt_telem_read_mmio, "INTEL_PMT");
 /*
  * sysfs
  */
-#ifdef BPM_STRUCT_BIN_ATTRIBUTE_READ_NEW_NOT_PRESENT
+#ifdef BPM_CONST_STRUCT_BIN_ATTRIBUTE_IS_NOT_PRESENT
 static ssize_t
 intel_pmt_read(struct file *filp, struct kobject *kobj,
 	       struct bin_attribute *attr, char *buf, loff_t off,
@@ -106,7 +106,7 @@ intel_pmt_read(struct file *filp, struct kobject *kobj,
 	if (count > entry->size - off)
 		count = entry->size - off;
 
-	count = pmt_telem_read_mmio(entry->pcidev, entry->cb, entry->header.guid, buf,
+	count = pmt_telem_read_mmio(entry->ep->dev, entry->cb, entry->header.guid, buf,
 				    entry->base, off, count);
 
 	return count;
@@ -153,7 +153,7 @@ guid_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct intel_pmt_entry *entry = dev_get_drvdata(dev);
 
-	return sprintf(buf, "0x%x\n", entry->guid);
+	return sysfs_emit(buf, "0x%x\n", entry->guid);
 }
 static DEVICE_ATTR_RO(guid);
 
@@ -162,7 +162,7 @@ static ssize_t size_show(struct device *dev, struct device_attribute *attr,
 {
 	struct intel_pmt_entry *entry = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%zu\n", entry->size);
+	return sysfs_emit(buf, "%zu\n", entry->size);
 }
 static DEVICE_ATTR_RO(size);
 
@@ -171,7 +171,7 @@ offset_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct intel_pmt_entry *entry = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%lu\n", offset_in_page(entry->base_addr));
+	return sysfs_emit(buf, "%lu\n", offset_in_page(entry->base_addr));
 }
 static DEVICE_ATTR_RO(offset);
 
@@ -221,7 +221,7 @@ static int intel_pmt_populate_entry(struct intel_pmt_entry *entry,
 				    struct intel_vsec_device *ivdev,
 				    struct resource *disc_res)
 {
-	struct pci_dev *pci_dev = ivdev->pcidev;
+	struct pci_dev *pci_dev = to_pci_dev(ivdev->dev);
 	struct device *dev = &ivdev->auxdev.dev;
 	struct intel_pmt_header *header = &entry->header;
 	u8 bir;

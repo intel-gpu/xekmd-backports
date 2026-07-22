@@ -8,6 +8,7 @@
 #include <drm/drm_managed.h>
 
 #include "xe_assert.h"
+#include "xe_configfs.h"
 #include "xe_device.h"
 #include "xe_gt_sriov_pf.h"
 #include "xe_module.h"
@@ -19,9 +20,14 @@
 #include "xe_sriov_pf_sysfs.h"
 #include "xe_sriov_printk.h"
 
+static bool wanted_admin_only(struct xe_device *xe)
+{
+	return xe_configfs_admin_only_pf(to_pci_dev(xe->drm.dev));
+}
+
 static unsigned int wanted_max_vfs(struct xe_device *xe)
 {
-	return xe_modparam.max_vfs;
+	return xe_configfs_get_max_vfs(to_pci_dev(xe->drm.dev));
 }
 
 static int pf_reduce_totalvfs(struct xe_device *xe, int limit)
@@ -73,6 +79,7 @@ bool xe_sriov_pf_readiness(struct xe_device *xe)
 
 	pf_reduce_totalvfs(xe, newlimit);
 
+	xe->sriov.pf.admin_only = wanted_admin_only(xe);
 	xe->sriov.pf.device_total_vfs = totalvfs;
 	xe->sriov.pf.driver_max_vfs = newlimit;
 
@@ -107,6 +114,8 @@ int xe_sriov_pf_init_early(struct xe_device *xe)
 	xe_guard_init(&xe->sriov.pf.guard_vfs_enabling, "vfs_enabling");
 
 	xe_sriov_pf_service_init(xe);
+
+	xe_mert_init_early(xe);
 
 	return 0;
 }

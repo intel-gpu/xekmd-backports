@@ -17,7 +17,7 @@
 
 #include <uapi/drm/xe_drm.h>
 
-#include "xe_gt_debug.h"
+#include "prelim/xe_gt_debug.h"
 
 struct xe_device;
 struct task_struct;
@@ -27,6 +27,8 @@ struct xe_hw_engine;
 struct workqueue_struct;
 struct xe_exec_queue;
 struct xe_lrc;
+struct xe_vm;
+struct xe_gt;
 
 #define CONFIG_DRM_XE_DEBUGGER_EVENT_QUEUE_SIZE 64
 
@@ -51,7 +53,7 @@ struct xe_eudebug_resource {
 	/** @xa: xarrays for <id->key> */
 	struct xarray xa;
 
-	/** @rh rhashtable for <key->id> */
+	/** @rh: rhashtable for <key->id> */
 	struct rhashtable rh;
 };
 
@@ -89,6 +91,11 @@ struct xe_eudebug_eu_control_ops {
 	/** @stopped: returns bitmap reflecting threads which signal attention */
 	int (*stopped)(struct xe_eudebug *e, struct xe_exec_queue *q,
 		       struct xe_lrc *lrc, u8 *bitmap, unsigned int bitmap_size);
+
+	/** @unlock: unlocks threads reflected by bitmask active on given hwe */
+	int (*unlock)(struct xe_eudebug *e, struct xe_exec_queue *q,
+		      struct xe_lrc *lrc, u8 *bitmap, unsigned int bitmap_size);
+
 };
 
 /**
@@ -104,6 +111,7 @@ struct xe_eudebug {
 	/** @connection_link: our link into the xe_device:eudebug.list */
 	struct list_head connection_link;
 
+	/** @connection: eu debug connection status */
 	struct {
 		/** @status: connected = 1, disconnected = error */
 #define XE_EUDEBUG_STATUS_CONNECTED 1
@@ -131,7 +139,7 @@ struct xe_eudebug {
 	/** @discovery_work: worker to discover resources for target_task */
 	struct work_struct discovery_work;
 
-	/** eu_lock: guards operations on eus (eu thread control and attention) */
+	/** @eu_lock: guards operations on eus (eu thread control and attention) */
 	struct mutex eu_lock;
 
 	/** @events: kfifo queue of to-be-delivered events */
@@ -154,7 +162,7 @@ struct xe_eudebug {
 		atomic_long_t seqno;
 	} events;
 
-	/* user fences tracked by this debugger */
+	/** @acks: user fences tracked by this debugger */
 	struct {
 		/** @lock: guards access to tree */
 		spinlock_t lock;
@@ -162,7 +170,7 @@ struct xe_eudebug {
 		struct rb_root tree;
 	} acks;
 
-	/** @ops operations for eu_control */
+	/** @ops: operations for eu_control */
 	struct xe_eudebug_eu_control_ops *ops;
 
 	/** @pf_lock: guards access to pagefaults list*/
@@ -173,7 +181,7 @@ struct xe_eudebug {
 	 * @pf_fence: fence on operations of eus (eu thread control and attention)
 	 * when page faults are being handled, protected by @eu_lock.
 	 */
-	struct dma_fence __rcu *pf_fence;
+	struct dma_fence *pf_fence;
 };
 
 /**
@@ -259,13 +267,13 @@ struct xe_eudebug_event_exec_queue {
 	/** @exec_queue_handle: engine handle */
 	u64 exec_queue_handle;
 
-	/** @engine_handle: engine class */
+	/** @engine_class: engine class */
 	u32 engine_class;
 
 	/** @width: submission width (number BB per exec) for this exec queue */
 	u32 width;
 
-	/** @lrc_handles: handles for each logical ring context created with this exec queue */
+	/** @lrc_handle: handles for each logical ring context created with this exec queue */
 	u64 lrc_handle[] __counted_by(width);
 };
 
@@ -305,29 +313,50 @@ struct xe_eudebug_event_vm_bind {
 	/** @base: base event */
 	struct xe_eudebug_event base;
 
+	/** @client_handle: client for the VM BIND */
 	u64 client_handle;
+	/** @vm_handle: vm handle */
 	u64 vm_handle;
 
+	/** @flags: flags for bind */
 	u32 flags;
+	/** @num_binds: number of binds user should receive */
 	u32 num_binds;
 };
 
+/**
+ * struct xe_eudebug_event_vm_bind_op - Internal event for vm bind/unbind instance operation
+ */
 struct xe_eudebug_event_vm_bind_op {
 	/** @base: base event */
 	struct xe_eudebug_event base;
+
+	/** @vm_bind_ref_seqno: seqno of the struct xe_eudebug_event_vm_bind */
 	u64 vm_bind_ref_seqno;
+	/** @num_extensions: number of extensions for this bind */
 	u64 num_extensions;
 
+	/** @addr: address of the bind */
 	u64 addr; /* Zero for unmap all ? */
+	/** @range: range of the bind */
 	u64 range; /* Zero for unmap all ? */
 };
 
+/**
+ * struct xe_eudebug_event_vm_bind_ufence - Internal event for vm bind ufence
+ */
 struct xe_eudebug_event_vm_bind_ufence {
+	/** @base: base event */
 	struct xe_eudebug_event base;
+	/** @vm_bind_ref_seqno: seqno of parent struct xe_eudebug_event_vm_bind */
 	u64 vm_bind_ref_seqno;
 };
 
+/**
+ * struct xe_eudebug_event_metadata - Internal event for metadata
+ */
 struct xe_eudebug_event_metadata {
+	/** @base: base event */
 	struct xe_eudebug_event base;
 
 	/** @client_handle: client for the attention */
@@ -336,18 +365,25 @@ struct xe_eudebug_event_metadata {
 	/** @metadata_handle: debug metadata handle it's created/destroyed */
 	u64 metadata_handle;
 
-	/* @type: metadata type, refer to xe_drm.h for options */
+	/** @type: metadata type, refer to xe_drm.h for options */
 	u64 type;
 
-	/* @len: size of metadata paylad */
+	/** @len: size of metadata paylad */
 	u64 len;
 };
 
+/**
+ * struct xe_eudebug_event_vm_bind_op_metadata - Internal event for vm bind metadata
+ */
 struct xe_eudebug_event_vm_bind_op_metadata {
+	/** @base: base event */
 	struct xe_eudebug_event base;
+	/** @vm_bind_op_ref_seqno: seqno of parent struct xe_eudebug_event_vm_bind_op */
 	u64 vm_bind_op_ref_seqno;
 
+	/** @metadata_handle: metadata handle */
 	u64 metadata_handle;
+	/** @metadata_cookie: metadata cookie */
 	u64 metadata_cookie;
 };
 
@@ -397,32 +433,40 @@ struct xe_eudebug_pagefault {
 	struct xe_exec_queue *q;
 	/** @lrc_idx: lrc index of the workload which raised pagefault */
 	int lrc_idx;
+	/** @vm: vm involved in a pagefault **/
+	struct xe_vm *vm;
+	/** @gt: gt involved in a pagefault **/
+	struct xe_gt *gt;
 
-	/* pagefault raw partial data passed from guc*/
+	/** @fault: pagefault raw partial data passed from guc*/
 	struct {
 		/** @addr: ppgtt address where the pagefault occurred */
 		u64 addr;
+		/** @type: type of fault */
 		int type;
+		/** @level: level of fault */
 		int level;
+		/** @access: access type */
 		int access;
 	} fault;
 
+	/** @attentions: struct holding aggregated attensions */
 	struct {
 		/** @before: state of attention bits before page fault WA processing*/
-		struct xe_eu_attentions before;
+		struct prelim_xe_eu_attentions before;
 		/**
 		 * @after: status of attention bits during page fault WA processing.
 		 * It includes eu threads where attention bits are turned on for
 		 * reasons other than page fault WA (breakpoint, interrupt, etc.).
 		 */
-		struct xe_eu_attentions after;
+		struct prelim_xe_eu_attentions after;
 		/**
 		 * @resolved: state of the attention bits after page fault WA.
 		 * It includes the eu thread that caused the page fault.
 		 * To determine the eu thread that caused the page fault,
 		 * do XOR attentions.after and attentions.resolved.
 		 */
-		struct xe_eu_attentions resolved;
+		struct prelim_xe_eu_attentions resolved;
 	} attentions;
 
 	/**
@@ -433,6 +477,26 @@ struct xe_eudebug_pagefault {
 	bool deferred_resolved;
 };
 
+/**
+ * struct xe_eudebug_event_sync_host - Internal event for sync host.
+ */
+struct xe_eudebug_event_sync_host {
+	/** @base: base event */
+	struct xe_eudebug_event base;
+
+	/** @client_handle: client handle which workload stopped */
+	u64 client_handle;
+
+	/** @exec_queue_handle: handle of exec_queue which eus halted */
+	u64 exec_queue_handle;
+
+	/** @lrc_handle: lrc handle of the workload which eus halted */
+	u64 lrc_handle;
+};
+
+/**
+ * struct xe_eudebug_event_exec_queue_placements - Internal event for exec queue placement.
+ */
 struct xe_eudebug_event_exec_queue_placements {
 	/** @base: base event */
 	struct xe_eudebug_event base;
@@ -446,7 +510,7 @@ struct xe_eudebug_event_exec_queue_placements {
 	/** @exec_queue_handle: engine handle */
 	u64 exec_queue_handle;
 
-	/** @engine_handle: engine class */
+	/** @lrc_handle: lrc handle of the workload which caused this event */
 	u64 lrc_handle;
 
 	/** @num_placements: all possible placements for given lrc */
@@ -455,8 +519,11 @@ struct xe_eudebug_event_exec_queue_placements {
 	/** @pad: padding */
 	u32 pad;
 
-	/** @instances: num_placements sized array containing drm_xe_engine_class_instance*/
-	u64 instances[]; __counted_by(num_placements);
+	/**
+	 * @instances: num_placements sized array containing
+	 * struct drm_xe_engine_class_instance
+	 */
+	u64 instances[] __counted_by(num_placements);
 };
 
 #endif /* _XE_EUDEBUG_TYPES_H_ */

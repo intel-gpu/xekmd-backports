@@ -88,18 +88,16 @@
  * components. Please add an unreserved ioctl number here to reserve that
  * number.
  */
-/* SPDX-License-Identifier: MIT */
-/*
- * Copyright © 2023 Intel Corporation
- */
+#define PRELIM_DRM_XE_DEBUG_METADATA_DESTROY	0x5c
+#define PRELIM_DRM_XE_DEBUG_METADATA_CREATE	0x5b
+#define PRELIM_DRM_XE_EUDEBUG_CONNECT		0x59
 
-#define PRELIM_DRM_XE_EUDEBUG_CONNECT 0x59
-#define PRELIM_DRM_XE_DEBUG_METADATA_CREATE 0x5b
-#define PRELIM_DRM_XE_DEBUG_METADATA_DESTROY 0x5c
-
-#define PRELIM_DRM_IOCTL_XE_EUDEBUG_CONNECT		DRM_IOWR(DRM_COMMAND_BASE + PRELIM_DRM_XE_EUDEBUG_CONNECT, struct prelim_drm_xe_eudebug_connect)
-#define PRELIM_DRM_IOCTL_XE_DEBUG_METADATA_CREATE	 DRM_IOWR(DRM_COMMAND_BASE + PRELIM_DRM_XE_DEBUG_METADATA_CREATE, struct prelim_drm_xe_debug_metadata_create)
-#define PRELIM_DRM_IOCTL_XE_DEBUG_METADATA_DESTROY	 DRM_IOW(DRM_COMMAND_BASE + PRELIM_DRM_XE_DEBUG_METADATA_DESTROY, struct prelim_drm_xe_debug_metadata_destroy)
+#define PRELIM_DRM_IOCTL_XE_EUDEBUG_CONNECT \
+		DRM_IOWR(DRM_COMMAND_BASE + PRELIM_DRM_XE_EUDEBUG_CONNECT, struct prelim_drm_xe_eudebug_connect)
+#define PRELIM_DRM_IOCTL_XE_DEBUG_METADATA_CREATE \
+		DRM_IOWR(DRM_COMMAND_BASE + PRELIM_DRM_XE_DEBUG_METADATA_CREATE, struct prelim_drm_xe_debug_metadata_create)
+#define PRELIM_DRM_IOCTL_XE_DEBUG_METADATA_DESTROY \
+		DRM_IOW(DRM_COMMAND_BASE + PRELIM_DRM_XE_DEBUG_METADATA_DESTROY, struct prelim_drm_xe_debug_metadata_destroy)
 
 struct prelim_drm_xe_vm_bind_op_ext_attach_debug {
 	/** @base: base user extension */
@@ -118,10 +116,11 @@ struct prelim_drm_xe_vm_bind_op_ext_attach_debug {
 	__u64 reserved;
 };
 
-#define PRELIM_XE_VM_BIND_OP_EXTENSIONS_ATTACH_DEBUG (PRELIM_DRM_XE_VALUE_INDICATOR)
+#define PRELIM_XE_VM_BIND_OP_EXTENSIONS_ATTACH_DEBUG	(PRELIM_DRM_XE_VALUE_INDICATOR)
 
 #define   PRELIM_DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG		(PRELIM_DRM_XE_VALUE_INDICATOR)
 #define     PRELIM_DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE		(1 << 0)
+#define     PRELIM_DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE	(1 << 1)
 
 /*
  * Debugger ABI (ioctl and events) Version History:
@@ -129,7 +128,6 @@ struct prelim_drm_xe_vm_bind_op_ext_attach_debug {
  * 1 - Initial version
  */
 #define PRELIM_DRM_XE_EUDEBUG_VERSION 1
-
 struct prelim_drm_xe_eudebug_connect {
 	/** @extensions: Pointer to the first extension struct, if any */
 	__u64 extensions;
@@ -141,7 +139,7 @@ struct prelim_drm_xe_eudebug_connect {
 };
 
 /*
- * struct drm_xe_debug_metadata_create - Create debug metadata
+ * struct prelim_drm_xe_debug_metadata_create - Create debug metadata
  *
  * Add a region of user memory to be marked as debug metadata.
  * When the debugger attaches, the metadata regions will be delivered
@@ -176,7 +174,7 @@ struct prelim_drm_xe_debug_metadata_create {
 };
 
 /**
- * struct drm_xe_debug_metadata_destroy - Destroy debug metadata
+ * struct prelim_drm_xe_debug_metadata_destroy - Destroy debug metadata
  *
  * Destroy debug metadata.
  */
@@ -187,6 +185,7 @@ struct prelim_drm_xe_debug_metadata_destroy {
 	/** @metadata_id: metadata handle to destroy */
 	__u32 metadata_id;
 };
+
 
 /**
  * Do a eudebug event read for a debugger connection.
@@ -204,19 +203,19 @@ struct prelim_drm_xe_eudebug_event {
 	__u32 len;
 
 	__u16 type;
-#define PRELIM_DRM_XE_EUDEBUG_EVENT_NONE		0
-#define PRELIM_DRM_XE_EUDEBUG_EVENT_READ		1
-#define PRELIM_DRM_XE_EUDEBUG_EVENT_OPEN		2
-#define PRELIM_DRM_XE_EUDEBUG_EVENT_VM			3
-#define PRELIM_DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE		4
-#define PRELIM_DRM_XE_EUDEBUG_EVENT_EU_ATTENTION	5
-#define PRELIM_DRM_XE_EUDEBUG_EVENT_VM_BIND		6
-#define PRELIM_DRM_XE_EUDEBUG_EVENT_VM_BIND_OP		7
-#define PRELIM_DRM_XE_EUDEBUG_EVENT_VM_BIND_UFENCE	8
-#define PRELIM_DRM_XE_EUDEBUG_EVENT_METADATA		9
-#define PRELIM_DRM_XE_EUDEBUG_EVENT_VM_BIND_OP_METADATA	10
-#define PRELIM_DRM_XE_EUDEBUG_EVENT_PAGEFAULT		11
-#define PRELIM_DRM_XE_EUDEBUG_EVENT_SYNC_HOST 		12
+#define PRELIM_DRM_XE_EUDEBUG_EVENT_NONE			0
+#define PRELIM_DRM_XE_EUDEBUG_EVENT_READ			1
+#define PRELIM_DRM_XE_EUDEBUG_EVENT_OPEN			2
+#define PRELIM_DRM_XE_EUDEBUG_EVENT_VM				3
+#define PRELIM_DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE			4
+#define PRELIM_DRM_XE_EUDEBUG_EVENT_EU_ATTENTION		5
+#define PRELIM_DRM_XE_EUDEBUG_EVENT_VM_BIND			6
+#define PRELIM_DRM_XE_EUDEBUG_EVENT_VM_BIND_OP			7
+#define PRELIM_DRM_XE_EUDEBUG_EVENT_VM_BIND_UFENCE		8
+#define PRELIM_DRM_XE_EUDEBUG_EVENT_METADATA			9
+#define PRELIM_DRM_XE_EUDEBUG_EVENT_VM_BIND_OP_METADATA 	10
+#define PRELIM_DRM_XE_EUDEBUG_EVENT_PAGEFAULT			11
+#define PRELIM_DRM_XE_EUDEBUG_EVENT_SYNC_HOST			12
 #define PRELIM_DRM_XE_EUDEBUG_EVENT_EXEC_QUEUE_PLACEMENTS	13
 
 	__u16 flags;
@@ -253,22 +252,6 @@ struct prelim_drm_xe_eudebug_event_exec_queue {
 	__u64 lrc_handle[];
 };
 
-struct prelim_drm_xe_eudebug_event_exec_queue_placements {
-	struct prelim_drm_xe_eudebug_event base;
-
-	__u64 client_handle;
-	__u64 vm_handle;
-	__u64 exec_queue_handle;
-	__u64 lrc_handle;
-	__u32 num_placements;
-	__u32 pad;
-	/**
-	 * @instances: user pointer to num_placements sized array of struct
-	 * drm_xe_engine_class_instance
-	 */
-	__u64 instances[];
-};
-
 struct prelim_drm_xe_eudebug_event_eu_attention {
 	struct prelim_drm_xe_eudebug_event base;
 
@@ -286,7 +269,7 @@ struct prelim_drm_xe_eudebug_eu_control {
 #define PRELIM_DRM_XE_EUDEBUG_EU_CONTROL_CMD_INTERRUPT_ALL	0
 #define PRELIM_DRM_XE_EUDEBUG_EU_CONTROL_CMD_STOPPED		1
 #define PRELIM_DRM_XE_EUDEBUG_EU_CONTROL_CMD_RESUME		2
-
+#define PRELIM_DRM_XE_EUDEBUG_EU_CONTROL_CMD_UNLOCK		3
 	__u32 cmd;
 	__u32 flags;
 
@@ -334,7 +317,7 @@ struct prelim_drm_xe_eudebug_eu_control {
  * Client's UFENCE sync will be held by the driver: client's
  * drm_xe_wait_ufence will not complete and the value of the ufence
  * won't appear until ufence is acked by the debugger process calling
- * DRM_XE_EUDEBUG_IOCTL_ACK_EVENT with the event_ufence.base.seqno.
+ * PRELIM_DRM_XE_EUDEBUG_IOCTL_ACK_EVENT with the event_ufence.base.seqno.
  * This will signal the fence, .value will update and the wait will
  * complete allowing the client to continue.
  *
@@ -427,6 +410,28 @@ struct prelim_drm_xe_eudebug_event_pagefault {
 	__u32 bitmask_size;
 	__u64 pagefault_address;
 	__u8 bitmask[];
+};
+
+struct prelim_drm_xe_eudebug_event_sync_host {
+	struct prelim_drm_xe_eudebug_event base;
+	__u64 client_handle;
+	__u64 exec_queue_handle;
+	__u64 lrc_handle;
+};
+
+struct prelim_drm_xe_eudebug_event_exec_queue_placements {
+	struct prelim_drm_xe_eudebug_event base;
+	__u64 client_handle;
+	__u64 vm_handle;
+	__u64 exec_queue_handle;
+	__u64 lrc_handle;
+	__u32 num_placements;
+	__u32 pad;
+	/**
+	 * @instances: user pointer to num_placements sized array of struct
+	 * drm_xe_engine_class_instance
+	 */
+	__u64 instances[];
 };
 
 #endif /* _UAPI_XE_DRM_PRELIM_H_ */

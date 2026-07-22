@@ -87,6 +87,7 @@ struct xe_oa_regs {
 	struct xe_reg oa_ctrl;
 	struct xe_reg oa_debug;
 	struct xe_reg oa_status;
+	struct xe_reg oa_mmio_trg;
 	u32 oa_ctrl_counter_select_mask;
 };
 
@@ -161,8 +162,8 @@ struct xe_oa_buffer {
 	/** @format: xe_bo backing the OA buffer */
 	struct xe_bo *bo;
 
-	/** @vaddr: mapped vaddr of the OA buffer */
-	u8 *vaddr;
+	/** @bounce: bounce buffer used with xe_map layer */
+	void *bounce;
 
 	/** @ptr_lock: Lock protecting reads/writes to head/tail pointers */
 	spinlock_t ptr_lock;
@@ -238,9 +239,6 @@ struct xe_oa_stream {
 	/** @poll_period_ns: hrtimer period for checking OA buffer for available data */
 	u64 poll_period_ns;
 
-	/** @override_gucrc: GuC RC has been overridden for the OA stream */
-	bool override_gucrc;
-
 	/** @oa_status: temporary storage for oa_status register value */
 	u32 oa_status;
 
@@ -264,5 +262,8 @@ struct xe_oa_stream {
 
 	/** @syncs: syncs to wait on and to signal */
 	struct xe_sync_entry *syncs;
+
+	/** @fw_ref: Forcewake reference */
+	unsigned int fw_ref;
 };
 #endif

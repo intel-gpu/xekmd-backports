@@ -3,7 +3,7 @@ config XE_VFIO_PCI
 	tristate "VFIO support for Intel Graphics"
 	depends on m
 	depends on m
-	depends on DRM_XE
+	depends on DRM_XE && PCI_IOV
 	select VFIO_PCI_CORE
 	help
 	  This option enables device specific VFIO driver variant for Intel Graphics.

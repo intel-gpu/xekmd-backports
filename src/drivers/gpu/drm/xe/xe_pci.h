@@ -8,8 +8,8 @@
 
 struct pci_dev;
 
-struct xe_device *xe_pci_get_pf(struct pci_dev *pdev);
 int xe_register_pci_driver(void);
 void xe_unregister_pci_driver(void);
+struct xe_device *xe_pci_to_pf_device(struct pci_dev *pdev);
 
 #endif

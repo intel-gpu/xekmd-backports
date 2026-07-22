@@ -119,6 +119,7 @@
 
 #define CS_DEBUG_MODE2(base)			XE_REG((base) + 0xd8, XE_REG_OPTION_MASKED)
 #define   INSTRUCTION_STATE_CACHE_INVALIDATE	REG_BIT(6)
+#define   GLOBAL_DEBUG_ENABLE			REG_BIT(5)
 
 #define FF_SLICE_CS_CHICKEN1(base)		XE_REG((base) + 0xe0, XE_REG_OPTION_MASKED)
 #define   FFSC_PERCTX_PREEMPT_CTRL		REG_BIT(14)
@@ -129,12 +130,16 @@
 
 #define INDIRECT_RING_STATE(base)		XE_REG((base) + 0x108)
 
-#define CS_DEBUG_MODE2(base)			XE_REG((base) + 0xd8, XE_REG_OPTION_MASKED)
-#define   INST_STATE_CACHE_INVALIDATE		REG_BIT(6)
-#define   GLOBAL_DEBUG_ENABLE			REG_BIT(5)
-
 #define RING_BBADDR(base)			XE_REG((base) + 0x140)
 #define RING_BBADDR_UDW(base)			XE_REG((base) + 0x168)
+
+#define PR_CTR_CTRL(base)			XE_REG((base) + 0x178)
+#define   CTR_COUNT_SELECT_FF			REG_BIT(31)
+#define   CTR_LOGIC_OP_MASK			REG_GENMASK(30, 0)
+#define     CTR_START				0
+#define     CTR_STOP				1
+#define   CTR_LOGIC_OP(OP)			REG_FIELD_PREP(CTR_LOGIC_OP_MASK, CTR_##OP)
+#define PR_CTR_THRSH(base)			XE_REG((base) + 0x17c)
 
 #define BCS_SWCTRL(base)			XE_REG((base) + 0x200, XE_REG_OPTION_MASKED)
 #define   BCS_SWCTRL_DISABLE_256B		REG_BIT(2)
@@ -165,6 +170,8 @@
 #define RING_MODE(base)				XE_REG((base) + 0x29c)
 #define   GFX_DISABLE_LEGACY_MODE		REG_BIT(3)
 #define   GFX_MSIX_INTERRUPT_ENABLE		REG_BIT(13)
+
+#define RING_CSMQDEBUG(base)			XE_REG((base) + 0x2b0)
 
 #define RING_TIMESTAMP(base)			XE_REG((base) + 0x358)
 

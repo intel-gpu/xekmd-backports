@@ -10,7 +10,8 @@
 
 #include <drm/drm_module.h>
 
-#include "xe_device.h"
+#include "xe_defaults.h"
+#include "xe_device_types.h"
 #include "xe_drv.h"
 #include "xe_configfs.h"
 #include "xe_hw_fence.h"
@@ -20,51 +21,38 @@
 #include "xe_observation.h"
 #include "xe_sched_job.h"
 
-#if IS_ENABLED(CPTCFG_DRM_XE_DEBUG)
-#define DEFAULT_GUC_LOG_LEVEL		3
-#else
-#define DEFAULT_GUC_LOG_LEVEL		1
-#endif
-
-#define DEFAULT_PROBE_DISPLAY		true
-#define DEFAULT_VRAM_BAR_SIZE		0
-#define DEFAULT_FORCE_PROBE		CPTCFG_DRM_XE_FORCE_PROBE
-#define DEFAULT_MAX_VFS			~0
-#define DEFAULT_MAX_VFS_STR		"unlimited"
-#define DEFAULT_WEDGED_MODE		XE_WEDGED_MODE_DEFAULT
-#define DEFAULT_WEDGED_MODE_STR		XE_WEDGED_MODE_DEFAULT_STR
-#define DEFAULT_SVM_NOTIFIER_SIZE	512
-
 struct xe_modparam xe_modparam = {
-	.probe_display =	DEFAULT_PROBE_DISPLAY,
-	.guc_log_level =	DEFAULT_GUC_LOG_LEVEL,
-	.force_probe =		DEFAULT_FORCE_PROBE,
+	.probe_display =	XE_DEFAULT_PROBE_DISPLAY,
+	.guc_log_level =	XE_DEFAULT_GUC_LOG_LEVEL,
+	.force_probe =		XE_DEFAULT_FORCE_PROBE,
 #ifdef CONFIG_PCI_IOV
-	.max_vfs =		DEFAULT_MAX_VFS,
+	.max_vfs =		XE_DEFAULT_MAX_VFS,
 #endif
-	.wedged_mode =		DEFAULT_WEDGED_MODE,
-	.svm_notifier_size =	DEFAULT_SVM_NOTIFIER_SIZE,
+	.wedged_mode =		XE_DEFAULT_WEDGED_MODE,
+	.svm_notifier_size =	XE_DEFAULT_SVM_NOTIFIER_SIZE,
 	/* the rest are 0 by default */
 };
 
 module_param_named(svm_notifier_size, xe_modparam.svm_notifier_size, uint, 0600);
 MODULE_PARM_DESC(svm_notifier_size, "Set the svm notifier size in MiB, must be power of 2 "
-		 "[default=" __stringify(DEFAULT_SVM_NOTIFIER_SIZE) "]");
+		 "[default=" __stringify(XE_DEFAULT_SVM_NOTIFIER_SIZE) "]");
 
 module_param_named_unsafe(force_execlist, xe_modparam.force_execlist, bool, 0444);
 MODULE_PARM_DESC(force_execlist, "Force Execlist submission");
 
+#if IS_ENABLED(CPTCFG_DRM_XE_DISPLAY)
 module_param_named(probe_display, xe_modparam.probe_display, bool, 0444);
 MODULE_PARM_DESC(probe_display, "Probe display HW, otherwise it's left untouched "
-		 "[default=" __stringify(DEFAULT_PROBE_DISPLAY) "])");
+		 "[default=" __stringify(XE_DEFAULT_PROBE_DISPLAY) "])");
+#endif
 
 module_param_named(vram_bar_size, xe_modparam.force_vram_bar_size, int, 0600);
 MODULE_PARM_DESC(vram_bar_size, "Set the vram bar size in MiB (<0=disable-resize, 0=max-needed-size, >0=force-size "
-		 "[default=" __stringify(DEFAULT_VRAM_BAR_SIZE) "])");
+		 "[default=" __stringify(XE_DEFAULT_VRAM_BAR_SIZE) "])");
 
 module_param_named(guc_log_level, xe_modparam.guc_log_level, int, 0600);
 MODULE_PARM_DESC(guc_log_level, "GuC firmware logging level (0=disable, 1=normal, 2..5=verbose-levels "
-		 "[default=" __stringify(DEFAULT_GUC_LOG_LEVEL) "])");
+		 "[default=" __stringify(XE_DEFAULT_GUC_LOG_LEVEL) "])");
 
 module_param_named_unsafe(guc_firmware_path, xe_modparam.guc_firmware_path, charp, 0400);
 MODULE_PARM_DESC(guc_firmware_path,
@@ -81,20 +69,20 @@ MODULE_PARM_DESC(gsc_firmware_path,
 module_param_named_unsafe(force_probe, xe_modparam.force_probe, charp, 0400);
 MODULE_PARM_DESC(force_probe,
 		 "Force probe options for specified devices. See CPTCFG_DRM_XE_FORCE_PROBE for details "
-		 "[default=" DEFAULT_FORCE_PROBE "])");
+		 "[default=" XE_DEFAULT_FORCE_PROBE "])");
 
 #ifdef CONFIG_PCI_IOV
 module_param_named(max_vfs, xe_modparam.max_vfs, uint, 0400);
 MODULE_PARM_DESC(max_vfs,
 		 "Limit number of Virtual Functions (VFs) that could be managed. "
 		 "(0=no VFs; N=allow up to N VFs "
-		 "[default=" DEFAULT_MAX_VFS_STR "])");
+		 "[default=" XE_DEFAULT_MAX_VFS_STR "])");
 #endif
 
 module_param_named_unsafe(wedged_mode, xe_modparam.wedged_mode, uint, 0600);
 MODULE_PARM_DESC(wedged_mode,
 		 "Module's default policy for the wedged mode (0=never, 1=upon-critical-error, 2=upon-any-hang-no-reset "
-		 "[default=" DEFAULT_WEDGED_MODE_STR "])");
+		 "[default=" XE_DEFAULT_WEDGED_MODE_STR "])");
 
 static int xe_check_nomodeset(void)
 {
@@ -144,24 +132,17 @@ static const struct init_funcs init_funcs[] = {
 	},
 };
 
-static int __init xe_call_init_func(unsigned int i)
+static int __init xe_call_init_func(const struct init_funcs *func)
 {
-	if (WARN_ON(i >= ARRAY_SIZE(init_funcs)))
-		return 0;
-	if (!init_funcs[i].init)
-		return 0;
-
-	return init_funcs[i].init();
+	if (func->init)
+		return func->init();
+	return 0;
 }
 
-static void xe_call_exit_func(unsigned int i)
+static void xe_call_exit_func(const struct init_funcs *func)
 {
-	if (WARN_ON(i >= ARRAY_SIZE(init_funcs)))
-		return;
-	if (!init_funcs[i].exit)
-		return;
-
-	init_funcs[i].exit();
+	if (func->exit)
+		func->exit();
 }
 
 static int __init xe_init(void)
@@ -169,10 +150,12 @@ static int __init xe_init(void)
 	int err, i;
 	printk(KERN_INFO "XE Backport init, Module is backported from " CPTCFG_BASE_KERNEL_TAG "\n");
 	for (i = 0; i < ARRAY_SIZE(init_funcs); i++) {
-		err = xe_call_init_func(i);
+		err = xe_call_init_func(init_funcs + i);
 		if (err) {
+			pr_info("%s: module_init aborted at %ps %pe\n",
+				DRIVER_NAME, init_funcs[i].init, ERR_PTR(err));
 			while (i--)
-				xe_call_exit_func(i);
+				xe_call_exit_func(init_funcs + i);
 			return err;
 		}
 	}
@@ -185,7 +168,7 @@ static void __exit xe_exit(void)
 	int i;
 
 	for (i = ARRAY_SIZE(init_funcs) - 1; i >= 0; i--)
-		xe_call_exit_func(i);
+		xe_call_exit_func(init_funcs + i);
 }
 
 module_init(xe_init);

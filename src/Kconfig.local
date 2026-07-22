@@ -67,6 +67,9 @@ config BACKPORTED_DRM_EXEC
 config BACKPORTED_DRM_GPUVM
 	tristate
 	default DRM_GPUVM
+config BACKPORTED_DRM_GPUSVM
+	tristate
+	default DRM_GPUSVM
 config BACKPORTED_DRM_XE
 	tristate
 	default DRM_XE
@@ -163,6 +166,9 @@ config BACKPORTED_INTEL_HID_EVENT
 config BACKPORTED_INTEL_VBTN
 	tristate
 	default INTEL_VBTN
+config BACKPORTED_INTEL_EHL_PSE_IO
+	tristate
+	default INTEL_EHL_PSE_IO
 config BACKPORTED_INTEL_INT0002_VGPIO
 	tristate
 	default INTEL_INT0002_VGPIO
@@ -274,9 +280,15 @@ config BACKPORTED_VFIO_PCI_IGD
 config BACKPORTED_VFIO_PCI_ZDEV_KVM
 	tristate
 	default VFIO_PCI_ZDEV_KVM
+config BACKPORTED_VFIO_PCI_DMABUF
+	tristate
+	default VFIO_PCI_DMABUF
 config BACKPORTED_MLX5_VFIO_PCI
 	tristate
 	default MLX5_VFIO_PCI
+config BACKPORTED_ISM_VFIO_PCI
+	tristate
+	default ISM_VFIO_PCI
 config BACKPORTED_HISI_ACC_VFIO_PCI
 	tristate
 	default HISI_ACC_VFIO_PCI

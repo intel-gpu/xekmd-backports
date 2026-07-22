@@ -43,4 +43,32 @@ static inline struct dma_fence *dma_fence_chain_contained(struct dma_fence *fenc
 	return __bp_to_dma_fence_chain(fence)->fence;
 }
 #endif
-#endif
+
+#ifdef BPM_DMA_FENCE_CHECK_AND_SIGNAL_LOCKED_NOT_PRESENT
+/*
+ * dma_fence_check_and_signal_locked - check if signaled and signal if not
+ * Must be called with fence->lock held.
+ * Returns true if fence was already signaled, false otherwise.
+ */
+static inline bool
+dma_fence_check_and_signal_locked(struct dma_fence *fence)
+{
+	bool was_signaled = test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags);
+
+	dma_fence_signal_locked(fence);
+	return was_signaled;
+}
+#endif /* BPM_DMA_FENCE_CHECK_AND_SIGNAL_LOCKED_NOT_PRESENT */
+
+#ifdef BPM_DMA_FENCE_EXTERN_LOCK_NOT_PRESENT
+#define extern_lock lock
+#endif   /* BPM_DMA_FENCE_EXTERN_LOCK_NOT_PRESENT */
+
+#ifdef BPM_DMA_FENCE_LOCK_IRQSAVE_AND_IRQRESTORE_NOT_PRESENT
+#define dma_fence_lock_irqsave(fence, flags) \
+	spin_lock_irqsave((fence)->lock, flags)
+#define dma_fence_unlock_irqrestore(fence, flags) \
+	spin_unlock_irqrestore((fence)->lock, flags)
+#endif /* BPM_DMA_FENCE_LOCK_IRQSAVE_AND_IRQRESTORE_NOT_PRESENT */
+
+#endif /* __BACKPORT_LINUX_DMA_FENCE_H */

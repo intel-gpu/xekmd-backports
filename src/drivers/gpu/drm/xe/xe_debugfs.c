@@ -20,14 +20,15 @@
 #include "xe_guc_ads.h"
 #include "xe_mmio.h"
 #include "xe_pm.h"
+#include "xe_psmi.h"
 #include "xe_pxp_debugfs.h"
 #include "xe_sriov.h"
 #include "xe_sriov_pf_debugfs.h"
 #include "xe_sriov_vf.h"
 #include "xe_step.h"
 #include "xe_tile_debugfs.h"
-#include "xe_wa.h"
 #include "xe_vsec.h"
+#include "xe_wa.h"
 
 #ifdef CPTCFG_DRM_XE_DEBUG
 #include "xe_bo_evict.h"
@@ -44,7 +45,7 @@ static void read_residency_counter(struct xe_device *xe, struct xe_mmio *mmio,
 	u64 residency = 0;
 	int ret;
 
-	ret = xe_pmt_telem_read(to_pci_dev(xe->drm.dev),
+	ret = xe_pmt_telem_read(xe->drm.dev,
 				xe_mmio_read32(mmio, PUNIT_TELEMETRY_GUID),
 				&residency, offset, sizeof(residency));
 	if (ret != sizeof(residency)) {
@@ -112,7 +113,7 @@ static int info(struct seq_file *m, void *data)
 	struct xe_gt *gt;
 	u8 id;
 
-	xe_pm_runtime_get(xe);
+	guard(xe_pm_runtime)(xe);
 
 	drm_printf(&p, "graphics_verx100 %d\n", xe->info.graphics_verx100);
 	drm_printf(&p, "media_verx100 %d\n", xe->info.media_verx100);
@@ -137,9 +138,10 @@ static int info(struct seq_file *m, void *data)
 			   xe_force_wake_ref(gt_to_fw(gt), XE_FW_GT));
 		drm_printf(&p, "gt%d engine_mask 0x%llx\n", id,
 			   gt->info.engine_mask);
+		drm_printf(&p, "gt%d multi_queue_engine_class_mask 0x%x\n", id,
+			   gt->info.multi_queue_engine_class_mask);
 	}
 
-	xe_pm_runtime_put(xe);
 	return 0;
 }
 
@@ -154,9 +156,8 @@ static int sriov_info(struct seq_file *m, void *data)
 
 static int workarounds(struct xe_device *xe, struct drm_printer *p)
 {
-	xe_pm_runtime_get(xe);
+	guard(xe_pm_runtime)(xe);
 	xe_wa_device_dump(xe, p);
-	xe_pm_runtime_put(xe);
 
 	return 0;
 }
@@ -178,7 +179,7 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
 
 	xe = node_to_xe(m->private);
 	p = drm_seq_file_printer(m);
-	xe_pm_runtime_get(xe);
+	guard(xe_pm_runtime)(xe);
 	mmio = xe_root_tile_mmio(xe);
 	static const struct {
 		u32 offset;
@@ -186,6 +187,7 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
 	} residencies[] = {
 		{BMG_G2_RESIDENCY_OFFSET, "Package G2"},
 		{BMG_G6_RESIDENCY_OFFSET, "Package G6"},
+		{BMG_G7_RESIDENCY_OFFSET, "Package G7"},
 		{BMG_G8_RESIDENCY_OFFSET, "Package G8"},
 		{BMG_G10_RESIDENCY_OFFSET, "Package G10"},
 		{BMG_MODS_RESIDENCY_OFFSET, "Package ModS"}
@@ -194,7 +196,6 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
 	for (int i = 0; i < ARRAY_SIZE(residencies); i++)
 		read_residency_counter(xe, mmio, residencies[i].offset, residencies[i].name, &p);
 
-	xe_pm_runtime_put(xe);
 	return 0;
 }
 
@@ -206,7 +207,7 @@ static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
 
 	xe = node_to_xe(m->private);
 	p = drm_seq_file_printer(m);
-	xe_pm_runtime_get(xe);
+	guard(xe_pm_runtime)(xe);
 	mmio = xe_root_tile_mmio(xe);
 
 	static const struct {
@@ -221,7 +222,6 @@ static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
 	for (int i = 0; i < ARRAY_SIZE(residencies); i++)
 		read_residency_counter(xe, mmio, residencies[i].offset, residencies[i].name, &p);
 
-	xe_pm_runtime_put(xe);
 	return 0;
 }
 
@@ -319,7 +319,7 @@ static int wedged_mode_set_reset_policy(struct xe_device *xe, enum xe_wedged_mod
 	int ret;
 	u8 id;
 
-	xe_pm_runtime_get(xe);
+	guard(xe_pm_runtime)(xe);
 	for_each_gt(gt, xe, id) {
 		ret = __wedged_mode_set_reset_policy(gt, mode);
 		if (ret) {
@@ -327,11 +327,9 @@ static int wedged_mode_set_reset_policy(struct xe_device *xe, enum xe_wedged_mod
 				xe->wedged.inconsistent_reset = true;
 				drm_err(&xe->drm, "Inconsistent reset policy state between GTs\n");
 			}
-			xe_pm_runtime_put(xe);
 			return ret;
 		}
 	}
-	xe_pm_runtime_put(xe);
 
 	xe->wedged.inconsistent_reset = false;
 
@@ -385,6 +383,39 @@ static const struct file_operations wedged_mode_fops = {
 	.write = wedged_mode_set,
 };
 
+static ssize_t page_reclaim_hw_assist_show(struct file *f, char __user *ubuf,
+					   size_t size, loff_t *pos)
+{
+	struct xe_device *xe = file_inode(f)->i_private;
+	char buf[8];
+	int len;
+
+	len = scnprintf(buf, sizeof(buf), "%d\n", xe->info.has_page_reclaim_hw_assist);
+	return simple_read_from_buffer(ubuf, size, pos, buf, len);
+}
+
+static ssize_t page_reclaim_hw_assist_set(struct file *f, const char __user *ubuf,
+					  size_t size, loff_t *pos)
+{
+	struct xe_device *xe = file_inode(f)->i_private;
+	bool val;
+	ssize_t ret;
+
+	ret = kstrtobool_from_user(ubuf, size, &val);
+	if (ret)
+		return ret;
+
+	xe->info.has_page_reclaim_hw_assist = val;
+
+	return size;
+}
+
+static const struct file_operations page_reclaim_hw_assist_fops = {
+	.owner = THIS_MODULE,
+	.read = page_reclaim_hw_assist_show,
+	.write = page_reclaim_hw_assist_set,
+};
+
 static ssize_t atomic_svm_timeslice_ms_show(struct file *f, char __user *ubuf,
 					    size_t size, loff_t *pos)
 {
@@ -420,6 +451,74 @@ static const struct file_operations atomic_svm_timeslice_ms_fops = {
 	.write = atomic_svm_timeslice_ms_set,
 };
 
+static ssize_t min_run_period_lr_ms_show(struct file *f, char __user *ubuf,
+					 size_t size, loff_t *pos)
+{
+	struct xe_device *xe = file_inode(f)->i_private;
+	char buf[32];
+	int len = 0;
+
+	len = scnprintf(buf, sizeof(buf), "%d\n", xe->min_run_period_lr_ms);
+
+	return simple_read_from_buffer(ubuf, size, pos, buf, len);
+}
+
+static ssize_t min_run_period_lr_ms_set(struct file *f, const char __user *ubuf,
+					size_t size, loff_t *pos)
+{
+	struct xe_device *xe = file_inode(f)->i_private;
+	u32 min_run_period_lr_ms;
+	ssize_t ret;
+
+	ret = kstrtouint_from_user(ubuf, size, 0, &min_run_period_lr_ms);
+	if (ret)
+		return ret;
+
+	xe->min_run_period_lr_ms = min_run_period_lr_ms;
+
+	return size;
+}
+
+static const struct file_operations min_run_period_lr_ms_fops = {
+	.owner = THIS_MODULE,
+	.read = min_run_period_lr_ms_show,
+	.write = min_run_period_lr_ms_set,
+};
+
+static ssize_t min_run_period_pf_ms_show(struct file *f, char __user *ubuf,
+					 size_t size, loff_t *pos)
+{
+	struct xe_device *xe = file_inode(f)->i_private;
+	char buf[32];
+	int len = 0;
+
+	len = scnprintf(buf, sizeof(buf), "%d\n", xe->min_run_period_pf_ms);
+
+	return simple_read_from_buffer(ubuf, size, pos, buf, len);
+}
+
+static ssize_t min_run_period_pf_ms_set(struct file *f, const char __user *ubuf,
+					size_t size, loff_t *pos)
+{
+	struct xe_device *xe = file_inode(f)->i_private;
+	u32 min_run_period_pf_ms;
+	ssize_t ret;
+
+	ret = kstrtouint_from_user(ubuf, size, 0, &min_run_period_pf_ms);
+	if (ret)
+		return ret;
+
+	xe->min_run_period_pf_ms = min_run_period_pf_ms;
+
+	return size;
+}
+
+static const struct file_operations min_run_period_pf_ms_fops = {
+	.owner = THIS_MODULE,
+	.read = min_run_period_pf_ms_show,
+	.write = min_run_period_pf_ms_set,
+};
+
 static ssize_t disable_late_binding_show(struct file *f, char __user *ubuf,
 					 size_t size, loff_t *pos)
 {
@@ -438,17 +537,14 @@ static ssize_t disable_late_binding_set(struct file *f, const char __user *ubuf,
 {
 	struct xe_device *xe = file_inode(f)->i_private;
 	struct xe_late_bind *late_bind = &xe->late_bind;
-	u32 uval;
-	ssize_t ret;
+	bool val;
+	int ret;
 
-	ret = kstrtouint_from_user(ubuf, size, sizeof(uval), &uval);
+	ret = kstrtobool_from_user(ubuf, size, &val);
 	if (ret)
 		return ret;
 
-	if (uval > 1)
-		return -EINVAL;
-
-	late_bind->disable = !!uval;
+	late_bind->disable = val;
 	return size;
 }
 
@@ -478,7 +574,7 @@ void xe_debugfs_register(struct xe_device *xe)
 					 ARRAY_SIZE(debugfs_residencies),
 					 root, minor);
 		fault_create_debugfs_attr("inject_csc_hw_error", root,
-					 &inject_csc_hw_error);
+					  &inject_csc_hw_error);
 	}
 
 	debugfs_create_file("forcewake_all", 0400, root, xe,
@@ -490,8 +586,22 @@ void xe_debugfs_register(struct xe_device *xe)
 	debugfs_create_file("atomic_svm_timeslice_ms", 0600, root, xe,
 			    &atomic_svm_timeslice_ms_fops);
 
+	debugfs_create_file("min_run_period_lr_ms", 0600, root, xe,
+			    &min_run_period_lr_ms_fops);
+
+	debugfs_create_file("min_run_period_pf_ms", 0600, root, xe,
+			    &min_run_period_pf_ms_fops);
+
 	debugfs_create_file("disable_late_binding", 0600, root, xe,
 			    &disable_late_binding_fops);
+
+	/*
+	 * Don't expose page reclaim configuration file if not supported by the
+	 * hardware initially.
+	 */
+	if (xe->info.has_page_reclaim_hw_assist)
+		debugfs_create_file("page_reclaim_hw_assist", 0600, root, xe,
+				    &page_reclaim_hw_assist_fops);
 
 	man = ttm_manager_type(bdev, XE_PL_TT);
 	ttm_resource_manager_create_debugfs(man, root, "gtt_mm");
@@ -507,6 +617,8 @@ void xe_debugfs_register(struct xe_device *xe)
 		xe_gt_debugfs_register(gt);
 
 	xe_pxp_debugfs_register(xe->pxp);
+
+	xe_psmi_debugfs_register(xe);
 
 	fault_create_debugfs_attr("fail_gt_reset", root, &gt_reset_failure);
 

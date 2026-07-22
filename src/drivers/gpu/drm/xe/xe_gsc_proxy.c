@@ -18,8 +18,8 @@
 #include "xe_force_wake.h"
 #include "xe_gsc.h"
 #include "xe_gsc_submit.h"
-#include "xe_gt.h"
 #include "xe_gt_printk.h"
+#include "xe_gt_types.h"
 #include "xe_map.h"
 #include "xe_mmio.h"
 #include "xe_pm.h"
@@ -439,19 +439,16 @@ static void xe_gsc_proxy_stop(struct xe_gsc *gsc)
 {
 	struct xe_gt *gt = gsc_to_gt(gsc);
 	struct xe_device *xe = gt_to_xe(gt);
-	unsigned int fw_ref = 0;
 
 	/* disable HECI2 IRQs */
-	xe_pm_runtime_get(xe);
-	fw_ref = xe_force_wake_get(gt_to_fw(gt), XE_FW_GSC);
-	if (!fw_ref)
-		xe_gt_err(gt, "failed to get forcewake to disable GSC interrupts\n");
+	scoped_guard(xe_pm_runtime, xe) {
+		CLASS(xe_force_wake, fw_ref)(gt_to_fw(gt), XE_FW_GSC);
+		if (!fw_ref.domains)
+			xe_gt_err(gt, "failed to get forcewake to disable GSC interrupts\n");
 
-	/* try do disable irq even if forcewake failed */
-	gsc_proxy_irq_toggle(gsc, false);
-
-	xe_force_wake_put(gt_to_fw(gt), fw_ref);
-	xe_pm_runtime_put(xe);
+		/* try do disable irq even if forcewake failed */
+		gsc_proxy_irq_toggle(gsc, false);
+	}
 
 	xe_gsc_wait_for_worker_completion(gsc);
 	gsc->proxy.started = false;
@@ -467,15 +464,15 @@ static void xe_gsc_proxy_remove(void *arg)
 		return;
 
 	/*
-	* GSC proxy start is an async process that can be ongoing during
-	* Xe module load/unload. Using devm managed action to register
-	* xe_gsc_proxy_stop could cause issues if Xe module unload has
-	* already started when the action is registered, potentially leading
-	* to the cleanup being called at the wrong time. Therefore, instead
-	* of registering a separate devm action to undo what is done in
-	* proxy start, we call it from here, but only if the start has
-	* completed successfully (tracked with the 'started' flag).
-	*/
+	 * GSC proxy start is an async process that can be ongoing during
+	 * Xe module load/unload. Using devm managed action to register
+	 * xe_gsc_proxy_stop could cause issues if Xe module unload has
+	 * already started when the action is registered, potentially leading
+	 * to the cleanup being called at the wrong time. Therefore, instead
+	 * of registering a separate devm action to undo what is done in
+	 * proxy start, we call it from here, but only if the start has
+	 * completed successfully (tracked with the 'started' flag).
+	 */
 	if (gsc->proxy.started)
 		xe_gsc_proxy_stop(gsc);
 

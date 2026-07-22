@@ -21,6 +21,7 @@
 #include "xe_force_wake.h"
 #include "xe_ggtt.h"
 #include "xe_gt.h"
+#include "xe_gt_topology.h"
 #include "xe_guc_hwconfig.h"
 #include "xe_macros.h"
 #include "xe_mmio.h"
@@ -121,7 +122,6 @@ query_engine_cycles(struct xe_device *xe,
 	__ktime_func_t cpu_clock;
 	struct xe_hw_engine *hwe;
 	struct xe_gt *gt;
-	unsigned int fw_ref;
 
 	if (IS_SRIOV_VF(xe))
 		return -EOPNOTSUPP;
@@ -142,9 +142,6 @@ query_engine_cycles(struct xe_device *xe,
 		return -EINVAL;
 
 	eci = &resp.eci;
-	if (eci->gt_id >= xe->info.max_gt_per_tile)
-		return -EINVAL;
-
 	gt = xe_device_get_gt(xe, eci->gt_id);
 	if (!gt)
 		return -EINVAL;
@@ -157,16 +154,13 @@ query_engine_cycles(struct xe_device *xe,
 	if (!hwe)
 		return -EINVAL;
 
-	fw_ref = xe_force_wake_get(gt_to_fw(gt), XE_FORCEWAKE_ALL);
-	if (!xe_force_wake_ref_has_domain(fw_ref, XE_FORCEWAKE_ALL))  {
-		xe_force_wake_put(gt_to_fw(gt), fw_ref);
-		return -EIO;
+	xe_with_force_wake(fw_ref, gt_to_fw(gt), XE_FORCEWAKE_ALL) {
+		if (!xe_force_wake_ref_has_domain(fw_ref.domains, XE_FORCEWAKE_ALL))
+			return -EIO;
+
+		hwe_read_timestamp(hwe, &resp.engine_cycles, &resp.cpu_timestamp,
+				   &resp.cpu_delta, cpu_clock);
 	}
-
-	hwe_read_timestamp(hwe, &resp.engine_cycles, &resp.cpu_timestamp,
-			   &resp.cpu_delta, cpu_clock);
-
-	xe_force_wake_put(gt_to_fw(gt), fw_ref);
 
 	if (GRAPHICS_VER(xe) >= 20)
 		resp.width = 64;
@@ -338,11 +332,20 @@ static int query_config(struct xe_device *xe, struct drm_xe_device_query *query)
 	if (xe->mem.vram)
 		config->info[DRM_XE_QUERY_CONFIG_FLAGS] |=
 			DRM_XE_QUERY_CONFIG_FLAG_HAS_VRAM;
-	if (xe->info.has_usm && IS_ENABLED(CPTCFG_DRM_XE_GPUSVM))
+#if IS_ENABLED(CPTCFG_DRM_XE_GPUSVM) && !defined(BPM_MIGRATE_DEVICE_PFNS_NOT_PRESENT)
+	if (xe->info.has_usm)
 		config->info[DRM_XE_QUERY_CONFIG_FLAGS] |=
 			DRM_XE_QUERY_CONFIG_FLAG_HAS_CPU_ADDR_MIRROR;
+#endif
+	if (GRAPHICS_VER(xe) >= 20)
+		config->info[DRM_XE_QUERY_CONFIG_FLAGS] |=
+			DRM_XE_QUERY_CONFIG_FLAG_HAS_NO_COMPRESSION_HINT;
 	config->info[DRM_XE_QUERY_CONFIG_FLAGS] |=
 			DRM_XE_QUERY_CONFIG_FLAG_HAS_LOW_LATENCY;
+	config->info[DRM_XE_QUERY_CONFIG_FLAGS] |=
+		DRM_XE_QUERY_CONFIG_FLAG_HAS_DISABLE_STATE_CACHE_PERF_FIX;
+	config->info[DRM_XE_QUERY_CONFIG_FLAGS] |=
+		DRM_XE_QUERY_CONFIG_FLAG_HAS_PURGING_SUPPORT;
 	config->info[DRM_XE_QUERY_CONFIG_MIN_ALIGNMENT] =
 		xe->info.vram_flags & XE_VRAM_FLAGS_NEED64K ? SZ_64K : SZ_4K;
 	config->info[DRM_XE_QUERY_CONFIG_VA_BITS] = xe->info.va_bits;
@@ -435,7 +438,7 @@ static int query_hwconfig(struct xe_device *xe,
 			  struct drm_xe_device_query *query)
 {
 	struct xe_gt *gt = xe_root_mmio_gt(xe);
-	size_t size = xe_guc_hwconfig_size(&gt->uc.guc);
+	size_t size = gt ? xe_guc_hwconfig_size(&gt->uc.guc) : 0;
 	void __user *query_ptr = u64_to_user_ptr(query->data);
 	void *hwconfig;
 
@@ -474,7 +477,7 @@ static size_t calc_topo_query_size(struct xe_device *xe)
 			sizeof_field(struct xe_gt, fuse_topo.eu_mask_per_dss);
 
 		/* L3bank mask may not be available for some GTs */
-		if (!XE_WA(gt, no_media_l3))
+		if (xe_gt_topology_report_l3(gt))
 			query_size += sizeof(struct drm_xe_query_topology_mask) +
 				sizeof_field(struct xe_gt, fuse_topo.l3_bank_mask);
 	}
@@ -537,7 +540,7 @@ static int query_gt_topology(struct xe_device *xe,
 		 * mask, then it's better to omit L3 from the query rather than
 		 * reporting bogus or zeroed information to userspace.
 		 */
-		if (!XE_WA(gt, no_media_l3)) {
+		if (xe_gt_topology_report_l3(gt)) {
 			topo.type = DRM_XE_TOPO_L3_BANK;
 			err = copy_mask(&query_ptr, &topo, gt->fuse_topo.l3_bank_mask,
 					sizeof(gt->fuse_topo.l3_bank_mask));
@@ -685,7 +688,9 @@ static int query_oa_units(struct xe_device *xe,
 			du->capabilities = DRM_XE_OA_CAPS_BASE | DRM_XE_OA_CAPS_SYNCS |
 					   DRM_XE_OA_CAPS_OA_BUFFER_SIZE |
 					   DRM_XE_OA_CAPS_WAIT_NUM_REPORTS |
-					   DRM_XE_OA_CAPS_OAM;
+					   DRM_XE_OA_CAPS_OAM |
+					   DRM_XE_OA_CAPS_OA_UNIT_GT_ID;
+			du->gt_id = u->gt->info.id;
 			j = 0;
 			for_each_hw_engine(hwe, gt, hwe_id) {
 				if (!xe_hw_engine_is_reserved(hwe) &&
@@ -746,10 +751,8 @@ static int query_eu_stall(struct xe_device *xe,
 	u32 num_rates;
 	int ret;
 
-	if (!xe_eu_stall_supported_on_platform(xe)) {
-		drm_dbg(&xe->drm, "EU stall monitoring is not supported on this platform\n");
+	if (!xe_eu_stall_supported_on_platform(xe))
 		return -ENODEV;
-	}
 
 	array_size = xe_eu_stall_get_sampling_rates(&num_rates, &rates);
 	size = sizeof(struct drm_xe_query_eu_stall) + array_size;

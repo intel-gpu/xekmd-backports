@@ -20,8 +20,8 @@ struct xe_vfio_pci_migration_file {
 	struct file *filp;
 	/* serializes accesses to migration data */
 	struct mutex lock;
-	bool disabled;
 	struct xe_vfio_pci_core_device *xe_vdev;
+	u8 disabled:1;
 };
 
 struct xe_vfio_pci_core_device {
@@ -29,7 +29,6 @@ struct xe_vfio_pci_core_device {
 	struct xe_device *xe;
 	/* PF internal control uses vfid index starting from 1 */
 	unsigned int vfid;
-	u8 migrate_cap:1;
 	u8 deferred_reset:1;
 	/* protects migration state */
 	struct mutex state_mutex;
@@ -86,12 +85,25 @@ again:
 	spin_unlock(&xe_vdev->reset_lock);
 }
 
+static void xe_vfio_pci_reset_prepare(struct pci_dev *pdev)
+{
+	struct xe_vfio_pci_core_device *xe_vdev = pci_get_drvdata(pdev);
+	int ret;
+
+	if (!pdev->is_virtfn)
+		return;
+
+	ret = xe_sriov_vfio_flr_prepare(xe_vdev->xe, xe_vdev->vfid);
+	if (ret)
+		dev_err(&pdev->dev, "Failed to prepare FLR: %d\n", ret);
+}
+
 static void xe_vfio_pci_reset_done(struct pci_dev *pdev)
 {
 	struct xe_vfio_pci_core_device *xe_vdev = pci_get_drvdata(pdev);
 	int ret;
 
-	if (!xe_vdev->vfid)
+	if (!pdev->is_virtfn)
 		return;
 
 	/*
@@ -105,7 +117,7 @@ static void xe_vfio_pci_reset_done(struct pci_dev *pdev)
 	if (ret)
 		dev_err(&pdev->dev, "Failed to wait for FLR: %d\n", ret);
 
-	if (!xe_vdev->migrate_cap)
+	if (!xe_vdev->vfid)
 		return;
 
 	/*
@@ -128,6 +140,7 @@ static void xe_vfio_pci_reset_done(struct pci_dev *pdev)
 }
 
 static const struct pci_error_handlers xe_vfio_pci_err_handlers = {
+	.reset_prepare = xe_vfio_pci_reset_prepare,
 	.reset_done = xe_vfio_pci_reset_done,
 	.error_detected = vfio_pci_core_aer_err_detected,
 };
@@ -143,16 +156,28 @@ static int xe_vfio_pci_open_device(struct vfio_device *core_vdev)
 	if (ret)
 		return ret;
 
+	xe_vdev->mig_state = VFIO_DEVICE_STATE_RUNNING;
+
 	vfio_pci_core_finish_enable(vdev);
 
 	return 0;
+}
+
+static void xe_vfio_pci_close_device(struct vfio_device *core_vdev)
+{
+	struct xe_vfio_pci_core_device *xe_vdev =
+		container_of(core_vdev, struct xe_vfio_pci_core_device, core_device.vdev);
+
+	xe_vfio_pci_state_mutex_lock(xe_vdev);
+	xe_vfio_pci_reset(xe_vdev);
+	xe_vfio_pci_state_mutex_unlock(xe_vdev);
+	vfio_pci_core_close_device(core_vdev);
 }
 
 static int xe_vfio_pci_release_file(struct inode *inode, struct file *filp)
 {
 	struct xe_vfio_pci_migration_file *migf = filp->private_data;
 
-	xe_vfio_pci_disable_file(migf);
 	mutex_destroy(&migf->lock);
 	kfree(migf);
 
@@ -239,8 +264,9 @@ xe_vfio_pci_alloc_file(struct xe_vfio_pci_core_device *xe_vdev,
 	struct xe_vfio_pci_migration_file *migf;
 	const struct file_operations *fops;
 	int flags;
+	int ret;
 
-	migf = kzalloc(sizeof(*migf), GFP_KERNEL);
+	migf = kzalloc_obj(*migf, GFP_KERNEL_ACCOUNT);
 	if (!migf)
 		return ERR_PTR(-ENOMEM);
 
@@ -248,8 +274,9 @@ xe_vfio_pci_alloc_file(struct xe_vfio_pci_core_device *xe_vdev,
 	flags = type == XE_VFIO_FILE_SAVE ? O_RDONLY : O_WRONLY;
 	migf->filp = anon_inode_getfile("xe_vfio_mig", fops, migf, flags);
 	if (IS_ERR(migf->filp)) {
+		ret = PTR_ERR(migf->filp);
 		kfree(migf);
-		return ERR_CAST(migf->filp);
+		return ERR_PTR(ret);
 	}
 
 	mutex_init(&migf->lock);
@@ -441,45 +468,46 @@ static const struct vfio_migration_ops xe_vfio_pci_migration_ops = {
 static void xe_vfio_pci_migration_init(struct xe_vfio_pci_core_device *xe_vdev)
 {
 	struct vfio_device *core_vdev = &xe_vdev->core_device.vdev;
-	struct pci_dev *pdev = to_pci_dev(core_vdev->dev);
-	struct xe_device *xe = xe_sriov_vfio_get_pf(pdev);
-	int ret;
 
-	if (!xe)
+	if (!xe_sriov_vfio_migration_supported(xe_vdev->xe))
 		return;
-	if (!xe_sriov_vfio_migration_supported(xe))
-		return;
-
-	ret = pci_iov_vf_id(pdev);
-	if (ret < 0)
-		return;
-
-	mutex_init(&xe_vdev->state_mutex);
-	spin_lock_init(&xe_vdev->reset_lock);
-
-	/* PF internal control uses vfid index starting from 1 */
-	xe_vdev->vfid = ret + 1;
-	xe_vdev->xe = xe;
-	xe_vdev->migrate_cap = true;
 
 	core_vdev->migration_flags = VFIO_MIGRATION_STOP_COPY | VFIO_MIGRATION_P2P;
 	core_vdev->mig_ops = &xe_vfio_pci_migration_ops;
 }
 
-static void xe_vfio_pci_migration_fini(struct xe_vfio_pci_core_device *xe_vdev)
+static int xe_vfio_pci_vf_init(struct xe_vfio_pci_core_device *xe_vdev)
 {
-	if (!xe_vdev->migrate_cap)
-		return;
+	struct vfio_device *core_vdev = &xe_vdev->core_device.vdev;
+	struct pci_dev *pdev = to_pci_dev(core_vdev->dev);
+	struct xe_device *xe = xe_sriov_vfio_get_pf(pdev);
 
-	mutex_destroy(&xe_vdev->state_mutex);
+	if (!pdev->is_virtfn)
+		return 0;
+	if (!xe)
+		return -ENODEV;
+	xe_vdev->xe = xe;
+
+	/* PF internal control uses vfid index starting from 1 */
+	xe_vdev->vfid = pci_iov_vf_id(pdev) + 1;
+
+	xe_vfio_pci_migration_init(xe_vdev);
+
+	return 0;
 }
 
 static int xe_vfio_pci_init_dev(struct vfio_device *core_vdev)
 {
 	struct xe_vfio_pci_core_device *xe_vdev =
 		container_of(core_vdev, struct xe_vfio_pci_core_device, core_device.vdev);
+	int ret;
 
-	xe_vfio_pci_migration_init(xe_vdev);
+	mutex_init(&xe_vdev->state_mutex);
+	spin_lock_init(&xe_vdev->reset_lock);
+
+	ret = xe_vfio_pci_vf_init(xe_vdev);
+	if (ret)
+		return ret;
 
 	return vfio_pci_core_init_dev(core_vdev);
 }
@@ -489,7 +517,8 @@ static void xe_vfio_pci_release_dev(struct vfio_device *core_vdev)
 	struct xe_vfio_pci_core_device *xe_vdev =
 		container_of(core_vdev, struct xe_vfio_pci_core_device, core_device.vdev);
 
-	xe_vfio_pci_migration_fini(xe_vdev);
+	mutex_destroy(&xe_vdev->state_mutex);
+	vfio_pci_core_release_dev(core_vdev);
 }
 
 static const struct vfio_device_ops xe_vfio_pci_ops = {
@@ -497,8 +526,11 @@ static const struct vfio_device_ops xe_vfio_pci_ops = {
 	.init = xe_vfio_pci_init_dev,
 	.release = xe_vfio_pci_release_dev,
 	.open_device = xe_vfio_pci_open_device,
-	.close_device = vfio_pci_core_close_device,
+	.close_device = xe_vfio_pci_close_device,
 	.ioctl = vfio_pci_core_ioctl,
+#ifndef BPM_VFIO_GET_REGION_INFO_CAPS_NOT_PRESENT
+	.get_region_info_caps = vfio_pci_ioctl_get_region_info,
+#endif
 	.device_feature = vfio_pci_core_ioctl_feature,
 	.read = vfio_pci_core_read,
 	.write = vfio_pci_core_write,

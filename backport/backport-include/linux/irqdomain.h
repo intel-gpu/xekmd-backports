@@ -44,4 +44,8 @@
 #define IRQ_DOMAIN_FLAG_MSI_DEVICE (1 << 9)
 #endif
 
+#ifdef BPM_IOMMU_GROUP_HAS_ISOLATED_MSI_NOT_PRESENT
+bool irq_domain_check_msi_remap(void);
+#endif
+
 #endif

@@ -122,49 +122,34 @@ EXPORT_SYMBOL_GPL(iommu_paging_domain_alloc);
         list_for_each_entry(pos, &(group)->devices, list)
 
 /**
- * msi_device_has_isolated_msi - True if the device has isolated MSI
- * @dev: The device to check
- *
- * Isolated MSI means that HW modeled by an irq_domain on the path from the
- * initiating device to the CPU will validate that the MSI message specifies an
- * interrupt number that the device is authorized to trigger. This must block
- * devices from triggering interrupts they are not authorized to trigger.
- * Currently authorization means the MSI vector is one assigned to the device.
- *
- * This is interesting for securing VFIO use cases where a rouge MSI (eg created
- * by abusing a normal PCI MemWr DMA) must not allow the VFIO userspace to
- * impact outside its security domain, eg userspace triggering interrupts on
- * kernel drivers, a VM triggering interrupts on the hypervisor, or a VM
- * triggering interrupts on another VM.
- */
-bool msi_device_has_isolated_msi(struct device *dev)
-{
-        struct irq_domain *domain = dev_get_msi_domain(dev);
-
-        for (; domain; domain = domain->parent)
-                if (domain->flags & IRQ_DOMAIN_FLAG_ISOLATED_MSI)
-                        return true;
-        return arch_is_isolated_msi();
-}
-
-/**
- * iommu_group_has_isolated_msi() - Compute msi_device_has_isolated_msi()
- *       for a group
+ * iommu_group_has_isolated_msi() - Compute whether the group's MSIs are isolated
  * @group: Group to query
  *
- * IOMMU groups should not have differing values of
- * msi_device_has_isolated_msi() for devices in a group. However nothing
- * directly prevents this, so ensure mistakes don't result in isolation failures
- * by checking that all the devices are the same.
+ * This shim is only built on kernels prior to v6.5, which lack the per-device
+ * ISOLATED_MSI irq_domain flag used by the upstream helper. Reproduce what those
+ * kernels' own VFIO code did to detect interrupt remapping: it is considered
+ * present if either the global irq_domain_check_msi_remap() reports a remapping
+ * MSI domain, or the IOMMU advertises IOMMU_CAP_INTR_REMAP for the group's
+ * devices (e.g. Intel VT-d / AMD-Vi with interrupt remapping enabled). Relying
+ * on irq_domain_check_msi_remap() alone misses platforms that only expose IR
+ * through the IOMMU capability, wrongly forcing the "unsafe interrupts" path.
  */
 bool iommu_group_has_isolated_msi(struct iommu_group *group)
 {
         struct group_device *group_dev;
-        bool ret = true;
+        bool ret = false;
+
+        if (irq_domain_check_msi_remap() || arch_is_isolated_msi())
+                return true;
 
         mutex_lock(&group->mutex);
-        for_each_group_device(group, group_dev)
-                ret &= msi_device_has_isolated_msi(group_dev->dev);
+        for_each_group_device(group, group_dev) {
+                if (device_iommu_capable(group_dev->dev,
+                                         IOMMU_CAP_INTR_REMAP)) {
+                        ret = true;
+                        break;
+                }
+        }
         mutex_unlock(&group->mutex);
         return ret;
 }

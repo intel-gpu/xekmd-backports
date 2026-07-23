@@ -4,16 +4,12 @@
 
 #include_next <linux/pgtable.h>
 
-#ifdef BPM_PMD_ORDER_NOT_PRESENT
-
-#ifdef CONFIG_ARCH_SUPPORTS_PMD_PFNMAP
+#ifndef PMD_ORDER
 #define PMD_ORDER	(PMD_SHIFT - PAGE_SHIFT)
 #endif
 
-#ifdef CONFIG_ARCH_SUPPORTS_PUD_PFNMAP
+#ifndef PUD_ORDER
 #define PUD_ORDER	(PUD_SHIFT - PAGE_SHIFT)
-#endif
-
 #endif
 
 #endif /* __BACKPORT_LINUX_PGTABLE_H */

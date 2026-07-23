@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 OR MIT */
 
 #include <drm/drm_suballoc.h>
+#include <linux/slab.h>
 
 #if defined(BPM_DRM_SUBALLOC_ALLOC_NOT_PRESENT) && !defined(CPTCFG_BUILD_XE_DRM_SUBALLOC_HELPER)
 /**

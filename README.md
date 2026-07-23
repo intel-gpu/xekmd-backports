@@ -16,8 +16,6 @@ Below are list of patches to enable the features , based on feature requirement 
 
 # Patch Integration
 
-# Patch Integration
-
 Apply patches to your Linux kernel v6.6 LTS tree based on the features you require from the table above. All patches are available in the `backport/patches/base/` directory and listed in the `series` file.
 
 To apply specific patches:

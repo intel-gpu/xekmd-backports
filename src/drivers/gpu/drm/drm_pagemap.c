@@ -1159,7 +1159,9 @@ static int __drm_pagemap_migrate_to_ram(struct vm_area_struct *vas,
 				  MIGRATE_VMA_SELECT_DEVICE_COHERENT |
 				  MIGRATE_VMA_SELECT_COMPOUND,
 #endif
+#ifndef BPM_MIGRATE_VMA_FAULT_PAGE_NOT_PRESENT
 		.fault_page	= page,
+#endif
 	};
 	struct drm_pagemap_migrate_details mdetails = {};
 	struct drm_pagemap_zdd *zdd;

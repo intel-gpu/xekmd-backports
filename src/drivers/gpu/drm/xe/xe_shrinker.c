@@ -314,11 +314,7 @@ int xe_shrinker_create(struct xe_device *xe)
 #ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
 	shrinker->shrink.count_objects = xe_shrinker_count;
         shrinker->shrink.scan_objects = xe_shrinker_scan;
-#ifdef BPM_REGISTER_SHRINKER_ARG2_NOT_PRESENT
-	register_shrinker(&shrinker->shrink);
-#else
 	register_shrinker(&shrinker->shrink, "drm-xe_gem");
-#endif
 #else
 	shrinker->shrink->count_objects = xe_shrinker_count;
 	shrinker->shrink->scan_objects = xe_shrinker_scan;

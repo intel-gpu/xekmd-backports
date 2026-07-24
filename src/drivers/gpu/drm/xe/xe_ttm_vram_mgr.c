@@ -132,7 +132,7 @@ static int xe_ttm_vram_mgr_new(struct ttm_resource_manager *man,
 		goto error_unlock;
 #ifdef BPM_DRM_BUDDY_CONTIGUOUS_ALLOCATION_NOT_PRESENT
 	if (place->flags & TTM_PL_FLAG_CONTIGUOUS) {
-		if (!drm_buddy_block_trim(mm, NULL, vres->base.size, &vres->blocks))
+		if (!gpu_buddy_block_trim(mm, NULL, vres->base.size, &vres->blocks))
 			size = vres->base.size;
 	}
 #endif

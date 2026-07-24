@@ -63,12 +63,20 @@ MODULE_PARM_DESC(enable_unsafe_noiommu_mode, "Enable UNSAFE, no-IOMMU mode.  Thi
 
 static DEFINE_XARRAY(vfio_device_set_xa);
 
+#ifdef BPM_CLASS_DEVNODE_CONST_NOT_PRESENT
+static char *vfio_device_devnode(struct device *dev, umode_t *mode)
+#else
 static char *vfio_device_devnode(const struct device *dev, umode_t *mode)
+#endif
 {
 	return kasprintf(GFP_KERNEL, "vfio/devices/%s", dev_name(dev));
 }
 
+#ifdef BPM_CLASS_DEVNODE_CONST_NOT_PRESENT
+static struct class vfio_device_class = {
+#else
 static const struct class vfio_device_class = {
+#endif
 	.name		= "vfio-dev",
 	.devnode	= vfio_device_devnode
 };

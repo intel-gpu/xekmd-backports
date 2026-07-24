@@ -29,6 +29,7 @@
 #define gpu_buddy_block_offset drm_buddy_block_offset
 #define gpu_buddy_block_size drm_buddy_block_size
 #define gpu_buddy_print_tree drm_buddy_print_tree
+#define gpu_buddy_block_trim drm_buddy_block_trim
 
 #endif /* HAVE_LINUX_GPU_BUDDY_H_AVAILABLE || CPTCFG_BUILD_XE_DRM_BUDDY */
 

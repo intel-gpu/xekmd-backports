@@ -29,6 +29,7 @@ struct vfio_pci_core_device;
 struct vfio_pci_region;
 struct p2pdma_provider;
 struct dma_buf_attachment;
+struct phys_vec;
 
 struct vfio_pci_eventfd {
 	struct eventfd_ctx	*ctx;

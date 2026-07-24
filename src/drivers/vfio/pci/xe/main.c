@@ -528,7 +528,7 @@ static const struct vfio_device_ops xe_vfio_pci_ops = {
 	.open_device = xe_vfio_pci_open_device,
 	.close_device = xe_vfio_pci_close_device,
 	.ioctl = vfio_pci_core_ioctl,
-#ifndef BPM_VFIO_GET_REGION_INFO_CAPS_NOT_PRESENT
+#if !defined(BPM_VFIO_GET_REGION_INFO_CAPS_NOT_PRESENT) || defined(CPTCFG_BUILD_FULL_VFIO)
 	.get_region_info_caps = vfio_pci_ioctl_get_region_info,
 #endif
 	.device_feature = vfio_pci_core_ioctl_feature,

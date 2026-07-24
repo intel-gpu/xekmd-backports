@@ -15,8 +15,16 @@
 #include <linux/anon_inodes.h>
 #include "vfio.h"
 
+#ifdef BPM_CLASS_DEVNODE_CONST_NOT_PRESENT
+static char *vfio_devnode(struct device *dev, umode_t *mode);
+#else
 static char *vfio_devnode(const struct device *, umode_t *);
+#endif
+#ifdef BPM_CLASS_DEVNODE_CONST_NOT_PRESENT
+static struct class vfio_class = {
+#else
 static const struct class vfio_class = {
+#endif
 	.name	= "vfio",
 	.devnode = vfio_devnode
 };

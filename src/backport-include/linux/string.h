@@ -1,6 +1,7 @@
 #ifndef __BACKPORT_LINUX_STRING_H
 #define __BACKPORT_LINUX_STRING_H
 #include_next <linux/string.h>
+#include <linux/string_choices.h>
 
 #ifndef memset_after
 #define memset_after(obj, v, member)					\

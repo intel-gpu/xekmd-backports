@@ -39,7 +39,7 @@ index 1b4a7e9a7..7ae6ea2d7 100644
  #define FF_SLICE_CS_CHICKEN1(base)		XE_REG((base) + 0xe0, XE_REG_OPTION_MASKED)
  #define   FFSC_PERCTX_PREEMPT_CTRL		REG_BIT(14)
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 353fe0bd4..ae82759bb 100644
+index 91d377dcf..6c4ed229d 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 @@ -515,6 +515,14 @@
@@ -57,7 +57,7 @@ index 353fe0bd4..ae82759bb 100644
  #define CACHE_MODE_SS				XE_REG_MCR(0xe420, XE_REG_OPTION_MASKED)
  #define   DISABLE_ECC				REG_BIT(5)
  #define   ENABLE_PREFETCH_INTO_IC		REG_BIT(3)
-@@ -542,11 +550,13 @@
+@@ -545,11 +553,13 @@
  #define   MDQ_ARBITRATION_MODE			REG_BIT(12)
  #define   STALL_DOP_GATING_DISABLE		REG_BIT(5)
  #define   EARLY_EOT_DIS				REG_BIT(1)
@@ -174,7 +174,7 @@ index c1fdfc288..4a04cec98 100644
  static inline void xe_eudebug_file_open(struct xe_file *xef) { }
  static inline void xe_eudebug_file_close(struct xe_file *xef) { }
 diff --git a/drivers/gpu/drm/xe/xe_hw_engine.c b/drivers/gpu/drm/xe/xe_hw_engine.c
-index 6dd05fac6..7ce68ea06 100644
+index acc250d54..3a5480d9d 100644
 --- a/drivers/gpu/drm/xe/xe_hw_engine.c
 +++ b/drivers/gpu/drm/xe/xe_hw_engine.c
 @@ -19,6 +19,7 @@
@@ -185,14 +185,14 @@ index 6dd05fac6..7ce68ea06 100644
  #include "xe_execlist.h"
  #include "xe_force_wake.h"
  #include "xe_gsc.h"
-@@ -573,6 +574,7 @@ static void hw_engine_init_early(struct xe_gt *gt, struct xe_hw_engine *hwe,
+@@ -576,6 +577,7 @@ static void hw_engine_init_early(struct xe_gt *gt, struct xe_hw_engine *hwe,
  	xe_tuning_process_engine(hwe);
  	xe_wa_process_engine(hwe);
  	hw_engine_setup_default_state(hwe);
 +	xe_eudebug_init_hw_engine(hwe);
  
  	xe_reg_sr_init(&hwe->reg_whitelist, hwe->name, gt_to_xe(gt));
- 	xe_reg_whitelist_process_engine(hwe);
+ 	xe_reg_sr_init(&hwe->oa_whitelist, hwe->name, gt_to_xe(gt));
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
 index 80b54b195..053d50db6 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules

@@ -35,10 +35,10 @@ index 5fe12e5d6..47582c959 100644
  #define   MDQ_ARBITRATION_MODE			REG_BIT(12)
  #define   STALL_DOP_GATING_DISABLE		REG_BIT(5)
 diff --git a/drivers/gpu/drm/xe/xe_tuning.c b/drivers/gpu/drm/xe/xe_tuning.c
-index 9a1b3862e..90d6c9913 100644
+index bf3fad9cd..bc67d63cb 100644
 --- a/drivers/gpu/drm/xe/xe_tuning.c
 +++ b/drivers/gpu/drm/xe/xe_tuning.c
-@@ -129,6 +129,10 @@ static const struct xe_rtp_entry_sr engine_tunings[] = {
+@@ -129,6 +129,10 @@ static const struct xe_rtp_table_sr engine_tunings = XE_RTP_TABLE_SR(
  		       FUNC(xe_rtp_match_first_render_or_compute)),
  	  XE_RTP_ACTIONS(SET(TDL_TSL_CHICKEN2, TILEY_LOCALID))
  	},
@@ -46,9 +46,9 @@ index 9a1b3862e..90d6c9913 100644
 +	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(3500, XE_RTP_END_VERSION_UNDEFINED)),
 +	  XE_RTP_ACTIONS(CLR(ROW_CHICKEN, CHICK_HANG_SEND_EXCEPTION))
 +	},
- };
+ );
  
- static const struct xe_rtp_entry_sr lrc_tunings[] = {
+ static const struct xe_rtp_table_sr lrc_tunings = XE_RTP_TABLE_SR(
 -- 
 2.43.0
 

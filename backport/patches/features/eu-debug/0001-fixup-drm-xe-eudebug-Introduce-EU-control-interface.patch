@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Date: Wed, 8 Jul 2026 14:07:35 +0200
+Subject: fixup! drm/xe/eudebug: Introduce EU control interface
+
+Before doing any thread control operations stop the attention thread
+and resume it afterwards.
+
+There is a race between attention scan worker and eudebug ioctl.
+Attention scan worker can wait for eu_lock while this lock is held by
+eudebug ioctl doing attention clear operations. This results in
+sending empty attention event.
+
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Signed-off-by: Sanjay Yadav <sanjay.kumar.yadav@intel.com>
+Reviewed-by: Jan Sokolowski <jan.sokolowski@intel.com>
+Reviewed-by: Jakub Legowski <jakub.legowski@intel.com>
+Reviewed-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+(backported from commit e7a445611c14cfc87da2ae57ba5a045711433253 drm-tip-eudebug)
+---
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c | 30 +++++++++++++++-----------
+ 1 file changed, 18 insertions(+), 12 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+index 7897bfae5907..fe6041fcf013 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+@@ -1076,6 +1076,17 @@ xe_eudebug_ack_event_ioctl(struct xe_eudebug *d,
+ 	return 0;
+ }
+ 
++static void attention_scan_cancel(struct xe_device *xe)
++{
++	cancel_delayed_work_sync(&xe->eudebug.attention_scan);
++}
++
++static void attention_scan_flush(struct xe_device *xe)
++{
++	if (!xe_device_eudebug_uses_guc(xe))
++		mod_delayed_work(system_wq, &xe->eudebug.attention_scan, 0);
++}
++
+ static int do_eu_control(struct xe_eudebug *d,
+ 			 const struct prelim_drm_xe_eudebug_eu_control * const arg,
+ 			 struct prelim_drm_xe_eudebug_eu_control __user * const user_ptr)
+@@ -1148,6 +1159,12 @@ static int do_eu_control(struct xe_eudebug *d,
+ 		goto out_free;
+ 	}
+ 
++	/*
++	 * Stop attention worker to avoid race
++	 * on reading / clearing attention
++	 */
++	attention_scan_cancel(xe);
++
+ 	ret = -EINVAL;
+ 	mutex_lock(&d->eu_lock);
+ 	pf_fence = dma_fence_get(d->pf_fence);
+@@ -1212,7 +1229,7 @@ static int do_eu_control(struct xe_eudebug *d,
+ queue_put:
+ 	xe_exec_queue_put(q);
+ 	xe_file_put(xef);
+-
++	attention_scan_flush(xe);
+ 	return ret;
+ }
+ 
+@@ -1980,17 +1997,6 @@ static void attention_scan_fn(struct work_struct *work)
+ 	schedule_delayed_work(&xe->eudebug.attention_scan, delay);
+ }
+ 
+-static void attention_scan_cancel(struct xe_device *xe)
+-{
+-	cancel_delayed_work_sync(&xe->eudebug.attention_scan);
+-}
+-
+-static void attention_scan_flush(struct xe_device *xe)
+-{
+-	if (!xe_device_eudebug_uses_guc(xe))
+-		mod_delayed_work(system_wq, &xe->eudebug.attention_scan, 0);
+-}
+-
+ static int xe_eu_control_interrupt_all(struct xe_eudebug *d,
+ 				       struct xe_exec_queue *q,
+ 				       struct xe_lrc *lrc)
+-- 
+2.52.0
+

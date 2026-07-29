@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Date: Thu, 9 Jul 2026 11:50:51 +0200
+Subject: fixup! drm/xe/eudebug: Introduce per device attention scan
+ worker
+
+Attention scan worker works all the time. We don't need to
+push it after each connection. Moreover, when rescheduled immediately
+it may collide with discovery.
+
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Signed-off-by: Sanjay Yadav <sanjay.kumar.yadav@intel.com>
+Reviewed-by: Jan Sokolowski <jan.sokolowski@intel.com>
+Reviewed-by: Jakub Legowski <jakub.legowski@intel.com>
+Reviewed-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+(backported from commit 0844542b5018635d244998c398e94bbe98ecd967 drm-tip-eudebug)
+---
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+index fe6041fcf013..d4a3e7d58d87 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+@@ -2395,7 +2395,6 @@ xe_eudebug_connect(struct xe_device *xe,
+ 
+ 	kref_get(&d->ref);
+ 	queue_work(xe->eudebug.ordered_wq, &d->discovery_work);
+-	attention_scan_flush(xe);
+ 
+ 	eu_dbg(d, "connected session %lld", d->session);
+ 
+-- 
+2.52.0
+

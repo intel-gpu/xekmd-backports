@@ -1076,6 +1076,17 @@ xe_eudebug_ack_event_ioctl(struct xe_eudebug *d,
 	return 0;
 }
 
+static void attention_scan_cancel(struct xe_device *xe)
+{
+	cancel_delayed_work_sync(&xe->eudebug.attention_scan);
+}
+
+static void attention_scan_flush(struct xe_device *xe)
+{
+	if (!xe_device_eudebug_uses_guc(xe))
+		mod_delayed_work(system_wq, &xe->eudebug.attention_scan, 0);
+}
+
 static int do_eu_control(struct xe_eudebug *d,
 			 const struct prelim_drm_xe_eudebug_eu_control * const arg,
 			 struct prelim_drm_xe_eudebug_eu_control __user * const user_ptr)
@@ -1148,6 +1159,7 @@ static int do_eu_control(struct xe_eudebug *d,
 		goto out_free;
 	}
 
+	/* 1st: Wait for PF to finalize */
 	ret = -EINVAL;
 	mutex_lock(&d->eu_lock);
 	pf_fence = dma_fence_get(d->pf_fence);
@@ -1163,6 +1175,9 @@ static int do_eu_control(struct xe_eudebug *d,
 		mutex_lock(&d->eu_lock);
 		pf_fence = dma_fence_get(d->pf_fence);
 	}
+
+	/* 2nd: wait for attention stan worker to finish and stop it */
+	attention_scan_cancel(xe);
 
 	switch (arg->cmd) {
 	case PRELIM_DRM_XE_EUDEBUG_EU_CONTROL_CMD_INTERRUPT_ALL:
@@ -1187,7 +1202,8 @@ static int do_eu_control(struct xe_eudebug *d,
 
 	if (ret == 0)
 		seqno = atomic_long_inc_return(&d->events.seqno);
-
+	/* Resume attn worker but under lock */
+	attention_scan_flush(xe);
 	mutex_unlock(&d->eu_lock);
 
 	if (ret)
@@ -1212,7 +1228,6 @@ out_free:
 queue_put:
 	xe_exec_queue_put(q);
 	xe_file_put(xef);
-
 	return ret;
 }
 
@@ -1686,10 +1701,8 @@ static int send_attention_event(struct xe_eudebug *d, struct xe_exec_queue *q, i
 	write_member(struct prelim_drm_xe_eudebug_event_eu_attention, ea, lrc_handle, (u64)h_lrc);
 	write_member(struct prelim_drm_xe_eudebug_event_eu_attention, ea, bitmask_size, size);
 
-	mutex_lock(&d->eu_lock);
 	event->seqno = atomic_long_inc_return(&d->events.seqno);
 	ret = prelim_xe_gt_eu_attention_bitmap(q->gt, &ea->bitmask[0], ea->bitmask_size);
-	mutex_unlock(&d->eu_lock);
 
 	if (ret)
 		return ret;
@@ -1976,17 +1989,6 @@ static void attention_scan_fn(struct work_struct *work)
 	}
 
 	schedule_delayed_work(&xe->eudebug.attention_scan, delay);
-}
-
-static void attention_scan_cancel(struct xe_device *xe)
-{
-	cancel_delayed_work_sync(&xe->eudebug.attention_scan);
-}
-
-static void attention_scan_flush(struct xe_device *xe)
-{
-	if (!xe_device_eudebug_uses_guc(xe))
-		mod_delayed_work(system_wq, &xe->eudebug.attention_scan, 0);
 }
 
 static int xe_eu_control_interrupt_all(struct xe_eudebug *d,
@@ -2387,7 +2389,6 @@ xe_eudebug_connect(struct xe_device *xe,
 
 	kref_get(&d->ref);
 	queue_work(xe->eudebug.ordered_wq, &d->discovery_work);
-	attention_scan_flush(xe);
 
 	eu_dbg(d, "connected session %lld", d->session);
 
@@ -4472,8 +4473,6 @@ prelim_xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm,
 	if (!pf)
 		goto err_put_fw;
 
-	attention_scan_cancel(gt_to_xe(gt));
-
 	mutex_lock(&d->eu_lock);
 	fence = dma_fence_get(d->pf_fence);
 
@@ -4493,6 +4492,9 @@ prelim_xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm,
 		goto err_unlock_eu_lock;
 
 	d->pf_fence = &pf_fence->base;
+
+	attention_scan_cancel(gt_to_xe(gt));
+
 	mutex_unlock(&d->eu_lock);
 
 	INIT_LIST_HEAD(&pf->list);
@@ -4536,7 +4538,6 @@ prelim_xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm,
 
 err_unlock_eu_lock:
 	mutex_unlock(&d->eu_lock);
-	attention_scan_flush(gt_to_xe(gt));
 	kfree(pf);
 err_put_fw:
 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
@@ -4603,6 +4604,7 @@ prelim_xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf, bool is_er
 		}
 
 		d->pf_fence = NULL;
+		attention_scan_flush(gt_to_xe(gt));
 		mutex_unlock(&d->eu_lock);
 
 		prelim_xe_eudebug_put(d);
@@ -4613,8 +4615,6 @@ prelim_xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf, bool is_er
 		xe_vm_put(pf->vm);
 		kfree(pf);
 	}
-
-	attention_scan_flush(gt_to_xe(gt));
 }
 
 static int send_sync_host_event(struct xe_eudebug *d,

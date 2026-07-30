@@ -120,7 +120,7 @@ diff --git a/drivers/gpu/drm/xe/xe_svm.h b/drivers/gpu/drm/xe/xe_svm.h
 +#define xe_svm_assert_in_notifier(vm__) \
 +	lockdep_assert_held_write(&(vm__)->svm.gpusvm.notifier_lock)
  
- static inline void xe_svm_assert_held_read(struct xe_vm *vm)
+ static inline void xe_svm_assert_held_read_or_inject_write(struct xe_vm *vm)
  {
 +	lockdep_assert_held_read(&vm->svm.gpusvm.notifier_lock);
  }

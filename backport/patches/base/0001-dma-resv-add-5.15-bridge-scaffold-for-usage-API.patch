@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Thu, 30 Jul 2026 20:57:01 +0530
+Subject: dma-resv: add 5.15 bridge scaffold for usage API
+
+Provide a custom compatibility layer without requiring
+a tree-wide rewrite of unconverted callers:
+
+- Change the @usage parameter in dma_resv_wait_timeout() and
+  dma_resv_test_signaled() to unsigned int. This handles both
+  legacy bool variables and the new enum dma_resv_usage values
+  passed by modern xe/ttm drivers.
+- Introduce the dma_resv_reserve_fences() wrapper to preserve the
+  existing ABI for legacy components.
+
+Reference:
+    7bc80a5462c3
+    dma-buf: add enum dma_resv_usage v4
+
+Reviewed-by: Arvind Yadav <arvind.yadav@intel.com>
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ include/linux/dma-resv.h | 13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/include/linux/dma-resv.h b/include/linux/dma-resv.h
+index ef9f94ce2cc3..6d5d4e3ef19b 100644
+--- a/include/linux/dma-resv.h
++++ b/include/linux/dma-resv.h
+@@ -370,8 +370,15 @@ void dma_resv_add_excl_fence(struct dma_resv *obj, struct dma_fence *fence);
+ int dma_resv_get_fences(struct dma_resv *obj, struct dma_fence **pfence_excl,
+ 			unsigned *pshared_count, struct dma_fence ***pshared);
+ int dma_resv_copy_fences(struct dma_resv *dst, struct dma_resv *src);
+-long dma_resv_wait_timeout(struct dma_resv *obj, bool wait_all, bool intr,
+-			   unsigned long timeout);
+-bool dma_resv_test_signaled(struct dma_resv *obj, bool test_all);
++
++long dma_resv_wait_timeout(struct dma_resv *obj, unsigned int usage,
++			   bool intr, unsigned long timeout);
++bool dma_resv_test_signaled(struct dma_resv *obj, unsigned int usage);
++
++static inline int dma_resv_reserve_fences(struct dma_resv *obj,
++					  unsigned int num_fences)
++{
++	return dma_resv_reserve_shared(obj, num_fences);
++}
+ 
+ #endif /* _LINUX_RESERVATION_H */
+-- 
+2.43.0
+

@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Danilo Krummrich <dakr@redhat.com>
+Date: Thu, 26 Jan 2023 01:28:44 +0100
+Subject: dma-buf: actually set signaling bit for private stub fences
+
+In dma_fence_allocate_private_stub() set the signaling bit of the newly
+allocated private stub fence rather than the signaling bit of the
+shared dma_fence_stub.
+
+Fixes: c85d00d4fd8b ("dma-buf: set signaling bit for the stub fence")
+Reviewed-by: Christian König <christian.koenig@amd.com>
+Signed-off-by: Danilo Krummrich <dakr@redhat.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/20230126002844.339593-1-dakr@redhat.com
+
+(cherry-picked from commit 851a4a77a9f6441bd73625fe6dbc29c814ae681f linux)
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/dma-buf/dma-fence.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/dma-buf/dma-fence.c b/drivers/dma-buf/dma-fence.c
+index 7108828bec2b..a31531a7ea2d 100644
+--- a/drivers/dma-buf/dma-fence.c
++++ b/drivers/dma-buf/dma-fence.c
+@@ -166,7 +166,7 @@ struct dma_fence *dma_fence_allocate_private_stub(void)
+ 		       0, 0);
+ 
+ 	set_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT,
+-		&dma_fence_stub.flags);
++		&fence->flags);
+ 
+ 	dma_fence_signal(fence);
+ 
+-- 
+2.43.0
+

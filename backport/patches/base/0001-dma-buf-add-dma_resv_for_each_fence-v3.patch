@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Christian=20K=C3=B6nig?= <christian.koenig@amd.com>
+Date: Tue, 15 Jun 2021 15:10:03 +0200
+Subject: dma-buf: add dma_resv_for_each_fence v3
+
+A simpler version of the iterator to be used when the dma_resv object is
+locked.
+
+v2: fix index check here as well
+v3: minor coding improvement, some documentation cleanup
+
+Signed-off-by: Christian König <christian.koenig@amd.com>
+Reviewed-by: Tvrtko Ursulin <tvrtko.ursulin@intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/20211006123609.2026-1-christian.koenig@amd.com
+
+(backported from commit 5baaac3184ab896d74993825858f1b1a46c460ce linux)
+
+Reviewed-by: Arvind Yadav <arvind.yadav@intel.com>
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/dma-buf/dma-resv.c | 56 ++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 56 insertions(+)
+
+diff --git a/drivers/dma-buf/dma-resv.c b/drivers/dma-buf/dma-resv.c
+index 65e5c267ce0f..c87ce64da2d1 100644
+--- a/drivers/dma-buf/dma-resv.c
++++ b/drivers/dma-buf/dma-resv.c
+@@ -976,3 +976,59 @@ struct dma_fence *dma_resv_iter_next_unlocked(struct dma_resv_iter *cursor)
+ 	return cursor->fence;
+ }
+ EXPORT_SYMBOL(dma_resv_iter_next_unlocked);
++
++struct dma_fence *dma_resv_iter_first(struct dma_resv_iter *cursor)
++{
++	struct dma_fence *fence;
++
++	dma_resv_assert_held(cursor->obj);
++
++	cursor->index = 0;
++	cursor->fobj = dma_resv_shared_list(cursor->obj);
++
++	/*
++	 * fence_excl is returned for every @usage on purpose. It is never a
++	 * preempt fence (those are tagged DMA_RESV_USAGE_BOOKKEEP in shared[]),
++	 * so including it can only over-synchronise, never deadlock, and it
++	 * keeps imported legacy buffers safe.
++	 */
++	fence = dma_resv_excl_fence(cursor->obj);
++	if (fence) {
++		cursor->fence_usage = DMA_RESV_USAGE_WRITE;
++	} else {
++		fence = dma_resv_iter_next(cursor);
++	}
++
++	cursor->is_restarted = true;
++	return fence;
++}
++EXPORT_SYMBOL(dma_resv_iter_first);
++
++struct dma_fence *dma_resv_iter_next(struct dma_resv_iter *cursor)
++{
++	struct dma_fence *fence;
++	enum dma_resv_usage usage;
++
++	dma_resv_assert_held(cursor->obj);
++
++	cursor->is_restarted = false;
++
++	/*
++	 * Skip fences whose usage is weaker than what the caller asked for.
++	 * This is the filter that stops DMA_RESV_USAGE_BOOKKEEP preempt
++	 * fences from becoming hard dependencies of ordinary exec jobs.
++	 */
++	while (cursor->fobj &&
++	       cursor->index < (int)cursor->fobj->shared_count) {
++		dma_resv_list_entry(cursor->fobj, cursor->index++, cursor->obj,
++				    &fence, &usage);
++		if (usage <= cursor->usage) {
++			cursor->fence_usage = usage;
++			return fence;
++		}
++	}
++
++	cursor->fence = NULL;
++	return NULL;
++}
++EXPORT_SYMBOL(dma_resv_iter_next);
+-- 
+2.43.0
+

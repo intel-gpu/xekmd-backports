@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Christian=20K=C3=B6nig?= <christian.koenig@amd.com>
+Date: Sun, 6 Jun 2021 11:46:33 +0200
+Subject: dma-buf: fix dma_resv_test_signaled test_all handling v2
+
+As the name implies if testing all fences is requested we
+should indeed test all fences and not skip the exclusive
+one because we see shared ones.
+
+v2: fix logic once more
+
+Signed-off-by: Christian König <christian.koenig@amd.com>
+Reviewed-by: Daniel Vetter <daniel.vetter@ffwll.ch>
+Link: https://patchwork.freedesktop.org/patch/msgid/20210702111642.17259-3-christian.koenig@amd.com
+
+(Backported from commit 9d38814d1e346ea37a51cbf31f4424c9d059459e linux)
+
+Reviewed-by: Arvind Yadav <arvind.yadav@intel.com>
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/dma-buf/dma-resv.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/dma-buf/dma-resv.c b/drivers/dma-buf/dma-resv.c
+index cc27b7bafec7..c5bfb1beb91a 100644
+--- a/drivers/dma-buf/dma-resv.c
++++ b/drivers/dma-buf/dma-resv.c
+@@ -636,11 +636,11 @@ bool dma_resv_test_signaled(struct dma_resv *obj, unsigned int usage)
+ 	ret = true;
+ 	seq = read_seqcount_begin(&obj->seq);
+ 
+-	if (test_all) {
++	{
+ 		struct dma_resv_list *fobj = dma_resv_shared_list(obj);
+ 		unsigned int i, shared_count;
+ 
+-		shared_count = fobj ? fobj->shared_count : 0;
++		shared_count = fobj ? READ_ONCE(fobj->shared_count) : 0;
+ 		for (i = 0; i < shared_count; ++i) {
+ 			enum dma_resv_usage fence_usage;
+ 			dma_resv_list_entry(fobj, i, NULL, &fence, &fence_usage);
+-- 
+2.43.0
+

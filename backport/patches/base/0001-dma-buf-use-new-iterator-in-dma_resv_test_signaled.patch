@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Christian=20K=C3=B6nig?= <christian.koenig@amd.com>
+Date: Tue, 15 Jun 2021 15:34:11 +0200
+Subject: dma-buf: use new iterator in dma_resv_test_signaled
+
+This makes the function much simpler since the complex
+retry logic is now handled elsewhere.
+
+Signed-off-by: Christian König <christian.koenig@amd.com>
+Reviewed-by: Daniel Vetter <daniel.vetter@ffwll.ch>
+Link: https://patchwork.freedesktop.org/patch/msgid/20211005113742.1101-8-christian.koenig@amd.com
+
+(Backported from commit 7fa828cb926532a90de23763bc143523d2ff209c linux)
+
+Reviewed-by: Arvind Yadav <arvind.yadav@intel.com>
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/dma-buf/dma-resv.c | 9 +++------
+ 1 file changed, 3 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/dma-buf/dma-resv.c b/drivers/dma-buf/dma-resv.c
+index 95f00f3d33da..cc27b7bafec7 100644
+--- a/drivers/dma-buf/dma-resv.c
++++ b/drivers/dma-buf/dma-resv.c
+@@ -620,15 +620,12 @@ static inline int dma_resv_test_signaled_single(struct dma_fence *passed_fence)
+  * dma_resv_test_signaled - Test if a reservation object's fences have been
+  * signaled.
+  * @obj: the reservation object
+- * @test_all: if true, test all fences, otherwise only test the exclusive
+- * fence
++ * @usage: controls which fences to include, see enum dma_resv_usage
+  *
+- * Callers are not required to hold specific locks, but maybe hold
+- * dma_resv_lock() already
+  * RETURNS
+  * true if all fences signaled, else false
+  */
+-bool dma_resv_test_signaled(struct dma_resv *obj, bool test_all)
++bool dma_resv_test_signaled(struct dma_resv *obj, unsigned int usage)
+ {
+ 	struct dma_fence *fence;
+ 	unsigned int seq;
+@@ -645,7 +642,10 @@ bool dma_resv_test_signaled(struct dma_resv *obj, bool test_all)
+ 
+ 		shared_count = fobj ? fobj->shared_count : 0;
+ 		for (i = 0; i < shared_count; ++i) {
+-			fence = rcu_dereference(fobj->shared[i]);
++			enum dma_resv_usage fence_usage;
++			dma_resv_list_entry(fobj, i, NULL, &fence, &fence_usage);
++			if (fence_usage > usage)
++				continue;
+ 			ret = dma_resv_test_signaled_single(fence);
+ 			if (ret < 0)
+ 				goto retry;
+-- 
+2.43.0
+

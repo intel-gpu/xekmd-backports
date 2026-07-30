@@ -1,0 +1,97 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Christian=20K=C3=B6nig?= <christian.koenig@amd.com>
+Date: Fri, 24 Sep 2021 10:55:45 +0200
+Subject: dma-buf: add dma_resv_replace_fences v2
+
+This function allows to replace fences from the shared fence list when
+we can gurantee that the operation represented by the original fence has
+finished or no accesses to the resources protected by the dma_resv
+object any more when the new fence finishes.
+
+Then use this function in the amdkfd code when BOs are unmapped from the
+process.
+
+v2: add an example when this is usefull.
+
+Signed-off-by: Christian König <christian.koenig@amd.com>
+Reviewed-by: Felix Kuehling <Felix.Kuehling@amd.com>
+Reviewed-by: Daniel Vetter <daniel.vetter@ffwll.ch>
+Link: https://patchwork.freedesktop.org/patch/msgid/20220321135856.1331-1-christian.koenig@amd.com
+
+(Backported from commit 548e7432dc2da475a18077b612e8d55b8ff51891 linux)
+
+Reviewed-by: Arvind Yadav <arvind.yadav@intel.com>
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/dma-buf/dma-resv.c | 45 ++++++++++++++++++++++++++++++++++++++
+ include/linux/dma-resv.h   |  1 +
+ 2 files changed, 46 insertions(+)
+
+diff --git a/drivers/dma-buf/dma-resv.c b/drivers/dma-buf/dma-resv.c
+index 654e39b39c1d..a84df495df4c 100644
+--- a/drivers/dma-buf/dma-resv.c
++++ b/drivers/dma-buf/dma-resv.c
+@@ -821,6 +821,49 @@ int dma_resv_get_singleton(struct dma_resv *obj, enum dma_resv_usage usage, stru
+ }
+ EXPORT_SYMBOL(dma_resv_get_singleton);
+ 
++/**
++ * dma_resv_replace_fences - replace fences in the dma_resv obj
++ * @obj: the reservation object
++ * @context: the context of the fences to replace
++ * @replacement: the new fence to use instead
++ * @usage: how the new fence is used, see enum dma_resv_usage
++ *
++ * Replace fences with a specified context with a new fence. Only valid if the
++ * operation represented by the original fence has no longer access to the
++ * resources represented by the dma_resv object when the new fence completes.
++ */
++void dma_resv_replace_fences(struct dma_resv *obj, uint64_t context,
++                            struct dma_fence *replacement,
++                            enum dma_resv_usage usage)
++{
++        struct dma_resv_list *list;
++        struct dma_fence *old;
++        unsigned int i;
++
++        dma_resv_assert_held(obj);
++
++        write_seqcount_begin(&obj->seq);
++
++        old = rcu_dereference_protected(obj->fence_excl, dma_resv_held(obj));
++        if (old && old->context == context) {
++                rcu_assign_pointer(obj->fence_excl, dma_fence_get(replacement));
++                dma_fence_put(old);
++        }
++
++        list = dma_resv_shared_list(obj);
++        for (i = 0; list && i < list->shared_count; ++i) {
++                dma_resv_list_entry(list, i, obj, &old, NULL);
++                if (!old || old->context != context)
++                        continue;
++
++                dma_resv_list_set(list, i, dma_fence_get(replacement), usage);
++                dma_fence_put(old);
++        }
++
++        write_seqcount_end(&obj->seq);
++}
++EXPORT_SYMBOL(dma_resv_replace_fences);
++
+ /**
+  * dma_resv_iter_restart_unlocked - restart the unlocked iterator
+  * @cursor: The dma_resv_iter object to restart
+diff --git a/include/linux/dma-resv.h b/include/linux/dma-resv.h
+index b6da90681110..67a29b26cfcf 100644
+--- a/include/linux/dma-resv.h
++++ b/include/linux/dma-resv.h
+@@ -390,5 +390,6 @@ struct dma_fence *dma_resv_iter_next(struct dma_resv_iter *cursor);
+ 
+ void dma_resv_add_fence(struct dma_resv *obj, struct dma_fence *fence, enum dma_resv_usage usage);
+ int dma_resv_get_singleton(struct dma_resv *obj, enum dma_resv_usage usage, struct dma_fence **fence);
++void dma_resv_replace_fences(struct dma_resv *obj, uint64_t context, struct dma_fence *replacement, enum dma_resv_usage usage);
+ 
+ #endif /* _LINUX_RESERVATION_H */
+-- 
+2.43.0
+

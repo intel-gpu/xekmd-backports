@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Christian=20K=C3=B6nig?= <christian.koenig@amd.com>
+Date: Tue, 9 Nov 2021 11:08:18 +0100
+Subject: dma-buf: add enum dma_resv_usage v4
+
+This change adds the dma_resv_usage enum and allows us to specify why a
+dma_resv object is queried for its containing fences.
+
+Additional to that a dma_resv_usage_rw() helper function is added to aid
+retrieving the fences for a read or write userspace submission.
+
+This is then deployed to the different query functions of the dma_resv
+object and all of their users. When the write paratermer was previously
+true we now use DMA_RESV_USAGE_WRITE and DMA_RESV_USAGE_READ otherwise.
+
+v2: add KERNEL/OTHER in separate patch
+v3: some kerneldoc suggestions by Daniel
+v4: some more kerneldoc suggestions by Daniel, fix missing cases lost in
+    the rebase pointed out by Bas.
+
+Signed-off-by: Christian König <christian.koenig@amd.com>
+Reviewed-by: Daniel Vetter <daniel.vetter@ffwll.ch>
+Link: https://patchwork.freedesktop.org/patch/msgid/20220407085946.744568-2-christian.koenig@amd.com
+
+(Backported from commit 7bc80a5462c37eab58a9ea386064307c0f447fd1 linux)
+(Backported from commit b29895e18304feb7e8afc6388db7ece60327b23c linux)
+(Backported from commit 0cc848a75b742c3f9800e643cd2c03b9cfdc3d69 linux)
+
+Reviewed-by: Arvind Yadav <arvind.yadav@intel.com>
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ include/linux/dma-resv.h | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/include/linux/dma-resv.h b/include/linux/dma-resv.h
+index 6d5d4e3ef19b..3520045a280c 100644
+--- a/include/linux/dma-resv.h
++++ b/include/linux/dma-resv.h
+@@ -362,6 +362,18 @@ static inline struct dma_resv_list *dma_resv_shared_list(struct dma_resv *obj)
+ 	return rcu_dereference_check(obj->fence, dma_resv_held(obj));
+ }
+ 
++enum dma_resv_usage {
++	DMA_RESV_USAGE_KERNEL = 0,
++	DMA_RESV_USAGE_WRITE,
++	DMA_RESV_USAGE_READ,
++	DMA_RESV_USAGE_BOOKKEEP
++};
++
++static inline enum dma_resv_usage dma_resv_usage_rw(bool write)
++{
++	return write ? DMA_RESV_USAGE_READ : DMA_RESV_USAGE_WRITE;
++}
++
+ void dma_resv_init(struct dma_resv *obj);
+ void dma_resv_fini(struct dma_resv *obj);
+ int dma_resv_reserve_shared(struct dma_resv *obj, unsigned int num_fences);
+-- 
+2.43.0
+

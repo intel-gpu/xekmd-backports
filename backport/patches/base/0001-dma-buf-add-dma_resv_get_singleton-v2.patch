@@ -1,0 +1,131 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Christian=20K=C3=B6nig?= <christian.koenig@amd.com>
+Date: Wed, 3 Nov 2021 10:02:08 +0100
+Subject: dma-buf: add dma_resv_get_singleton v2
+
+Add a function to simplify getting a single fence for all the fences in
+the dma_resv object.
+
+v2: fix ref leak in error handling
+
+Signed-off-by: Christian König <christian.koenig@amd.com>
+Reviewed-by: Daniel Vetter <daniel.vetter@ffwll.ch>
+Link: https://patchwork.freedesktop.org/patch/msgid/20220321135856.1331-3-christian.koenig@amd.com
+
+(Backported from commit 92cedee6a6a3e6fcc3ffc0e3866baae5f6f76ac1 linux)
+
+Reviewed-by: Arvind Yadav <arvind.yadav@intel.com>
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/dma-buf/dma-resv.c | 76 ++++++++++++++++++++++++++++++++++++++
+ include/linux/dma-resv.h   |  1 +
+ 2 files changed, 77 insertions(+)
+
+diff --git a/drivers/dma-buf/dma-resv.c b/drivers/dma-buf/dma-resv.c
+index c5bfb1beb91a..654e39b39c1d 100644
+--- a/drivers/dma-buf/dma-resv.c
++++ b/drivers/dma-buf/dma-resv.c
+@@ -34,6 +34,7 @@
+  */
+ 
+ #include <linux/dma-resv.h>
++#include <linux/dma-fence-array.h>
+ #include <linux/export.h>
+ #include <linux/mm.h>
+ #include <linux/sched/mm.h>
+@@ -745,6 +746,81 @@ void dma_resv_add_fence(struct dma_resv *obj, struct dma_fence *fence, enum dma_
+ }
+ EXPORT_SYMBOL(dma_resv_add_fence);
+ 
++/**
++ * dma_resv_get_singleton - Get a single fence for all the fences
++ * @obj: the reservation object
++ * @usage: controls which fences to include, see enum dma_resv_usage
++ * @fence: the resulting fence
++ *
++ * Get a single fence representing all the fences inside the resv object.
++ * Returns either 0 for success or -ENOMEM.
++ *
++ * Warning: This can't be used like this when adding the fence back to the resv
++ * object since that can lead to stack corruption when finalizing the
++ * dma_fence_array.
++ */
++int dma_resv_get_singleton(struct dma_resv *obj, enum dma_resv_usage usage, struct dma_fence **fence)
++{
++        struct dma_fence *excl = NULL;
++        struct dma_fence **shared = NULL;
++        unsigned int shared_count = 0;
++        struct dma_fence_array *array;
++        struct dma_fence **fences;
++        int ret, i, count;
++
++        ret = dma_resv_get_fences(obj, &excl, &shared_count, &shared);
++        if (ret)
++                return ret;
++
++        count = shared_count + (excl ? 1 : 0);
++
++        if (count == 0) {
++                *fence = NULL;
++                return 0;
++        }
++
++        if (count == 1) {
++                if (excl)
++                        *fence = excl;
++                else {
++                        *fence = shared[0];
++                        kfree(shared);
++                }
++                return 0;
++        }
++
++        fences = kmalloc_array(count, sizeof(*fences), GFP_KERNEL);
++        if (!fences) {
++                if (excl)
++                        dma_fence_put(excl);
++                for (i = 0; i < shared_count; i++)
++                        dma_fence_put(shared[i]);
++                kfree(shared);
++                return -ENOMEM;
++        }
++
++        count = 0;
++        if (excl)
++                fences[count++] = excl;
++        for (i = 0; i < shared_count; i++)
++                fences[count++] = shared[i];
++
++        kfree(shared);
++
++        array = dma_fence_array_create(count, fences,
++                                       dma_fence_context_alloc(1), 1, false);
++        if (!array) {
++                for (i = 0; i < count; i++)
++                        dma_fence_put(fences[i]);
++                kfree(fences);
++                return -ENOMEM;
++        }
++
++        *fence = &array->base;
++        return 0;
++}
++EXPORT_SYMBOL(dma_resv_get_singleton);
++
+ /**
+  * dma_resv_iter_restart_unlocked - restart the unlocked iterator
+  * @cursor: The dma_resv_iter object to restart
+diff --git a/include/linux/dma-resv.h b/include/linux/dma-resv.h
+index 2d7376cc67f5..b6da90681110 100644
+--- a/include/linux/dma-resv.h
++++ b/include/linux/dma-resv.h
+@@ -389,5 +389,6 @@ struct dma_fence *dma_resv_iter_first(struct dma_resv_iter *cursor);
+ struct dma_fence *dma_resv_iter_next(struct dma_resv_iter *cursor);
+ 
+ void dma_resv_add_fence(struct dma_resv *obj, struct dma_fence *fence, enum dma_resv_usage usage);
++int dma_resv_get_singleton(struct dma_resv *obj, enum dma_resv_usage usage, struct dma_fence **fence);
+ 
+ #endif /* _LINUX_RESERVATION_H */
+-- 
+2.43.0
+

@@ -6,7 +6,7 @@ This backport provides early access of discrete GFX functionalities which are no
 
 You can create Dynamic Kernel Module Support (DKMS) as well as pre-compiled out-of-tree modules packages, which can be installed on supported OS distributions.
 
-We are using [backport project](https://backports.wiki.kernel.org/index.php/Main_Page) to generate out-of-tree xe kernel module source codes.
+We are using [backport project](https://backports.wiki.kernel.org/index.php/Main_Page) to generate out-of-tree Xe kernel module source codes.
 
 ## Prerequisite
 We have dependencies on the following packages
@@ -46,7 +46,7 @@ Each project is tagged consistently, so when pulling these repos, pull the same 
 
 ### Dynamic Kernel Module Support(DKMS)
 
-Creating xe DKMS packages
+Creating Xe DKMS packages
 
 #### Debian / Ubuntu
 

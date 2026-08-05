@@ -24,10 +24,10 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  2 files changed, 57 insertions(+), 11 deletions(-)
 
 diff --git a/drivers/dma-buf/dma-resv.c b/drivers/dma-buf/dma-resv.c
-index bcce96d4a753..67da04653311 100644
+index b78f8dcb6770..456f378fcf24 100644
 --- a/drivers/dma-buf/dma-resv.c
 +++ b/drivers/dma-buf/dma-resv.c
-@@ -74,6 +74,43 @@ static struct dma_resv_list *dma_resv_list_alloc(unsigned int shared_max)
+@@ -75,6 +75,43 @@ static struct dma_resv_list *dma_resv_list_alloc(unsigned int shared_max)
  	return list;
  }
  
@@ -71,7 +71,7 @@ index bcce96d4a753..67da04653311 100644
  /**
   * dma_resv_list_free - free fence list
   * @list: list to free
-@@ -87,8 +124,12 @@ static void dma_resv_list_free(struct dma_resv_list *list)
+@@ -88,8 +125,12 @@ static void dma_resv_list_free(struct dma_resv_list *list)
  	if (!list)
  		return;
  
@@ -86,7 +86,7 @@ index bcce96d4a753..67da04653311 100644
  
  	kfree_rcu(list, rcu);
  }
-@@ -169,14 +210,14 @@ int dma_resv_reserve_shared(struct dma_resv *obj, unsigned int num_fences)
+@@ -170,14 +211,14 @@ int dma_resv_reserve_shared(struct dma_resv *obj, unsigned int num_fences)
  	 * the new.
  	 */
  	for (i = 0, j = 0, k = max; i < (old ? old->shared_count : 0); ++i) {
@@ -105,7 +105,7 @@ index bcce96d4a753..67da04653311 100644
  	}
  	new->shared_count = j;
  
-@@ -197,8 +238,7 @@ int dma_resv_reserve_shared(struct dma_resv *obj, unsigned int num_fences)
+@@ -198,8 +239,7 @@ int dma_resv_reserve_shared(struct dma_resv *obj, unsigned int num_fences)
  	for (i = k; i < max; ++i) {
  		struct dma_fence *fence;
  
@@ -115,7 +115,7 @@ index bcce96d4a753..67da04653311 100644
  		dma_fence_put(fence);
  	}
  	kfree_rcu(old, rcu);
-@@ -306,9 +346,12 @@ void dma_resv_add_excl_fence(struct dma_resv *obj, struct dma_fence *fence)
+@@ -367,9 +407,12 @@ void dma_resv_add_excl_fence(struct dma_resv *obj,
  	write_seqcount_end(&obj->seq);
  
  	/* inplace update, no shared fences */
@@ -132,10 +132,10 @@ index bcce96d4a753..67da04653311 100644
  	dma_fence_put(old_fence);
  }
 diff --git a/include/linux/dma-resv.h b/include/linux/dma-resv.h
-index 3520045a280c..4edff7e44f82 100644
+index 97adbfcab544..e7f51dad6586 100644
 --- a/include/linux/dma-resv.h
 +++ b/include/linux/dma-resv.h
-@@ -60,6 +60,9 @@ struct dma_resv_list {
+@@ -70,6 +70,9 @@ struct dma_resv_list {
  	struct dma_fence __rcu *shared[];
  };
  

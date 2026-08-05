@@ -23,28 +23,118 @@ Reviewed-by: Daniel Vetter <daniel.vetter@ffwll.ch>
 Link: https://patchwork.freedesktop.org/patch/msgid/20220407085946.744568-2-christian.koenig@amd.com
 
 (Backported from commit 7bc80a5462c37eab58a9ea386064307c0f447fd1 linux)
-(Backported from commit b29895e18304feb7e8afc6388db7ece60327b23c linux)
-(Backported from commit 0cc848a75b742c3f9800e643cd2c03b9cfdc3d69 linux)
 
 Reviewed-by: Arvind Yadav <arvind.yadav@intel.com>
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
 ---
- include/linux/dma-resv.h | 12 ++++++++++++
- 1 file changed, 12 insertions(+)
+ drivers/dma-buf/dma-resv.c | 19 ++++++++++---------
+ include/linux/dma-resv.h   | 32 +++++++++++++++++++++-----------
+ 2 files changed, 31 insertions(+), 20 deletions(-)
 
+diff --git a/drivers/dma-buf/dma-resv.c b/drivers/dma-buf/dma-resv.c
+index f0afb7cd9c02..9ea42d37ced6 100644
+--- a/drivers/dma-buf/dma-resv.c
++++ b/drivers/dma-buf/dma-resv.c
+@@ -371,7 +371,7 @@ static void dma_resv_iter_restart_unlocked(struct dma_resv_iter *cursor)
+ 	cursor->seq = read_seqcount_begin(&cursor->obj->seq);
+ 	cursor->index = -1;
+ 	cursor->shared_count = 0;
+-	if (cursor->all_fences) {
++	if (cursor->usage >= DMA_RESV_USAGE_READ) {
+ 		cursor->fences = dma_resv_shared_list(cursor->obj);
+ 		if (cursor->fences)
+ 			cursor->shared_count = cursor->fences->shared_count;
+@@ -478,7 +478,7 @@ struct dma_fence *dma_resv_iter_first(struct dma_resv_iter *cursor)
+ 	dma_resv_assert_held(cursor->obj);
+ 
+ 	cursor->index = 0;
+-	if (cursor->all_fences)
++	if (cursor->usage >= DMA_RESV_USAGE_READ)
+ 		cursor->fences = dma_resv_shared_list(cursor->obj);
+ 	else
+ 		cursor->fences = NULL;
+@@ -533,7 +533,7 @@ int dma_resv_copy_fences(struct dma_resv *dst, struct dma_resv *src)
+ 	list = NULL;
+ 	excl = NULL;
+ 
+-	dma_resv_iter_begin(&cursor, src, true);
++	dma_resv_iter_begin(&cursor, src, DMA_RESV_USAGE_READ);
+ 	dma_resv_for_each_fence_unlocked(&cursor, f) {
+ 
+ 		if (dma_resv_iter_is_restarted(&cursor)) {
+@@ -600,7 +600,7 @@ int dma_resv_get_fences(struct dma_resv *obj, struct dma_fence **fence_excl,
+ 	if (fence_excl)
+ 		*fence_excl = NULL;
+ 
+-	dma_resv_iter_begin(&cursor, obj, true);
++	dma_resv_iter_begin(&cursor, obj, DMA_RESV_USAGE_READ);
+ 	dma_resv_for_each_fence_unlocked(&cursor, fence) {
+ 
+ 		if (dma_resv_iter_is_restarted(&cursor)) {
+@@ -640,7 +640,7 @@ EXPORT_SYMBOL_GPL(dma_resv_get_fences);
+ /**
+  * dma_resv_get_singleton - Get a single fence for all the fences
+  * @obj: the reservation object
+- * @write: true if we should return all fences
++ * @usage: controls which fences to include, see enum dma_resv_usage.
+  * @fence: the resulting fence
+  *
+  * Get a single fence representing all the fences inside the resv object.
+@@ -652,7 +652,7 @@ EXPORT_SYMBOL_GPL(dma_resv_get_fences);
+  *
+  * Returns 0 on success and negative error values on failure.
+  */
+-int dma_resv_get_singleton(struct dma_resv *obj, bool write,
++int dma_resv_get_singleton(struct dma_resv *obj, enum dma_resv_usage usage,
+ 			  struct dma_fence **fence)
+ {
+ 	struct dma_fence *excl = NULL;
+@@ -661,6 +661,7 @@ int dma_resv_get_singleton(struct dma_resv *obj, bool write,
+ 	struct dma_fence **fences;
+ 	unsigned int shared_count = 0;
+ 	unsigned int count, i;
++	bool write = usage >= DMA_RESV_USAGE_READ;
+ 	int r;
+ 
+ 	r = dma_resv_get_fences(obj, &excl, &shared_count, &shared);
+@@ -726,7 +727,7 @@ EXPORT_SYMBOL_GPL(dma_resv_get_singleton);
+  * dma_resv_wait_timeout - Wait on reservation's objects
+  * shared and/or exclusive fences.
+  * @obj: the reservation object
+- * @wait_all: if true, wait on all fences, else wait on just exclusive fence
++ * @usage: controls which fences to include, see enum dma_resv_usage.
+  * @intr: if true, do interruptible wait
+  * @timeout: timeout value in jiffies or zero to return immediately
+  *
+@@ -744,7 +745,7 @@ long dma_resv_wait_timeout(struct dma_resv *obj, unsigned int usage, bool intr,
+ 	struct dma_resv_iter cursor;
+ 	struct dma_fence *fence;
+ 
+-	dma_resv_iter_begin(&cursor, obj, wait_all);
++	dma_resv_iter_begin(&cursor, obj, usage);
+ 	dma_resv_for_each_fence_unlocked(&cursor, fence) {
+ 
+ 		ret = dma_fence_wait_timeout(fence, intr, ret);
+@@ -778,7 +779,7 @@ bool dma_resv_test_signaled(struct dma_resv *obj, unsigned int usage)
+ 	struct dma_resv_iter cursor;
+ 	struct dma_fence *fence;
+ 
+-	dma_resv_iter_begin(&cursor, obj, test_all);
++	dma_resv_iter_begin(&cursor, obj, usage);
+ 	dma_resv_for_each_fence_unlocked(&cursor, fence) {
+ 		dma_resv_iter_end(&cursor);
+ 		return false;
 diff --git a/include/linux/dma-resv.h b/include/linux/dma-resv.h
-index 6d5d4e3ef19b..3520045a280c 100644
+index 84ef57cd1ae6..5e68c0d83235 100644
 --- a/include/linux/dma-resv.h
 +++ b/include/linux/dma-resv.h
-@@ -362,6 +362,18 @@ static inline struct dma_resv_list *dma_resv_shared_list(struct dma_resv *obj)
- 	return rcu_dereference_check(obj->fence, dma_resv_held(obj));
- }
+@@ -47,6 +47,16 @@
+ 
+ extern struct ww_class reservation_ww_class;
  
 +enum dma_resv_usage {
-+	DMA_RESV_USAGE_KERNEL = 0,
 +	DMA_RESV_USAGE_WRITE,
 +	DMA_RESV_USAGE_READ,
-+	DMA_RESV_USAGE_BOOKKEEP
 +};
 +
 +static inline enum dma_resv_usage dma_resv_usage_rw(bool write)
@@ -52,9 +142,75 @@ index 6d5d4e3ef19b..3520045a280c 100644
 +	return write ? DMA_RESV_USAGE_READ : DMA_RESV_USAGE_WRITE;
 +}
 +
- void dma_resv_init(struct dma_resv *obj);
- void dma_resv_fini(struct dma_resv *obj);
- int dma_resv_reserve_shared(struct dma_resv *obj, unsigned int num_fences);
+ /**
+  * struct dma_resv_list - a list of shared fences
+  * @rcu: for internal use
+@@ -84,8 +94,8 @@ struct dma_resv_iter {
+ 	/** @obj: The dma_resv object we iterate over */
+ 	struct dma_resv *obj;
+ 
+-	/** @all_fences: If all fences should be returned */
+-	bool all_fences;
++	/** @usage: Return fences with this usage or lower. */
++	enum dma_resv_usage usage;
+ 
+ 	/** @fence: the currently handled fence */
+ 	struct dma_fence *fence;
+@@ -115,14 +125,14 @@ struct dma_fence *dma_resv_iter_next(struct dma_resv_iter *cursor);
+  * dma_resv_iter_begin - initialize a dma_resv_iter object
+  * @cursor: The dma_resv_iter object to initialize
+  * @obj: The dma_resv object which we want to iterate over
+- * @all_fences: If all fences should be returned or just the exclusive one
++ * @usage: controls which fences to include, see enum dma_resv_usage.
+  */
+ static inline void dma_resv_iter_begin(struct dma_resv_iter *cursor,
+ 				       struct dma_resv *obj,
+-				       bool all_fences)
++				       enum dma_resv_usage usage)
+ {
+ 	cursor->obj = obj;
+-	cursor->all_fences = all_fences;
++	cursor->usage = usage;
+ 	cursor->fence = NULL;
+ }
+ 
+@@ -179,7 +189,7 @@ static inline bool dma_resv_iter_is_restarted(struct dma_resv_iter *cursor)
+  * dma_resv_for_each_fence - fence iterator
+  * @cursor: a struct dma_resv_iter pointer
+  * @obj: a dma_resv object pointer
+- * @all_fences: true if all fences should be returned
++ * @usage: controls which fences to return
+  * @fence: the current fence
+  *
+  * Iterate over the fences in a struct dma_resv object while holding the
+@@ -188,8 +198,8 @@ static inline bool dma_resv_iter_is_restarted(struct dma_resv_iter *cursor)
+  * valid as long as the lock is held and so no extra reference to the fence is
+  * taken.
+  */
+-#define dma_resv_for_each_fence(cursor, obj, all_fences, fence)	\
+-	for (dma_resv_iter_begin(cursor, obj, all_fences),	\
++#define dma_resv_for_each_fence(cursor, obj, usage, fence)	\
++	for (dma_resv_iter_begin(cursor, obj, usage),	\
+ 	     fence = dma_resv_iter_first(cursor); fence;	\
+ 	     fence = dma_resv_iter_next(cursor))
+ 
+@@ -394,13 +404,13 @@ void dma_resv_replace_fences(struct dma_resv *obj, uint64_t context,
+ void dma_resv_add_excl_fence(struct dma_resv *obj, struct dma_fence *fence);
+ int dma_resv_get_fences(struct dma_resv *obj, struct dma_fence **pfence_excl,
+ 			unsigned *pshared_count, struct dma_fence ***pshared);
+-int dma_resv_get_singleton(struct dma_resv *obj, bool write,
++int dma_resv_get_singleton(struct dma_resv *obj, enum dma_resv_usage usage,
+ 						  struct dma_fence **fence);
+ int dma_resv_copy_fences(struct dma_resv *dst, struct dma_resv *src);
+ 
+-long dma_resv_wait_timeout(struct dma_resv *obj, unsigned int usage,
++long dma_resv_wait_timeout(struct dma_resv *obj, enum dma_resv_usage usage,
+ 			   bool intr, unsigned long timeout);
+-bool dma_resv_test_signaled(struct dma_resv *obj, unsigned int usage);
++bool dma_resv_test_signaled(struct dma_resv *obj, enum dma_resv_usage usage);
+ 
+ static inline int dma_resv_reserve_fences(struct dma_resv *obj,
+ 					  unsigned int num_fences)
 -- 
 2.43.0
 

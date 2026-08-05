@@ -1,7 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Christian=20K=C3=B6nig?= <christian.koenig@amd.com>
 Date: Mon, 19 Sep 2022 14:00:33 +0200
-Subject: dma-buf: fix dma_fence_default_wait() signaling check
+Subject: dma-buf: fix dma_fence_default_wait() signaling
+ check
 
 That check must now come after grabing the spinlock, not before.
 
@@ -18,10 +19,10 @@ Signed-off-by: Varun Gupta <varun.gupta@intel.com>
  1 file changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/dma-buf/dma-fence.c b/drivers/dma-buf/dma-fence.c
-index 72bcc54836fb..1b63cc6848b8 100644
+index 708fb94ae8c2..b87aaea6f0a1 100644
 --- a/drivers/dma-buf/dma-fence.c
 +++ b/drivers/dma-buf/dma-fence.c
-@@ -768,11 +768,11 @@ dma_fence_default_wait(struct dma_fence *fence, bool intr, signed long timeout)
+@@ -765,11 +765,11 @@ dma_fence_default_wait(struct dma_fence *fence, bool intr, signed long timeout)
  	unsigned long flags;
  	signed long ret = timeout ? timeout : 1;
  

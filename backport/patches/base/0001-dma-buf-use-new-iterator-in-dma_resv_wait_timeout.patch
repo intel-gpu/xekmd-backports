@@ -15,47 +15,32 @@ Link: https://patchwork.freedesktop.org/patch/msgid/20211005113742.1101-7-christ
 Reviewed-by: Arvind Yadav <arvind.yadav@intel.com>
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
 ---
- drivers/dma-buf/dma-resv.c | 15 ++++++---------
- 1 file changed, 6 insertions(+), 9 deletions(-)
+ drivers/dma-buf/dma-resv.c | 12 +++++-------
+ 1 file changed, 5 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/dma-buf/dma-resv.c b/drivers/dma-buf/dma-resv.c
-index 24cad9ee2563..95f00f3d33da 100644
+index 1fd5d9ee6dc8..e83ce783c45d 100644
 --- a/drivers/dma-buf/dma-resv.c
 +++ b/drivers/dma-buf/dma-resv.c
-@@ -565,27 +565,24 @@ int dma_resv_get_fences(struct dma_resv *obj, struct dma_fence **pfence_excl,
- EXPORT_SYMBOL_GPL(dma_resv_get_fences);
- 
- /**
-- * dma_resv_wait_timeout - Wait on reservation's objects
-- * shared and/or exclusive fences.
-+ * dma_resv_wait_timeout - Wait on reservation's objects fences
-  * @obj: the reservation object
-- * @wait_all: if true, wait on all fences, else wait on just exclusive fence
-+ * @usage: controls which fences to include, see enum dma_resv_usage
-  * @intr: if true, do interruptible wait
-  * @timeout: timeout value in jiffies or zero to return immediately
-  *
-- * Callers are not required to hold specific locks, but maybe hold
-- * dma_resv_lock() already
-  * RETURNS
-  * Returns -ERESTARTSYS if interrupted, 0 if the wait timed out, or
-- * greater than zer on success.
-+ * greater than zero on success.
-  */
--long dma_resv_wait_timeout(struct dma_resv *obj, bool wait_all, bool intr,
--			   unsigned long timeout)
-+long dma_resv_wait_timeout(struct dma_resv *obj, unsigned int usage,
-+			   bool intr, unsigned long timeout)
- {
- 	long ret = timeout ? timeout : 1;
- 	struct dma_resv_iter cursor;
- 	struct dma_fence *fence;
- 
--	dma_resv_iter_begin(&cursor, obj, wait_all);
-+	dma_resv_iter_begin(&cursor, obj, usage);
+@@ -562,13 +562,11 @@ long dma_resv_wait_timeout(struct dma_resv *obj, bool wait_all, bool intr,
+ 	dma_resv_iter_begin(&cursor, obj, wait_all);
  	dma_resv_for_each_fence_unlocked(&cursor, fence) {
  
- 		ret = dma_fence_wait_timeout(fence, intr, timeout);
+-		ret = dma_fence_wait_timeout(fence, intr, timeout);
+-		if (ret <= 0)
+-			break;
+-
+-		/* Even for zero timeout the return value is 1 */
+-		if (timeout)
+-			timeout = ret;
++		ret = dma_fence_wait_timeout(fence, intr, ret);
++		if (ret <= 0) {
++			dma_resv_iter_end(&cursor);
++			return ret;
++		}
+ 	}
+ 	dma_resv_iter_end(&cursor);
+ 
 -- 
 2.43.0
 

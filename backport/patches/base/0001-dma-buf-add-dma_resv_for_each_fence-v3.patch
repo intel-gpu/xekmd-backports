@@ -13,23 +13,30 @@ Signed-off-by: Christian König <christian.koenig@amd.com>
 Reviewed-by: Tvrtko Ursulin <tvrtko.ursulin@intel.com>
 Link: https://patchwork.freedesktop.org/patch/msgid/20211006123609.2026-1-christian.koenig@amd.com
 
-(backported from commit 5baaac3184ab896d74993825858f1b1a46c460ce linux)
+(Backported from commit 5baaac3184ab896d74993825858f1b1a46c460ce linux)
 
 Reviewed-by: Arvind Yadav <arvind.yadav@intel.com>
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
 ---
- drivers/dma-buf/dma-resv.c | 56 ++++++++++++++++++++++++++++++++++++++
- 1 file changed, 56 insertions(+)
+ drivers/dma-buf/dma-resv.c | 51 ++++++++++++++++++++++++++++++++++++++
+ include/linux/dma-resv.h   | 20 +++++++++++++++
+ 2 files changed, 71 insertions(+)
 
 diff --git a/drivers/dma-buf/dma-resv.c b/drivers/dma-buf/dma-resv.c
-index 65e5c267ce0f..c87ce64da2d1 100644
+index b1f0de17dde0..5f0b428f9802 100644
 --- a/drivers/dma-buf/dma-resv.c
 +++ b/drivers/dma-buf/dma-resv.c
-@@ -976,3 +976,59 @@ struct dma_fence *dma_resv_iter_next_unlocked(struct dma_resv_iter *cursor)
- 	return cursor->fence;
+@@ -414,6 +414,57 @@ struct dma_fence *dma_resv_iter_next_unlocked(struct dma_resv_iter *cursor)
  }
  EXPORT_SYMBOL(dma_resv_iter_next_unlocked);
-+
+ 
++/**
++ * dma_resv_iter_first - first fence from a locked dma_resv object
++ * @cursor: cursor to record the current position
++ *
++ * Return the first fence in the dma_resv object while holding the
++ * &dma_resv.lock.
++ */
 +struct dma_fence *dma_resv_iter_first(struct dma_resv_iter *cursor)
 +{
 +	struct dma_fence *fence;
@@ -37,54 +44,84 @@ index 65e5c267ce0f..c87ce64da2d1 100644
 +	dma_resv_assert_held(cursor->obj);
 +
 +	cursor->index = 0;
-+	cursor->fobj = dma_resv_shared_list(cursor->obj);
++	if (cursor->all_fences)
++		cursor->fences = dma_resv_shared_list(cursor->obj);
++	else
++		cursor->fences = NULL;
 +
-+	/*
-+	 * fence_excl is returned for every @usage on purpose. It is never a
-+	 * preempt fence (those are tagged DMA_RESV_USAGE_BOOKKEEP in shared[]),
-+	 * so including it can only over-synchronise, never deadlock, and it
-+	 * keeps imported legacy buffers safe.
-+	 */
 +	fence = dma_resv_excl_fence(cursor->obj);
-+	if (fence) {
-+		cursor->fence_usage = DMA_RESV_USAGE_WRITE;
-+	} else {
++	if (!fence)
 +		fence = dma_resv_iter_next(cursor);
-+	}
 +
 +	cursor->is_restarted = true;
 +	return fence;
 +}
-+EXPORT_SYMBOL(dma_resv_iter_first);
++EXPORT_SYMBOL_GPL(dma_resv_iter_first);
 +
++/**
++ * dma_resv_iter_next - next fence from a locked dma_resv object
++ * @cursor: cursor to record the current position
++ *
++ * Return the next fences from the dma_resv object while holding the
++ * &dma_resv.lock.
++ */
 +struct dma_fence *dma_resv_iter_next(struct dma_resv_iter *cursor)
 +{
-+	struct dma_fence *fence;
-+	enum dma_resv_usage usage;
++	unsigned int idx;
 +
 +	dma_resv_assert_held(cursor->obj);
 +
 +	cursor->is_restarted = false;
++	if (!cursor->fences || cursor->index >= cursor->fences->shared_count)
++		return NULL;
 +
-+	/*
-+	 * Skip fences whose usage is weaker than what the caller asked for.
-+	 * This is the filter that stops DMA_RESV_USAGE_BOOKKEEP preempt
-+	 * fences from becoming hard dependencies of ordinary exec jobs.
-+	 */
-+	while (cursor->fobj &&
-+	       cursor->index < (int)cursor->fobj->shared_count) {
-+		dma_resv_list_entry(cursor->fobj, cursor->index++, cursor->obj,
-+				    &fence, &usage);
-+		if (usage <= cursor->usage) {
-+			cursor->fence_usage = usage;
-+			return fence;
-+		}
-+	}
-+
-+	cursor->fence = NULL;
-+	return NULL;
++	idx = cursor->index++;
++	return rcu_dereference_protected(cursor->fences->shared[idx],
++					 dma_resv_held(cursor->obj));
 +}
-+EXPORT_SYMBOL(dma_resv_iter_next);
++EXPORT_SYMBOL_GPL(dma_resv_iter_next);
++
+ /**
+  * dma_resv_copy_fences - Copy all fences from src to dst.
+  * @dst: the destination reservation object
+diff --git a/include/linux/dma-resv.h b/include/linux/dma-resv.h
+index ef9f94ce2cc3..3f9bb7b6e405 100644
+--- a/include/linux/dma-resv.h
++++ b/include/linux/dma-resv.h
+@@ -105,6 +105,8 @@ struct dma_resv_iter {
+ 
+ struct dma_fence *dma_resv_iter_first_unlocked(struct dma_resv_iter *cursor);
+ struct dma_fence *dma_resv_iter_next_unlocked(struct dma_resv_iter *cursor);
++struct dma_fence *dma_resv_iter_first(struct dma_resv_iter *cursor);
++struct dma_fence *dma_resv_iter_next(struct dma_resv_iter *cursor);
+ 
+ /**
+  * dma_resv_iter_begin - initialize a dma_resv_iter object
+@@ -170,6 +172,24 @@ static inline bool dma_resv_iter_is_restarted(struct dma_resv_iter *cursor)
+ 	for (fence = dma_resv_iter_first_unlocked(cursor);		\
+ 	     fence; fence = dma_resv_iter_next_unlocked(cursor))
+ 
++/**
++ * dma_resv_for_each_fence - fence iterator
++ * @cursor: a struct dma_resv_iter pointer
++ * @obj: a dma_resv object pointer
++ * @all_fences: true if all fences should be returned
++ * @fence: the current fence
++ *
++ * Iterate over the fences in a struct dma_resv object while holding the
++ * &dma_resv.lock. @all_fences controls if the shared fences are returned as
++ * well. The cursor initialisation is part of the iterator and the fence stays
++ * valid as long as the lock is held and so no extra reference to the fence is
++ * taken.
++ */
++#define dma_resv_for_each_fence(cursor, obj, all_fences, fence)	\
++	for (dma_resv_iter_begin(cursor, obj, all_fences),	\
++	     fence = dma_resv_iter_first(cursor); fence;	\
++	     fence = dma_resv_iter_next(cursor))
++
+ #define dma_resv_held(obj) lockdep_is_held(&(obj)->lock.base)
+ #define dma_resv_assert_held(obj) lockdep_assert_held(&(obj)->lock.base)
+ 
 -- 
 2.43.0
 

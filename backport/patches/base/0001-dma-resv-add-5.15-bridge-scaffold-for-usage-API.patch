@@ -20,14 +20,43 @@ Reference:
 Reviewed-by: Arvind Yadav <arvind.yadav@intel.com>
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
 ---
- include/linux/dma-resv.h | 13 ++++++++++---
- 1 file changed, 10 insertions(+), 3 deletions(-)
+ drivers/dma-buf/dma-resv.c |  8 +++++---
+ include/linux/dma-resv.h   | 13 ++++++++++---
+ 2 files changed, 15 insertions(+), 6 deletions(-)
 
+diff --git a/drivers/dma-buf/dma-resv.c b/drivers/dma-buf/dma-resv.c
+index 3b4903322f29..5c93b43b8702 100644
+--- a/drivers/dma-buf/dma-resv.c
++++ b/drivers/dma-buf/dma-resv.c
+@@ -605,9 +605,10 @@ EXPORT_SYMBOL_GPL(dma_resv_get_fences);
+  * Returns -ERESTARTSYS if interrupted, 0 if the wait timed out, or
+  * greater than zer on success.
+  */
+-long dma_resv_wait_timeout(struct dma_resv *obj, bool wait_all, bool intr,
+-			   unsigned long timeout)
++long dma_resv_wait_timeout(struct dma_resv *obj, unsigned int usage, bool intr,
++                           unsigned long timeout)
+ {
++	bool wait_all = !!usage;
+ 	long ret = timeout ? timeout : 1;
+ 	struct dma_resv_iter cursor;
+ 	struct dma_fence *fence;
+@@ -640,8 +641,9 @@ EXPORT_SYMBOL_GPL(dma_resv_wait_timeout);
+  * RETURNS
+  * true if all fences signaled, else false
+  */
+-bool dma_resv_test_signaled(struct dma_resv *obj, bool test_all)
++bool dma_resv_test_signaled(struct dma_resv *obj, unsigned int usage)
+ {
++	bool test_all = !!usage;
+ 	struct dma_resv_iter cursor;
+ 	struct dma_fence *fence;
+ 
 diff --git a/include/linux/dma-resv.h b/include/linux/dma-resv.h
-index ef9f94ce2cc3..6d5d4e3ef19b 100644
+index ab4c1673c350..7743d6d34d95 100644
 --- a/include/linux/dma-resv.h
 +++ b/include/linux/dma-resv.h
-@@ -370,8 +370,15 @@ void dma_resv_add_excl_fence(struct dma_resv *obj, struct dma_fence *fence);
+@@ -393,8 +393,15 @@ void dma_resv_add_excl_fence(struct dma_resv *obj, struct dma_fence *fence);
  int dma_resv_get_fences(struct dma_resv *obj, struct dma_fence **pfence_excl,
  			unsigned *pshared_count, struct dma_fence ***pshared);
  int dma_resv_copy_fences(struct dma_resv *dst, struct dma_resv *src);

@@ -2697,10 +2697,13 @@ void prelim_xe_eudebug_file_open(struct xe_file *xef)
 	struct xe_eudebug *d;
 
 	INIT_LIST_HEAD(&xef->eudebug.client_link);
+	INIT_LIST_HEAD(&xef->eudebug.discovery_link);
 	mutex_init(&xef->eudebug.metadata.lock);
 	xa_init_flags(&xef->eudebug.metadata.xa, XA_FLAGS_ALLOC1);
 
 	down_read(&xef->xe->eudebug.discovery_lock);
+
+	xe_file_get(xef);
 
 	spin_lock(&xef->xe->clients.lock);
 	list_add_tail(&xef->eudebug.client_link, &xef->xe->clients.list);
@@ -2719,10 +2722,17 @@ void prelim_xe_eudebug_file_close(struct xe_file *xef)
 	unsigned long idx;
 	struct prelim_xe_debug_metadata *mdata;
 
-	down_read(&xef->xe->eudebug.discovery_lock);
-	d = prelim_xe_eudebug_get(xef);
-	if (d)
+	spin_lock(&xef->xe->clients.lock);
+	list_del_init(&xef->eudebug.client_link);
+	spin_unlock(&xef->xe->clients.lock);
+
+	xe_file_put(xef);
+
+	d = _xe_eudebug_get(xef);
+	if (d) {
+		wait_for_completion(&d->discovery);
 		xe_eudebug_event_put(d, client_destroy_event(d, xef));
+	}
 
 	mutex_lock(&xef->eudebug.metadata.lock);
 	xa_for_each(&xef->eudebug.metadata.xa, idx, mdata)
@@ -2731,12 +2741,6 @@ void prelim_xe_eudebug_file_close(struct xe_file *xef)
 
 	xa_destroy(&xef->eudebug.metadata.xa);
 	mutex_destroy(&xef->eudebug.metadata.lock);
-
-	spin_lock(&xef->xe->clients.lock);
-	list_del_init(&xef->eudebug.client_link);
-	spin_unlock(&xef->xe->clients.lock);
-
-	up_read(&xef->xe->eudebug.discovery_lock);
 }
 
 static int send_vm_event(struct xe_eudebug *d, u32 flags,
@@ -3786,6 +3790,9 @@ static int discover_client(struct xe_eudebug *d, struct xe_file *xef)
 	unsigned long i;
 	int err;
 
+	if (!prelim_xe_eudebug_client_tracked(xef))
+		return 0;
+
 	err = client_create_event(d, xef);
 	if (err)
 		return err;
@@ -3836,13 +3843,19 @@ static bool xe_eudebug_task_match(struct xe_eudebug *d, struct xe_file *xef)
 
 static void discover_clients(struct xe_device *xe, struct xe_eudebug *d)
 {
-	struct xe_file *xef;
-	int err;
+	struct xe_file *xef, *tmp;
+	LIST_HEAD(dlist);
+	int err = 0;
 
+	spin_lock(&xe->clients.lock);
 	list_for_each_entry(xef, &xe->clients.list, eudebug.client_link) {
-		if (xe_eudebug_detached(d))
-			break;
+		xe_file_get(xef);
+		XE_WARN_ON(!list_empty(&xef->eudebug.discovery_link));
+		list_add_tail(&xef->eudebug.discovery_link, &dlist);
+	}
+	spin_unlock(&xe->clients.lock);
 
+	list_for_each_entry(xef, &dlist, eudebug.discovery_link) {
 		if (xe_eudebug_task_match(d, xef))
 			err = discover_client(d, xef);
 		else
@@ -3852,6 +3865,11 @@ static void discover_clients(struct xe_device *xe, struct xe_eudebug *d)
 			eu_dbg(d, "discover client %p: %d\n", xef, err);
 			break;
 		}
+	}
+
+	list_for_each_entry_safe(xef, tmp, &dlist, eudebug.discovery_link) {
+		list_del_init(&xef->eudebug.discovery_link);
+		xe_file_put(xef);
 	}
 }
 
@@ -4679,6 +4697,11 @@ int prelim_xe_eudebug_sync_host(struct xe_exec_queue *q, struct xe_lrc *lrc)
 	up_read(&xe->eudebug.discovery_lock);
 
 	return err;
+}
+
+bool prelim_xe_eudebug_client_tracked(struct xe_file *xef)
+{
+	return !list_empty_careful(&xef->eudebug.client_link);
 }
 
 #if IS_ENABLED(CPTCFG_DRM_XE_KUNIT_TEST)

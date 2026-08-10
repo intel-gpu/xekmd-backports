@@ -63,6 +63,8 @@ void prelim_xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf, bool 
 
 int prelim_xe_eudebug_sync_host(struct xe_exec_queue *q, struct xe_lrc *lrc);
 
+bool prelim_xe_eudebug_client_tracked(struct xe_file *xef);
+
 #else
 
 static inline int prelim_xe_eudebug_connect_ioctl(struct drm_device *dev,

@@ -205,6 +205,8 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([linux/dma-iommu.h])
 	dnl # v6.12-5f60d5f6bbc1 move asm/unaligned.h to linux/unaligned.h
 	AC_KERNEL_CHECK_HEADERS([linux/unaligned.h])
+	dnl # v5.19-6a99099fe1d6 drm/display: Move HDCP helpers into display-helper module
+	AC_KERNEL_CHECK_HEADERS([drm/display/drm_hdcp.h])
 
 	AC_KERNEL_WAIT
 ])

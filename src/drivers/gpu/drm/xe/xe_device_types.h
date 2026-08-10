@@ -673,8 +673,17 @@ struct xe_file {
 #if IS_ENABLED(CPTCFG_PRELIM_DRM_XE_EUDEBUG)
 	/** @eudebug: stores link to drm client and debug metadata */
 	struct {
-		/** @eudebug.client_link: list entry in xe_device.clients.list */
+		/**
+		 * @eudebug.client_link: list entry in xe_device.clients.list.
+		 * protected by xe_device.clients.lock
+		 */
 		struct list_head client_link;
+
+		/**
+		 * @eudebug.discovery_link: list entry for current discovery process.
+		 * protected by single-walker discovery via eudebug.ordered_wq
+		 */
+		struct list_head discovery_link;
 
 		/** @eudebug.metadata: debug metadata handling */
 		struct {

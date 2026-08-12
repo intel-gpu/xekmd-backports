@@ -49,6 +49,9 @@ struct ttm_transfer_obj {
 int ttm_mem_io_reserve(struct ttm_device *bdev,
 		       struct ttm_resource *mem)
 {
+	if (!mem)
+		return 0;
+	
 	if (mem->bus.offset || mem->bus.addr)
 		return 0;
 

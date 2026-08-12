@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akanksha Hotta <akanksha.hotta@intel.com>
+Date: Wed, 12 Aug 2026 11:47:27 +0530
+Subject: drm/ttm: Add NULL check for bo-resource in
+ ttm_bo_vm_fault_reserved()
+
+During xe_madvise, bo->resource is temporarily NULL. If a page fault hits this
+window, we must check bo->resource before using it, otherwise the kernel
+crashes trying to use a NULL address.
+
+Reviewed-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/ttm/ttm_bo_util.c | 3 +++
+ drivers/gpu/drm/ttm/ttm_bo_vm.c   | 3 +++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/drivers/gpu/drm/ttm/ttm_bo_util.c b/drivers/gpu/drm/ttm/ttm_bo_util.c
+index 3e3c201..09740ad 100644
+--- a/drivers/gpu/drm/ttm/ttm_bo_util.c
++++ b/drivers/gpu/drm/ttm/ttm_bo_util.c
+@@ -49,6 +49,9 @@ struct ttm_transfer_obj {
+ int ttm_mem_io_reserve(struct ttm_device *bdev,
+ 		       struct ttm_resource *mem)
+ {
++	if (!mem)
++		return 0;
++	
+ 	if (mem->bus.offset || mem->bus.addr)
+ 		return 0;
+ 
+diff --git a/drivers/gpu/drm/ttm/ttm_bo_vm.c b/drivers/gpu/drm/ttm/ttm_bo_vm.c
+index a805104..31d9a6c 100644
+--- a/drivers/gpu/drm/ttm/ttm_bo_vm.c
++++ b/drivers/gpu/drm/ttm/ttm_bo_vm.c
+@@ -204,6 +204,9 @@ vm_fault_t ttm_bo_vm_fault_reserved(struct vm_fault *vmf,
+ 	if (unlikely(ret != 0))
+ 		return ret;
+ 
++	if (unlikely(!bo->resource))
++		return VM_FAULT_SIGBUS;
++
+ 	err = ttm_mem_io_reserve(bo->bdev, bo->resource);
+ 	if (unlikely(err != 0))
+ 		return VM_FAULT_SIGBUS;
+-- 
+2.43.0
+

@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michał Winiarski <michal.winiarski@intel.com>
+Date: Wed, 24 Jun 2026 13:14:20 +0200
+Subject: drm/xe: Fix memory leak in exec_queue_set_hang_replay_state()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The q->replay_state is blindly overwritten, which can potentially leak
+memory that was previously allocated by vmemdup_user().
+Return an error if q->replay_state is not empty.
+
+Discovered using AI-assisted static analysis confirmed by Intel Product
+Security.
+
+Reported-by: Martin Hodo <martin.hodo@intel.com>
+Fixes: 1026c1a73a96 ("drm/xe: Implement DRM_XE_EXEC_QUEUE_SET_HANG_REPLAY_STATE")
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260624111421.1258364-1-michal.winiarski@intel.com
+Signed-off-by: Michał Winiarski <michal.winiarski@intel.com>
+(cherry-picked from commit f6b6cc1118bdbc4265fa8b3bdf8565b26f13e56e linux-next)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index 3d7df8f8a58f..4a9995ae4588 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -811,6 +811,9 @@ static int exec_queue_set_hang_replay_state(struct xe_device *xe,
+ 	u64 __user *address = u64_to_user_ptr(value);
+ 	void *ptr;
+ 
++	if (q->replay_state)
++		return -EINVAL;
++
+ 	ptr = vmemdup_user(address, size);
+ 	if (XE_IOCTL_DBG(xe, IS_ERR(ptr)))
+ 		return PTR_ERR(ptr);
+-- 
+2.43.0
+

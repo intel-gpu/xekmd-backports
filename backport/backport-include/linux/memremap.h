@@ -19,12 +19,19 @@ static inline void *folio_zone_device_data(const struct folio *folio)
 #endif /* BPM_FOLIO_ZONE_DEVICE_DATA_NOT_PRESENT */
 
 #ifdef BPM_ZONE_DEVICE_PAGE_INIT_3ARGS_NOT_PRESENT
-/*
- * On legacy targets we bypass device-memory migration helpers.
- * Accept any call form and intentionally no-op this initialization.
- */
+#ifndef BPM_ZONE_DEVICE_PAGE_INIT_2ARGS_NOT_PRESENT
+/* Has 2-arg signature */
+#define zone_device_page_init(page, pgmap, order) \
+	zone_device_page_init(page, pgmap)
+#elif !defined(BPM_ZONE_DEVICE_PAGE_INIT_1ARG_NOT_PRESENT)
+/* Has 1-arg signature */
+#define zone_device_page_init(page, pgmap, order) \
+	zone_device_page_init(page)
+#else
 #undef zone_device_page_init
-#define zone_device_page_init(page) do { } while (0)
+#define zone_device_page_init(page, pgmap, order) \
+        do { } while (0)
+#endif
 #endif
 
 #endif /* __BACKPORT_LINUX_MEMREMAP_H */

@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 2 Apr 2026 21:17:17 +0200
+Subject: drm/xe/pf: Print applied policy KLVs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Under CONFIG_DRM_XE_DEBUG_SRIOV print all policy KLVs sent to the
+GuC for better diagnostics.  This is similar what we are already
+doing with VF configuration KLVs.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260402191726.4932-5-michal.wajdeczko@intel.com
+(cherry-picked from commit 980bb387fb08163d0692f25892d8b3e34542349c linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
+index 6ab02e96e..c88c4e6a9 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
+@@ -68,6 +68,15 @@ static int pf_push_policy_buf_klvs(struct xe_gt *gt, u32 num_klvs,
+ 		return err;
+ 	}
+ 
++	if (IS_ENABLED(CONFIG_DRM_XE_DEBUG_SRIOV)) {
++		struct drm_printer p = xe_gt_dbg_printer(gt);
++		void *klvs = xe_guc_buf_cpu_ptr(buf);
++
++		xe_gt_sriov_dbg(gt, "pushed policy update with %u KLV%s:\n",
++				num_klvs, str_plural(num_klvs));
++		xe_guc_klv_print(klvs, num_dwords, &p);
++	}
++
+ 	return 0;
+ }
+ 
+-- 
+2.43.0
+

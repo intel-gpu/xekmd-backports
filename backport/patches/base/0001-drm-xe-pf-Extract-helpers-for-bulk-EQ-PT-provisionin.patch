@@ -1,0 +1,139 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 2 Apr 2026 21:17:25 +0200
+Subject: drm/xe/pf: Extract helpers for bulk EQ/PT provisioning
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We already have functions to bulk provision execution quantum and
+preemption timeout, but they are applying changes to all possible
+VFs, while in upcoming patch we would like to provision only subset
+of available VFs.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260402191726.4932-13-michal.wajdeczko@intel.com
+(cherry-picked from commit 4f91e3a5b79f3962acff8038dfb89394496faa7d linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 66 +++++++++++++---------
+ 1 file changed, 40 insertions(+), 26 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index 2eda63b69..d02c96d30 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -2193,34 +2193,41 @@ u32 xe_gt_sriov_pf_config_get_exec_quantum(struct xe_gt *gt, unsigned int vfid)
+ 	return pf_get_exec_quantum(gt, vfid);
+ }
+ 
+-/**
+- * xe_gt_sriov_pf_config_bulk_set_exec_quantum_locked() - Configure EQ for PF and VFs.
+- * @gt: the &xe_gt to configure
+- * @exec_quantum: requested execution quantum in milliseconds (0 is infinity)
+- *
+- * This function can only be called on PF with the master mutex hold.
+- *
+- * Return: 0 on success or a negative error code on failure.
+- */
+-int xe_gt_sriov_pf_config_bulk_set_exec_quantum_locked(struct xe_gt *gt, u32 exec_quantum)
++static int pf_bulk_set_exec_quantum(struct xe_gt *gt, u32 exec_quantum,
++				    unsigned int first_vf, unsigned int num_vfs)
+ {
+-	unsigned int totalvfs = xe_gt_sriov_pf_get_totalvfs(gt);
+ 	unsigned int n;
+ 	int err = 0;
+ 
+ 	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+ 
+-	for (n = 0; n <= totalvfs; n++) {
++	for (n = first_vf; n < first_vf + num_vfs; n++) {
+ 		err = pf_provision_exec_quantum(gt, VFID(n), exec_quantum);
+ 		if (err)
+ 			break;
+ 	}
+ 
+-	return pf_config_bulk_set_u32_done(gt, 0, 1 + totalvfs, exec_quantum,
++	return pf_config_bulk_set_u32_done(gt, first_vf, num_vfs, exec_quantum,
+ 					   pf_get_exec_quantum, "execution quantum",
+ 					   exec_quantum_unit, n, err);
+ }
+ 
++/**
++ * xe_gt_sriov_pf_config_bulk_set_exec_quantum_locked() - Configure EQ for PF and VFs.
++ * @gt: the &xe_gt to configure
++ * @exec_quantum: requested execution quantum in milliseconds (0 is infinity)
++ *
++ * This function can only be called on PF with the master mutex hold.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_gt_sriov_pf_config_bulk_set_exec_quantum_locked(struct xe_gt *gt, u32 exec_quantum)
++{
++	unsigned int totalvfs = xe_gt_sriov_pf_get_totalvfs(gt);
++
++	return pf_bulk_set_exec_quantum(gt, exec_quantum, PFID, 1 + totalvfs);
++}
++
+ static int pf_provision_groups_exec_quantums(struct xe_gt *gt, unsigned int vfid,
+ 					     const u32 *exec_quantums, u32 count)
+ {
+@@ -2418,34 +2425,41 @@ u32 xe_gt_sriov_pf_config_get_preempt_timeout(struct xe_gt *gt, unsigned int vfi
+ 	return pf_get_preempt_timeout(gt, vfid);
+ }
+ 
+-/**
+- * xe_gt_sriov_pf_config_bulk_set_preempt_timeout_locked() - Configure PT for PF and VFs.
+- * @gt: the &xe_gt to configure
+- * @preempt_timeout: requested preemption timeout in microseconds (0 is infinity)
+- *
+- * This function can only be called on PF with the master mutex hold.
+- *
+- * Return: 0 on success or a negative error code on failure.
+- */
+-int xe_gt_sriov_pf_config_bulk_set_preempt_timeout_locked(struct xe_gt *gt, u32 preempt_timeout)
++static int pf_bulk_set_preempt_timeout(struct xe_gt *gt, u32 preempt_timeout,
++				       unsigned int first_vf, unsigned int num_vfs)
+ {
+-	unsigned int totalvfs = xe_gt_sriov_pf_get_totalvfs(gt);
+ 	unsigned int n;
+ 	int err = 0;
+ 
+ 	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+ 
+-	for (n = 0; n <= totalvfs; n++) {
++	for (n = first_vf; n < first_vf + num_vfs; n++) {
+ 		err = pf_provision_preempt_timeout(gt, VFID(n), preempt_timeout);
+ 		if (err)
+ 			break;
+ 	}
+ 
+-	return pf_config_bulk_set_u32_done(gt, 0, 1 + totalvfs, preempt_timeout,
++	return pf_config_bulk_set_u32_done(gt, first_vf, num_vfs, preempt_timeout,
+ 					   pf_get_preempt_timeout, "preemption timeout",
+ 					   preempt_timeout_unit, n, err);
+ }
+ 
++/**
++ * xe_gt_sriov_pf_config_bulk_set_preempt_timeout_locked() - Configure PT for PF and VFs.
++ * @gt: the &xe_gt to configure
++ * @preempt_timeout: requested preemption timeout in microseconds (0 is infinity)
++ *
++ * This function can only be called on PF with the master mutex hold.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_gt_sriov_pf_config_bulk_set_preempt_timeout_locked(struct xe_gt *gt, u32 preempt_timeout)
++{
++	unsigned int totalvfs = xe_gt_sriov_pf_get_totalvfs(gt);
++
++	return pf_bulk_set_preempt_timeout(gt, preempt_timeout, PFID, 1 + totalvfs);
++}
++
+ static int pf_provision_groups_preempt_timeouts(struct xe_gt *gt, unsigned int vfid,
+ 						const u32 *preempt_timeouts, u32 count)
+ {
+-- 
+2.43.0
+

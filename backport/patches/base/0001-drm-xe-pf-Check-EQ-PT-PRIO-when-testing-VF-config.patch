@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 2 Apr 2026 21:17:21 +0200
+Subject: drm/xe/pf: Check EQ/PT/PRIO when testing VF config
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In addition to the hard resources (like GGTT, CTXs, DBs) we should
+also check if VF was already configured (by sysfs or debugfs) with
+optional parameters like execution quantum (EQ), preemption timeout
+(PT) or scheduling priority (PRIO) as otherwise we might miss to
+send to the GuC updated latest values after a resume or GT reset.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260402191726.4932-9-michal.wajdeczko@intel.com
+(cherry-picked from commit 0701bf6fce0aa6f0f2122c9a324bd954d3d91b0b linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 32 ++++++++++++++++++++++
+ 1 file changed, 32 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index 703a954d7..abc6b5e22 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -2090,6 +2090,17 @@ static u32 pf_get_exec_quantum(struct xe_gt *gt, unsigned int vfid)
+ 	return config->exec_quantum[0];
+ }
+ 
++static bool pf_non_default_exec_quantum(struct xe_gt *gt, unsigned int vfid)
++{
++	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(config->exec_quantum); i++)
++		if (config->exec_quantum[i])
++			return true;
++	return false;
++}
++
+ /**
+  * xe_gt_sriov_pf_config_set_exec_quantum_locked() - Configure PF/VF execution quantum.
+  * @gt: the &xe_gt
+@@ -2305,6 +2316,17 @@ static u32 pf_get_preempt_timeout(struct xe_gt *gt, unsigned int vfid)
+ 	return config->preempt_timeout[0];
+ }
+ 
++static bool pf_non_default_preempt_timeout(struct xe_gt *gt, unsigned int vfid)
++{
++	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(config->preempt_timeout); i++)
++		if (config->preempt_timeout[i])
++			return true;
++	return false;
++}
++
+ /**
+  * xe_gt_sriov_pf_config_set_preempt_timeout_locked() - Configure PF/VF preemption timeout.
+  * @gt: the &xe_gt
+@@ -2603,6 +2625,13 @@ static void pf_reset_config_sched(struct xe_gt *gt, struct xe_gt_sriov_config *c
+ 	}
+ }
+ 
++static bool pf_non_default_sched(struct xe_gt *gt, unsigned int vfid)
++{
++	return pf_non_default_exec_quantum(gt, vfid) ||
++	       pf_non_default_preempt_timeout(gt, vfid) ||
++	       custom_sched_priority(gt, pf_get_sched_priority(gt, vfid));
++}
++
+ static int pf_provision_threshold(struct xe_gt *gt, unsigned int vfid,
+ 				  enum xe_guc_klv_threshold_index index, u32 value)
+ {
+@@ -2879,6 +2908,9 @@ static int pf_validate_vf_config(struct xe_gt *gt, unsigned int vfid)
+ 		valid_all = valid_all && valid_lmem;
+ 	}
+ 
++	/* also check optional EQ/PT/PRIO */
++	valid_any = valid_any || pf_non_default_sched(gt, vfid);
++
+ 	return valid_all ? 0 : valid_any ? -ENOKEY : -ENODATA;
+ }
+ 
+-- 
+2.43.0
+

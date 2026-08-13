@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 2 Apr 2026 21:17:15 +0200
+Subject: drm/xe/pf: Fix pf_get_sched_priority() function signature
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The pf_get_sched_priority() function returns scheduling priority
+that we defined as u32 so while it works we shouldn't return int.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260402191726.4932-3-michal.wajdeczko@intel.com
+(cherry-picked from commit a438423409692833e3b0f56a1d8440ac1761e594 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index 2f376b5fb..658e9b048 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -2500,7 +2500,7 @@ static int pf_provision_sched_priority(struct xe_gt *gt, unsigned int vfid, u32
+ 	return 0;
+ }
+ 
+-static int pf_get_sched_priority(struct xe_gt *gt, unsigned int vfid)
++static u32 pf_get_sched_priority(struct xe_gt *gt, unsigned int vfid)
+ {
+ 	struct xe_gt_sriov_config *config = pf_pick_vf_config(gt, vfid);
+ 
+-- 
+2.43.0
+

@@ -1,0 +1,116 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 2 Apr 2026 21:17:20 +0200
+Subject: drm/xe/pf: Encode scheduling priority KLV if needed
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+After a reset we missed to reprovision VFs scheduling priority config.
+But as of today, the GuC firmware allows to change scheduling priority
+using config SCHED_PRIORITY KLV only for the PF and configuration of
+all VFs relies on the previously applied value of the SCHED_IF_IDLE
+policy. Use this policy value to check and decide whether we need to
+encode VF priority KLV while reprovisioning this VF.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260402191726.4932-8-michal.wajdeczko@intel.com
+(cherry-picked from commit 43533f75c4577885da1f2e6fddeb88ccf61005f0 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 12 +++++++++++
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c | 25 ++++++++++++++++------
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h |  1 +
+ 3 files changed, 31 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index c74745642..703a954d7 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -285,6 +285,13 @@ static u32 encode_config_ggtt(u32 *cfg, const struct xe_gt_sriov_config *config,
+ 	return encode_ggtt(cfg, xe_ggtt_node_addr(node), xe_ggtt_node_size(node), details);
+ }
+ 
++static bool custom_sched_priority(struct xe_gt *gt, u32 priority)
++{
++	return xe_gt_sriov_pf_policy_get_sched_if_idle_locked(gt) ?
++		priority != GUC_SCHED_PRIORITY_NORMAL :
++		priority != GUC_SCHED_PRIORITY_LOW;
++}
++
+ static u32 encode_config_sched(struct xe_gt *gt, u32 *cfg, u32 n,
+ 			       const struct xe_gt_sriov_config *config)
+ {
+@@ -313,6 +320,11 @@ static u32 encode_config_sched(struct xe_gt *gt, u32 *cfg, u32 n,
+ 		cfg[n++] = config->preempt_timeout[0];
+ 	}
+ 
++	if (custom_sched_priority(gt, config->sched_priority)) {
++		cfg[n++] = PREP_GUC_KLV_TAG(VF_CFG_SCHED_PRIORITY);
++		cfg[n++] = config->sched_priority;
++	}
++
+ 	return n;
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
+index 55b54a519..6c1036743 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
+@@ -224,6 +224,22 @@ int xe_gt_sriov_pf_policy_set_sched_if_idle(struct xe_gt *gt, bool enable)
+ 	return 0;
+ }
+ 
++/**
++ * xe_gt_sriov_pf_policy_get_sched_if_idle_locked() - Retrieve value of 'sched_if_idle' policy.
++ * @gt: the &xe_gt where to read the policy from
++ *
++ * This function can only be called on PF.
++ *
++ * Return: last value of 'sched_if_idle' policy applied.
++ */
++bool xe_gt_sriov_pf_policy_get_sched_if_idle_locked(struct xe_gt *gt)
++{
++	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
++	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
++
++	return gt->sriov.pf.policy.guc.sched_if_idle;
++}
++
+ /**
+  * xe_gt_sriov_pf_policy_get_sched_if_idle - Retrieve value of 'sched_if_idle' policy.
+  * @gt: the &xe_gt where to read the policy from
+@@ -234,15 +250,10 @@ int xe_gt_sriov_pf_policy_set_sched_if_idle(struct xe_gt *gt, bool enable)
+  */
+ bool xe_gt_sriov_pf_policy_get_sched_if_idle(struct xe_gt *gt)
+ {
+-	bool enable;
+-
+ 	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
++	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
+ 
+-	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
+-	enable = gt->sriov.pf.policy.guc.sched_if_idle;
+-	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
+-
+-	return enable;
++	return xe_gt_sriov_pf_policy_get_sched_if_idle_locked(gt);
+ }
+ 
+ static int pf_provision_reset_engine(struct xe_gt *gt, bool enable)
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h
+index bd73aa58f..8c4c5b710 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h
+@@ -15,6 +15,7 @@ struct xe_gt;
+ 
+ int xe_gt_sriov_pf_policy_set_sched_if_idle(struct xe_gt *gt, bool enable);
+ bool xe_gt_sriov_pf_policy_get_sched_if_idle(struct xe_gt *gt);
++bool xe_gt_sriov_pf_policy_get_sched_if_idle_locked(struct xe_gt *gt);
+ int xe_gt_sriov_pf_policy_set_reset_engine(struct xe_gt *gt, bool enable);
+ bool xe_gt_sriov_pf_policy_get_reset_engine(struct xe_gt *gt);
+ int xe_gt_sriov_pf_policy_set_sample_period(struct xe_gt *gt, u32 value);
+-- 
+2.43.0
+

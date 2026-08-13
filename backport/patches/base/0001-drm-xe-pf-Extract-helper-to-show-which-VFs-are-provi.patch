@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 2 Apr 2026 21:17:24 +0200
+Subject: drm/xe/pf: Extract helper to show which VFs are provisioned
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In upcoming patches we will want to show which VFs were already
+provisioned with resources other than LMEM(VRAM). Convert code
+from the LMEM reporting function into a more generic helper that
+can handle both u32 and u64 resources and can report also PF.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260402191726.4932-12-michal.wajdeczko@intel.com
+(cherry-picked from commit 67a5fb1f9ada7c3d8b7f571be86554968084a4b9 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 30 +++++++++++++++++-----
+ 1 file changed, 23 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index abc6b5e22..2eda63b69 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -1934,29 +1934,45 @@ static u64 pf_profile_fair_lmem(struct xe_gt *gt, unsigned int num_vfs)
+ 	return ALIGN_DOWN(fair, alignment);
+ }
+ 
+-static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
+-					unsigned int num_vfs, bool provisioned)
++static void __pf_show_provisioned(struct xe_gt *gt, unsigned int first_vf,
++				  unsigned int num_vfs, bool provisioned,
++				  u32 (*get32)(struct xe_gt *, unsigned int),
++				  u64 (*get64)(struct xe_gt *, unsigned int),
++				  const char *what)
+ {
+ 	unsigned int allvfs = 1 + xe_gt_sriov_pf_get_totalvfs(gt); /* PF plus VFs */
+ 	unsigned long *bitmap __free(bitmap) = bitmap_zalloc(allvfs, GFP_KERNEL);
+ 	unsigned int weight;
+ 	unsigned int n;
++	bool pf;
++
++	xe_gt_assert(gt, get32 || get64);
+ 
+ 	if (!bitmap)
+ 		return;
+ 
+ 	for (n = first_vf; n < first_vf + num_vfs; n++) {
+-		if (!!pf_get_vf_config_lmem(gt, VFID(n)) == provisioned)
++		if ((get32 && (!!get32(gt, VFID(n)) == provisioned)) ||
++		    (get64 && (!!get64(gt, VFID(n)) == provisioned)))
+ 			bitmap_set(bitmap, n, 1);
+ 	}
+ 
++	pf = test_and_clear_bit(0, bitmap);
+ 	weight = bitmap_weight(bitmap, allvfs);
+-	if (!weight)
++	if (!pf && !weight)
+ 		return;
+ 
+-	xe_gt_sriov_info(gt, "VF%s%*pbl %s provisioned with VRAM\n",
+-			 weight > 1 ? "s " : "", allvfs, bitmap,
+-			 provisioned ? "already" : "not");
++	xe_gt_sriov_info(gt, "%s%s%s%s%*pbl %s provisioned with %s\n",
++			 pf ? "PF" : "", pf && weight ? " and " : "",
++			 weight ? "VF" : "", weight > 1 ? "s " : "",
++			 allvfs, bitmap, provisioned ? "already" : "not", what);
++}
++
++static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
++					unsigned int num_vfs, bool provisioned)
++{
++	__pf_show_provisioned(gt, first_vf, num_vfs, provisioned,
++			      NULL, pf_get_vf_config_lmem, "VRAM");
+ }
+ 
+ static void pf_show_all_provisioned_lmem(struct xe_gt *gt)
+-- 
+2.43.0
+

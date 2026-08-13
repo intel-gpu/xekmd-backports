@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 2 Apr 2026 21:17:23 +0200
+Subject: drm/xe/pf: Reprovision scheduling to default when no VFs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Once we have disabled VFs there is no point in keeping potentially
+limited PF scheduling provisioning as we want to complete a cleanup
+of the VFs resources and return to the pure native mode, the same
+as before VFs were enabled, as soon as possible.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260402191726.4932-11-michal.wajdeczko@intel.com
+(cherry-picked from commit 24ac010a97b6e6a65dc32ee2af1cdbe4a44daf7e linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci_sriov.c          |  2 ++
+ drivers/gpu/drm/xe/xe_sriov_pf_provision.c | 39 ++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sriov_pf_provision.h |  1 +
+ 3 files changed, 42 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov.c
+index 3fd22034f..35e6b53e1 100644
+--- a/drivers/gpu/drm/xe/xe_pci_sriov.c
++++ b/drivers/gpu/drm/xe/xe_pci_sriov.c
+@@ -191,6 +191,8 @@ static int pf_disable_vfs(struct xe_device *xe)
+ 
+ 	pci_disable_sriov(pdev);
+ 
++	xe_sriov_pf_reprovision_default(xe);
++
+ 	pf_reset_vfs(xe, num_vfs);
+ 
+ 	xe_sriov_pf_unprovision_vfs(xe, num_vfs);
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+index abe3677d3..e11874d68 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+@@ -103,6 +103,45 @@ int xe_sriov_pf_unprovision_vfs(struct xe_device *xe, unsigned int num_vfs)
+ 	return 0;
+ }
+ 
++static int pf_reprovision_default(struct xe_device *xe)
++{
++	struct xe_gt *gt;
++	unsigned int id;
++	int result = 0;
++	int err;
++
++	guard(mutex)(xe_sriov_pf_master_mutex(xe));
++
++	for_each_gt(gt, xe, id) {
++		err = xe_gt_sriov_pf_policy_set_sched_if_idle_locked(gt, false);
++		result = result ?: err;
++		err = xe_gt_sriov_pf_config_set_exec_quantum_locked(gt, PFID, 0);
++		result = result ?: err;
++		err = xe_gt_sriov_pf_config_set_preempt_timeout_locked(gt, PFID, 0);
++		result = result ?: err;
++	}
++
++	return result;
++}
++
++/**
++ * xe_sriov_pf_reprovision_default() - Reprovision default PF in auto-mode.
++ * @xe: the PF &xe_device
++ *
++ * This function can only be called on PF.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_sriov_pf_reprovision_default(struct xe_device *xe)
++{
++	xe_assert(xe, IS_SRIOV_PF(xe));
++
++	if (!pf_auto_provisioning_mode(xe))
++		return 0;
++
++	return pf_reprovision_default(xe);
++}
++
+ /**
+  * xe_sriov_pf_provision_set_mode() - Change VFs provision mode.
+  * @xe: the PF &xe_device
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision.h b/drivers/gpu/drm/xe/xe_sriov_pf_provision.h
+index f26f49539..b15e4d7ad 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_provision.h
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision.h
+@@ -30,6 +30,7 @@ int xe_sriov_pf_provision_query_vf_vram(struct xe_device *xe, unsigned int vfid,
+ 
+ int xe_sriov_pf_provision_vfs(struct xe_device *xe, unsigned int num_vfs);
+ int xe_sriov_pf_unprovision_vfs(struct xe_device *xe, unsigned int num_vfs);
++int xe_sriov_pf_reprovision_default(struct xe_device *xe);
+ 
+ int xe_sriov_pf_provision_set_mode(struct xe_device *xe, enum xe_sriov_provisioning_mode mode);
+ 
+-- 
+2.43.0
+

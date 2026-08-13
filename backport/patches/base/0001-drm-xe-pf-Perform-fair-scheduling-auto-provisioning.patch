@@ -1,0 +1,161 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 2 Apr 2026 21:17:26 +0200
+Subject: drm/xe/pf: Perform fair scheduling auto-provisioning
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Default VF scheduling configuration is the same as for the PF and
+includes unlimited execution quantum (EQ) and unlimited preemption
+timeout (PT). While this setup gives the most flexibility it does
+not protect the PF or VFs from other VF that could constantly submit
+workloads without any gaps that would let GuC do a VF-switch.
+
+To avoid that, do some trivial auto-provisioning and configure PF
+and all VFs with 16ms EQ and PT. This setup should allow GuC to
+perform a full round-robin with up to 63 VFs within 2s, which in
+turn should match expectations from most of the VMs using VFs.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com> #v1
+Reviewed-by: Michał Winiarski <michal.winiarski@intel.com>
+Link: https://patch.msgid.link/20260402191726.4932-14-michal.wajdeczko@intel.com
+(cherry-picked from commit afc480ff55c5244f3a1941096f232b57c354cc68 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 91 ++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h |  1 +
+ drivers/gpu/drm/xe/xe_sriov_pf_provision.c |  2 +
+ 3 files changed, 94 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+index d02c96d30..e112aa148 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
+@@ -2662,6 +2662,97 @@ static bool pf_non_default_sched(struct xe_gt *gt, unsigned int vfid)
+ 	       custom_sched_priority(gt, pf_get_sched_priority(gt, vfid));
+ }
+ 
++static void __pf_show_provisioned_sched(struct xe_gt *gt, unsigned int first_vf,
++					unsigned int num_vfs, bool provisioned)
++{
++	__pf_show_provisioned(gt, first_vf, num_vfs, provisioned,
++			      pf_get_exec_quantum, NULL, "EQ");
++	__pf_show_provisioned(gt, first_vf, num_vfs, provisioned,
++			      pf_get_preempt_timeout, NULL, "PT");
++
++	/* we only care about non-default priorities */
++	if (provisioned)
++		__pf_show_provisioned(gt, first_vf, num_vfs, true,
++				      pf_get_sched_priority, NULL, "PRIORITY");
++}
++
++static void pf_show_all_provisioned_sched(struct xe_gt *gt)
++{
++	__pf_show_provisioned_sched(gt, PFID, 1 + xe_gt_sriov_pf_get_totalvfs(gt), true);
++}
++
++static void pf_show_unprovisioned_sched(struct xe_gt *gt, unsigned int num_vfs)
++{
++	__pf_show_provisioned_sched(gt, PFID, 1 + num_vfs, false);
++}
++
++static bool pf_needs_provision_sched(struct xe_gt *gt, unsigned int num_vfs)
++{
++	unsigned int vfid;
++
++	for (vfid = PFID; vfid <= PFID + num_vfs; vfid++) {
++		if (pf_non_default_sched(gt, vfid)) {
++			pf_show_all_provisioned_sched(gt);
++			pf_show_unprovisioned_sched(gt, num_vfs);
++			return false;
++		}
++	}
++
++	if (xe_gt_sriov_pf_policy_get_sched_if_idle_locked(gt)) {
++		pf_show_all_provisioned_sched(gt);
++		pf_show_unprovisioned_sched(gt, num_vfs);
++		return false;
++	}
++
++	pf_show_all_provisioned_sched(gt);
++	return true;
++}
++
++/* With 16ms EQ/PT GuC should be able to handle up to 63 VFs within 2s */
++#define XE_FAIR_EXEC_QUANTUM_MS		16
++#define XE_FAIR_PREEMPT_TIMEOUT_US	16000
++#define XE_FAIR_SCHED_PRIORITY		GUC_SCHED_PRIORITY_LOW
++#define XE_ADMIN_PF_SCHED_PRIORITY	GUC_SCHED_PRIORITY_HIGH
++
++/**
++ * xe_gt_sriov_pf_config_set_fair_sched() - Provision PF and VFs with fair scheduling.
++ * @gt: the &xe_gt
++ * @num_vfs: number of VFs to provision (can't be 0)
++ *
++ * This function can only be called on PF.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_gt_sriov_pf_config_set_fair_sched(struct xe_gt *gt, unsigned int num_vfs)
++{
++	int result = 0;
++	int err;
++
++	xe_gt_assert(gt, num_vfs);
++	xe_gt_assert(gt, XE_FAIR_EXEC_QUANTUM_MS);
++	xe_gt_assert(gt, XE_FAIR_PREEMPT_TIMEOUT_US);
++
++	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
++
++	if (!pf_needs_provision_sched(gt, num_vfs))
++		return 0;
++
++	err = pf_bulk_set_exec_quantum(gt, XE_FAIR_EXEC_QUANTUM_MS, PFID, 1 + num_vfs);
++	result = result ?: err;
++	err = pf_bulk_set_preempt_timeout(gt, XE_FAIR_PREEMPT_TIMEOUT_US, PFID, 1 + num_vfs);
++	result = result ?: err;
++
++	xe_gt_assert(gt, XE_FAIR_SCHED_PRIORITY == GUC_SCHED_PRIORITY_LOW);
++	xe_gt_assert(gt, !xe_gt_sriov_pf_policy_get_sched_if_idle_locked(gt));
++
++	if (xe_sriov_pf_admin_only(gt_to_xe(gt))) {
++		err = pf_provision_sched_priority(gt, PFID, XE_ADMIN_PF_SCHED_PRIORITY);
++		result = result ?: err;
++	}
++
++	return result;
++}
++
+ static int pf_provision_threshold(struct xe_gt *gt, unsigned int vfid,
+ 				  enum xe_guc_klv_threshold_index index, u32 value)
+ {
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
+index e9314f0a9..2ec62c12a 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.h
+@@ -78,6 +78,7 @@ u32 xe_gt_sriov_pf_config_get_threshold(struct xe_gt *gt, unsigned int vfid,
+ int xe_gt_sriov_pf_config_set_threshold(struct xe_gt *gt, unsigned int vfid,
+ 					enum xe_guc_klv_threshold_index index, u32 value);
+ 
++int xe_gt_sriov_pf_config_set_fair_sched(struct xe_gt *gt, unsigned int num_vfs);
+ int xe_gt_sriov_pf_config_set_fair(struct xe_gt *gt, unsigned int vfid, unsigned int num_vfs);
+ int xe_gt_sriov_pf_config_sanitize(struct xe_gt *gt, unsigned int vfid, long timeout);
+ int xe_gt_sriov_pf_config_release(struct xe_gt *gt, unsigned int vfid, bool force);
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+index e11874d68..0ec7ea83f 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+@@ -41,6 +41,8 @@ static int pf_provision_vfs(struct xe_device *xe, unsigned int num_vfs)
+ 	int err;
+ 
+ 	for_each_gt(gt, xe, id) {
++		err = xe_gt_sriov_pf_config_set_fair_sched(gt, num_vfs);
++		result = result ?: err;
+ 		err = xe_gt_sriov_pf_config_set_fair(gt, VFID(1), num_vfs);
+ 		result = result ?: err;
+ 	}
+-- 
+2.43.0
+

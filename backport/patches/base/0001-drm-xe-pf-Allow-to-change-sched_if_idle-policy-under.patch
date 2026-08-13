@@ -1,0 +1,89 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 2 Apr 2026 21:17:22 +0200
+Subject: drm/xe/pf: Allow to change sched_if_idle policy under lock
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In upcoming patch we will need to update sched_if_idle policy when
+we already hold the provisioning mutex. Split existing function
+into two variants to allow that.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260402191726.4932-10-michal.wajdeczko@intel.com
+(cherry-picked from commit 55d1945636583f2b88034e50458013f1a9165ee0 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c | 23 +++++++++++++++++++---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h |  1 +
+ 2 files changed, 21 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
+index 6c1036743..d1d494d00 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
+@@ -193,7 +193,7 @@ static void pf_sanitize_sched_if_idle(struct xe_gt *gt)
+ }
+ 
+ /**
+- * xe_gt_sriov_pf_policy_set_sched_if_idle - Control the 'sched_if_idle' policy.
++ * xe_gt_sriov_pf_policy_set_sched_if_idle_locked() - Control the 'sched_if_idle' policy.
+  * @gt: the &xe_gt where to apply the policy
+  * @enable: the value of the 'sched_if_idle' policy
+  *
+@@ -201,12 +201,12 @@ static void pf_sanitize_sched_if_idle(struct xe_gt *gt)
+  *
+  * Return: 0 on success or a negative error code on failure.
+  */
+-int xe_gt_sriov_pf_policy_set_sched_if_idle(struct xe_gt *gt, bool enable)
++int xe_gt_sriov_pf_policy_set_sched_if_idle_locked(struct xe_gt *gt, bool enable)
+ {
+ 	u32 priority;
+ 	int err;
+ 
+-	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
++	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+ 
+ 	err = pf_provision_sched_if_idle(gt, enable);
+ 	if (err)
+@@ -224,6 +224,23 @@ int xe_gt_sriov_pf_policy_set_sched_if_idle(struct xe_gt *gt, bool enable)
+ 	return 0;
+ }
+ 
++/**
++ * xe_gt_sriov_pf_policy_set_sched_if_idle() - Control the 'sched_if_idle' policy.
++ * @gt: the &xe_gt where to apply the policy
++ * @enable: the value of the 'sched_if_idle' policy
++ *
++ * This function can only be called on PF.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_gt_sriov_pf_policy_set_sched_if_idle(struct xe_gt *gt, bool enable)
++{
++	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
++	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
++
++	return xe_gt_sriov_pf_policy_set_sched_if_idle_locked(gt, enable);
++}
++
+ /**
+  * xe_gt_sriov_pf_policy_get_sched_if_idle_locked() - Retrieve value of 'sched_if_idle' policy.
+  * @gt: the &xe_gt where to read the policy from
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h
+index 8c4c5b710..071097fea 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h
+@@ -14,6 +14,7 @@ struct drm_printer;
+ struct xe_gt;
+ 
+ int xe_gt_sriov_pf_policy_set_sched_if_idle(struct xe_gt *gt, bool enable);
++int xe_gt_sriov_pf_policy_set_sched_if_idle_locked(struct xe_gt *gt, bool enable);
+ bool xe_gt_sriov_pf_policy_get_sched_if_idle(struct xe_gt *gt);
+ bool xe_gt_sriov_pf_policy_get_sched_if_idle_locked(struct xe_gt *gt);
+ int xe_gt_sriov_pf_policy_set_reset_engine(struct xe_gt *gt, bool enable);
+-- 
+2.43.0
+

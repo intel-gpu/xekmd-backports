@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 2 Apr 2026 21:17:14 +0200
+Subject: drm/xe/guc: Update POLICY_SCHED_IF_IDLE documentation
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Starting from the GuC firmware version 70.12.0 the meaning of the
+POLICY_SCHED_IF_IDLE has changed, which now acts as a bulk update
+of the VF_CFG_SCHED_PRIORITY configurations of all VFs.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260402191726.4932-2-michal.wajdeczko@intel.com
+(cherry-picked from commit 3fb4d2c10702695f33eee9f00a94d2d5e91a5755 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/abi/guc_klvs_abi.h | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
+index e33bd622a..7106fad7b 100644
+--- a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
++++ b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
+@@ -192,6 +192,13 @@ enum  {
+  * `GuC KLV`_ keys available for use with PF2GUC_UPDATE_VGT_POLICY.
+  *
+  * _`GUC_KLV_VGT_POLICY_SCHED_IF_IDLE` : 0x8001
++ *      [From 70.12.0]
++ *      This config allows to update scheduling priority of PF and all VFs at once.
++ *      Setting this policy to 0 updates all VFs scheduling priorities to LOW, and
++ *      setting this policy to 1 updates all VFs scheduling priorities to NORMAL.
++ *      Those changes will take effect on the next VF-Switch event.
++ *
++ *      [Before 70.12.0]
+  *      This config sets whether strict scheduling is enabled whereby any VF
+  *      that doesn’t have work to submit is still allocated a fixed execution
+  *      time-slice to ensure active VFs execution is always consistent even
+-- 
+2.43.0
+

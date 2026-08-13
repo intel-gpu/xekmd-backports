@@ -1,0 +1,99 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 2 Apr 2026 21:17:18 +0200
+Subject: drm/xe/pf: Reprovision policy settings after GT reset
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In addition to the reprovisioning of individual VFs configurations,
+we should also reprovision GuC global policy settings. Note that we
+already had a draft function for that but we missed to call it once
+we started handling GT reset. Reuse it now but don't take extra RPM
+as this is now a caller responsibility and drop unused parameter.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260402191726.4932-6-michal.wajdeczko@intel.com
+(cherry-picked from commit b23883a0874fbca9ada07b75509c6126fb5f3575 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf.c        |  1 +
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c | 14 +++-----------
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h |  2 +-
+ 3 files changed, 5 insertions(+), 12 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf.c
+index fb5c9101e..786805684 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf.c
+@@ -219,6 +219,7 @@ static void pf_restart(struct xe_gt *gt)
+ 
+ 	xe_gt_assert(gt, !xe_pm_runtime_suspended(xe));
+ 
++	xe_gt_sriov_pf_policy_restart(gt);
+ 	xe_gt_sriov_pf_config_restart(gt);
+ 	xe_gt_sriov_pf_control_restart(gt);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
+index d1d494d00..e8458d637 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
+@@ -17,7 +17,6 @@
+ #include "xe_guc_ct.h"
+ #include "xe_guc_klv_helpers.h"
+ #include "xe_guc_submit.h"
+-#include "xe_pm.h"
+ 
+ /*
+  * Return: number of KLVs that were successfully parsed and saved,
+@@ -729,30 +728,23 @@ void xe_gt_sriov_pf_policy_sanitize(struct xe_gt *gt)
+ }
+ 
+ /**
+- * xe_gt_sriov_pf_policy_reprovision - Reprovision (and optionally reset) policy settings.
++ * xe_gt_sriov_pf_policy_restart() - Reprovision policy settings.
+  * @gt: the &xe_gt
+- * @reset: if true will reprovision using default values instead of latest
+  *
+  * This function can only be called on PF.
+  *
+  * Return: 0 on success or a negative error code on failure.
+  */
+-int xe_gt_sriov_pf_policy_reprovision(struct xe_gt *gt, bool reset)
++int xe_gt_sriov_pf_policy_restart(struct xe_gt *gt)
+ {
+ 	int err = 0;
+ 
+-	xe_pm_runtime_get_noresume(gt_to_xe(gt));
++	guard(mutex)(xe_gt_sriov_pf_master_mutex(gt));
+ 
+-	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
+-	if (reset)
+-		pf_sanitize_guc_policies(gt);
+ 	err |= pf_reprovision_sched_if_idle(gt);
+ 	err |= pf_reprovision_reset_engine(gt);
+ 	err |= pf_reprovision_sample_period(gt);
+ 	err |= pf_reprovision_sched_groups(gt);
+-	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
+-
+-	xe_pm_runtime_put(gt_to_xe(gt));
+ 
+ 	return err ? -ENXIO : 0;
+ }
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h
+index 071097fea..d667d6689 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.h
+@@ -31,7 +31,7 @@ bool xe_gt_sriov_pf_policy_sched_groups_enabled(struct xe_gt *gt);
+ 
+ void xe_gt_sriov_pf_policy_init(struct xe_gt *gt);
+ void xe_gt_sriov_pf_policy_sanitize(struct xe_gt *gt);
+-int xe_gt_sriov_pf_policy_reprovision(struct xe_gt *gt, bool reset);
++int xe_gt_sriov_pf_policy_restart(struct xe_gt *gt);
+ int xe_gt_sriov_pf_policy_print(struct xe_gt *gt, struct drm_printer *p);
+ 
+ #endif
+-- 
+2.43.0
+

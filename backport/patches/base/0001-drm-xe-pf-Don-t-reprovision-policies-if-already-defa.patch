@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Thu, 2 Apr 2026 21:17:19 +0200
+Subject: drm/xe/pf: Don't reprovision policies if already default
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+There is no need to send policy updates to the GuC if policies
+were not changed from the default settings (usually zero value).
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Link: https://patch.msgid.link/20260402191726.4932-7-michal.wajdeczko@intel.com
+(cherry-picked from commit 689937c71cbbec927ba2c04f86fd1e59de5097f3 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
+index c88c4e6a9..55b54a519 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
+@@ -178,6 +178,9 @@ static int pf_reprovision_sched_if_idle(struct xe_gt *gt)
+ 	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
+ 	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+ 
++	if (!gt->sriov.pf.policy.guc.sched_if_idle)
++		return 0;
++
+ 	return pf_provision_sched_if_idle(gt, gt->sriov.pf.policy.guc.sched_if_idle);
+ }
+ 
+@@ -256,6 +259,9 @@ static int pf_reprovision_reset_engine(struct xe_gt *gt)
+ 	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
+ 	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+ 
++	if (!gt->sriov.pf.policy.guc.reset_engine)
++		return 0;
++
+ 	return pf_provision_reset_engine(gt, gt->sriov.pf.policy.guc.reset_engine);
+ }
+ 
+@@ -322,6 +328,9 @@ static int pf_reprovision_sample_period(struct xe_gt *gt)
+ 	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
+ 	lockdep_assert_held(xe_gt_sriov_pf_master_mutex(gt));
+ 
++	if (!gt->sriov.pf.policy.guc.sample_period)
++		return 0;
++
+ 	return pf_provision_sample_period(gt, gt->sriov.pf.policy.guc.sample_period);
+ }
+ 
+-- 
+2.43.0
+

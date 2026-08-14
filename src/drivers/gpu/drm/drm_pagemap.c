@@ -212,11 +212,7 @@ static void drm_pagemap_get_devmem_page(struct page *page,
 {
 #ifdef BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT
 	page->zone_device_data = drm_pagemap_zdd_get(zdd);
-#ifdef BPM_ZONE_DEVICE_PAGE_INIT_3ARGS_NOT_PRESENT
-	zone_device_page_init(page);
-#else
 	zone_device_page_init(page, page_pgmap(page), 0);
-#endif
 #else
 	zone_device_folio_init((struct folio *)page, zdd->dpagemap->pagemap,
 			       order);

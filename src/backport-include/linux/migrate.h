@@ -5,11 +5,11 @@
 #include_next <linux/migrate.h>
 #include <linux/errno.h>
 
-#ifndef MIGRATE_VMA_SELECT_DEVICE_COHERENT
+#ifdef BPM_IS_DEVICE_COHERENT_PAGE_NOT_PRESENT
 #define MIGRATE_VMA_SELECT_DEVICE_COHERENT 4
 #endif
 
-#ifndef MIGRATE_VMA_SELECT_COMPOUND
+#ifdef BPM_MIGRATE_VMA_SELECT_COMPOUND_NOT_PRESENT
 #define MIGRATE_VMA_SELECT_COMPOUND 8
 #endif
 
@@ -23,11 +23,9 @@ backport_migrate_device_pfns(unsigned long *src_pfns, unsigned long npages)
 
 #define migrate_device_pfns(src_pfns, npages) \
 	backport_migrate_device_pfns(src_pfns, npages)
+#endif
 
-/*
- * Kernels missing migrate_device_pfns() also miss the newer split helpers.
- * Keep these as explicit no-ops because full SVM is gated off on this target.
- */
+#ifdef BPM_MIGRATE_DEVICE_PAGES_NOT_PRESENT
 static inline void
 backport_migrate_device_pages(unsigned long *src_pfns,
 			      unsigned long *dst_pfns,

@@ -52,6 +52,9 @@ drm_buddy-y := drivers/gpu/buddy.o drivers/gpu/drm/drm_buddy.o
 obj-$(CPTCFG_DRM_BUDDY) += drm_buddy.o
 drm_suballoc_helper-y := drivers/gpu/drm/drm_suballoc.o
 obj-$(CPTCFG_DRM_SUBALLOC_HELPER) += drm_suballoc_helper.o
+# DRM RAS support
+drm_ras-y := drivers/gpu/drm/drm_ras.o drivers/gpu/drm/drm_ras_nl.o drivers/gpu/drm/drm_ras_genl_family.o
+obj-$(CPTCFG_DRM_RAS) += drm_ras.o
 # Only compile drm_gpuvm if config is enabled and base kernel doesn't have it
 ifneq ($(filter m y, $(CPTCFG_DRM_GPUVM)),)
 obj-$(CPTCFG_DRM_GPUVM) += drm_gpuvm.o

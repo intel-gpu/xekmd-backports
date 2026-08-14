@@ -1,6 +1,9 @@
 # this has the configuration for the backport code
 source "$BACKPORT_DIR/compat/Kconfig"
 
+# DRM RAS support
+source "$BACKPORT_DIR/Kconfig.drm_ras"
+
 # these are copied from the kernel
 source "$BACKPORT_DIR/drivers/gpu/drm/xe/Kconfig"
 source "$BACKPORT_DIR/drivers/mtd/devices/Kconfig"

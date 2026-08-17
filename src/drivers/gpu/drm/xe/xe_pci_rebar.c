@@ -18,11 +18,7 @@ static void resize_bar(struct xe_device *xe, int resno, resource_size_t size)
 	int bar_size = pci_rebar_bytes_to_size(size);
 	int ret;
 
-#ifdef BPM_PCI_REBAR_SIZE_SUPPORTED_NOT_PRESENT
-	ret = pci_resize_resource(pdev, resno, bar_size);
-#else
 	ret = pci_resize_resource(pdev, resno, bar_size, 0);
-#endif
 	if (ret) {
 		xe_info(xe, "Failed to resize BAR%d to %dMiB (%pe). Consider enabling 'Resizable BAR' support in your BIOS\n",
 			resno, 1 << bar_size, ERR_PTR(ret));

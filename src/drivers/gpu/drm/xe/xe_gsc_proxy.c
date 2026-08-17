@@ -495,7 +495,7 @@ int xe_gsc_proxy_init(struct xe_gsc *gsc)
 
 	mutex_init(&gsc->proxy.mutex);
 
-	if (!IS_ENABLED(CONFIG_INTEL_MEI_GSC_PROXY)) {
+	if (!IS_ENABLED(CPTCFG_INTEL_MEI_GSC_PROXY)) {
 		xe_gt_info(gt, "can't init GSC proxy due to missing mei component\n");
 		return -ENODEV;
 	}

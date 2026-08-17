@@ -105,4 +105,15 @@ static inline struct pci_dev *pcim_p2pdma_provider(struct pci_dev *pdev, int bar
 }
 #endif /* BPM_PCIM_P2PDMA_NOT_PRESENT */
 
+#ifdef BPM_PCI_RESIZE_RESOURCE_VF_BARS_NOT_PRESENT
+static inline int backport_pci_resize_resource(struct pci_dev *dev,
+						int resno, int size, int)
+{
+	return pci_resize_resource(dev, resno, size);
+}
+
+#define pci_resize_resource(dev, resno, size, exclude_bars) \
+	backport_pci_resize_resource(dev, resno, size, exclude_bars)
+#endif /* BPM_PCI_RESIZE_RESOURCE_VF_BARS_NOT_PRESENT */
+
 #endif /* _BACKPORT_LINUX_PCI_H */

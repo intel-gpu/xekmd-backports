@@ -438,7 +438,7 @@ int xe_late_bind_init(struct xe_late_bind *late_bind)
 	if (!xe->info.has_late_bind)
 		return 0;
 
-	if (!IS_ENABLED(CONFIG_INTEL_MEI_LB) || !IS_ENABLED(CONFIG_INTEL_MEI_GSC)) {
+	if (!IS_ENABLED(CPTCFG_INTEL_MEI_LB) || !IS_ENABLED(CPTCFG_INTEL_MEI_GSC)) {
 		drm_info(&xe->drm, "Can't init xe mei late bind missing mei component\n");
 		return 0;
 	}

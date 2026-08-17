@@ -16,3 +16,9 @@ endif
 if !BUILD_FULL_VFIO
 source "$BACKPORT_DIR/drivers/vfio/pci/xe/Kconfig"
 endif
+
+# MEI
+source "$BACKPORT_DIR/drivers/misc/mei/Kconfig"
+source "$BACKPORT_DIR/drivers/misc/mei/hdcp/Kconfig"
+source "$BACKPORT_DIR/drivers/misc/mei/gsc_proxy/Kconfig"
+source "$BACKPORT_DIR/drivers/misc/mei/pxp/Kconfig"

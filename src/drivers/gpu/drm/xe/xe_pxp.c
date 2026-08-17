@@ -48,7 +48,7 @@
 
 bool xe_pxp_is_supported(const struct xe_device *xe)
 {
-	return xe->info.has_pxp && IS_ENABLED(CONFIG_INTEL_MEI_GSC_PROXY);
+	return xe->info.has_pxp && IS_ENABLED(CPTCFG_INTEL_MEI_GSC_PROXY);
 }
 
 bool xe_pxp_is_enabled(const struct xe_pxp *pxp)

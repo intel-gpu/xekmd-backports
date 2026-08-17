@@ -44,4 +44,11 @@ const struct dev_pm_ops name = { \
 
 #endif
 
+#ifdef BPM_DEV_PM_SMART_SUSPEND_NOT_PRESENT
+static inline bool dev_pm_smart_suspend(struct device *dev)
+{
+	return false;
+}
+#endif
+
 #endif /* __BACKPORT_PM_H */

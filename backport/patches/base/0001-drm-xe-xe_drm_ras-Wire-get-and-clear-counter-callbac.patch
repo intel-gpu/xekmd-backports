@@ -1,0 +1,143 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Thu, 18 Jun 2026 11:36:38 +0530
+Subject: drm/xe/xe_drm_ras: Wire get and clear counter callbacks
+
+Hook CRI get-error-counter and clear-error-counter support to
+xe_drm_ras to allow userspace to query and clear counters if supported.
+
+Integrate this with xe_drm_ras.
+
+Usage:
+
+Query all error counter value using ynl
+
+$ sudo ynl --family drm_ras --dump get-error-counter --json \
+'{"node-id":0}'
+[{'error-id': 1, 'error-name': 'core-compute', 'error-value': 0},
+ {'error-id': 2, 'error-name': 'soc-internal', 'error-value': 0},
+ {'error-id': 3, 'error-name': 'device-memory', 'error-value': 0},
+ {'error-id': 4, 'error-name': 'pcie', 'error-value': 0},
+ {'error-id': 5, 'error-name': 'fabric', 'error-value': 0}]
+
+Query single error counter value using ynl
+
+$ sudo ynl --family drm_ras  --do get-error-counter --json \
+'{"node-id":1, "error-id":1}'
+{'error-id': 1, 'error-name': 'core-compute', 'error-value': 2}
+
+Clear counter using ynl
+
+$ sudo ynl --family drm_ras  --do clear-error-counter --json '\
+{"node-id":1, "error-id":1}'
+None
+
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link: https://patch.msgid.link/20260618060633.2790109-12-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from commit 2f02918ab20397aa5c6b03f46db6bd7024a0ce6a linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_drm_ras.c | 41 +++++++++++++++++++++------------
+ 1 file changed, 26 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_drm_ras.c b/drivers/gpu/drm/xe/xe_drm_ras.c
+index cd236f53699e..7937d8ba0ed9 100644
+--- a/drivers/gpu/drm/xe/xe_drm_ras.c
++++ b/drivers/gpu/drm/xe/xe_drm_ras.c
+@@ -11,27 +11,46 @@
+ 
+ #include "xe_device_types.h"
+ #include "xe_drm_ras.h"
++#include "xe_ras.h"
+ 
+ static const char * const error_components[] = DRM_XE_RAS_ERROR_COMPONENT_NAMES;
+ static const char * const error_severity[] = DRM_XE_RAS_ERROR_SEVERITY_NAMES;
+ 
+-static int hw_query_error_counter(struct xe_drm_ras_counter *info,
+-				  u32 error_id, const char **name, u32 *val)
++static int query_error_counter(struct xe_device *xe,
++			       enum drm_xe_ras_error_severity severity,
++			       u32 error_id, const char **name, u32 *val)
+ {
++	struct xe_drm_ras *ras = &xe->ras;
++	struct xe_drm_ras_counter *info = ras->info[severity];
++
+ 	if (!info || !info[error_id].name)
+ 		return -ENOENT;
+ 
+ 	*name = info[error_id].name;
++
++	/* Fetch counter from system controller if supported */
++	if (xe->info.has_sysctrl)
++		return xe_ras_get_counter(xe, severity, error_id, val);
++
+ 	*val = atomic_read(&info[error_id].counter);
+ 
+ 	return 0;
+ }
+ 
+-static int hw_clear_error_counter(struct xe_drm_ras_counter *info, u32 error_id)
++static int clear_error_counter(struct xe_device *xe,
++			       enum drm_xe_ras_error_severity severity,
++			       u32 error_id)
+ {
++	struct xe_drm_ras *ras = &xe->ras;
++	struct xe_drm_ras_counter *info = ras->info[severity];
++
+ 	if (!info || !info[error_id].name)
+ 		return -ENOENT;
+ 
++	/* Clear counter from system controller if supported */
++	if (xe->info.has_sysctrl)
++		return xe_ras_clear_counter(xe, severity, error_id);
++
+ 	atomic_set(&info[error_id].counter, 0);
+ 
+ 	return 0;
+@@ -41,38 +60,30 @@ static int query_uncorrectable_error_counter(struct drm_ras_node *ep, u32 error_
+ 					     const char **name, u32 *val)
+ {
+ 	struct xe_device *xe = ep->priv;
+-	struct xe_drm_ras *ras = &xe->ras;
+-	struct xe_drm_ras_counter *info = ras->info[DRM_XE_RAS_ERR_SEV_UNCORRECTABLE];
+ 
+-	return hw_query_error_counter(info, error_id, name, val);
++	return query_error_counter(xe, DRM_XE_RAS_ERR_SEV_UNCORRECTABLE, error_id, name, val);
+ }
+ 
+ static int clear_uncorrectable_error_counter(struct drm_ras_node *node, u32 error_id)
+ {
+ 	struct xe_device *xe = node->priv;
+-	struct xe_drm_ras *ras = &xe->ras;
+-	struct xe_drm_ras_counter *info = ras->info[DRM_XE_RAS_ERR_SEV_UNCORRECTABLE];
+ 
+-	return hw_clear_error_counter(info, error_id);
++	return clear_error_counter(xe, DRM_XE_RAS_ERR_SEV_UNCORRECTABLE, error_id);
+ }
+ 
+ static int query_correctable_error_counter(struct drm_ras_node *ep, u32 error_id,
+ 					   const char **name, u32 *val)
+ {
+ 	struct xe_device *xe = ep->priv;
+-	struct xe_drm_ras *ras = &xe->ras;
+-	struct xe_drm_ras_counter *info = ras->info[DRM_XE_RAS_ERR_SEV_CORRECTABLE];
+ 
+-	return hw_query_error_counter(info, error_id, name, val);
++	return query_error_counter(xe, DRM_XE_RAS_ERR_SEV_CORRECTABLE, error_id, name, val);
+ }
+ 
+ static int clear_correctable_error_counter(struct drm_ras_node *node, u32 error_id)
+ {
+ 	struct xe_device *xe = node->priv;
+-	struct xe_drm_ras *ras = &xe->ras;
+-	struct xe_drm_ras_counter *info = ras->info[DRM_XE_RAS_ERR_SEV_CORRECTABLE];
+ 
+-	return hw_clear_error_counter(info, error_id);
++	return clear_error_counter(xe, DRM_XE_RAS_ERR_SEV_CORRECTABLE, error_id);
+ }
+ 
+ static struct xe_drm_ras_counter *allocate_and_copy_counters(struct xe_device *xe)
+-- 
+2.43.0
+

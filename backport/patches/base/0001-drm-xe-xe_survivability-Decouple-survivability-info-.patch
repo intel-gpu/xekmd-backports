@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Fri, 17 Jul 2026 19:46:52 +0530
+Subject: drm/xe/xe_survivability: Decouple survivability info from
+ boot survivability
+
+On CSC runtime firmware errors that requires firmware flash through SPI,
+PCODE sets the FDO mode bit in the Capability register.
+Currently the survivability_info group is created only for boot
+survivability.
+
+Create survivability_info group even for runtime survivability to allow
+userspace to check FDO mode sysfs.
+
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260717141650.2487761-6-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from commit 116932705096281f402ccf779036a814ed89bf56 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_survivability_mode.c | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
+index db64cac39..3110ab5d9 100644
+--- a/drivers/gpu/drm/xe/xe_survivability_mode.c
++++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
+@@ -54,7 +54,6 @@
+  *	# cat /sys/bus/pci/devices/<device>/survivability_mode
+  *	  Boot
+  *
+- *
+  * Any additional debug information if present will be visible under the directory
+  * ``survivability_info``::
+  *
+@@ -98,6 +97,15 @@
+  *	# cat /sys/bus/pci/devices/<device>/survivability_mode
+  *	  Runtime
+  *
++ * On some CSC firmware errors, PCODE sets FDO mode and the only recovery possible is through
++ * firmware flash using SPI driver. Userspace can check if FDO mode is set by checking the below
++ * sysfs entry.
++ *
++ * .. code-block:: shell
++ *
++ *	# cat /sys/bus/pci/devices/<device>/survivability_info/fdo_mode
++ *	  enabled
++ *
+  * When such errors occur, userspace is notified with the drm device wedged uevent and runtime
+  * survivability mode. User can then initiate a firmware flash using userspace tools like fwupd
+  * to restore device to normal operation.
+@@ -296,7 +304,8 @@ static int create_survivability_sysfs(struct pci_dev *pdev)
+ 	if (ret)
+ 		return ret;
+ 
+-	if (check_boot_failure(xe)) {
++	/* Survivability info is not required if enabled via configfs */
++	if (!xe_configfs_get_survivability_mode(pdev)) {
+ 		ret = devm_device_add_group(dev, &survivability_info_group);
+ 		if (ret)
+ 			return ret;
+-- 
+2.43.0
+

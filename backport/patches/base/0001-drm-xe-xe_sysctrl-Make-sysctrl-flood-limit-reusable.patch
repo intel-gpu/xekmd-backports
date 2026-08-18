@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Mon, 13 Jul 2026 13:17:57 +0530
+Subject: drm/xe/xe_sysctrl: Make sysctrl flood limit reusable
+
+The sysctrl command flood limit was defined in an event specific header,
+restricting its usage to event handling. Move it to the shared header
+with a generic name so it can be re-used across all files using system
+controller commands.
+
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260713074755.1278607-7-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from commit f6d8232d0c6978b299237c7c3dd4140c2e9db7ce linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sysctrl_event.c         | 2 +-
+ drivers/gpu/drm/xe/xe_sysctrl_event_types.h   | 3 ---
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h | 3 +++
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_event.c b/drivers/gpu/drm/xe/xe_sysctrl_event.c
+index b4d17329a..da395148e 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_event.c
++++ b/drivers/gpu/drm/xe/xe_sysctrl_event.c
+@@ -16,7 +16,7 @@ static void get_pending_event(struct xe_sysctrl *sc, struct xe_sysctrl_mailbox_c
+ {
+ 	struct xe_sysctrl_event_response *response = command->data_out;
+ 	struct xe_device *xe = sc_to_xe(sc);
+-	u32 count = XE_SYSCTRL_EVENT_FLOOD;
++	u32 count = XE_SYSCTRL_FLOOD_LIMIT;
+ 	size_t len;
+ 	int ret;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_event_types.h b/drivers/gpu/drm/xe/xe_sysctrl_event_types.h
+index c16c66b9f..348768ca4 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_event_types.h
++++ b/drivers/gpu/drm/xe/xe_sysctrl_event_types.h
+@@ -10,9 +10,6 @@
+ 
+ #define XE_SYSCTRL_EVENT_DATA_LEN		59
+ 
+-/* Modify as needed */
+-#define XE_SYSCTRL_EVENT_FLOOD			16
+-
+ /**
+  * enum xe_sysctrl_event - Events reported by System Controller
+  *
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
+index 84d7c647e..faa973986 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
+@@ -48,6 +48,9 @@ struct xe_sysctrl_mailbox_command {
+ 	size_t data_out_len;
+ };
+ 
++/* Modify as needed */
++#define XE_SYSCTRL_FLOOD_LIMIT		16
++
+ #define XE_SYSCTRL_MB_FRAME_SIZE	16
+ #define XE_SYSCTRL_MB_MAX_FRAMES	64
+ #define XE_SYSCTRL_MB_MAX_MESSAGE_SIZE	\
+-- 
+2.43.0
+

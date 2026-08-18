@@ -1,0 +1,95 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Mon, 29 Jun 2026 13:58:04 +0530
+Subject: drm/xe/xe_pci_error: Group all devres to release them on PCIe
+ slot reset
+
+Add devres grouping to handle device resource cleanup during
+PCI error recovery.
+
+Secondary Bus Reset (SBR) is triggered by PCI core when the
+error_detected/mmio_enabled callbacks return PCI_ERS_RESULT_NEED_RESET.
+
+Once SBR is complete, the slot_reset callback is triggered. SBR wipes
+out all device memory requiring XE KMD to perform a device removal and
+reprobe.
+Calling xe_pci_remove() alone does not free the devres allocated.
+Since there are no exported functions to release all devres, group the
+devres allocations and release the entire group during slot reset to
+ensure proper cleanup.
+
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260629082802.3690896-8-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from commit 0a0fae3327a537b23e86463240e7381ddb5e31a1 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device_types.h | 3 +++
+ drivers/gpu/drm/xe/xe_pci.c          | 8 ++++++++
+ drivers/gpu/drm/xe/xe_pci_error.c    | 1 +
+ 3 files changed, 12 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index 7595ed3e1..c43ce3ebb 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -537,6 +537,9 @@ struct xe_device {
+ 		bool inconsistent_reset;
+ 	} wedged;
+ 
++	/** @devres_group: devres group */
++	void *devres_group;
++
+ 	/** @bo_device: Struct to control async free of BOs */
+ 	struct xe_bo_dev {
+ 		/** @bo_device.async_free: Free worker */
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index b00fa7ef7..a3b387f44 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -1089,6 +1089,7 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 	const struct xe_device_desc *desc = (const void *)ent->driver_data;
+ 	const struct xe_subplatform_desc *subplatform_desc;
+ 	struct xe_device *xe;
++	void *group;
+ 	int err;
+ 
+ 	xe_configfs_check_device(pdev);
+@@ -1114,6 +1115,11 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 	if (xe_display_driver_probe_defer(pdev))
+ 		return -EPROBE_DEFER;
+ 
++	/* Group all devres so xe_pci_error_slot_reset() can release them as a unit. */
++	group = devres_open_group(&pdev->dev, NULL, GFP_KERNEL);
++	if (!group)
++		return -ENOMEM;
++
+ 	err = pcim_enable_device(pdev);
+ 	if (err)
+ 		return err;
+@@ -1122,6 +1128,8 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 	if (IS_ERR(xe))
+ 		return PTR_ERR(xe);
+ 
++	xe->devres_group = group;
++
+ 	pci_set_drvdata(pdev, &xe->drm);
+ 
+ 	xe_pm_assert_unbounded_bridge(xe);
+diff --git a/drivers/gpu/drm/xe/xe_pci_error.c b/drivers/gpu/drm/xe/xe_pci_error.c
+index 10424d038..2f7316266 100644
+--- a/drivers/gpu/drm/xe/xe_pci_error.c
++++ b/drivers/gpu/drm/xe/xe_pci_error.c
+@@ -89,6 +89,7 @@ static pci_ers_result_t xe_pci_error_slot_reset(struct pci_dev *pdev)
+ 	 * kernel BOs.
+ 	 */
+ 	pdev->driver->remove(pdev);
++	devres_release_group(&pdev->dev, xe->devres_group);
+ 
+ 	if (pdev->driver->probe(pdev, ent))
+ 		return PCI_ERS_RESULT_DISCONNECT;
+-- 
+2.43.0
+

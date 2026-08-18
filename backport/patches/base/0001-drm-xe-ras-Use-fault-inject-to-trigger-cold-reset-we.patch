@@ -1,0 +1,99 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Date: Wed, 5 Aug 2026 12:41:57 +0530
+Subject: drm/xe/ras: Use fault-inject to trigger cold-reset wedge
+
+Use the fault-inject framework to trigger the cold-reset
+wedge path (punit_error_handler()) for testing the
+wedge/recovery flow.
+
+Usage:
+  echo 100 > .../wedge_cold_reset/probability
+  echo 1   > .../wedge_cold_reset/times
+
+Signed-off-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link: https://patch.msgid.link/20260805071152.1225416-10-mallesh.koujalagi@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit f29c2bd7eaeb73afcdbd4e3bbf54d6f8799a9b06 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_debugfs.c | 4 ++++
+ drivers/gpu/drm/xe/xe_debugfs.h | 2 ++
+ drivers/gpu/drm/xe/xe_ras.c     | 7 +++++++
+ 3 files changed, 13 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
+index 68546d53de82..aa33609a16b4 100644
+--- a/drivers/gpu/drm/xe/xe_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_debugfs.c
+@@ -40,6 +40,7 @@
+ 
+ DECLARE_FAULT_ATTR(gt_reset_failure);
+ DECLARE_FAULT_ATTR(inject_csc_hw_error);
++DECLARE_FAULT_ATTR(wedge_cold_reset);
+ 
+ static bool csc_hw_error_available(struct xe_device *xe)
+ {
+@@ -60,6 +61,8 @@ static struct {
+ 	{ .name = "inject_csc_hw_error",
+ 	  .attr = &inject_csc_hw_error,
+ 	  .is_visible = csc_hw_error_available },
++	{ .name = "wedge_cold_reset",
++	  .attr = &wedge_cold_reset },
+ };
+ 
+ /*
+@@ -74,6 +77,7 @@ bool xe_fault_##name(void)				\
+ 
+ FAULT_ACTION(gt_reset, gt_reset_failure)
+ FAULT_ACTION(csc_hw_error, inject_csc_hw_error)
++FAULT_ACTION(wedge_cold_reset, wedge_cold_reset)
+ 
+ static void xe_fault_inject_debugfs_register(struct xe_device *xe,
+ 					     struct dentry *root)
+diff --git a/drivers/gpu/drm/xe/xe_debugfs.h b/drivers/gpu/drm/xe/xe_debugfs.h
+index cd56f7442b99..0dcd28fd7dc0 100644
+--- a/drivers/gpu/drm/xe/xe_debugfs.h
++++ b/drivers/gpu/drm/xe/xe_debugfs.h
+@@ -13,10 +13,12 @@ struct xe_device;
+ #ifdef CONFIG_DEBUG_FS
+ bool xe_fault_gt_reset(void);
+ bool xe_fault_csc_hw_error(void);
++bool xe_fault_wedge_cold_reset(void);
+ void xe_debugfs_register(struct xe_device *xe);
+ #else
+ static inline bool xe_fault_gt_reset(void) { return false; }
+ static inline bool xe_fault_csc_hw_error(void) { return false; }
++static inline bool xe_fault_wedge_cold_reset(void) { return false; }
+ static inline void xe_debugfs_register(struct xe_device *xe) { }
+ #endif
+ 
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 6ef3533f4f4d..0900155a3281 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -3,6 +3,7 @@
+  * Copyright © 2026 Intel Corporation
+  */
+ 
++#include "xe_debugfs.h"
+ #include "xe_device.h"
+ #include "xe_drm_ras.h"
+ #include "xe_pm.h"
+@@ -376,6 +377,12 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+ 	size_t rlen;
+ 	int ret;
+ 
++	if (xe_fault_wedge_cold_reset()) {
++		xe_err(xe, "[RAS]: cold-reset wedge injected\n");
++		punit_error_handler(xe);
++		return XE_RAS_RECOVERY_ACTION_DISCONNECT;
++	}
++
+ 	if (!xe->info.has_sysctrl)
+ 		return XE_RAS_RECOVERY_ACTION_RESET;
+ 
+-- 
+2.43.0
+

@@ -1,0 +1,120 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Mon, 29 Jun 2026 13:58:06 +0530
+Subject: drm/xe/xe_ras: Initialize Uncorrectable AER Registers
+
+Uncorrectable errors from different endpoints in the device are steered to
+the USP(Upstream Switch Port) which is a PCI Advanced Error Reporting (AER)
+Compliant device. Downgrade all the errors to non-fatal to prevent PCIe
+bus driver from triggering a Secondary Bus Reset (SBR). This allows error
+detection, containment and recovery in the driver.
+
+The Uncorrectable Error Severity Register has the 'Uncorrectable
+Internal Error Severity' set to fatal by default. Set this to
+non-fatal and unmask the error.
+
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260629082802.3690896-10-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from commit 7d8c458854814bf9e9aa4bc217662fd01a86d0f6 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c | 70 ++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 69 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 44f4e1a3455b..74d5016d9ffe 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -131,6 +131,68 @@ static inline const char *comp_to_str(u8 component)
+ 	return xe_ras_components[component];
+ }
+ 
++static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
++{
++	struct pci_dev *vsp;
++
++	/*
++	 * Device Hierarchy:
++	 *
++	 * Upstream Switch Port (USP) --> Virtual Switch Port (VSP) --> SGunit (GPU endpoint)
++	 */
++	vsp = pci_upstream_bridge(pdev);
++	if (!vsp)
++		return NULL;
++
++	return pci_upstream_bridge(vsp);
++}
++
++static void ras_usp_aer_init(struct xe_device *xe)
++{
++	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
++	struct pci_dev *usp;
++	u16 aer_cap;
++	u32 status;
++
++	usp = find_usp_dev(pdev);
++	if (!usp)
++		return;
++
++	aer_cap = pci_find_ext_capability(usp, PCI_EXT_CAP_ID_ERR);
++	if (!aer_cap) {
++		dev_warn(&usp->dev, "AER capability unavailable\n");
++		return;
++	}
++
++	/*
++	 * Clear any stale Uncorrectable Internal Error Status event in Uncorrectable Error
++	 * Status Register.
++	 */
++	pci_read_config_dword(usp, aer_cap + PCI_ERR_UNCOR_STATUS, &status);
++	if (status & PCI_ERR_UNC_INTN)
++		pci_write_config_dword(usp, aer_cap + PCI_ERR_UNCOR_STATUS, PCI_ERR_UNC_INTN);
++
++	/*
++	 * All errors are steered to USP which is a PCIe AER Compliant device.
++	 * Downgrade all the errors to non-fatal to prevent PCIe bus driver
++	 * from triggering a Secondary Bus Reset (SBR). This allows error
++	 * detection, containment and recovery in the driver.
++	 *
++	 * The Uncorrectable Error Severity Register has the 'Uncorrectable
++	 * Internal Error Severity' set to fatal by default. Set this to
++	 * non-fatal and unmask the error.
++	 */
++
++	/* Downgrade Uncorrectable Internal Error to non-fatal */
++	pci_clear_and_set_config_dword(usp, aer_cap + PCI_ERR_UNCOR_SEVER, PCI_ERR_UNC_INTN, 0);
++
++	/* Unmask Uncorrectable Internal Error */
++	pci_clear_and_set_config_dword(usp, aer_cap + PCI_ERR_UNCOR_MASK, PCI_ERR_UNC_INTN, 0);
++
++	pci_save_state(usp);
++	dev_dbg(&usp->dev, "Uncorrectable Internal Errors downgraded and unmasked\n");
++}
++
+ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
+ 				      struct xe_sysctrl_event_response *response)
+ {
+@@ -274,7 +336,7 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
+  * xe_ras_init - Initialize Xe RAS
+  * @xe: xe device instance
+  *
+- * Register drm_ras nodes
++ * Initialize Xe RAS
+  */
+ void xe_ras_init(struct xe_device *xe)
+ {
+@@ -282,4 +344,10 @@ void xe_ras_init(struct xe_device *xe)
+ 		return;
+ 
+ 	xe_drm_ras_init(xe);
++
++	if (!xe->info.has_sysctrl)
++		return;
++
++	if (IS_ENABLED(CONFIG_PCIEAER))
++		ras_usp_aer_init(xe);
+ }
+-- 
+2.43.0
+

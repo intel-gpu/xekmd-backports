@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ashutosh Dixit <ashutosh.dixit@intel.com>
+Date: Wed, 29 Jul 2026 16:06:44 -0700
+Subject: drm/xe/mcr: Take vcs1/vecs1 into account for first media
+ slice
+
+vcs1 and vecs1 may also be present on the first media slice, so take
+vcs1/vecs1 also into account when determining if the first media slice is
+absent.
+
+Bspec: 67103, 77977
+
+Cc: Gustavo Sousa <gustavo.sousa@intel.com>
+Cc: Matt Roper <matthew.d.roper@intel.com>
+Signed-off-by: Ashutosh Dixit <ashutosh.dixit@intel.com>
+Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
+Link: https://patch.msgid.link/20260729230645.3052178-2-ashutosh.dixit@intel.com
+(cherry-picked from commit 1c4d0c45d762539f174cf1d74b2cb21d18e71363 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_mcr.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_mcr.c b/drivers/gpu/drm/xe/xe_gt_mcr.c
+index 7c6f039c880d..edcc0eb33b7f 100644
+--- a/drivers/gpu/drm/xe/xe_gt_mcr.c
++++ b/drivers/gpu/drm/xe/xe_gt_mcr.c
+@@ -456,11 +456,16 @@ static void init_steering_dss(struct xe_gt *gt)
+ 
+ static void init_steering_oaddrm(struct xe_gt *gt)
+ {
++	u64 hwe_mask = XE_HW_ENGINE_VCS0 | XE_HW_ENGINE_VECS0;
++
++	/* TODO: Add 'VD per SCMI' and 'VE per SCMI' values into 'struct xe_media_desc' */
++	if (MEDIA_VERx100(gt_to_xe(gt)) >= 3500)
++		hwe_mask |= XE_HW_ENGINE_VCS1 | XE_HW_ENGINE_VECS1;
+ 	/*
+ 	 * First instance is only terminated if the entire first media slice
+-	 * is absent (i.e., no VCS0 or VECS0).
++	 * is absent (i.e., no engines in hwe_mask).
+ 	 */
+-	if (gt->info.engine_mask & (XE_HW_ENGINE_VCS0 | XE_HW_ENGINE_VECS0))
++	if (gt->info.engine_mask & hwe_mask)
+ 		gt->steering[OADDRM].group_target = 0;
+ 	else
+ 		gt->steering[OADDRM].group_target = 1;
+-- 
+2.43.0
+

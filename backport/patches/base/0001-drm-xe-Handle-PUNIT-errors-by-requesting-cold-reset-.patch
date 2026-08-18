@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Date: Wed, 5 Aug 2026 12:41:56 +0530
+Subject: drm/xe: Handle PUNIT errors by requesting cold-reset recovery
+
+When PUNIT (power management unit) errors are detected that persist across
+warm resets, mark the device as wedged with DRM_WEDGE_RECOVERY_COLD_RESET
+and notify userspace that a complete device power cycle is required to
+restore normal operation.
+
+Signed-off-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link: https://patch.msgid.link/20260805071152.1225416-9-mallesh.koujalagi@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 9b00f6153614ca495213f1734b63beae844551eb linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 6ab0bd8a3611..6ef3533f4f4d 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -221,6 +221,12 @@ static u8 handle_core_compute_errors(struct xe_ras_error_array *arr)
+ 	return XE_RAS_RECOVERY_ACTION_RECOVERED;
+ }
+ 
++static void punit_error_handler(struct xe_device *xe)
++{
++	xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_COLD_RESET);
++	xe_device_declare_wedged(xe);
++}
++
+ static u8 handle_soc_internal_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
+ {
+ 	struct xe_ras_soc_error *info = (void *)arr->details;
+@@ -252,7 +258,7 @@ static u8 handle_soc_internal_errors(struct xe_device *xe, struct xe_ras_error_a
+ 			xe_err(xe, "[RAS]: PUNIT %s detected: 0x%x\n",
+ 			       sev_to_str(counter->common.severity),
+ 			       ieh_error->global_error_status);
+-			/* TODO: Add PUNIT error handling */
++			punit_error_handler(xe);
+ 			return XE_RAS_RECOVERY_ACTION_DISCONNECT;
+ 		}
+ 	}
+-- 
+2.43.0
+

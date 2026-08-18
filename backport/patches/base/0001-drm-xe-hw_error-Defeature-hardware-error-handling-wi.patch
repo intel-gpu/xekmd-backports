@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Raag Jadav <raag.jadav@intel.com>
+Date: Thu, 18 Jun 2026 21:01:26 +0530
+Subject: drm/xe/hw_error: Defeature hardware error handling with
+ system controller
+
+Hardware errors are reported through System Controller on the platforms
+that support it, and never routed as direct IRQ to SGUnit. Defeature
+their handling to prevent unexpected side effects.
+
+Signed-off-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Riana Tauro <riana.tauro@intel.com>
+Link: https://patch.msgid.link/20260618153209.110899-2-raag.jadav@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from commit ff33a7f1d4ea8094ac2b44654737752de6f05a77 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hw_error.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
+index f7dad9b08..f9a15e95d 100644
+--- a/drivers/gpu/drm/xe/xe_hw_error.c
++++ b/drivers/gpu/drm/xe/xe_hw_error.c
+@@ -440,6 +440,16 @@ static void hw_error_source_handler(struct xe_tile *tile, const enum hardware_er
+ 	if (!IS_DGFX(xe))
+ 		return;
+ 
++	/*
++	 * Hardware errors are reported through System Controller on the platforms that
++	 * support it, and never routed as direct IRQ to SGUnit. So we should never be
++	 * here for those platforms.
++	 */
++	if (xe->info.has_sysctrl) {
++		drm_err_ratelimited(&xe->drm, HW_ERR "Invalid error routing\n");
++		return;
++	}
++
+ 	spin_lock_irqsave(&xe->irq.lock, flags);
+ 	err_src = xe_mmio_read32(&tile->mmio, DEV_ERR_STAT_REG(hw_err));
+ 	if (!err_src) {
+-- 
+2.43.0
+

@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Date: Wed, 5 Aug 2026 12:41:54 +0530
+Subject: drm: Add DRM_WEDGE_RECOVERY_COLD_RESET recovery method
+
+Introduce DRM_WEDGE_RECOVERY_COLD_RESET (BIT(4)) recovery method to handle
+scenarios requiring device power cycle.
+
+This method addresses cases where other recovery mechanisms
+(driver reload, PCIe reset, etc.) are insufficient to restore device
+functionality. When set, it indicates to userspace that only device power
+cycle can recover the device from its current error state.
+
+Signed-off-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link:
+https://patch.msgid.link/20260805071152.1225416-7-mallesh.koujalagi@intel.com
+Acked-by: Maxime Ripard <mripard@kernel.org>
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 3a4d995cb926da4bd16f9bd4c7104d95105c5eff linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/drm_drv.c | 2 ++
+ include/drm/drm_device.h  | 1 +
+ 2 files changed, 3 insertions(+)
+
+diff --git a/drivers/gpu/drm/drm_drv.c b/drivers/gpu/drm/drm_drv.c
+index 675675480da4..19c25366635e 100644
+--- a/drivers/gpu/drm/drm_drv.c
++++ b/drivers/gpu/drm/drm_drv.c
+@@ -535,6 +535,8 @@ static const char *drm_get_wedge_recovery(unsigned int opt)
+ 		return "bus-reset";
+ 	case DRM_WEDGE_RECOVERY_VENDOR:
+ 		return "vendor-specific";
++	case DRM_WEDGE_RECOVERY_COLD_RESET:
++		return "cold-reset";
+ 	default:
+ 		return NULL;
+ 	}
+diff --git a/include/drm/drm_device.h b/include/drm/drm_device.h
+index 768a8dae83c5..75f030d027ee 100644
+--- a/include/drm/drm_device.h
++++ b/include/drm/drm_device.h
+@@ -37,6 +37,7 @@ struct pci_controller;
+ #define DRM_WEDGE_RECOVERY_REBIND	BIT(1)	/* unbind + bind driver */
+ #define DRM_WEDGE_RECOVERY_BUS_RESET	BIT(2)	/* unbind + reset bus device + bind */
+ #define DRM_WEDGE_RECOVERY_VENDOR	BIT(3)	/* vendor specific recovery method */
++#define DRM_WEDGE_RECOVERY_COLD_RESET	BIT(4)	/* remove device + slot power cycle + rescan */
+ 
+ /**
+  * struct drm_wedge_task_info - information about the guilty task of a wedge dev
+-- 
+2.43.0
+

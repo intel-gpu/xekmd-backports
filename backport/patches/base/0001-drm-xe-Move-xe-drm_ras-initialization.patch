@@ -1,0 +1,157 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Thu, 18 Jun 2026 11:36:39 +0530
+Subject: drm/xe: Move xe drm_ras initialization
+
+Move xe drm_ras registration to RAS initialization flow and keep
+hardware error initialization for processing errors reported
+via irq.
+
+Move soc remapper and system controller initialization
+up in xe_device_probe as RAS initialization depends on both.
+
+Cc: Anoop Vijay <anoop.c.vijay@intel.com>
+Cc: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link: https://patch.msgid.link/20260618060633.2790109-13-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from commit 8a1f196b37bf14c7f8c6793d235e66adeef6c2c5 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c   | 19 +++++++++++--------
+ drivers/gpu/drm/xe/xe_hw_error.c | 13 -------------
+ drivers/gpu/drm/xe/xe_ras.c      | 15 +++++++++++++++
+ drivers/gpu/drm/xe/xe_ras.h      |  1 +
+ 4 files changed, 27 insertions(+), 21 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index ed4a3db6ca7d..c37007a50531 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -60,6 +60,7 @@
+ #include "xe_psmi.h"
+ #include "xe_pxp.h"
+ #include "xe_query.h"
++#include "xe_ras.h"
+ #include "xe_shrinker.h"
+ #include "xe_soc_remapper.h"
+ #include "xe_survivability_mode.h"
+@@ -933,6 +934,16 @@ int xe_device_probe(struct xe_device *xe)
+ 	if (err)
+ 		return err;
+ 
++	err = xe_soc_remapper_init(xe);
++	if (err)
++		return err;
++
++	err = xe_sysctrl_init(xe);
++	if (err)
++		return err;
++
++	xe_ras_init(xe);
++
+ 	/*
+ 	 * Now that GT is initialized (TTM in particular),
+ 	 * we can try to init display, and inherit the initial fb.
+@@ -973,10 +984,6 @@ int xe_device_probe(struct xe_device *xe)
+ 
+ 	xe_nvm_init(xe);
+ 
+-	err = xe_soc_remapper_init(xe);
+-	if (err)
+-		return err;
+-
+ 	err = xe_heci_gsc_init(xe);
+ 	if (err)
+ 		return err;
+@@ -1019,10 +1026,6 @@ int xe_device_probe(struct xe_device *xe)
+ 	if (err)
+ 		goto err_unregister_display;
+ 
+-	err = xe_sysctrl_init(xe);
+-	if (err)
+-		goto err_unregister_display;
+-
+ 	err = xe_device_sysfs_init(xe);
+ 	if (err)
+ 		goto err_unregister_display;
+diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
+index f9a15e95d567..09464982d13b 100644
+--- a/drivers/gpu/drm/xe/xe_hw_error.c
++++ b/drivers/gpu/drm/xe/xe_hw_error.c
+@@ -529,14 +529,6 @@ void xe_hw_error_irq_handler(struct xe_tile *tile, const u32 master_ctl)
+ 	}
+ }
+ 
+-static int hw_error_info_init(struct xe_device *xe)
+-{
+-	if (xe->info.platform != XE_PVC)
+-		return 0;
+-
+-	return xe_drm_ras_init(xe);
+-}
+-
+ /*
+  * Process hardware errors during boot
+  */
+@@ -563,16 +555,11 @@ static void process_hw_errors(struct xe_device *xe)
+ void xe_hw_error_init(struct xe_device *xe)
+ {
+ 	struct xe_tile *tile = xe_device_get_root_tile(xe);
+-	int ret;
+ 
+ 	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe))
+ 		return;
+ 
+ 	INIT_WORK(&tile->csc_hw_error_work, csc_hw_error_work);
+ 
+-	ret = hw_error_info_init(xe);
+-	if (ret)
+-		drm_err(&xe->drm, "Failed to initialize XE DRM RAS (%pe)\n", ERR_PTR(ret));
+-
+ 	process_hw_errors(xe);
+ }
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index a11ea841f9f1..71ee9eeb1896 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "xe_device.h"
++#include "xe_drm_ras.h"
+ #include "xe_pm.h"
+ #include "xe_printk.h"
+ #include "xe_ras.h"
+@@ -268,3 +269,17 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
+ 
+ 	return 0;
+ }
++
++/**
++ * xe_ras_init - Initialize Xe RAS
++ * @xe: xe device instance
++ *
++ * Register drm_ras nodes
++ */
++void xe_ras_init(struct xe_device *xe)
++{
++	if (xe->info.platform != XE_PVC)
++		return;
++
++	xe_drm_ras_init(xe);
++}
+diff --git a/drivers/gpu/drm/xe/xe_ras.h b/drivers/gpu/drm/xe/xe_ras.h
+index a2089fc3c3ff..ba0b0224df23 100644
+--- a/drivers/gpu/drm/xe/xe_ras.h
++++ b/drivers/gpu/drm/xe/xe_ras.h
+@@ -15,5 +15,6 @@ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
+ 				      struct xe_sysctrl_event_response *response);
+ int xe_ras_get_counter(struct xe_device *xe, u8 severity, u8 component, u32 *value);
+ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component);
++void xe_ras_init(struct xe_device *xe);
+ 
+ #endif
+-- 
+2.43.0
+

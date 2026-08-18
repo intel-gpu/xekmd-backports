@@ -1,0 +1,237 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
+Date: Wed, 29 Jul 2026 17:48:38 +0530
+Subject: drm/xe: add page size allocation control state to xe_device
+
+Introduce xe_page_size_alloc_ctrl_mode and add page_size_alloc_ctrl
+state to struct xe_device along with mutex lock.
+
+The new control supports forcing user BO allocations to 2M pages,
+forcing them to 1G pages, or using a mixed round-robin mode across
+4K, 64K, 2M, and 1G page sizes. Track the current mixed-mode index
+in xe_device so allocation policy can be applied consistently.
+
+v2
+- make cur_index to atomic as update need in later patch to
+  avoid race/concurency (sashiko)
+v3
+- reworded comments
+- protect mode/index updates with a mutex for proper concurrency handling
+
+v4(sashiko)
+- move xe_debug_page_size_alloc_ctrl_init() before drm_dev_register(),
+  so mutex and control states are initialized
+  before any userspace visibility
+
+v5(Himal)
+- Guard all the debug page size policy code under CONFIG
+- Squash Kconfig patch to have Kconfig entry for DEBUG_PAGE_SIZE
+- Add inline to check debug page size support and exact mode
+  configured if it is supported.
+
+v6 (fix CI build)
+
+v8 (Himal)
+- use drmm_mutex_init to avoid leak with mutex_init
+- call xe_debug_page_size_alloc_ctrl_init unconditionally
+- Add missed mixed mode check on xe_debug_page_size_mode_not_none check
+- Add xe_debug_page_size_mode_is_mixed() function
+
+v9
+- make xe_debug_page_size_alloc_ctrl_init() return int
+- fail probe if drmm_mutex_init() for page_size_alloc_ctrl.lock fails
+
+Signed-off-by: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
+Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Link: https://patch.msgid.link/20260729121843.1255891-2-naresh.kumar.g@intel.com
+Signed-off-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+(cherry-picked from commit 6bea40fc4cf3f708c0eac23bdc7e47edc1cc7a8a linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/Kconfig.debug     | 16 ++++++++++
+ drivers/gpu/drm/xe/xe_device.c       | 25 +++++++++++++++
+ drivers/gpu/drm/xe/xe_device.h       | 48 ++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_device_types.h | 31 ++++++++++++++++++
+ 4 files changed, 120 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/Kconfig.debug b/drivers/gpu/drm/xe/Kconfig.debug
+index 01227c77f..79118d9ef 100644
+--- a/drivers/gpu/drm/xe/Kconfig.debug
++++ b/drivers/gpu/drm/xe/Kconfig.debug
+@@ -86,6 +86,22 @@ config DRM_XE_KUNIT_TEST
+ 
+ 	  If in doubt, say "N".
+ 
++config DRM_XE_DEBUG_PAGE_SIZE
++	bool "Enable debug control for user BO page-size allocation"
++	depends on DRM_XE_DEBUG && DEBUG_FS
++	help
++	  Expose a debugfs knob to override user BO page-size allocation
++	  handling for validation and debug. Supported modes include forced
++	  2M, forced 1G, and a mixed mode that exercises 4K, 64K, 2M, and
++	  1G page-size paths on platforms that support them.
++
++	  This is an unstable debugfs interface intended for development and
++	  validation only. Its layout, contents, and existence may change or
++	  be removed at any time with no regression warranty.
++
++	  Recommended for driver developers only.
++	  If in doubt, say "N".
++
+ config DRM_XE_DEBUG_GUC
+         bool "Enable extra GuC related debug options"
+         depends on DRM_XE_DEBUG
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index e086cc221..9135e23dc 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -871,6 +871,27 @@ static void xe_device_wedged_fini(struct drm_device *drm, void *arg)
+ 		xe_pm_runtime_put(xe);
+ }
+ 
++#ifdef CONFIG_DRM_XE_DEBUG_PAGE_SIZE
++static int xe_debug_page_size_alloc_ctrl_init(struct xe_device *xe)
++{
++	int err;
++
++	err = drmm_mutex_init(&xe->drm, &xe->page_size_alloc_ctrl.lock);
++	if (err)
++		return err;
++
++	xe->page_size_alloc_ctrl.mode = XE_PAGE_SIZE_ALLOC_CTRL_MODE_NONE;
++	xe->page_size_alloc_ctrl.cur_index = 0;
++
++	return 0;
++}
++#else
++static int xe_debug_page_size_alloc_ctrl_init(struct xe_device *xe)
++{
++	return 0;
++}
++#endif
++
+ int xe_device_probe(struct xe_device *xe)
+ {
+ 	struct xe_tile *tile;
+@@ -1008,6 +1029,10 @@ int xe_device_probe(struct xe_device *xe)
+ 	if (err)
+ 		return err;
+ 
++	err = xe_debug_page_size_alloc_ctrl_init(xe);
++	if (err)
++		return err;
++
+ 	err = drm_dev_register(&xe->drm, 0);
+ 	if (err)
+ 		return err;
+diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
+index 4bce01108..4e6401f35 100644
+--- a/drivers/gpu/drm/xe/xe_device.h
++++ b/drivers/gpu/drm/xe/xe_device.h
+@@ -203,6 +203,54 @@ static inline bool xe_device_wedged(struct xe_device *xe)
+ 	return atomic_read(&xe->wedged.flag);
+ }
+ 
++#ifdef CONFIG_DRM_XE_DEBUG_PAGE_SIZE
++static inline bool xe_debug_page_size_supported(struct xe_device *xe)
++{
++	return IS_DGFX(xe);
++}
++
++static inline bool xe_debug_page_size_mode_not_none(struct xe_device *xe)
++{
++	enum xe_page_size_alloc_ctrl_mode mode;
++
++	if (!xe_debug_page_size_supported(xe))
++		return false;
++
++	mode = READ_ONCE(xe->page_size_alloc_ctrl.mode);
++
++	return mode == XE_PAGE_SIZE_ALLOC_CTRL_MODE_ONLY_2M ||
++	       mode == XE_PAGE_SIZE_ALLOC_CTRL_MODE_ONLY_1G ||
++	       mode == XE_PAGE_SIZE_ALLOC_CTRL_MODE_MIXED;
++}
++
++static inline bool xe_debug_page_size_mode_is_mixed(struct xe_device *xe)
++{
++	enum xe_page_size_alloc_ctrl_mode mode;
++
++	if (!xe_debug_page_size_supported(xe))
++		return false;
++
++	mode = READ_ONCE(xe->page_size_alloc_ctrl.mode);
++
++	return mode == XE_PAGE_SIZE_ALLOC_CTRL_MODE_MIXED;
++}
++#else
++static inline bool xe_debug_page_size_supported(struct xe_device *xe)
++{
++	return false;
++}
++
++static inline bool xe_debug_page_size_mode_not_none(struct xe_device *xe)
++{
++	return false;
++}
++
++static inline bool xe_debug_page_size_mode_is_mixed(struct xe_device *xe)
++{
++	return false;
++}
++#endif
++
+ void xe_device_set_wedged_method(struct xe_device *xe, unsigned long method);
+ void xe_device_declare_wedged(struct xe_device *xe);
+ int xe_device_validate_wedged_mode(struct xe_device *xe, unsigned int mode);
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index ff996c456..7595ed3e1 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -61,6 +61,23 @@ enum xe_wedged_mode {
+ 	XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET = 2,
+ };
+ 
++#ifdef CONFIG_DRM_XE_DEBUG_PAGE_SIZE
++/**
++ * enum xe_page_size_alloc_ctrl_mode - User BO page-size allocation control modes
++ * @XE_PAGE_SIZE_ALLOC_CTRL_MODE_NONE: Use the normal allocation policy
++ * @XE_PAGE_SIZE_ALLOC_CTRL_MODE_ONLY_2M: Force user BO allocations to 2M pages
++ * @XE_PAGE_SIZE_ALLOC_CTRL_MODE_ONLY_1G: Force user BO allocations to 1G pages
++ * @XE_PAGE_SIZE_ALLOC_CTRL_MODE_MIXED: Select page sizes in round-robin order
++ *     (4K, 64K, 2M, 1G)
++ */
++enum xe_page_size_alloc_ctrl_mode {
++	XE_PAGE_SIZE_ALLOC_CTRL_MODE_NONE = 0,
++	XE_PAGE_SIZE_ALLOC_CTRL_MODE_ONLY_2M,
++	XE_PAGE_SIZE_ALLOC_CTRL_MODE_ONLY_1G,
++	XE_PAGE_SIZE_ALLOC_CTRL_MODE_MIXED
++};
++#endif
++
+ #define XE_BO_INVALID_OFFSET	LONG_MAX
+ 
+ #define GRAPHICS_VER(xe) ((xe)->info.graphics_verx100 / 100)
+@@ -485,6 +502,20 @@ struct xe_device {
+ 	/** @late_bind: xe mei late bind interface */
+ 	struct xe_late_bind late_bind;
+ 
++#ifdef CONFIG_DRM_XE_DEBUG_PAGE_SIZE
++	/**
++	 * @page_size_alloc_ctrl: User BO page-size allocation
++	 * debug control state
++	 */
++	struct {
++		/** @page_size_alloc_ctrl.mode: xe page size allocation control mode */
++		enum xe_page_size_alloc_ctrl_mode mode;
++		/** @page_size_alloc_ctrl.cur_index: Round-robin index used by mixed mode */
++		u32 cur_index;
++		/** @page_size_alloc_ctrl.lock: Protects @mode and @cur_index */
++		struct mutex lock;
++	} page_size_alloc_ctrl;
++#endif
+ 	/** @oa: oa observation subsystem */
+ 	struct xe_oa oa;
+ 
+-- 
+2.43.0
+

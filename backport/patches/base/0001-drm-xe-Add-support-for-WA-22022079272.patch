@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Date: Mon, 6 Jul 2026 15:43:45 -0700
+Subject: drm/xe: Add support for WA 22022079272
+
+The WA is implemented by the GuC, so we just need to enable it via the
+dedicated KLV.
+This WA is supported starting from GuC 70.62.
+
+Signed-off-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Link: https://patch.msgid.link/20260706224344.2723462-3-daniele.ceraolospurio@intel.com
+(backported from commit 0af278683cd6 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/abi/guc_klvs_abi.h | 1 +
+ drivers/gpu/drm/xe/xe_guc_ads.c       | 3 +++
+ drivers/gpu/drm/xe/xe_wa_oob.rules    | 4 ++++
+ 3 files changed, 8 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
+index 974ca54212c2..d5d0ab852a92 100644
+--- a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
++++ b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
+@@ -504,6 +504,7 @@ enum xe_guc_klv_ids {
+ 	GUC_WA_KLV_WAKE_POWER_DOMAINS_FOR_OUTBOUND_MMIO					= 0x900a,
+ 	GUC_WA_KLV_RESET_BB_STACK_PTR_ON_VF_SWITCH					= 0x900b,
+ 	GUC_WA_KLV_RESTORE_UNSAVED_MEDIA_CONTROL_REG					= 0x900c,
++	GUC_WA_KLV_REMAP_RANGED_TLB_INV							= 0x900d,
+ };
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_guc_ads.c b/drivers/gpu/drm/xe/xe_guc_ads.c
+index 833e8f385265..f75827ffd6db 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ads.c
++++ b/drivers/gpu/drm/xe/xe_guc_ads.c
+@@ -341,6 +341,9 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
+ 		guc_waklv_enable(ads, NULL, 0, &offset, &remain,
+ 				 GUC_WORKAROUND_KLV_DISABLE_PSMI_INTERRUPTS_AT_C6_ENTRY_RESTORE_AT_EXIT);
+ 
++	if (XE_GT_WA(gt, 22022079272) && GUC_FIRMWARE_VER_AT_LEAST(&gt->uc.guc, 70, 62))
++		guc_waklv_enable(ads, NULL, 0, &offset, &remain, GUC_WA_KLV_REMAP_RANGED_TLB_INV);
++
+ 	size = guc_ads_waklv_size(ads) - remain;
+ 	if (!size)
+ 		return;
+diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
+index 80b54b195f20..ae27bf1a0dbf 100644
+--- a/drivers/gpu/drm/xe/xe_wa_oob.rules
++++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
+@@ -58,3 +58,7 @@
+ 
+ 14025883347	MEDIA_VERSION_RANGE(1301, 3503)
+ 		GRAPHICS_VERSION_RANGE(2004, 3005)
++
++22022079272	MEDIA_VERSION(3503)
++		GRAPHICS_VERSION(3510)
++		GRAPHICS_VERSION(3511)
+-- 
+2.43.0
+

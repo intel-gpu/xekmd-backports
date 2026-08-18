@@ -1,0 +1,154 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
+Date: Wed, 29 Jul 2026 17:48:39 +0530
+Subject: drm/xe/debugfs: add page-size allocation mode knob
+
+Expose a debugfs control to override the page-size allocation mode used
+for user BOs.
+
+The interface allows switching between the default allocation policy,
+forced 2M, forced 1G, and mixed allocation modes at runtime. This
+provides a simple way to validate behavior and debug page-size-dependent
+allocation flows.
+
+The debugfs entry is built only when CONFIG_DRM_XE_DEBUG_PAGE_SIZE is
+enabled.
+
+v2
+- update changelog to match mutex-based cur_index handling
+- reset cur_index when switching to mixed mode (sashiko)
+
+v3
+- add CONFIG guard for page-size allocation debugfs support (Himal)
+- create debugfs entry under CONFIG_DRM_XE_DEBUG_PAGE_SIZE
+
+v4
+- reorderd this patch with kconfig patch to ensure patch builds
+- Gurding this debug knob for only discrete graphics
+
+v5(Himal)
+- Guard all page size calls with CONFIG_DRM_XE_DEBUG_PAGE_SIZE
+
+v8(Himal)
+- For read/show used READ_ONCE instead lock
+- to match Reader used WRITE_ONCE under lock protection
+- change modes to string format to read/writer for debugfs
+
+v9(Himal)
+- Add an OOB guard for mode in page_size_alloc_mode_show().
+  This check makes the function display "unknown" if mode has been
+  maliciously altered by KMD, preventing out-of-bounds access.
+  Under normal operation, values set through debugfs are validated,
+  so OOB values should not occur.
+- simplify mode-to-string lookup using page_size_alloc_mode_names[]
+- use sysfs_match_string() to parse page_size_alloc_mode writes
+
+Signed-off-by: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
+Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Link: https://patch.msgid.link/20260729121843.1255891-3-naresh.kumar.g@intel.com
+Signed-off-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+(cherry-picked from commit ceb4e4f0df78432128e11dca364207bc7856a339 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_debugfs.c | 78 +++++++++++++++++++++++++++++++++
+ 1 file changed, 78 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
+index ad2d8f179..47a80fa02 100644
+--- a/drivers/gpu/drm/xe/xe_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_debugfs.c
+@@ -509,6 +509,72 @@ static const struct file_operations disable_late_binding_fops = {
+ 	.write = disable_late_binding_set,
+ };
+ 
++#ifdef CONFIG_DRM_XE_DEBUG_PAGE_SIZE
++static const char * const page_size_alloc_mode_names[] = {
++	[XE_PAGE_SIZE_ALLOC_CTRL_MODE_NONE]    = "none",
++	[XE_PAGE_SIZE_ALLOC_CTRL_MODE_ONLY_2M] = "only_2m",
++	[XE_PAGE_SIZE_ALLOC_CTRL_MODE_ONLY_1G] = "only_1g",
++	[XE_PAGE_SIZE_ALLOC_CTRL_MODE_MIXED]   = "mixed",
++};
++
++static ssize_t page_size_alloc_mode_show(struct file *f, char __user *ubuf,
++					 size_t size, loff_t *pos)
++{
++	struct xe_device *xe = file_inode(f)->i_private;
++	char buf[32];
++	int len;
++	enum xe_page_size_alloc_ctrl_mode mode;
++
++	mode = READ_ONCE(xe->page_size_alloc_ctrl.mode);
++	if (mode >= ARRAY_SIZE(page_size_alloc_mode_names) ||
++	    !page_size_alloc_mode_names[mode])
++		len = scnprintf(buf, sizeof(buf), "unknown\n");
++	else
++		len = scnprintf(buf, sizeof(buf), "%s\n",
++				page_size_alloc_mode_names[mode]);
++	return simple_read_from_buffer(ubuf, size, pos, buf, len);
++}
++
++static ssize_t page_size_alloc_mode_set(struct file *f, const char __user *ubuf,
++					size_t size, loff_t *pos)
++{
++	struct xe_device *xe = file_inode(f)->i_private;
++	int ret;
++	char buf[32];
++	int mode;
++
++	if (*pos)
++		return -ESPIPE;
++
++	if (size > sizeof(buf) - 1)
++		return -EINVAL;
++
++	ret = simple_write_to_buffer(buf, sizeof(buf) - 1, pos, ubuf, size);
++	if (ret < 0)
++		return ret;
++	buf[ret] = '\0';
++
++	mode = sysfs_match_string(page_size_alloc_mode_names, buf);
++	if (mode < 0)
++		return mode;
++
++	mutex_lock(&xe->page_size_alloc_ctrl.lock);
++	if (mode == XE_PAGE_SIZE_ALLOC_CTRL_MODE_MIXED)
++		xe->page_size_alloc_ctrl.cur_index = 0;
++	WRITE_ONCE(xe->page_size_alloc_ctrl.mode,
++		   (enum xe_page_size_alloc_ctrl_mode)mode);
++	mutex_unlock(&xe->page_size_alloc_ctrl.lock);
++
++	return size;
++}
++
++static const struct file_operations page_size_alloc_mode_fops = {
++	.owner = THIS_MODULE,
++	.read = page_size_alloc_mode_show,
++	.write = page_size_alloc_mode_set,
++};
++#endif
++
+ void xe_debugfs_register(struct xe_device *xe)
+ {
+ 	struct ttm_device *bdev = &xe->ttm;
+@@ -550,6 +616,18 @@ void xe_debugfs_register(struct xe_device *xe)
+ 	debugfs_create_file("disable_late_binding", 0600, root, xe,
+ 			    &disable_late_binding_fops);
+ 
++#ifdef CONFIG_DRM_XE_DEBUG_PAGE_SIZE
++	/*
++	 * Expose a debugfs knob to control user BO page-size allocation:
++	 * "none"    - default behavior
++	 * "only_2m" - force 2M page allocations
++	 * "only_1g" - force 1G page allocations
++	 * "mixed"   - select 4K, 64K, 2M, and 1G in round-robin order
++	 */
++	if (xe_debug_page_size_supported(xe))
++		debugfs_create_file("page_size_alloc_mode", 0600, root, xe,
++				    &page_size_alloc_mode_fops);
++#endif
+ 	/*
+ 	 * Don't expose page reclaim configuration file if not supported by the
+ 	 * hardware initially.
+-- 
+2.43.0
+

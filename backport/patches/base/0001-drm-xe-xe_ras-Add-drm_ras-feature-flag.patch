@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Thu, 18 Jun 2026 11:36:40 +0530
+Subject: drm/xe/xe_ras: Add drm_ras feature flag
+
+Add xe drm_ras feature flag. Enable this flag for PVC and CRI to support
+exposing RAS error counters via netlink.
+
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link: https://patch.msgid.link/20260618060633.2790109-14-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from commit 63dfab5786ca925f6bc90903b7a7b77c99f4708f linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c       | 1 +
+ drivers/gpu/drm/xe/xe_device_types.h | 2 ++
+ drivers/gpu/drm/xe/xe_pci.c          | 3 +++
+ drivers/gpu/drm/xe/xe_pci_types.h    | 1 +
+ drivers/gpu/drm/xe/xe_ras.c          | 2 +-
+ 5 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index c37007a50531..12ee4d03abbf 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -670,6 +670,7 @@ static void vf_update_device_info(struct xe_device *xe)
+ 	xe->info.has_late_bind = 0;
+ 	xe->info.skip_guc_pc = 1;
+ 	xe->info.skip_pcode = 1;
++	xe->info.has_drm_ras = false;
+ }
+ 
+ static int xe_device_vram_alloc(struct xe_device *xe)
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index 5cdedc538f4a..7686acd2e605 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -172,6 +172,8 @@ struct xe_device {
+ 		u8 has_cached_pt:1;
+ 		/** @info.has_device_atomics_on_smem: Supports device atomics on SMEM */
+ 		u8 has_device_atomics_on_smem:1;
++		/** @info.has_drm_ras: Device supports drm_ras (Reliability, Availability, Serviceability) */
++		u8 has_drm_ras:1;
+ 		/** @info.has_fan_control: Device supports fan control */
+ 		u8 has_fan_control:1;
+ 		/** @info.has_flat_ccs: Whether flat CCS metadata is used */
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index a3b387f442f3..9bc6209a2cc2 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -367,6 +367,7 @@ static const __maybe_unused struct xe_device_desc pvc_desc = {
+ 	PLATFORM(PVC),
+ 	.dma_mask_size = 52,
+ 	.has_display = false,
++	.has_drm_ras = true,
+ 	.has_gsc_nvm = 1,
+ 	.has_heci_gscfi = 1,
+ 	.max_gt_per_tile = 1,
+@@ -468,6 +469,7 @@ static const struct xe_device_desc cri_desc = {
+ 	PLATFORM(CRESCENTISLAND),
+ 	.dma_mask_size = 52,
+ 	.has_display = false,
++	.has_drm_ras = true,
+ 	.has_flat_ccs = false,
+ 	.has_gsc_nvm = 1,
+ 	.has_i2c = true,
+@@ -758,6 +760,7 @@ static int xe_info_init_early(struct xe_device *xe,
+ 
+ 	xe->info.is_dgfx = desc->is_dgfx;
+ 	xe->info.has_cached_pt = desc->has_cached_pt;
++	xe->info.has_drm_ras = desc->has_drm_ras;
+ 	xe->info.has_fan_control = desc->has_fan_control;
+ 	/* runtime fusing may force flat_ccs to disabled later */
+ 	xe->info.has_flat_ccs = desc->has_flat_ccs;
+diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
+index 50e5f9b4d212..9765a731e934 100644
+--- a/drivers/gpu/drm/xe/xe_pci_types.h
++++ b/drivers/gpu/drm/xe/xe_pci_types.h
+@@ -40,6 +40,7 @@ struct xe_device_desc {
+ 
+ 	u8 has_cached_pt:1;
+ 	u8 has_display:1;
++	u8 has_drm_ras:1;
+ 	u8 has_fan_control:1;
+ 	u8 has_flat_ccs:1;
+ 	u8 has_gsc_nvm:1;
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 71ee9eeb1896..44f4e1a3455b 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -278,7 +278,7 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
+  */
+ void xe_ras_init(struct xe_device *xe)
+ {
+-	if (xe->info.platform != XE_PVC)
++	if (!xe->info.has_drm_ras)
+ 		return;
+ 
+ 	xe_drm_ras_init(xe);
+-- 
+2.43.0
+

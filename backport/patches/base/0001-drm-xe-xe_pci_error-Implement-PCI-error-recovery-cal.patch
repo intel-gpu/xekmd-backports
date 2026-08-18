@@ -1,0 +1,214 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Mon, 29 Jun 2026 13:58:03 +0530
+Subject: drm/xe/xe_pci_error: Implement PCI error recovery callbacks
+
+Add error_detected, mmio_enabled, slot_reset and resume recovery callbacks
+to handle PCIe Advanced Error Reporting (AER) errors.
+
+For fatal errors, the device is wedged and becomes inaccessible. Return
+PCI_ERS_RESULT_NEED_RESET from error_detected to request a Secondary
+Bus Reset (SBR).
+
+For non-fatal errors, return PCI_ERS_RESULT_CAN_RECOVER from
+error_detected to trigger the mmio_enabled callback. In this callback, the
+device is queried to determine the error cause and attempt recovery based
+on the error type.
+
+Once the secondary bus reset(SBR) is completed the slot_reset callback
+cleanly removes and reprobe the device to restore functionality.
+
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Matt Roper <matthew.d.roper@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260629082802.3690896-7-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from commit 13b9555ffb0304d736fcad01e7a75d329b81ae9a linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/Makefile       |   1 +
+ drivers/gpu/drm/xe/xe_pci.c       |   2 +
+ drivers/gpu/drm/xe/xe_pci_error.c | 118 ++++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_pci_error.h |  13 ++++
+ 4 files changed, 134 insertions(+)
+ create mode 100644 drivers/gpu/drm/xe/xe_pci_error.c
+ create mode 100644 drivers/gpu/drm/xe/xe_pci_error.h
+
+diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
+index bdce89feb..f057de788 100644
+--- a/drivers/gpu/drm/xe/Makefile
++++ b/drivers/gpu/drm/xe/Makefile
+@@ -102,6 +102,7 @@ xe-y += xe_bb.o \
+ 	xe_page_reclaim.o \
+ 	xe_pat.o \
+ 	xe_pci.o \
++	xe_pci_error.o \
+ 	xe_pci_rebar.o \
+ 	xe_pcode.o \
+ 	xe_pm.o \
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 635ace764..b00fa7ef7 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -27,6 +27,7 @@
+ #include "xe_guc.h"
+ #include "xe_mmio.h"
+ #include "xe_module.h"
++#include "xe_pci_error.h"
+ #include "xe_pci_rebar.h"
+ #include "xe_pci_sriov.h"
+ #include "xe_pci_types.h"
+@@ -1363,6 +1364,7 @@ static struct pci_driver xe_pci_driver = {
+ 	.remove = xe_pci_remove,
+ 	.shutdown = xe_pci_shutdown,
+ 	.sriov_configure = xe_pci_sriov_configure,
++	.err_handler = &xe_pci_error_handlers,
+ #ifdef CONFIG_PM_SLEEP
+ 	.driver.pm = &xe_pm_ops,
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_pci_error.c b/drivers/gpu/drm/xe/xe_pci_error.c
+new file mode 100644
+index 000000000..10424d038
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_pci_error.c
+@@ -0,0 +1,118 @@
++// SPDX-License-Identifier: MIT
++/*
++ * Copyright © 2026 Intel Corporation
++ */
++
++#include <linux/pci.h>
++
++#include "xe_device.h"
++#include "xe_gt.h"
++#include "xe_pci.h"
++#include "xe_pm.h"
++#include "xe_printk.h"
++#include "xe_survivability_mode.h"
++
++static void prepare_device_for_reset(struct pci_dev *pdev)
++{
++	struct xe_device *xe = pdev_to_xe_device(pdev);
++	struct xe_gt *gt;
++	u8 id;
++
++	/*
++	 * Wedge the device to prevent userspace access but do not send the uevent.
++	 * xe_device_wedged_fini() releases runtime pm if wedged flag is set, so acquire a runtime
++	 * pm reference to avoid underflow.
++	 */
++	if (!atomic_xchg(&xe->wedged.flag, 1))
++		xe_pm_runtime_get_noresume(xe);
++
++	for_each_gt(gt, xe, id)
++		xe_gt_declare_wedged(gt);
++
++	pci_disable_device(pdev);
++}
++
++static pci_ers_result_t xe_pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
++{
++	struct xe_device *xe = pdev_to_xe_device(pdev);
++
++	xe_info(xe, "PCI error: detected state = %d\n", state);
++
++	if (state == pci_channel_io_perm_failure)
++		return PCI_ERS_RESULT_DISCONNECT;
++
++	/* If the device is already wedged or in survivability mode, do not attempt recovery */
++	if (xe_survivability_mode_is_boot_enabled(xe) || xe_device_wedged(xe))
++		return PCI_ERS_RESULT_DISCONNECT;
++
++	switch (state) {
++	case pci_channel_io_normal:
++		return PCI_ERS_RESULT_CAN_RECOVER;
++	case pci_channel_io_frozen:
++		prepare_device_for_reset(pdev);
++		return PCI_ERS_RESULT_NEED_RESET;
++	default:
++		xe_info(xe, "PCI error: unknown state %d\n", state);
++		return PCI_ERS_RESULT_DISCONNECT;
++	}
++}
++
++static pci_ers_result_t xe_pci_error_mmio_enabled(struct pci_dev *pdev)
++{
++	struct xe_device *xe = pdev_to_xe_device(pdev);
++
++	xe_info(xe, "PCI error: MMIO enabled\n");
++
++	/* TODO: Query system controller for the type of error and take appropriate action */
++	return PCI_ERS_RESULT_RECOVERED;
++}
++
++static pci_ers_result_t xe_pci_error_slot_reset(struct pci_dev *pdev)
++{
++	const struct pci_device_id *ent = pci_match_id(pdev->driver->id_table, pdev);
++	struct xe_device *xe = pdev_to_xe_device(pdev);
++
++	xe_info(xe, "PCI error: slot reset\n");
++
++	pci_restore_state(pdev);
++
++	if (pci_enable_device(pdev)) {
++		xe_err(xe, "Cannot re-enable PCI device after reset\n");
++		return PCI_ERS_RESULT_DISCONNECT;
++	}
++
++	/*
++	 * Secondary Bus Reset causes all VRAM state to be lost along with
++	 * hardware state. As an initial step, re-probe the device to
++	 * re-initialize the driver and hardware.
++	 * TODO: optimize by re-initializing only the hardware state and re-creating
++	 * kernel BOs.
++	 */
++	pdev->driver->remove(pdev);
++
++	if (pdev->driver->probe(pdev, ent))
++		return PCI_ERS_RESULT_DISCONNECT;
++
++	xe = pdev_to_xe_device(pdev);
++
++	/* Wedge the device to prevent I/O operations till the resume callback */
++	atomic_set(&xe->wedged.flag, 1);
++
++	return PCI_ERS_RESULT_RECOVERED;
++}
++
++static void xe_pci_error_resume(struct pci_dev *pdev)
++{
++	struct xe_device *xe = pdev_to_xe_device(pdev);
++
++	xe_info(xe, "PCI error: resume\n");
++
++	atomic_set(&xe->wedged.flag, 0);
++}
++
++const struct pci_error_handlers xe_pci_error_handlers = {
++	.error_detected	= xe_pci_error_detected,
++	.mmio_enabled	= xe_pci_error_mmio_enabled,
++	.slot_reset	= xe_pci_error_slot_reset,
++	.resume		= xe_pci_error_resume,
++};
+diff --git a/drivers/gpu/drm/xe/xe_pci_error.h b/drivers/gpu/drm/xe/xe_pci_error.h
+new file mode 100644
+index 000000000..725ad0214
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_pci_error.h
+@@ -0,0 +1,13 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2026 Intel Corporation
++ */
++
++#ifndef _XE_PCI_ERROR_H_
++#define _XE_PCI_ERROR_H_
++
++struct pci_error_handlers;
++
++extern const struct pci_error_handlers xe_pci_error_handlers;
++
++#endif
+-- 
+2.43.0
+

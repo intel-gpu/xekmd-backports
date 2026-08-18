@@ -1,0 +1,192 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Thu, 18 Jun 2026 11:36:37 +0530
+Subject: drm/xe/xe_ras: Add support to clear error counter value
+
+Add structures and helper function to clear error counter value.
+
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link: https://patch.msgid.link/20260618060633.2790109-11-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from commit 2801adbd3449d449431a09dd9382a8ee4f928a2f linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c                   | 86 +++++++++++++++++++
+ drivers/gpu/drm/xe/xe_ras.h                   |  1 +
+ drivers/gpu/drm/xe/xe_ras_types.h             | 25 ++++++
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h |  2 +
+ 4 files changed, 114 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 96702234d7ec..a11ea841f9f1 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -34,6 +34,17 @@ enum xe_ras_component {
+ 	XE_RAS_COMP_MAX
+ };
+ 
++/* RAS response status codes */
++enum xe_ras_response_status {
++	XE_RAS_STATUS_SUCCESS = 0,
++	XE_RAS_STATUS_INVALID_PARAM,
++	XE_RAS_STATUS_OP_NOT_SUPPORTED,
++	XE_RAS_STATUS_TIMEOUT,
++	XE_RAS_STATUS_HARDWARE_FAILURE,
++	XE_RAS_STATUS_INSUFFICIENT_RESOURCES,
++	XE_RAS_STATUS_MAX
++};
++
+ static const char *const xe_ras_severities[] = {
+ 	[XE_RAS_SEV_NOT_SUPPORTED]		= "Not Supported",
+ 	[XE_RAS_SEV_CORRECTABLE]		= "Correctable Error",
+@@ -83,6 +94,26 @@ static u8 drm_to_xe_ras_component(u8 component)
+ 	}
+ }
+ 
++static int ras_status_to_errno(u32 status)
++{
++	switch (status) {
++	case XE_RAS_STATUS_SUCCESS:
++		return 0;
++	case XE_RAS_STATUS_INVALID_PARAM:
++		return -EINVAL;
++	case XE_RAS_STATUS_OP_NOT_SUPPORTED:
++		return -EOPNOTSUPP;
++	case XE_RAS_STATUS_TIMEOUT:
++		return -ETIMEDOUT;
++	case XE_RAS_STATUS_HARDWARE_FAILURE:
++		return -EIO;
++	case XE_RAS_STATUS_INSUFFICIENT_RESOURCES:
++		return -ENOSPC;
++	default:
++		return -EPROTO;
++	}
++}
++
+ static inline const char *sev_to_str(u8 severity)
+ {
+ 	if (severity >= XE_RAS_SEV_MAX)
+@@ -182,3 +213,58 @@ int xe_ras_get_counter(struct xe_device *xe, u8 severity, u8 component, u32 *val
+ 	guard(xe_pm_runtime)(xe);
+ 	return get_counter(xe, &counter, value);
+ }
++
++/**
++ * xe_ras_clear_counter() - Clear error counter value
++ * @xe: Xe device instance
++ * @severity: Error severity to be cleared (&enum drm_xe_ras_error_severity)
++ * @component: Error component to be cleared (&enum drm_xe_ras_error_component)
++ *
++ * This function clears the value of a specific error counter based on
++ * the error severity and component.
++ *
++ * Return: 0 on success, negative error code on failure.
++ */
++int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
++{
++	struct xe_ras_clear_counter_response response = {0};
++	struct xe_ras_clear_counter_request request = {0};
++	struct xe_sysctrl_mailbox_command command = {0};
++	struct xe_ras_error_class *counter;
++	size_t rlen;
++	int ret;
++
++	counter = &request.counter;
++	counter->common.severity = drm_to_xe_ras_severity(severity);
++	counter->common.component = drm_to_xe_ras_component(component);
++
++	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_CLEAR_COUNTER,
++				  &request, sizeof(request), &response, sizeof(response));
++
++	guard(xe_pm_runtime)(xe);
++	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
++	if (ret) {
++		xe_err(xe, "sysctrl: failed to clear counter %d\n", ret);
++		return ret;
++	}
++
++	if (rlen != sizeof(response)) {
++		xe_err(xe, "sysctrl: unexpected clear counter response length %zu (expected %zu)\n",
++		       rlen, sizeof(response));
++		return -EIO;
++	}
++
++	ret = ras_status_to_errno(response.status);
++	if (ret) {
++		xe_err(xe, "sysctrl: clear counter command failed with status %#x\n",
++		       response.status);
++		return ret;
++	}
++
++	counter = &response.counter;
++
++	xe_dbg(xe, "[RAS]: clear counter for %s %s\n", comp_to_str(counter->common.component),
++	       sev_to_str(counter->common.severity));
++
++	return 0;
++}
+diff --git a/drivers/gpu/drm/xe/xe_ras.h b/drivers/gpu/drm/xe/xe_ras.h
+index e148debd5d41..a2089fc3c3ff 100644
+--- a/drivers/gpu/drm/xe/xe_ras.h
++++ b/drivers/gpu/drm/xe/xe_ras.h
+@@ -14,5 +14,6 @@ struct xe_sysctrl_event_response;
+ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
+ 				      struct xe_sysctrl_event_response *response);
+ int xe_ras_get_counter(struct xe_device *xe, u8 severity, u8 component, u32 *value);
++int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component);
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
+index fdfebaeb5ed2..6688e11f57a8 100644
+--- a/drivers/gpu/drm/xe/xe_ras_types.h
++++ b/drivers/gpu/drm/xe/xe_ras_types.h
+@@ -96,4 +96,29 @@ struct xe_ras_get_counter_response {
+ 	u32 reserved[57];
+ } __packed;
+ 
++/**
++ * struct xe_ras_clear_counter_request - Request structure for clear counter
++ */
++struct xe_ras_clear_counter_request {
++	/** @counter: Counter class to be cleared */
++	struct xe_ras_error_class counter;
++	/** @reserved: Reserved for future use */
++	u32 reserved;
++} __packed;
++
++/**
++ * struct xe_ras_clear_counter_response - Response structure for clear counter
++ */
++struct xe_ras_clear_counter_response {
++	/** @counter: Counter class that was cleared */
++	struct xe_ras_error_class counter;
++	/** @reserved: Reserved */
++	u32 reserved;
++	/** @timestamp: Timestamp when the counter was cleared */
++	u64 timestamp;
++	/** @status: Status of the clear operation */
++	u32 status;
++	/** @reserved1: Reserved for future use */
++	u32 reserved1[3];
++} __packed;
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
+index eb9066ea8f40..b0c123096969 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
+@@ -23,10 +23,12 @@ enum xe_sysctrl_group {
+  * enum xe_sysctrl_gfsp_cmd - Commands supported by GFSP group
+  *
+  * @XE_SYSCTRL_CMD_GET_COUNTER: Get error counter value
++ * @XE_SYSCTRL_CMD_CLEAR_COUNTER: Clear error counter value
+  * @XE_SYSCTRL_CMD_GET_PENDING_EVENT: Retrieve pending event
+  */
+ enum xe_sysctrl_gfsp_cmd {
+ 	XE_SYSCTRL_CMD_GET_COUNTER		= 0x03,
++	XE_SYSCTRL_CMD_CLEAR_COUNTER		= 0x04,
+ 	XE_SYSCTRL_CMD_GET_PENDING_EVENT	= 0x07,
+ };
+ 
+-- 
+2.43.0
+

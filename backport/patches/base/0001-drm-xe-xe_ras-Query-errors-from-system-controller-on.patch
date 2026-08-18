@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Mon, 13 Jul 2026 13:17:59 +0530
+Subject: drm/xe/xe_ras: Query errors from system controller on probe
+
+On driver load, process and log any errors detected by firmware prior to
+load. Critical errors such as Punit, CSC are reported through Pcode init
+failure, causing the driver to enter survivability mode on probe.
+
+Cc: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Reviewed-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Link: https://patch.msgid.link/20260713074755.1278607-9-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from commit d9732e498f5fc1a7e0e3bb287d631c84815a17f7 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 1204b9f05b24..845b0e99754c 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -464,4 +464,11 @@ void xe_ras_init(struct xe_device *xe)
+ 
+ 	if (IS_ENABLED(CONFIG_PCIEAER))
+ 		ras_usp_aer_init(xe);
++
++	/*
++	 * During probe, process and log any errors detected by firmware while the driver was not
++	 * loaded. Critical errors such as Punit and CSC are reported through Pcode init failure,
++	 * causing the driver to enter survivability mode.
++	 */
++	xe_ras_process_errors(xe);
+ }
+-- 
+2.43.0
+

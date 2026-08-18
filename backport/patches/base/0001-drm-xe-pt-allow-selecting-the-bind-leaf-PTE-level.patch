@@ -1,0 +1,177 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
+Date: Wed, 29 Jul 2026 17:48:42 +0530
+Subject: drm/xe/pt: allow selecting the bind leaf PTE level
+
+Add a target_leaf_level field to the page-table bind walk and use it to
+    control the level at which leaf entries are emitted.
+
+    By default, the bind walk emits level-0 leaf PTEs and relies on
+    xe_pt_hugepte_possible() to select huge mappings when possible. Add an
+    explicit target leaf level so the walk can stop earlier when the VMA
+    requests a larger mapping size.
+
+    Use level 1 for 2M PDE mappings and level 2 for 1G PDP mappings, while
+    keeping level 0 for normal mappings. The existing huge-page heuristic
+    is preserved for the default level-0 path.
+
+    This allows the bind path to emit 2M and 1G leaf entries when requested
+    by the VMA, while still validating alignment and size requirements.
+
+    v2
+    - avoid using max_level to control walk depth
+    - use target_leaf_level to preserve the normal walk behavior
+    - keep the default huge-page heuristic only for the level-0 path
+    - refine commit message
+
+    v3
+    - reword commit message
+
+    v4
+    - allow fallback to smaller huge-page levels for non-zero
+      target_leaf_level
+    - avoid constraining clear_pt walks by target_leaf_level
+
+    v5(Himal)
+    - Restrict only intended level in debug page size policy mode
+    - Allow the normal path to proceed smoothly when
+      no debug page-size mode is selected.
+    v8 (Himal)
+    - Drop
+      https://patchwork.freedesktop.org/patch/740059/?series=168905&rev=5
+      patch and populate target_leaf_level from bo flags
+    - populate target_leaf_level if it is in debug page size mode
+      otherwise fill with 0 which is having no effect on the normal
+      flow
+    v10 (Himal)
+    - use xe_bo_is_vram() instead of raw VRAM flag checks
+      so huge-page selection is based on BO VRAM placement.
+
+Signed-off-by: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
+Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Link: https://patch.msgid.link/20260729121843.1255891-6-naresh.kumar.g@intel.com
+Signed-off-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+(cherry-picked from commit 41a74ed31f0bb87035eef9bd4efd92b4e82bcc99 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pt.c | 76 +++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 74 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pt.c b/drivers/gpu/drm/xe/xe_pt.c
+index 232f38dd7..d73e1334d 100644
+--- a/drivers/gpu/drm/xe/xe_pt.c
++++ b/drivers/gpu/drm/xe/xe_pt.c
+@@ -301,6 +301,14 @@ struct xe_pt_stage_bind_walk {
+ 	bool needs_64K;
+ 	/** @clear_pt: clear page table entries during the bind walk */
+ 	bool clear_pt;
++	/**
++	 * @target_leaf_level: Page-table level at which to emit leaf PTEs
++	 * 0 for normal 4K/64K mappings, 1 for 2M huge pages, and 2 for 1G huge
++	 * pages. The walk still traverses from the root down; this field tells
++	 * xe_pt_stage_bind_entry() to treat the selected level as a leaf instead
++	 * of descending further.
++	 */
++	u32 target_leaf_level;
+ 	/**
+ 	 * @vma: VMA being mapped
+ 	 */
+@@ -513,6 +521,39 @@ xe_pt_is_pte_ps64K(u64 addr, u64 next, struct xe_pt_stage_bind_walk *xe_walk)
+ 	return xe_walk->found_64K;
+ }
+ 
++static bool xe_pt_huge_leaf_allowed(u64 addr, u64 next, unsigned int level,
++				    struct xe_pt_stage_bind_walk *xe_walk)
++{
++	if (xe_walk->clear_pt)
++		return xe_pt_hugepte_possible(addr, next, level, xe_walk);
++
++	if (!xe_debug_page_size_supported(xe_walk->vm->xe))
++		return xe_pt_hugepte_possible(addr, next, level, xe_walk);
++
++	if (!xe_walk->target_leaf_level)
++		return xe_pt_hugepte_possible(addr, next, level, xe_walk);
++
++	if (level == xe_walk->target_leaf_level)
++		return xe_pt_hugepte_possible(addr, next, level, xe_walk);
++
++	return false;
++}
++
++static bool xe_pt_exact_leaf_required_but_invalid(u64 addr, u64 next,
++						  unsigned int level,
++						  struct xe_pt_stage_bind_walk *xe_walk)
++{
++	struct xe_device *xe = xe_walk->vm->xe;
++
++	if (!xe_debug_page_size_mode_not_none(xe))
++		return false;
++
++	return !xe_walk->clear_pt &&
++		xe_walk->target_leaf_level &&
++		level == xe_walk->target_leaf_level &&
++		!xe_pt_hugepte_possible(addr, next, level, xe_walk);
++}
++
+ static int
+ xe_pt_stage_bind_entry(struct xe_ptw *parent, pgoff_t offset,
+ 		       unsigned int level, u64 addr, u64 next,
+@@ -530,8 +571,18 @@ xe_pt_stage_bind_entry(struct xe_ptw *parent, pgoff_t offset,
+ 	int ret = 0;
+ 	u64 pte;
+ 
+-	/* Is this a leaf entry ?*/
+-	if (level == 0 || xe_pt_hugepte_possible(addr, next, level, xe_walk)) {
++	if (xe_pt_exact_leaf_required_but_invalid(addr, next, level, xe_walk))
++		return -EINVAL;
++
++	/*
++	 * Is this a leaf entry?
++	 * Always create a 4K leaf at level 0. For huge pages (level > 0),
++	 * validate alignment and size with xe_pt_hugepte_possible().
++	 * When target_leaf_level is non-zero, only that huge-page level is
++	 * accepted for normal bind walks. Clear walks remain unconstrained so
++	 * existing huge leaves can be cleared without descending further.
++	 */
++	if (level == 0 || xe_pt_huge_leaf_allowed(addr, next, level, xe_walk)) {
+ 		struct xe_res_cursor *curs = xe_walk->curs;
+ 		struct xe_bo *bo = xe_vma_bo(xe_walk->vma);
+ 		bool is_null_or_purged = xe_vma_is_null(xe_walk->vma) ||
+@@ -681,6 +732,26 @@ static bool xe_atomic_for_system(struct xe_vm *vm, struct xe_vma *vma)
+ 				 (bo && xe_bo_has_single_placement(bo))));
+ }
+ 
++static u32 xe_pt_target_leaf_level_from_bo(struct xe_device *xe,
++					   struct xe_vma *vma)
++{
++	struct xe_bo *bo = xe_vma_bo(vma);
++
++	if (!xe_debug_page_size_mode_not_none(xe))
++		return 0;
++
++	if (!bo || !xe_bo_is_vram(bo) || !(bo->flags & XE_BO_FLAG_USER))
++		return 0;
++
++	if (bo->flags & XE_BO_FLAG_NEEDS_1G)
++		return 2;
++
++	if (bo->flags & XE_BO_FLAG_NEEDS_2M)
++		return 1;
++
++	return 0;
++}
++
+ /**
+  * xe_pt_stage_bind() - Build a disconnected page-table tree for a given address
+  * range.
+@@ -773,6 +844,7 @@ xe_pt_stage_bind(struct xe_tile *tile, struct xe_vma *vma,
+ 		xe_svm_notifier_unlock(vm);
+ 	}
+ 
++	xe_walk.target_leaf_level = xe_pt_target_leaf_level_from_bo(xe, vma);
+ 	xe_walk.needs_64K = (vm->flags & XE_VM_FLAG_64K);
+ 	if (clear_pt) {
+ 		xe_assert(xe, !range);
+-- 
+2.43.0
+

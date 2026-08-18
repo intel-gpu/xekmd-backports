@@ -1,0 +1,245 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Date: Wed, 15 Jul 2026 14:21:59 +0530
+Subject: drm/xe: Consolidate debugfs fault injection functions
+
+The fault injection code was scattered: the GT reset
+hook lived in xe_gt.h as an inline function with its own global
+variable, the CSC hook had a separate global in xe_hw_error.c with
+an extern declaration, and each was individually registered in
+xe_debugfs.c. Adding a new error type meant editing many files and
+copy-pasting the same boilerplate.
+
+Debugfs interface (under /sys/kernel/debug/dri/0/):
+ - fail_gt_reset         - GT reset failure
+ - inject_csc_hw_error   - CSC firmware error
+
+Signed-off-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Riana Tauro <riana.tauro@intel.com>
+Link: https://patch.msgid.link/20260715085159.424040-2-mallesh.koujalagi@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from commit 8cd24184c0f52f9f4e5a8eafa29ed0078ea33ddd linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_debugfs.c  | 54 ++++++++++++++++++++++++++++++--
+ drivers/gpu/drm/xe/xe_debugfs.h  |  6 ++++
+ drivers/gpu/drm/xe/xe_gt.c       |  5 +--
+ drivers/gpu/drm/xe/xe_gt.h       |  8 -----
+ drivers/gpu/drm/xe/xe_hw_error.c | 11 ++-----
+ 5 files changed, 62 insertions(+), 22 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
+index 8a992c30dc53..68546d53de82 100644
+--- a/drivers/gpu/drm/xe/xe_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_debugfs.c
+@@ -5,6 +5,7 @@
+ 
+ #include "xe_debugfs.h"
+ 
++#include <linux/bits.h>
+ #include <linux/debugfs.h>
+ #include <linux/fault-inject.h>
+ #include <linux/string_helpers.h>
+@@ -40,6 +41,55 @@
+ DECLARE_FAULT_ATTR(gt_reset_failure);
+ DECLARE_FAULT_ATTR(inject_csc_hw_error);
+ 
++static bool csc_hw_error_available(struct xe_device *xe)
++{
++	return !IS_SRIOV_VF(xe) && xe->info.platform == XE_BATTLEMAGE;
++}
++
++/*
++ * Fault injection table.  Each entry registers a debugfs attribute; add a
++ * matching FAULT_ACTION() below for every entry added here.
++ */
++static struct {
++	const char *name;
++	struct fault_attr *attr;
++	bool (*is_visible)(struct xe_device *xe);
++} xe_fault_inject_entry[] = {
++	{ .name = "fail_gt_reset",
++	  .attr = &gt_reset_failure },
++	{ .name = "inject_csc_hw_error",
++	  .attr = &inject_csc_hw_error,
++	  .is_visible = csc_hw_error_available },
++};
++
++/*
++ * FAULT_ACTION(name, fault_attr) - generate xe_fault_<name>() accessor.
++ * Add one entry per row in xe_fault_inject_entry[].
++ */
++#define FAULT_ACTION(name, fault_attr)			\
++bool xe_fault_##name(void)				\
++{							\
++	return should_fail(&(fault_attr), 1);		\
++}
++
++FAULT_ACTION(gt_reset, gt_reset_failure)
++FAULT_ACTION(csc_hw_error, inject_csc_hw_error)
++
++static void xe_fault_inject_debugfs_register(struct xe_device *xe,
++					     struct dentry *root)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(xe_fault_inject_entry); i++) {
++		if (xe_fault_inject_entry[i].is_visible &&
++		    !xe_fault_inject_entry[i].is_visible(xe))
++			continue;
++
++		fault_create_debugfs_attr(xe_fault_inject_entry[i].name, root,
++					  xe_fault_inject_entry[i].attr);
++	}
++}
++
+ static void read_residency_counter(struct xe_device *xe, struct xe_mmio *mmio,
+ 				   u32 offset, const char *name, struct drm_printer *p)
+ {
+@@ -615,8 +665,6 @@ void xe_debugfs_register(struct xe_device *xe)
+ 		drm_debugfs_create_files(debugfs_residencies,
+ 					 ARRAY_SIZE(debugfs_residencies),
+ 					 root, minor);
+-		fault_create_debugfs_attr("inject_csc_hw_error", root,
+-					  &inject_csc_hw_error);
+ 	}
+ 
+ 	/*
+@@ -686,7 +734,7 @@ void xe_debugfs_register(struct xe_device *xe)
+ 
+ 	xe_psmi_debugfs_register(xe);
+ 
+-	fault_create_debugfs_attr("fail_gt_reset", root, &gt_reset_failure);
++	xe_fault_inject_debugfs_register(xe, root);
+ 
+ 	if (IS_SRIOV_PF(xe))
+ 		xe_sriov_pf_debugfs_register(xe, root);
+diff --git a/drivers/gpu/drm/xe/xe_debugfs.h b/drivers/gpu/drm/xe/xe_debugfs.h
+index 17f4c2f1b5e4..cd56f7442b99 100644
+--- a/drivers/gpu/drm/xe/xe_debugfs.h
++++ b/drivers/gpu/drm/xe/xe_debugfs.h
+@@ -6,11 +6,17 @@
+ #ifndef _XE_DEBUGFS_H_
+ #define _XE_DEBUGFS_H_
+ 
++#include <linux/types.h>
++
+ struct xe_device;
+ 
+ #ifdef CONFIG_DEBUG_FS
++bool xe_fault_gt_reset(void);
++bool xe_fault_csc_hw_error(void);
+ void xe_debugfs_register(struct xe_device *xe);
+ #else
++static inline bool xe_fault_gt_reset(void) { return false; }
++static inline bool xe_fault_csc_hw_error(void) { return false; }
+ static inline void xe_debugfs_register(struct xe_device *xe) { }
+ #endif
+ 
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index ef36052fe90d..c7464af74f60 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -19,6 +19,7 @@
+ #include "regs/xe_gt_regs.h"
+ #include "xe_assert.h"
+ #include "xe_bb.h"
++#include "xe_debugfs.h"
+ #include "xe_device.h"
+ #include "xe_eu_stall.h"
+ #include "xe_exec_queue.h"
+@@ -926,7 +927,7 @@ static void gt_reset_worker(struct work_struct *w)
+ 
+ 	xe_gt_info(gt, "reset started\n");
+ 
+-	if (xe_fault_inject_gt_reset()) {
++	if (xe_fault_gt_reset()) {
+ 		err = -ECANCELED;
+ 		goto err_fail;
+ 	}
+@@ -986,7 +987,7 @@ void xe_gt_reset_async(struct xe_gt *gt)
+ 		return;
+ 
+ 	/* Don't do a reset while one is already in flight */
+-	if (!xe_fault_inject_gt_reset() && xe_uc_reset_prepare(&gt->uc))
++	if (!xe_fault_gt_reset() && xe_uc_reset_prepare(&gt->uc))
+ 		return;
+ 
+ 	xe_gt_info(gt, "reset queued from %ps\n", __builtin_return_address(0));
+diff --git a/drivers/gpu/drm/xe/xe_gt.h b/drivers/gpu/drm/xe/xe_gt.h
+index de7e47763411..c7278247215e 100644
+--- a/drivers/gpu/drm/xe/xe_gt.h
++++ b/drivers/gpu/drm/xe/xe_gt.h
+@@ -6,8 +6,6 @@
+ #ifndef _XE_GT_H_
+ #define _XE_GT_H_
+ 
+-#include <linux/fault-inject.h>
+-
+ #include <drm/drm_util.h>
+ 
+ #include "xe_device.h"
+@@ -38,12 +36,6 @@
+ 	xe_gt_is_media_type(gt_) ? MEDIA_VER(xe) : GRAPHICS_VER(xe); \
+ })
+ 
+-extern struct fault_attr gt_reset_failure;
+-static inline bool xe_fault_inject_gt_reset(void)
+-{
+-	return IS_ENABLED(CONFIG_DEBUG_FS) && should_fail(&gt_reset_failure, 1);
+-}
+-
+ struct xe_gt *xe_gt_alloc(struct xe_tile *tile);
+ int xe_gt_init_early(struct xe_gt *gt);
+ int xe_gt_init(struct xe_gt *gt);
+diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
+index 09464982d13b..d5f8073a5c66 100644
+--- a/drivers/gpu/drm/xe/xe_hw_error.c
++++ b/drivers/gpu/drm/xe/xe_hw_error.c
+@@ -4,12 +4,12 @@
+  */
+ 
+ #include <linux/bitmap.h>
+-#include <linux/fault-inject.h>
+ 
+ #include "regs/xe_gsc_regs.h"
+ #include "regs/xe_hw_error_regs.h"
+ #include "regs/xe_irq_regs.h"
+ 
++#include "xe_debugfs.h"
+ #include "xe_device.h"
+ #include "xe_drm_ras.h"
+ #include "xe_hw_error.h"
+@@ -25,8 +25,6 @@
+ 						 (PVC_COR_ERR_MASK & REG_BIT(err_bit)) : \
+ 						 (PVC_FAT_ERR_MASK & REG_BIT(err_bit)))
+ 
+-extern struct fault_attr inject_csc_hw_error;
+-
+ static const char * const error_severity[] = DRM_XE_RAS_ERROR_SEVERITY_NAMES;
+ 
+ static const char * const hec_uncorrected_fw_errors[] = {
+@@ -167,11 +165,6 @@ static_assert(ARRAY_SIZE(pvc_master_local_nonfatal_err_reg) == XE_RAS_REG_SIZE);
+ 						 pvc_master_local_fatal_err_reg : \
+ 						 pvc_master_local_nonfatal_err_reg)
+ 
+-static bool fault_inject_csc_hw_error(void)
+-{
+-	return IS_ENABLED(CONFIG_DEBUG_FS) && should_fail(&inject_csc_hw_error, 1);
+-}
+-
+ static void csc_hw_error_work(struct work_struct *work)
+ {
+ 	struct xe_tile *tile = container_of(work, typeof(*tile), csc_hw_error_work);
+@@ -520,7 +513,7 @@ void xe_hw_error_irq_handler(struct xe_tile *tile, const u32 master_ctl)
+ {
+ 	enum hardware_error hw_err;
+ 
+-	if (fault_inject_csc_hw_error())
++	if (xe_fault_csc_hw_error())
+ 		schedule_work(&tile->csc_hw_error_work);
+ 
+ 	for (hw_err = 0; hw_err < HARDWARE_ERROR_MAX; hw_err++) {
+-- 
+2.43.0
+

@@ -1,0 +1,162 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Fri, 17 Jul 2026 19:46:53 +0530
+Subject: drm/xe/xe_ras: Handle uncorrectable SoC Internal errors
+
+Some critical errors such as CSC firmware and Punit are reported under SoC
+internal errors and require special handling.
+
+CSC errors are classified into hardware errors and firmware errors.
+Hardware errors can be recovered using a SBR (Secondary Bus Reset) whereas
+firmware errors are critical and require a firmware flash. On such errors,
+device is wedged and runtime survivability mode will be enabled to notify
+userspace that a firmware flash is required.
+
+PUNIT uncorrectable errors can only be recovered through a cold reset.
+
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260717141650.2487761-7-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(backported from commit 573f9e7ed1a9 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c       | 44 ++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_ras_types.h | 48 +++++++++++++++++++++++++++++++
+ 2 files changed, 92 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 845b0e99754c..b5b62048921d 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -8,6 +8,7 @@
+ #include "xe_pm.h"
+ #include "xe_printk.h"
+ #include "xe_ras.h"
++#include "xe_survivability_mode.h"
+ #include "xe_sysctrl.h"
+ #include "xe_sysctrl_event_types.h"
+ #include "xe_sysctrl_mailbox.h"
+@@ -220,6 +221,46 @@ static u8 handle_core_compute_errors(struct xe_ras_error_array *arr)
+ 	return XE_RAS_RECOVERY_ACTION_RECOVERED;
+ }
+ 
++static u8 handle_soc_internal_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
++{
++	struct xe_ras_soc_error *info = (void *)arr->details;
++	struct xe_ras_soc_error_source *source = &info->source;
++	struct xe_ras_error_class *counter = &arr->counter;
++
++	if (source->csc) {
++		struct xe_ras_csc_error *csc_error = (void *)info->details;
++
++		/*
++		 * CSC uncorrectable errors are classified as hardware errors and firmware errors.
++		 * CSC firmware errors are critical errors that can be recovered only by firmware
++		 * update via SPI driver. On a CSC firmware error, PCODE enables FDO mode and sets
++		 * the bit in the capability register. On receiving this error, the driver enables
++		 * runtime survivability mode which notifies userspace that a firmware update
++		 * is required.
++		 */
++		if (csc_error->hec_fw_error) {
++			xe_err(xe, "[RAS]: CSC %s detected: 0x%x\n",
++			       sev_to_str(counter->common.severity),
++			       csc_error->hec_fw_error);
++			xe_survivability_mode_runtime_enable(xe);
++			return XE_RAS_RECOVERY_ACTION_DISCONNECT;
++		}
++	} else if (source->ieh) {
++		struct xe_ras_ieh_error *ieh_error = (void *)info->details;
++
++		if (ieh_error->global_error_status & XE_RAS_SOC_IEH_PUNIT) {
++			xe_err(xe, "[RAS]: PUNIT %s detected: 0x%x\n",
++			       sev_to_str(counter->common.severity),
++			       ieh_error->global_error_status);
++			/* TODO: Add PUNIT error handling */
++			return XE_RAS_RECOVERY_ACTION_DISCONNECT;
++		}
++	}
++
++	/* For other SoC internal errors, request a reset as recovery mechanism */
++	return XE_RAS_RECOVERY_ACTION_RESET;
++}
++
+ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
+ 				      struct xe_sysctrl_event_response *response)
+ {
+@@ -343,6 +384,9 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+ 			case XE_RAS_COMP_CORE_COMPUTE:
+ 				action = handle_core_compute_errors(arr);
+ 				break;
++			case XE_RAS_COMP_SOC_INTERNAL:
++				action = handle_soc_internal_errors(xe, arr);
++				break;
+ 			default:
+ 				/* For any other component, reset */
+ 				action = XE_RAS_RECOVERY_ACTION_RESET;
+diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
+index 8d344691b549..2d46c506068f 100644
+--- a/drivers/gpu/drm/xe/xe_ras_types.h
++++ b/drivers/gpu/drm/xe/xe_ras_types.h
+@@ -10,6 +10,8 @@
+ 
+ #define XE_RAS_NUM_COUNTERS			16
+ #define XE_RAS_NUM_ERROR_ARR			3
++/* Error bits in IEH global error status register */
++#define XE_RAS_SOC_IEH_PUNIT			BIT(1)
+ 
+ /**
+  * enum xe_ras_recovery_action - RAS recovery actions
+@@ -177,4 +179,50 @@ struct xe_ras_compute_error {
+ 	u32 reserved[15];
+ } __packed;
+ 
++/**
++ * struct xe_ras_soc_error_source - Source of SoC error
++ */
++struct xe_ras_soc_error_source {
++	/** @csc: CSC */
++	u32 csc:1;
++	/** @ieh: IEH (Integrated Error Handler) */
++	u32 ieh:1;
++	/** @reserved: Reserved for future use */
++	u32 reserved:30;
++} __packed;
++
++/**
++ * struct xe_ras_soc_error - Error details of SoC internal error
++ */
++struct xe_ras_soc_error {
++	/** @source: Error source */
++	struct xe_ras_soc_error_source source;
++	/** @details: Error details specific to the error source */
++	u32 details[15];
++} __packed;
++
++/**
++ * struct xe_ras_csc_error - CSC error details
++ */
++struct xe_ras_csc_error {
++	/** @reserved: Reserved for future use */
++	u32 reserved;
++	/** @hec_fw_error: CSC firmware error */
++	u32 hec_fw_error;
++} __packed;
++
++/**
++ * struct xe_ras_ieh_error - IEH (Integrated Error Handler) error details
++ */
++struct xe_ras_ieh_error {
++	/** @reserved: Reserved for future use */
++	u32 reserved;
++	/** @global_error_status: Global error status */
++	u32 global_error_status;
++	/** @reserved1: Reserved for future use */
++	u32 reserved1[2];
++	/** @info: Additional information */
++	u32 info[10];
++} __packed;
++
+ #endif
+-- 
+2.43.0
+

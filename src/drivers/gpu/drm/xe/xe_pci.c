@@ -22,10 +22,12 @@
 #include "xe_device.h"
 #include "xe_drv.h"
 #include "xe_gt.h"
+#include "xe_gt_printk.h"
 #include "xe_gt_sriov_vf.h"
 #include "xe_guc.h"
 #include "xe_mmio.h"
 #include "xe_module.h"
+#include "xe_pci_error.h"
 #include "xe_pci_rebar.h"
 #include "xe_pci_sriov.h"
 #include "xe_pci_types.h"
@@ -119,6 +121,7 @@ static const struct xe_graphics_desc graphics_xe2 = {
 static const struct xe_graphics_desc graphics_xe3p_lpg = {
 	XE2_GFX_FEATURES,
 	.has_indirect_ring_state = 1,
+	.has_uncorrectable_error_reporting = 1,
 	.multi_queue_engine_class_mask = BIT(XE_ENGINE_CLASS_COPY) | BIT(XE_ENGINE_CLASS_COMPUTE),
 	.num_geometry_xecore_fuse_regs = 3,
 	.num_compute_xecore_fuse_regs = 3,
@@ -128,6 +131,7 @@ static const struct xe_graphics_desc graphics_xe3p_xpc = {
 	XE2_GFX_FEATURES,
 	.has_access_counter = 0,
 	.has_indirect_ring_state = 1,
+	.has_uncorrectable_error_reporting = 1,
 	.hw_engine_mask =
 		GENMASK(XE_HW_ENGINE_BCS8, XE_HW_ENGINE_BCS1) |
 		GENMASK(XE_HW_ENGINE_CCS3, XE_HW_ENGINE_CCS0),
@@ -144,6 +148,14 @@ static const struct xe_media_desc media_xem = {
 };
 
 static const struct xe_media_desc media_xelpmp = {
+	.hw_engine_mask =
+		GENMASK(XE_HW_ENGINE_VCS7, XE_HW_ENGINE_VCS0) |
+		GENMASK(XE_HW_ENGINE_VECS3, XE_HW_ENGINE_VECS0) |
+		BIT(XE_HW_ENGINE_GSCCS0)
+};
+
+static const struct xe_media_desc media_xe3p_hpm = {
+	.has_uncorrectable_error_reporting = 1,
 	.hw_engine_mask =
 		GENMASK(XE_HW_ENGINE_VCS7, XE_HW_ENGINE_VCS0) |
 		GENMASK(XE_HW_ENGINE_VECS3, XE_HW_ENGINE_VECS0) |
@@ -185,7 +197,7 @@ static const struct xe_ip media_ips[] = {
 	{ 3000, "Xe3_LPM", &media_xelpmp },
 	{ 3002, "Xe3_LPM", &media_xelpmp },
 	{ 3500, "Xe3p_LPM", &media_xelpmp },
-	{ 3503, "Xe3p_HPM", &media_xelpmp },
+	{ 3503, "Xe3p_HPM", &media_xe3p_hpm },
 };
 
 #define MULTI_LRC_MASK \
@@ -355,6 +367,7 @@ static const __maybe_unused struct xe_device_desc pvc_desc = {
 	PLATFORM(PVC),
 	.dma_mask_size = 52,
 	.has_display = false,
+	.has_drm_ras = true,
 	.has_gsc_nvm = 1,
 	.has_heci_gscfi = 1,
 	.max_gt_per_tile = 1,
@@ -456,6 +469,7 @@ static const struct xe_device_desc cri_desc = {
 	PLATFORM(CRESCENTISLAND),
 	.dma_mask_size = 52,
 	.has_display = false,
+	.has_drm_ras = true,
 	.has_flat_ccs = false,
 	.has_gsc_nvm = 1,
 	.has_i2c = true,
@@ -746,6 +760,7 @@ static int xe_info_init_early(struct xe_device *xe,
 
 	xe->info.is_dgfx = desc->is_dgfx;
 	xe->info.has_cached_pt = desc->has_cached_pt;
+	xe->info.has_drm_ras = desc->has_drm_ras;
 	xe->info.has_fan_control = desc->has_fan_control;
 	/* runtime fusing may force flat_ccs to disabled later */
 	xe->info.has_flat_ccs = desc->has_flat_ccs;
@@ -848,7 +863,13 @@ static struct xe_gt *alloc_primary_gt(struct xe_tile *tile,
 	gt->info.type = XE_GT_TYPE_MAIN;
 	gt->info.id = tile->id * xe->info.max_gt_per_tile;
 	gt->info.has_indirect_ring_state = graphics_desc->has_indirect_ring_state;
+	gt->info.has_uncorrectable_error_reporting =
+		graphics_desc->has_uncorrectable_error_reporting;
 	gt->info.multi_queue_engine_class_mask = graphics_desc->multi_queue_engine_class_mask;
+	if (!xe_configfs_get_enable_multi_queue(to_pci_dev(xe->drm.dev))) {
+		xe_gt_info(gt, "Multi-queue disabled via configfs\n");
+		gt->info.multi_queue_engine_class_mask = 0;
+	}
 	gt->info.engine_mask = graphics_desc->hw_engine_mask;
 	gt->info.num_geometry_xecore_fuse_regs = graphics_desc->num_geometry_xecore_fuse_regs;
 	gt->info.num_compute_xecore_fuse_regs = graphics_desc->num_compute_xecore_fuse_regs;
@@ -893,6 +914,7 @@ static struct xe_gt *alloc_media_gt(struct xe_tile *tile,
 	gt->info.type = XE_GT_TYPE_MEDIA;
 	gt->info.id = tile->id * xe->info.max_gt_per_tile + 1;
 	gt->info.has_indirect_ring_state = media_desc->has_indirect_ring_state;
+	gt->info.has_uncorrectable_error_reporting = media_desc->has_uncorrectable_error_reporting;
 	gt->info.engine_mask = media_desc->hw_engine_mask;
 
 	return gt;
@@ -1070,6 +1092,7 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	const struct xe_device_desc *desc = (const void *)ent->driver_data;
 	const struct xe_subplatform_desc *subplatform_desc;
 	struct xe_device *xe;
+	void *group;
 	int err;
 
 	xe_configfs_check_device(pdev);
@@ -1095,6 +1118,11 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (xe_display_driver_probe_defer(pdev))
 		return -EPROBE_DEFER;
 
+	/* Group all devres so xe_pci_error_slot_reset() can release them as a unit. */
+	group = devres_open_group(&pdev->dev, NULL, GFP_KERNEL);
+	if (!group)
+		return -ENOMEM;
+
 	err = pcim_enable_device(pdev);
 	if (err)
 		return err;
@@ -1102,6 +1130,8 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	xe = xe_device_create(pdev, ent);
 	if (IS_ERR(xe))
 		return PTR_ERR(xe);
+
+	xe->devres_group = group;
 
 	pci_set_drvdata(pdev, &xe->drm);
 
@@ -1345,6 +1375,7 @@ static struct pci_driver xe_pci_driver = {
 	.remove = xe_pci_remove,
 	.shutdown = xe_pci_shutdown,
 	.sriov_configure = xe_pci_sriov_configure,
+	.err_handler = &xe_pci_error_handlers,
 #ifdef CONFIG_PM_SLEEP
 	.driver.pm = &xe_pm_ops,
 #endif

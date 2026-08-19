@@ -16,6 +16,7 @@
 #include "regs/xe_gt_regs.h"
 #include "regs/xe_guc_regs.h"
 #include "xe_bo.h"
+#include "xe_configfs.h"
 #include "xe_gt.h"
 #include "xe_gt_ccs_mode.h"
 #include "xe_gt_mcr.h"
@@ -341,12 +342,34 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
 		guc_waklv_enable(ads, NULL, 0, &offset, &remain,
 				 GUC_WORKAROUND_KLV_DISABLE_PSMI_INTERRUPTS_AT_C6_ENTRY_RESTORE_AT_EXIT);
 
+	if (XE_GT_WA(gt, 22022079272) && GUC_FIRMWARE_VER_AT_LEAST(&gt->uc.guc, 70, 62))
+		guc_waklv_enable(ads, NULL, 0, &offset, &remain, GUC_WA_KLV_REMAP_RANGED_TLB_INV);
+
+	/* The GuC does not enable the sem_tok_64 feature on NVL-S */
+	if (XE_GT_WA(gt, 16029897822) && gt_to_xe(gt)->info.platform != XE_NOVALAKE_S &&
+	    GUC_FIRMWARE_VER_AT_LEAST(&gt->uc.guc, 70, 69))
+		guc_waklv_enable(ads, NULL, 0, &offset, &remain,
+				 GUC_WA_KLV_IGNORE_MMIO_READ_SEM_TOKEN_64);
+
+	/*
+	 * On GuC firmware 70.66 and above, use the Feature KLV (shared with the
+	 * WA KLV buffer); older firmware uses GUC_CTL_DISABLE_MULTI_QUEUE in
+	 * the init params instead.
+	 */
+	if (!xe_configfs_get_enable_multi_queue(to_pci_dev(gt_to_xe(gt)->drm.dev)) &&
+	    GUC_FIRMWARE_VER_AT_LEAST(&gt->uc.guc, 70, 66)) {
+		u32 data = 1;
+
+		guc_waklv_enable(ads, &data, 1, &offset, &remain,
+				GUC_FEATURE_KLV_DISABLE_MULTI_QUEUE);
+	}
+
 #if IS_ENABLED(CPTCFG_PRELIM_DRM_XE_EUDEBUG)
 	if (XE_GT_WA(gt, 14022766366)) {
 		if (xe_guc_has_debug_contexts(&gt->uc.guc)) {
 			guc_waklv_enable(ads, NULL, 0, &offset, &remain,
 					GUC_WA_KLV_RESET_DEP_ENGINES_ON_DEBUG_CTX_SWITCH);
-		} else  {
+		} else {
 			const struct xe_uc_fw_version required =
 				XE_UC_FW_VERSION_DEBUG_CONTEXTS;
 

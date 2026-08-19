@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Tue, 26 May 2026 21:54:47 +0200
+Subject: drm/xe: Drop unused param from xe_device_create()
+
+We never used or need anything from the struct pci_device_id there.
+And while around, add simple kernel-doc for this function.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://patch.msgid.link/20260526195452.20545-3-michal.wajdeczko@intel.com
+(cherry-picked from commit 5ebf57fb7c7313c8b621218df67fa420c98346e3 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_device.c | 11 +++++++++--
+ drivers/gpu/drm/xe/xe_device.h |  3 +--
+ drivers/gpu/drm/xe/xe_pci.c    |  2 +-
+ 3 files changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index cbce1d0ffe48..a517ed1eb25b 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -436,8 +436,15 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
+ 	ttm_device_fini(&xe->ttm);
+ }
+ 
+-struct xe_device *xe_device_create(struct pci_dev *pdev,
+-				   const struct pci_device_id *ent)
++/**
++ * xe_device_create() - Create a new &xe_device instance
++ * @pdev: the parent &pci_dev
++ *
++ * Allocate and initialize a device managed Xe device structure.
++ *
++ * Return: pointer to new &xe_device on success, or ERR_PTR on failure.
++ */
++struct xe_device *xe_device_create(struct pci_dev *pdev)
+ {
+ 	struct xe_device *xe;
+ 	int err;
+diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
+index e4b9de8d8e95..e363b4a8ff13 100644
+--- a/drivers/gpu/drm/xe/xe_device.h
++++ b/drivers/gpu/drm/xe/xe_device.h
+@@ -43,8 +43,7 @@ static inline struct xe_device *ttm_to_xe_device(struct ttm_device *ttm)
+ 	return container_of(ttm, struct xe_device, ttm);
+ }
+ 
+-struct xe_device *xe_device_create(struct pci_dev *pdev,
+-				   const struct pci_device_id *ent);
++struct xe_device *xe_device_create(struct pci_dev *pdev);
+ int xe_device_probe_early(struct xe_device *xe);
+ int xe_device_probe(struct xe_device *xe);
+ void xe_device_remove(struct xe_device *xe);
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 0e0d127c8eb1..1acbba21e9b4 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -1095,7 +1095,7 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 	if (err)
+ 		return err;
+ 
+-	xe = xe_device_create(pdev, ent);
++	xe = xe_device_create(pdev);
+ 	if (IS_ERR(xe))
+ 		return PTR_ERR(xe);
+ 
+-- 
+2.43.0
+

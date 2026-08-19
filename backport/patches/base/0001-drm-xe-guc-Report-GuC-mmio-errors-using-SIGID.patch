@@ -1,0 +1,81 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:55 +0200
+Subject: drm/xe/guc: Report 'GuC mmio' errors using SIGID
+
+Report various 'GuC mmio' errors using xe_log() helpers.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Cc: Aravind Iddamsetty <aravind.iddamsetty@intel.com>
+Cc: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260814171801.13347-30-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 9e35364579ddd3260e890d90b55a8de597ea00fd linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_guc.c | 18 ++++++++++--------
+ 1 file changed, 10 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
+index ccebb437e37f..de1e98123f1a 100644
+--- a/drivers/gpu/drm/xe/xe_guc.c
++++ b/drivers/gpu/drm/xe/xe_guc.c
+@@ -38,6 +38,7 @@
+ #include "xe_guc_rc.h"
+ #include "xe_guc_relay.h"
+ #include "xe_guc_submit.h"
++#include "xe_log.h"
+ #include "xe_memirq.h"
+ #include "xe_mmio.h"
+ #include "xe_platform_types.h"
+@@ -1516,8 +1517,9 @@ int xe_guc_mmio_send_recv(struct xe_guc *guc, const u32 *request,
+ 		/* scratch registers might be cleared during FLR, try once more */
+ 		if (!header) {
+ 			if (++lost > MAX_RETRIES_ON_FLR) {
+-				xe_gt_err(gt, "GuC mmio request %#x: lost, too many retries %u\n",
+-					  request[0], lost);
++				xe_log_err(gt, GUC, -ENOLINK,
++					   "MMIO request %#x: lost, too many retries %u\n",
++					   request[0], lost);
+ 				return -ENOLINK;
+ 			}
+ 			xe_gt_dbg(gt, "GuC mmio request %#x: lost, trying again\n", request[0]);
+@@ -1525,8 +1527,8 @@ int xe_guc_mmio_send_recv(struct xe_guc *guc, const u32 *request,
+ 			goto retry;
+ 		}
+ timeout:
+-		xe_gt_err(gt, "GuC mmio request %#x: no reply %#x\n",
+-			  request[0], header);
++		xe_log_err(gt, GUC, ret, "MMIO request %#x: no reply %#x\n",
++			   request[0], header);
+ 		return ret;
+ 	}
+ 
+@@ -1581,16 +1583,16 @@ int xe_guc_mmio_send_recv(struct xe_guc *guc, const u32 *request,
+ 			return -EREMCHG;
+ 		}
+ 
+-		xe_gt_err(gt, "GuC mmio request %#x: failure %#x hint %#x\n",
+-			  request[0], error, hint);
++		xe_log_err(gt, GUC, -ENXIO, "MMIO request %#x: failure %#x hint %#x\n",
++			   request[0], error, hint);
+ 		return -ENXIO;
+ 	}
+ 
+ 	if (FIELD_GET(GUC_HXG_MSG_0_TYPE, header) !=
+ 	    GUC_HXG_TYPE_RESPONSE_SUCCESS) {
+ proto:
+-		xe_gt_err(gt, "GuC mmio request %#x: unexpected reply %#x\n",
+-			  request[0], header);
++		xe_log_err(gt, GUC, -EPROTO, "MMIO request %#x: unexpected reply %#x\n",
++			   request[0], header);
+ 		return -EPROTO;
+ 	}
+ 
+-- 
+2.43.0
+

@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:50 +0200
+Subject: drm/xe/survivability: Report 'Runtime Mode enabled' status
+ using SIGID
+
+Report 'Runtime Mode' status or failure using xe_log_err() helper.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Riana Tauro <riana.tauro@intel.com>
+Cc: Aravind Iddamsetty <aravind.iddamsetty@intel.com>
+Cc: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20260814171801.13347-25-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(backported from commit f04f7c7aa651534d723af98c03132c44ffa281c2 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_survivability_mode.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
+index c9d709e9b51b..696fed96a589 100644
+--- a/drivers/gpu/drm/xe/xe_survivability_mode.c
++++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
+@@ -438,7 +438,7 @@ int xe_survivability_mode_runtime_enable(struct xe_device *xe)
+ 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+ 
+ 	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe) || xe->info.platform < XE_BATTLEMAGE) {
+-		dev_err(&pdev->dev, "Runtime Survivability Mode not supported\n");
++		xe_log_err(xe, SURVIVABILITY, -EOPNOTSUPP, "Runtime Mode not supported!\n");
+ 		return -EINVAL;
+ 	}
+ 
+@@ -447,11 +447,14 @@ int xe_survivability_mode_runtime_enable(struct xe_device *xe)
+ 	create_survivability_sysfs(pdev);
+ 
+ 	survivability->type = XE_SURVIVABILITY_TYPE_RUNTIME;
+-	dev_err(&pdev->dev, "Runtime Survivability mode enabled\n");
++	xe_log_err(xe, SURVIVABILITY, 0, "Runtime Mode enabled!\n");
+ 
+ 	xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_VENDOR);
+ 	xe_device_declare_wedged(xe);
+-	dev_err(&pdev->dev, "Firmware flash required, Please refer to the userspace documentation for more details!\n");
++
++	xe_log_err(xe, SURVIVABILITY, 0, "Firmware flash required!\n");
++	xe_info(xe, "Please refer to the userspace documentation for more details how to flash the firmware on %s!\n",
++			xe->info.platform_name);
+ 
+ 	return 0;
+ }
+-- 
+2.43.0
+

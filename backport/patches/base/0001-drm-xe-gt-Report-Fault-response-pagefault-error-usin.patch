@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:57 +0200
+Subject: drm/xe/gt: Report 'Fault response' pagefault error using
+ SIGID
+
+Report 'Unsuccessful response' error using xe_log_err_info() helper.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Cc: Aravind Iddamsetty <aravind.iddamsetty@intel.com>
+Cc: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20260814171801.13347-32-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(backported from commit 07fed9b3f47136b6ccc4d71ab283768b6d5daf59 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pagefault.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
+index dd3c068e1a39..a0832f3e0ecc 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_pagefault.c
+@@ -14,6 +14,7 @@
+ #include "xe_gt_types.h"
+ #include "xe_gt_stats.h"
+ #include "xe_hw_engine.h"
++#include "xe_log.h"
+ #include "xe_pagefault.h"
+ #include "xe_pagefault_types.h"
+ #include "xe_svm.h"
+@@ -309,8 +310,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+ 			xe_pagefault_save_to_vm(gt_to_xe(pf.gt), &pf);
+ 			if (!(pf.consumer.access_type & XE_PAGEFAULT_ACCESS_PREFETCH)) {
+ 				xe_pagefault_print(&pf);
+-				xe_gt_info(pf.gt, "Fault response: Unsuccessful %pe\n",
+-					   ERR_PTR(err));
++				xe_log_err_info(pf.gt, PAGEFAULT, err, "Unsuccessful response\n");
+ 			} else {
+ 				xe_gt_stats_incr(pf.gt, XE_GT_STATS_ID_INVALID_PREFETCH_PAGEFAULT_COUNT, 1);
+ 				xe_gt_dbg(pf.gt, "Prefetch Fault response: Unsuccessful %pe\n",
+-- 
+2.43.0
+

@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:53 +0200
+Subject: drm/xe/pcode: Report 'timeout, retrying' error using SIGID
+
+Report 'timeout, retrying with preemption disabled' error using
+xe_log_err() helper.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Riana Tauro <riana.tauro@intel.com>
+Cc: Aravind Iddamsetty <aravind.iddamsetty@intel.com>
+Cc: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Badal Nilawar <badal.nilawar@intel.com>
+Cc: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Link: https://patch.msgid.link/20260814171801.13347-28-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit b01fa481555e10de9d88addfcc41f527008ff649 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_pcode.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pcode.c b/drivers/gpu/drm/xe/xe_pcode.c
+index 704b1376442a..6cf579317152 100644
+--- a/drivers/gpu/drm/xe/xe_pcode.c
++++ b/drivers/gpu/drm/xe/xe_pcode.c
+@@ -214,8 +214,7 @@ int xe_pcode_request(struct xe_tile *tile, u32 mbox, u32 request,
+ 	 * requests, and for any quirks of the PCODE firmware that delays
+ 	 * the request completion.
+ 	 */
+-	drm_err(&tile_to_xe(tile)->drm,
+-		"PCODE timeout, retrying with preemption disabled\n");
++	xe_log_err(tile, PCODE, ret, "timeout, retrying with preemption disabled\n");
+ 	preempt_disable();
+ 	ret = pcode_try_request(tile, mbox, request, reply_mask, reply, &status,
+ 				true, 50 * 1000, true);
+-- 
+2.43.0
+

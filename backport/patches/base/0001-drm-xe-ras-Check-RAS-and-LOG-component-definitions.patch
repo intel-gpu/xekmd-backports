@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:40 +0200
+Subject: drm/xe/ras: Check RAS and LOG component definitions
+
+While not strictly required, we want to make sure that components
+definitions used by the RAS firmware are in the same fixed relation
+with HW components definitions used by the LOG infrastructure to
+allow code simplification. Add static asserts to enforce that.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Aravind Iddamsetty <aravind.iddamsetty@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260814171801.13347-15-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit eb732ef76b0ed4fb28194273e21ae620ab600aa9 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_ras.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index d0375b38b..b177416c9 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -6,6 +6,7 @@
+ #include "xe_debugfs.h"
+ #include "xe_device.h"
+ #include "xe_drm_ras.h"
++#include "xe_log.h"
+ #include "xe_pm.h"
+ #include "xe_printk.h"
+ #include "xe_ras.h"
+@@ -46,6 +47,16 @@ enum xe_ras_component {
+ 	XE_RAS_COMP_MAX
+ };
+ 
++#define CHECK_COMPONENT(RAS_COMP, LOG_COMP) \
++	static_assert(MAKE_XE_LOG_COMPONENT(HARDWARE, (RAS_COMP)) == (LOG_COMP))
++	/* make sure components definitions maintain stable relation */
++	CHECK_COMPONENT(XE_RAS_COMP_DEVICE_MEMORY, XE_LOG_COMPONENT_DEVICE_MEMORY);
++	CHECK_COMPONENT(XE_RAS_COMP_CORE_COMPUTE, XE_LOG_COMPONENT_CORE_COMPUTE);
++	CHECK_COMPONENT(XE_RAS_COMP_PCIE, XE_LOG_COMPONENT_PCIE);
++	CHECK_COMPONENT(XE_RAS_COMP_FABRIC, XE_LOG_COMPONENT_FABRIC);
++	CHECK_COMPONENT(XE_RAS_COMP_SOC_INTERNAL, XE_LOG_COMPONENT_SOC_INTERNAL);
++#undef CHECK_COMPONENT
++
+ /* RAS response status codes */
+ enum xe_ras_response_status {
+ 	XE_RAS_STATUS_SUCCESS = 0,
+-- 
+2.43.0
+

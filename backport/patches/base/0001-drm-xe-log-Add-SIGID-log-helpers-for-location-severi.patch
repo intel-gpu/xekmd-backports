@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:33 +0200
+Subject: drm/xe/log: Add SIGID log helpers for location & severity
+
+There are only few CPER severity levels defined, add more helpers
+to avoid forcing developers to write full CPER severity name in
+every function call.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260814171801.13347-8-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit eb9316ef7669a1da0940a0982a312f6219dec401 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_log.h | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_log.h b/drivers/gpu/drm/xe/xe_log.h
+index 510cedae6e14..916218560297 100644
+--- a/drivers/gpu/drm/xe/xe_log.h
++++ b/drivers/gpu/drm/xe/xe_log.h
+@@ -69,4 +69,20 @@ void xe_log_emit(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigid,
+ 		    xe_log_location(___any), (data), (len), fmt, ##args);		\
+ } while (0)
+ 
++#define xe_log_from_fatal(any, sig, comp, data, len, fmt, args...) \
++	xe_log_from((any), CPER_SEV_FATAL, (sig), (comp), \
++		    (data), (len), fmt, ##args)
++
++#define xe_log_from_recoverable(any, sig, comp, data, len, fmt, args...) \
++	xe_log_from((any), CPER_SEV_RECOVERABLE, (sig), (comp), \
++		    (data), (len), fmt, ##args)
++
++#define xe_log_from_corrected(any, sig, comp, data, len, fmt, args...) \
++	xe_log_from((any), CPER_SEV_CORRECTED, (sig), (comp), \
++		    (data), (len), fmt, ##args)
++
++#define xe_log_from_info(any, sig, comp, data, len, fmt, args...) \
++	xe_log_from((any), CPER_SEV_INFORMATIONAL, (sig), (comp), \
++		    (data), (len), fmt, ##args)
++
+ #endif
+-- 
+2.43.0
+

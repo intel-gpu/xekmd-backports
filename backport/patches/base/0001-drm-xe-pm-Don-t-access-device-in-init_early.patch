@@ -1,0 +1,133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Tue, 26 May 2026 21:54:51 +0200
+Subject: drm/xe/pm: Don't access device in init_early()
+
+We should separate software-only state initialization from anything
+else that requires access to the device's hardware. Extract d3cold
+capability detection into a new function. Add simple kernel-doc for
+updated functions here.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://patch.msgid.link/20260526195452.20545-7-michal.wajdeczko@intel.com
+(cherry-picked from commit 5ebf57fb7c7313c8b621218df67fa420c98346e3 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_device.c |  4 ++++
+ drivers/gpu/drm/xe/xe_pci.c    |  5 +----
+ drivers/gpu/drm/xe/xe_pm.c     | 27 ++++++++++++++++++++++++++-
+ drivers/gpu/drm/xe/xe_pm.h     |  1 +
+ 4 files changed, 32 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 96bb09b130d3..199d1313ffdf 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -547,6 +547,10 @@ int xe_device_init_early(struct xe_device *xe)
+ 	if (err)
+ 		return err;
+ 
++	err = xe_pm_init_early(xe);
++	if (err)
++		return err;
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 64d1b830904c..e8cb01f30fb3 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -1169,7 +1169,7 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 		str_yes_no(xe_device_has_sriov(xe)),
+ 		xe_sriov_mode_to_string(xe_device_sriov_mode(xe)));
+ 
+-	err = xe_pm_init_early(xe);
++	err = xe_pm_probe(xe);
+ 	if (err)
+ 		return err;
+ 
+@@ -1181,9 +1181,6 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 	if (err)
+ 		goto err_driver_cleanup;
+ 
+-	drm_dbg(&xe->drm, "d3cold: capable=%s\n",
+-		str_yes_no(xe->d3cold.capable));
+-
+ 	return 0;
+ 
+ err_driver_cleanup:
+diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
+index d4672eb07476..5d1a3a26cb6e 100644
+--- a/drivers/gpu/drm/xe/xe_pm.c
++++ b/drivers/gpu/drm/xe/xe_pm.c
+@@ -24,6 +24,7 @@
+ #include "xe_irq.h"
+ #include "xe_late_bind_fw.h"
+ #include "xe_pcode.h"
++#include "xe_printk.h"
+ #include "xe_pxp.h"
+ #include "xe_sriov_vf_ccs.h"
+ #include "xe_sysctrl.h"
+@@ -349,6 +350,15 @@ static void xe_pm_runtime_init(struct xe_device *xe)
+ 	pm_runtime_put(dev);
+ }
+ 
++/**
++ * xe_pm_init_early() - Initialize Xe Power Management
++ * @xe: the &xe_device instance
++ *
++ * Initialize everything that is a "software-only" state that does not
++ * require access to any of the device's hardware data.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
+ int xe_pm_init_early(struct xe_device *xe)
+ {
+ 	int err;
+@@ -363,11 +373,26 @@ int xe_pm_init_early(struct xe_device *xe)
+ 	if (err)
+ 		return err;
+ 
+-	xe->d3cold.capable = xe_pm_pci_d3cold_capable(xe);
+ 	return 0;
+ }
+ ALLOW_ERROR_INJECTION(xe_pm_init_early, ERRNO); /* See xe_pci_probe() */
+ 
++/**
++ * xe_pm_probe() - Initialize Xe Power Management
++ * @xe: the &xe_device instance
++ *
++ * Check d3cold capability.
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_pm_probe(struct xe_device *xe)
++{
++	xe->d3cold.capable = xe_pm_pci_d3cold_capable(xe);
++	xe_dbg(xe, "d3cold: capable=%s\n", str_yes_no(xe->d3cold.capable));
++
++	return 0;
++}
++
+ static u32 vram_threshold_value(struct xe_device *xe)
+ {
+ 	if (xe->info.platform == XE_BATTLEMAGE) {
+diff --git a/drivers/gpu/drm/xe/xe_pm.h b/drivers/gpu/drm/xe/xe_pm.h
+index 6b27039e7b2d..6d5ab09cb769 100644
+--- a/drivers/gpu/drm/xe/xe_pm.h
++++ b/drivers/gpu/drm/xe/xe_pm.h
+@@ -17,6 +17,7 @@ int xe_pm_suspend(struct xe_device *xe);
+ int xe_pm_resume(struct xe_device *xe);
+ 
+ int xe_pm_init_early(struct xe_device *xe);
++int xe_pm_probe(struct xe_device *xe);
+ int xe_pm_init(struct xe_device *xe);
+ void xe_pm_fini(struct xe_device *xe);
+ bool xe_pm_runtime_suspended(struct xe_device *xe);
+-- 
+2.43.0
+

@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Tue, 26 May 2026 21:54:52 +0200
+Subject: drm/xe/pm: Do early initialization in init_early()
+
+There is no need nor gain in splitting mutex or list initializations
+between two init functions as all of this is just pure software state
+and all this could be done at once.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://patch.msgid.link/20260526195452.20545-8-michal.wajdeczko@intel.com
+(cherry-picked from commit 5ebf57fb7c7313c8b621218df67fa420c98346e3 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_pm.c | 15 +++++++--------
+ 1 file changed, 7 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
+index 5d1a3a26cb6e..99562f691080 100644
+--- a/drivers/gpu/drm/xe/xe_pm.c
++++ b/drivers/gpu/drm/xe/xe_pm.c
+@@ -363,6 +363,9 @@ int xe_pm_init_early(struct xe_device *xe)
+ {
+ 	int err;
+ 
++	init_completion(&xe->pm_block);
++	complete_all(&xe->pm_block);
++	INIT_LIST_HEAD(&xe->rebind_resume_list);
+ 	INIT_LIST_HEAD(&xe->mem_access.vram_userfault.list);
+ 
+ 	err = drmm_mutex_init(&xe->drm, &xe->mem_access.vram_userfault.lock);
+@@ -373,6 +376,10 @@ int xe_pm_init_early(struct xe_device *xe)
+ 	if (err)
+ 		return err;
+ 
++	err = drmm_mutex_init(&xe->drm, &xe->rebind_resume_lock);
++	if (err)
++		return err;
++
+ 	return 0;
+ }
+ ALLOW_ERROR_INJECTION(xe_pm_init_early, ERRNO); /* See xe_pci_probe() */
+@@ -484,14 +491,6 @@ int xe_pm_init(struct xe_device *xe)
+ 	if (err)
+ 		return err;
+ 
+-	err = drmm_mutex_init(&xe->drm, &xe->rebind_resume_lock);
+-	if (err)
+-		goto err_unregister;
+-
+-	init_completion(&xe->pm_block);
+-	complete_all(&xe->pm_block);
+-	INIT_LIST_HEAD(&xe->rebind_resume_list);
+-
+ 	/* For now suspend/resume is only allowed with GuC */
+ 	if (!xe_device_uc_enabled(xe))
+ 		return 0;
+-- 
+2.43.0
+

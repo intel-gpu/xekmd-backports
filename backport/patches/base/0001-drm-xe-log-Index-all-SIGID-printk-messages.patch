@@ -1,0 +1,89 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:37 +0200
+Subject: drm/xe/log: Index all SIGID printk messages
+
+When CONFIG_PRINTK_INDEX is enabled, it is expected that all device
+level printk messages are indexed for audit. While usually this is
+done automatically behind the scenes when code is using regular
+dev_printk macros, since we are generating different dmesg messages
+inside xe_log_emit() based on the severity, component and location,
+we only get those entries in /sys/kernel/debug/printk/index/xe:
+
+  <3> drivers/gpu/drm/xe/xe_log.c:142 log_dmesg_vprintk "%s %s: [drm] *ERROR* %pV"
+  <6> drivers/gpu/drm/xe/xe_log.c:140 log_dmesg_vprintk "%s %s: [drm] %pV"
+
+Explicitly generate printk index using dev_printk_index_emit() with
+some generic prefix that includes the SIGID tag.
+
+Suggested-by: Jani Nikula <jani.nikula@intel.com>
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Jani Nikula <jani.nikula@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260814171801.13347-12-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 4d3dd0c9464bd342506e075598b3db25c9ee75b3 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_log.c |  8 ++++----
+ drivers/gpu/drm/xe/xe_log.h | 17 ++++++++++++++---
+ 2 files changed, 18 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_log.c b/drivers/gpu/drm/xe/xe_log.c
+index 0b4f791a490f..015a9f734e77 100644
+--- a/drivers/gpu/drm/xe/xe_log.c
++++ b/drivers/gpu/drm/xe/xe_log.c
+@@ -177,7 +177,7 @@ static void log_emit_dmesg(struct pci_dev *pdev, int cper_sev, enum xe_sigid sig
+ }
+ 
+ /**
+- * xe_log_emit() - Emit a structured SIGID log entry
++ * __xe_log_emit() - Emit a structured SIGID log entry
+  * @pdev: the &pci_dev device
+  * @cper_sev: CPER severity (CPER_SEV_FATAL, CPER_SEV_RECOVERABLE, ...)
+  * @sigid: signature identifier, see &enum xe_sigid
+@@ -206,9 +206,9 @@ static void log_emit_dmesg(struct pci_dev *pdev, int cper_sev, enum xe_sigid sig
+  *   <3> xe 0000:03:00.0: [drm] *ERROR* SIGID=106 (-ETIMEDOUT) Engine 'rcs0' hung
+  *   <6> xe 0000:03:00.0: [drm] SIGID=103 In survivability mode
+  */
+-void xe_log_emit(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigid,
+-		 u32 component, u32 location, const void *data, size_t len,
+-		 const char *fmt, ...)
++void __xe_log_emit(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigid,
++		   u32 component, u32 location, const void *data, size_t len,
++		   const char *fmt, ...)
+ {
+ 	struct va_format vaf;
+ 	va_list args;
+diff --git a/drivers/gpu/drm/xe/xe_log.h b/drivers/gpu/drm/xe/xe_log.h
+index 8c74f809fb5b..bb1185143589 100644
+--- a/drivers/gpu/drm/xe/xe_log.h
++++ b/drivers/gpu/drm/xe/xe_log.h
+@@ -16,9 +16,20 @@
+ struct pci_dev;
+ 
+ __printf(8, 9)
+-void xe_log_emit(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigid,
+-		 u32 component, u32 location, const void *data, size_t len,
+-		 const char *fmt, ...);
++void __xe_log_emit(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigid,
++		   u32 component, u32 location, const void *data, size_t len,
++		   const char *fmt, ...);
++
++#define __xe_log_const_sev_to_level(sev) \
++	(__builtin_constant_p(sev) ? (sev) == CPER_SEV_INFORMATIONAL ? KERN_INFO : KERN_ERR : NULL)
++
++#define __xe_log_emit_printk_index(level, fmt) \
++	dev_printk_index_emit(level, "%s SIGID=%u %s" fmt);
++
++#define xe_log_emit(pdev, sev, sig, comp, loc, data, len, fmt, args...) do {		\
++	__xe_log_emit_printk_index(__xe_log_const_sev_to_level(sev), fmt);		\
++	__xe_log_emit((pdev), (sev), (sig), (comp), (loc), (data), (len), fmt, ##args); \
++} while (0)
+ 
+ #define xe_log_emit_fatal(pdev, sig, comp, loc, data, len, fmt, args...) \
+ 	xe_log_emit((pdev), CPER_SEV_FATAL, (sig), (comp), (loc), \
+-- 
+2.43.0
+

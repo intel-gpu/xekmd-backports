@@ -1,0 +1,65 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:56 +0200
+Subject: drm/xe/gt: Report 'reset failed' errors using SIGID
+
+Report 'reset' related err/info messages using xe_log() helpers.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Cc: Aravind Iddamsetty <aravind.iddamsetty@intel.com>
+Cc: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260814171801.13347-31-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 968ec2cdcd6ed4a271932581f27566b29870fa9c linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_gt.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index c7464af74f60..a16784d2c440 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -46,6 +46,7 @@
+ #include "xe_hw_engine_class_sysfs.h"
+ #include "xe_irq.h"
+ #include "xe_lmtt.h"
++#include "xe_log.h"
+ #include "xe_lrc.h"
+ #include "xe_map.h"
+ #include "xe_migrate.h"
+@@ -925,7 +926,7 @@ static void gt_reset_worker(struct work_struct *w)
+ 	if (!xe_device_uc_enabled(gt_to_xe(gt)))
+ 		goto err_pm_put;
+ 
+-	xe_gt_info(gt, "reset started\n");
++	xe_log_info(gt, GT, "reset started\n");
+ 
+ 	if (xe_fault_gt_reset()) {
+ 		err = -ECANCELED;
+@@ -964,7 +965,7 @@ static void gt_reset_worker(struct work_struct *w)
+ 	/* Pair with get while enqueueing the work in xe_gt_reset_async() */
+ 	xe_pm_runtime_put(gt_to_xe(gt));
+ 
+-	xe_gt_info(gt, "reset done\n");
++	xe_log_info(gt, GT, "reset done\n");
+ 
+ 	return;
+ 
+@@ -973,7 +974,7 @@ static void gt_reset_worker(struct work_struct *w)
+ 	XE_WARN_ON(xe_uc_start(&gt->uc));
+ 
+ err_fail:
+-	xe_gt_err(gt, "reset failed (%pe)\n", ERR_PTR(err));
++	xe_log_err_fatal(gt, GT, err, "reset failed\n");
+ 	xe_device_declare_wedged(gt_to_xe(gt));
+ err_pm_put:
+ 	xe_pm_runtime_put(gt_to_xe(gt));
+-- 
+2.43.0
+

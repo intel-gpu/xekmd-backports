@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:46 +0200
+Subject: drm/xe/survivability: Report 'boot status' using SIGID
+
+Report 'boot status' and other scratch registers details using
+the xe_log_info() macros. While around, add helper to decode
+boot status code and change pdev parameter to xe.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Riana Tauro <riana.tauro@intel.com>
+Cc: Aravind Iddamsetty <aravind.iddamsetty@intel.com>
+Cc: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com> #v1
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20260814171801.13347-21-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 0e1c4b5de48135958ec55c22468c2e637eb49f57 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_survivability_mode.c | 29 ++++++++++++++++------
+ 1 file changed, 22 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
+index db64cac39c94..8a7fcb14b9c7 100644
+--- a/drivers/gpu/drm/xe/xe_survivability_mode.c
++++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
+@@ -14,6 +14,7 @@
+ #include "xe_device.h"
+ #include "xe_heci_gsc.h"
+ #include "xe_i2c.h"
++#include "xe_log.h"
+ #include "xe_mmio.h"
+ #include "xe_nvm.h"
+ #include "xe_pcode_api.h"
+@@ -164,18 +165,32 @@ static void populate_survivability_info(struct xe_device *xe)
+ 	}
+ }
+ 
+-static void log_survivability_info(struct pci_dev *pdev)
++static const char *boot_status_str(u8 boot_status)
++{
++	switch (boot_status) {
++	case CRITICAL_FAILURE:
++		return "Critical Failure";
++	case NON_CRITICAL_FAILURE:
++		return "Non Critical Failure";
++	default:
++		return "Other";
++	}
++}
++
++static void log_survivability_info(struct xe_device *xe)
+ {
+-	struct xe_device *xe = pdev_to_xe_device(pdev);
+ 	struct xe_survivability *survivability = &xe->survivability;
+ 	u32 *info = survivability->info;
+ 	int id;
+ 
+-	dev_info(&pdev->dev, "Survivability Boot Status : Critical Failure (%d)\n",
+-		 survivability->boot_status);
++	xe_log_info(xe, SURVIVABILITY, "Boot Status: %#x (%s)\n",
++		    survivability->boot_status,
++		    boot_status_str(survivability->boot_status));
++
+ 	for (id = 0; id < MAX_SCRATCH_REG; id++) {
+-		if (info[id])
+-			dev_info(&pdev->dev, "%s: 0x%x\n", reg_map[id], info[id]);
++		if (!info[id])
++			continue;
++		xe_log_info(xe, SURVIVABILITY, "%s: %#x\n", reg_map[id], info[id]);
+ 	}
+ }
+ 
+@@ -449,7 +464,7 @@ int xe_survivability_mode_boot_enable(struct xe_device *xe)
+ 	 * v2 supports survivability mode for critical errors
+ 	 */
+ 	if (survivability->version < 2  && survivability->boot_status == CRITICAL_FAILURE) {
+-		log_survivability_info(pdev);
++		log_survivability_info(xe);
+ 		return -ENXIO;
+ 	}
+ 
+-- 
+2.43.0
+

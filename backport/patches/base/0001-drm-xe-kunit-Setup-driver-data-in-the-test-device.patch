@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:41 +0200
+Subject: drm/xe/kunit: Setup driver data in the test device
+
+While we have helpers pdev_to_xe_device() and kdev_to_xe_device()
+to obtain the xe_device pointer from the struct device pointer or
+from the struct pci_dev pointer, we must also setup the drm_device
+pointer as driver data in the device to make them work.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260814171801.13347-16-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 60fabbdbf6efe12f4075692d7c732c5536259e6c linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+---
+ drivers/gpu/drm/xe/tests/xe_kunit_helpers.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/tests/xe_kunit_helpers.c b/drivers/gpu/drm/xe/tests/xe_kunit_helpers.c
+index bc5156966ce9..27740b40c8ae 100644
+--- a/drivers/gpu/drm/xe/tests/xe_kunit_helpers.c
++++ b/drivers/gpu/drm/xe/tests/xe_kunit_helpers.c
+@@ -39,6 +39,10 @@ struct xe_device *xe_kunit_helper_alloc_xe_device(struct kunit *test,
+ 					       struct xe_device,
+ 					       drm, DRIVER_GEM);
+ 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, xe);
++
++	dev_set_drvdata(xe->drm.dev, &xe->drm);
++	KUNIT_ASSERT_PTR_EQ(test, xe, kdev_to_xe_device(dev));
++
+ 	return xe;
+ }
+ EXPORT_SYMBOL_IF_KUNIT(xe_kunit_helper_alloc_xe_device);
+-- 
+2.43.0
+

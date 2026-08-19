@@ -1,0 +1,78 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:32 +0200
+Subject: drm/xe/log: Add SIGID log helpers for location
+
+We can determine the location of the SIGID error source based on the
+type of the xe pointer being currently available. Add helper macros
+that will accept any of xe_device, xe_tile or xe_gt pointers instead
+of plain pci_dev to generate valid XE_LOG_LOCATION identifier and then
+call low-level xe_log_emit(pdev) function.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260814171801.13347-7-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit c74b9048318a71af3083dda17644aa6897cf3be2 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_log.h | 36 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 36 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_log.h b/drivers/gpu/drm/xe/xe_log.h
+index 73daf37d6463..510cedae6e14 100644
+--- a/drivers/gpu/drm/xe/xe_log.h
++++ b/drivers/gpu/drm/xe/xe_log.h
+@@ -8,7 +8,9 @@
+ 
+ #include <linux/cper.h>
+ 
++#include "abi/xe_log_abi.h"
+ #include "abi/xe_sigid_abi.h"
++#include "xe_any.h"
+ 
+ struct pci_dev;
+ 
+@@ -33,4 +35,38 @@ void xe_log_emit(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigid,
+ 	xe_log_emit((pdev), CPER_SEV_INFORMATIONAL, (sig), (comp), (loc), \
+ 		    (data), (len), fmt, ##args)
+ 
++#define xe_log_location_type(any)							\
++	_Generic((any),									\
++		 struct xe_gt * : XE_LOG_LOCATION_TYPE_GT,				\
++		 const struct xe_gt * : XE_LOG_LOCATION_TYPE_GT,			\
++		 struct xe_tile * : XE_LOG_LOCATION_TYPE_TILE,				\
++		 const struct xe_tile * : XE_LOG_LOCATION_TYPE_TILE,			\
++		 struct xe_device * : XE_LOG_LOCATION_TYPE_DEVICE,			\
++		 const struct xe_device * : XE_LOG_LOCATION_TYPE_DEVICE,		\
++		 struct pci_dev * : XE_LOG_LOCATION_TYPE_DEVICE,			\
++		 struct device * : XE_LOG_LOCATION_TYPE_DEVICE)
++
++#define xe_log_location(any) \
++	PREP_XE_LOG_LOCATION(xe_log_location_type(any), xe_any_id(any))
++
++/**
++ * xe_log_from() - Emit a structured SIGID log entry using @any pointer as location.
++ * @any: the &xe_device or &xe_tile or &xe_gt pointer this report relates to
++ * @cper_sev: CPER severity (CPER_SEV_FATAL, CPER_SEV_RECOVERABLE, ...)
++ * @sigid: signature identifier, see &enum xe_sigid
++ * @component: component identifer
++ * @data: pointer to the additional details, or ERR_PTR, or NULL if not applicable
++ * @len: length of the @data in bytes, or 0 if not applicable
++ * @fmt: printf-style format string
++ * @args: arguments for the @fmt format string
++ *
++ * The location used to emit SIGID entry will be based on the @any pointer type.
++ * See xe_log_emit() for more details.
++ */
++#define xe_log_from(any, cper_sev, sigid, component, data, len, fmt, args...) do {	\
++	typeof(any) ___any = (any);							\
++	xe_log_emit(xe_any_to_pdev(___any), (cper_sev), (sigid), (component),		\
++		    xe_log_location(___any), (data), (len), fmt, ##args);		\
++} while (0)
++
+ #endif
+-- 
+2.43.0
+

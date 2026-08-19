@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:54 +0200
+Subject: drm/xe/pcode: Report 'initialization timedout' error using
+ SIGID
+
+Report 'initialization timedout' error using xe_log_err() helper.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Riana Tauro <riana.tauro@intel.com>
+Cc: Aravind Iddamsetty <aravind.iddamsetty@intel.com>
+Cc: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Cc: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20260814171801.13347-29-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 35241a7a8e57a150944340ec9ccd6de9fb4bb304 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_pcode.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pcode.c b/drivers/gpu/drm/xe/xe_pcode.c
+index 6cf579317152..75cc8c3373a8 100644
+--- a/drivers/gpu/drm/xe/xe_pcode.c
++++ b/drivers/gpu/drm/xe/xe_pcode.c
+@@ -293,7 +293,7 @@ int xe_pcode_ready(struct xe_device *xe, bool locked)
+ {
+ 	u32 status, request = DGFX_GET_INIT_STATUS;
+ 	struct xe_tile *tile = xe_device_get_root_tile(xe);
+-	int timeout_us = 180000000; /* 3 min */
++	long timeout_us = 3 * 60 * USEC_PER_SEC; /* 3 min */
+ 	int ret;
+ 
+ 	if (xe->info.skip_pcode)
+@@ -314,8 +314,8 @@ int xe_pcode_ready(struct xe_device *xe, bool locked)
+ 		mutex_unlock(&tile->pcode.lock);
+ 
+ 	if (ret)
+-		drm_err(&xe->drm,
+-			"PCODE initialization timedout after: 3 min\n");
++		xe_log_err(tile, PCODE, ret, "initialization timedout after %ld seconds\n",
++			   timeout_us / USEC_PER_SEC);
+ 
+ 	return ret;
+ }
+-- 
+2.43.0
+

@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:45 +0200
+Subject: drm/xe: Report all probe errors using SIGID
+
+For completeness, we should catch and report all probe errors, not
+just the ones that have explicit error message. Split xe_pci_probe()
+function after a display check to avoid reporting -EPROBE_DEFER and
+use xe_log_err_fatal() helper to report all returned errors.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Aravind Iddamsetty <aravind.iddamsetty@intel.com>
+Cc: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260814171801.13347-20-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(backported from commit 9d91d2c1f947f7a1fa698f1881248feb602c4b15 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c | 25 ++++++++++++++++++++-----
+ 1 file changed, 20 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 6bc6ea632efe..aab0f6369cf4 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -1101,16 +1101,12 @@ static void xe_pci_remove(struct pci_dev *pdev)
+  * caller. Therefore there is no consequence on those specific callers when
+  * function error injection skips the whole function.
+  */
++static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *desc);
+ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ {
+ 	const struct xe_device_desc *desc = (const void *)ent->driver_data;
+-	const struct xe_subplatform_desc *subplatform_desc;
+-	struct xe_device *xe;
+-	void *group;
+ 	int err;
+ 
+-	subplatform_desc = find_subplatform(desc, pdev->device);
+-
+ 	xe_configfs_check_device(pdev);
+ 
+ 	if (desc->require_force_probe && !id_forced(pdev->device)) {
+@@ -1134,6 +1130,25 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 	if (xe_display_driver_probe_defer(pdev))
+ 		return -EPROBE_DEFER;
+ 
++	err = __xe_pci_probe(pdev, desc);
++	if (err) {
++		xe_log_err_fatal(pdev, PROBE, err, "driver loading failed for device '%04x'\n",
++				 pdev->device);
++		return err;
++	}
++
++	return 0;
++}
++
++static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *desc)
++{
++	const struct xe_subplatform_desc *subplatform_desc;
++	struct xe_device *xe;
++	void *group;
++	int err;
++
++	subplatform_desc = find_subplatform(desc, pdev->device);
++
+ 	/* Group all devres so xe_pci_error_slot_reset() can release them as a unit. */
+ 	group = devres_open_group(&pdev->dev, NULL, GFP_KERNEL);
+ 	if (!group)
+-- 
+2.43.0
+

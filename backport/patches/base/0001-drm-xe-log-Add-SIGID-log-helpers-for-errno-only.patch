@@ -1,0 +1,104 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:36 +0200
+Subject: drm/xe/log: Add SIGID log helpers for errno-only
+
+For the software based SIGID errors, we will usually want to pass
+only the errno value as the data to be logged in the dmesg line or
+the CPER record. Add simple wrappers for that.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com> #v3
+Link: https://patch.msgid.link/20260814171801.13347-11-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 9dae5c3b00f3f5e26e22d18156a1a10d8a783640 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_log.h | 65 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 65 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_log.h b/drivers/gpu/drm/xe/xe_log.h
+index c56306a183e7..8c74f809fb5b 100644
+--- a/drivers/gpu/drm/xe/xe_log.h
++++ b/drivers/gpu/drm/xe/xe_log.h
+@@ -7,6 +7,7 @@
+ #define _XE_LOG_H_
+ 
+ #include <linux/cper.h>
++#include <linux/err.h>
+ 
+ #include "abi/xe_log_abi.h"
+ #include "abi/xe_sigid_abi.h"
+@@ -115,4 +116,68 @@ void xe_log_emit(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigid,
+ #define xe_log_comp_info(any, TAG, data, len, fmt, args...) \
+ 	xe_log_comp((any), CPER_SEV_INFORMATIONAL, TAG, (data), (len), fmt, ##args)
+ 
++/**
++ * xe_log_err() - Emit a structured SIGID error log entry on the component behalf.
++ * @any: the &xe_device or &xe_tile or &xe_gt pointer this report relates to
++ * @TAG: the component tag to use
++ * @err: negative errno for the failing operation, or 0 if not applicable
++ * @fmt: printf-style free text format string (not a stable interface)
++ * @args: arguments for the @fmt format string
++ *
++ * The log entry will be emitted with @CPER_SEV_RECOVERABLE severity.
++ */
++#define xe_log_err(any, TAG, err, fmt, args...) \
++	xe_log_comp_recoverable((any), TAG, ERR_PTR(err), 0, fmt, ##args)
++
++/**
++ * xe_log_err_fatal() - Emit a structured SIGID error log entry on the component behalf.
++ * @any: the &xe_device or &xe_tile or &xe_gt pointer this report relates to
++ * @TAG: the component tag to use
++ * @err: negative errno for the failing operation, or 0 if not applicable
++ * @fmt: printf-style free text format string (not a stable interface)
++ * @args: arguments for the @fmt format string
++ *
++ * The log entry will be emitted with @CPER_SEV_FATAL severity.
++ */
++#define xe_log_err_fatal(any, TAG, err, fmt, args...) \
++	xe_log_comp_fatal((any), TAG, ERR_PTR(err), 0, fmt, ##args)
++
++/**
++ * xe_log_err_corrected() - Emit a structured SIGID error log entry on the component behalf.
++ * @any: the &xe_device or &xe_tile or &xe_gt pointer this report relates to
++ * @TAG: the component tag to use
++ * @err: negative errno for the failing operation, or 0 if not applicable
++ * @fmt: printf-style free text format string (not a stable interface)
++ * @args: arguments for the @fmt format string
++ *
++ * The log entry will be emitted with @CPER_SEV_CORRECTED severity.
++ */
++#define xe_log_err_corrected(any, TAG, err, fmt, args...) \
++	xe_log_comp_corrected((any), TAG, ERR_PTR(err), 0, fmt, ##args)
++
++/**
++ * xe_log_err_info() - Emit a structured SIGID error log entry on the component behalf.
++ * @any: the &xe_device or &xe_tile or &xe_gt pointer this report relates to
++ * @TAG: the component tag to use
++ * @err: negative errno for the failing operation, or 0 if not applicable
++ * @fmt: printf-style free text format string (not a stable interface)
++ * @args: arguments for the @fmt format string
++ *
++ * The log entry will be emitted with @CPER_SEV_INFORMATIONAL severity.
++ */
++#define xe_log_err_info(any, TAG, err, fmt, args...) \
++	xe_log_comp_info((any), TAG, ERR_PTR(err), 0, fmt, ##args)
++
++/**
++ * xe_log_info() - Emit a structured SIGID information log entry on the component behalf.
++ * @any: the &xe_device or &xe_tile or &xe_gt pointer this report relates to
++ * @TAG: the component tag to use
++ * @fmt: printf-style free text format string (not a stable interface)
++ * @args: arguments for the @fmt format string
++ *
++ * The log entry will be emitted with @CPER_SEV_INFORMATIONAL severity.
++ */
++#define xe_log_info(any, TAG, fmt, args...) \
++	xe_log_err_info((any), TAG, 0, fmt, ##args)
++
+ #endif
+-- 
+2.43.0
+

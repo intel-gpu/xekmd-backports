@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Tue, 26 May 2026 21:54:46 +0200
+Subject: drm/xe: Use raw device ID to find sub-platform descriptor
+
+We don't need the partially initialized xe_device pointer to
+find the sub-platform descriptor, as for the descriptor lookup
+only the device ID is required and it can be obtained directly
+from the pci_dev.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link: https://patch.msgid.link/20260526195452.20545-2-michal.wajdeczko@intel.com
+(cherry-picked from commit 5ebf57fb7c7313c8b621218df67fa420c98346e3 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_pci.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 9bc6209a2..186fef8c2 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -587,14 +587,14 @@ static bool id_blocked(u16 device_id)
+ }
+ 
+ static const struct xe_subplatform_desc *
+-find_subplatform(const struct xe_device *xe, const struct xe_device_desc *desc)
++find_subplatform(const struct xe_device_desc *desc, u16 devid)
+ {
+ 	const struct xe_subplatform_desc *sp;
+ 	const u16 *id;
+ 
+ 	for (sp = desc->subplatforms; sp && sp->subplatform; sp++)
+ 		for (id = sp->pciidlist; *id; id++)
+-			if (*id == xe->info.devid)
++			if (*id == devid)
+ 				return sp;
+ 
+ 	return NULL;
+@@ -1095,6 +1095,8 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 	void *group;
+ 	int err;
+ 
++	subplatform_desc = find_subplatform(desc, pdev->device);
++
+ 	xe_configfs_check_device(pdev);
+ 
+ 	if (desc->require_force_probe && !id_forced(pdev->device)) {
+@@ -1136,7 +1138,6 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 	pci_set_drvdata(pdev, &xe->drm);
+ 
+ 	xe_pm_assert_unbounded_bridge(xe);
+-	subplatform_desc = find_subplatform(xe, desc);
+ 
+ 	pci_set_master(pdev);
+ 
+-- 
+2.43.0
+

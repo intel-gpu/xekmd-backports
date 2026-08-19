@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 14 Aug 2026 19:17:59 +0200
+Subject: drm/xe/pci: Report 'cannot re-enable' error using SIGID
+
+Report 'cannot re-enable PCI device' error using xe_log() helper.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Riana Tauro <riana.tauro@intel.com>
+Cc: Aravind Iddamsetty <aravind.iddamsetty@intel.com>
+Cc: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20260814171801.13347-34-michal.wajdeczko@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit b4f95affc66ef76342c1f6bf3849f6c8ade6b9d6 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_pci_error.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci_error.c b/drivers/gpu/drm/xe/xe_pci_error.c
+index e41af2ac7f23..fb965f52be5e 100644
+--- a/drivers/gpu/drm/xe/xe_pci_error.c
++++ b/drivers/gpu/drm/xe/xe_pci_error.c
+@@ -7,6 +7,7 @@
+ 
+ #include "xe_device.h"
+ #include "xe_gt.h"
++#include "xe_log.h"
+ #include "xe_pci.h"
+ #include "xe_pm.h"
+ #include "xe_printk.h"
+@@ -90,13 +91,15 @@ static pci_ers_result_t xe_pci_error_slot_reset(struct pci_dev *pdev)
+ {
+ 	const struct pci_device_id *ent = pci_match_id(pdev->driver->id_table, pdev);
+ 	struct xe_device *xe = pdev_to_xe_device(pdev);
++	int err;
+ 
+ 	xe_info(xe, "PCI error: slot reset\n");
+ 
+ 	pci_restore_state(pdev);
+ 
+-	if (pci_enable_device(pdev)) {
+-		xe_err(xe, "Cannot re-enable PCI device after reset\n");
++	err = pci_enable_device(pdev);
++	if (err) {
++		xe_log_err_fatal(xe, PCI, err, "Cannot re-enable PCI device after reset\n");
+ 		return PCI_ERS_RESULT_DISCONNECT;
+ 	}
+ 
+-- 
+2.43.0
+

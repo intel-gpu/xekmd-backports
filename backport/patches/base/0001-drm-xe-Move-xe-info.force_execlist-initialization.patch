@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Tue, 26 May 2026 21:54:48 +0200
+Subject: drm/xe: Move xe->info.force_execlist initialization
+
+The xe_info_init_early() is a place where we initialize those of
+the xe->info fields that do not require any additional hardware
+probes. Move the initialization of the force_execlist flag there.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://patch.msgid.link/20260526195452.20545-4-michal.wajdeczko@intel.com
+(cherry-picked from commit 5ebf57fb7c7313c8b621218df67fa420c98346e3 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_device.c | 1 -
+ drivers/gpu/drm/xe/xe_pci.c    | 1 +
+ 2 files changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index a517ed1eb25b..211ad7484157 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -476,7 +476,6 @@ struct xe_device *xe_device_create(struct pci_dev *pdev)
+ 
+ 	xe->info.devid = pdev->device;
+ 	xe->info.revid = pdev->revision;
+-	xe->info.force_execlist = xe_modparam.force_execlist;
+ 	xe->atomic_svm_timeslice_ms = 5;
+ 	xe->min_run_period_lr_ms = 5;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 1acbba21e9b4..b4acad89f677 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -776,6 +776,7 @@ static int xe_info_init_early(struct xe_device *xe,
+ 	xe->info.probe_display = IS_ENABLED(CONFIG_DRM_XE_DISPLAY) &&
+ 				 xe_modparam.probe_display &&
+ 				 desc->has_display;
++	xe->info.force_execlist = xe_modparam.force_execlist;
+ 
+ 	xe_assert(xe, desc->max_gt_per_tile > 0);
+ 	xe_assert(xe, desc->max_gt_per_tile <= XE_MAX_GT_PER_TILE);
+-- 
+2.43.0
+

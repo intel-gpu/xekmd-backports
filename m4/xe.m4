@@ -216,6 +216,8 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([linux/unaligned.h])
 	dnl # v5.19-6a99099fe1d6 drm/display: Move HDCP helpers into display-helper module
 	AC_KERNEL_CHECK_HEADERS([drm/display/drm_hdcp.h])
+	dnl # Check for designware i2c header
+	AC_KERNEL_CHECK_HEADERS([linux/designware_i2c.h])
 
 	AC_KERNEL_WAIT
 ])

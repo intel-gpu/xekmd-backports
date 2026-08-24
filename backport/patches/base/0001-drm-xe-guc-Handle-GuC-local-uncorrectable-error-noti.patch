@@ -16,7 +16,8 @@ Signed-off-by: Zhanjun Dong <zhanjun.dong@intel.com>
 Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Signed-off-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Link: https://patch.msgid.link/20260706234353.3874355-1-zhanjun.dong@intel.com
-(cherry-picked from commit 4e57574fa3a3 linux-next)
+
+(cherry-picked from commit 4e57574fa3a3a152bcca40f7595a28e88af28b27 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/abi/guc_actions_abi.h |  1 +
@@ -44,7 +45,7 @@ index 83a6e7794982..f5c9b37038d4 100644
  	XE_GUC_ACTION_TLB_INVALIDATION_DONE = 0x7001,
  	XE_GUC_ACTION_TLB_INVALIDATION_ALL = 0x7002,
 diff --git a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
-index e33bd622ab44..974ca54212c2 100644
+index 644f5a4226d7..5c428f02a642 100644
 --- a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
 +++ b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
 @@ -154,6 +154,11 @@ enum  {
@@ -70,7 +71,7 @@ index e33bd622ab44..974ca54212c2 100644
   * DOC: GuC Scheduling Policies KLVs
   *
 diff --git a/drivers/gpu/drm/xe/xe_gt_types.h b/drivers/gpu/drm/xe/xe_gt_types.h
-index fffb5d631b69..d53ec0f1de5b 100644
+index e5588c88800a..0d234160ee3a 100644
 --- a/drivers/gpu/drm/xe/xe_gt_types.h
 +++ b/drivers/gpu/drm/xe/xe_gt_types.h
 @@ -144,6 +144,11 @@ struct xe_gt {
@@ -86,7 +87,7 @@ index fffb5d631b69..d53ec0f1de5b 100644
  		 * @info.has_xe2_blt_instructions: GT supports Xe2-style MEM_SET
  		 * and MEM_COPY blitter functionality.  Note that despite the
 diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
-index ccebb437e37f..56fd6e5db262 100644
+index 4023700ff2a9..543f3992bccd 100644
 --- a/drivers/gpu/drm/xe/xe_guc.c
 +++ b/drivers/gpu/drm/xe/xe_guc.c
 @@ -12,6 +12,7 @@
@@ -114,10 +115,10 @@ index ccebb437e37f..56fd6e5db262 100644
  		klvs[count++] = PREP_GUC_KLV_TAG(OPT_IN_FEATURE_DYNAMIC_INHIBIT_CONTEXT_SWITCH);
  
 diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
-index a11cff7a20be..b9c59aeed51a 100644
+index 21e0dad9a481..fe6a55fe7fb5 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ct.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ct.c
-@@ -1627,6 +1627,9 @@ static int process_g2h_msg(struct xe_guc_ct *ct, u32 *msg, u32 len)
+@@ -1661,6 +1661,9 @@ static int process_g2h_msg(struct xe_guc_ct *ct, u32 *msg, u32 len)
  		ret = xe_guc_exec_queue_memory_cat_error_handler(guc, payload,
  								 adj_len);
  		break;
@@ -128,10 +129,10 @@ index a11cff7a20be..b9c59aeed51a 100644
  		ret = xe_guc_pagefault_handler(guc, payload, adj_len);
  		break;
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index f2a07bc639f9..e2d9c2490fd2 100644
+index d13f98983721..b4b7b613d996 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -3052,6 +3052,38 @@ int xe_guc_exec_queue_memory_cat_error_handler(struct xe_guc *guc, u32 *msg,
+@@ -3043,6 +3043,38 @@ int xe_guc_exec_queue_memory_cat_error_handler(struct xe_guc *guc, u32 *msg,
  	return 0;
  }
  
@@ -183,10 +184,10 @@ index b3839a90c142..ccade320dc69 100644
  int xe_guc_error_capture_handler(struct xe_guc *guc, u32 *msg, u32 len);
  int xe_guc_exec_queue_cgp_sync_done_handler(struct xe_guc *guc, u32 *msg, u32 len);
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index bacfa0327d41..77cdddcc6725 100644
+index c8c79032fb08..c8c09dc65b2c 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -119,6 +119,7 @@ static const struct xe_graphics_desc graphics_xe2 = {
+@@ -120,6 +120,7 @@ static const struct xe_graphics_desc graphics_xe2 = {
  static const struct xe_graphics_desc graphics_xe3p_lpg = {
  	XE2_GFX_FEATURES,
  	.has_indirect_ring_state = 1,
@@ -194,7 +195,7 @@ index bacfa0327d41..77cdddcc6725 100644
  	.multi_queue_engine_class_mask = BIT(XE_ENGINE_CLASS_COPY) | BIT(XE_ENGINE_CLASS_COMPUTE),
  	.num_geometry_xecore_fuse_regs = 3,
  	.num_compute_xecore_fuse_regs = 3,
-@@ -128,6 +129,7 @@ static const struct xe_graphics_desc graphics_xe3p_xpc = {
+@@ -129,6 +130,7 @@ static const struct xe_graphics_desc graphics_xe3p_xpc = {
  	XE2_GFX_FEATURES,
  	.has_access_counter = 0,
  	.has_indirect_ring_state = 1,
@@ -202,7 +203,7 @@ index bacfa0327d41..77cdddcc6725 100644
  	.hw_engine_mask =
  		GENMASK(XE_HW_ENGINE_BCS8, XE_HW_ENGINE_BCS1) |
  		GENMASK(XE_HW_ENGINE_CCS3, XE_HW_ENGINE_CCS0),
-@@ -150,6 +152,14 @@ static const struct xe_media_desc media_xelpmp = {
+@@ -151,6 +153,14 @@ static const struct xe_media_desc media_xelpmp = {
  		BIT(XE_HW_ENGINE_GSCCS0)
  };
  
@@ -217,7 +218,7 @@ index bacfa0327d41..77cdddcc6725 100644
  /* Pre-GMDID Graphics IPs */
  static const struct xe_ip graphics_ip_xelp = { 1200, "Xe_LP", &graphics_xelp };
  static const struct xe_ip graphics_ip_xelpp = { 1210, "Xe_LP+", &graphics_xelp };
-@@ -185,7 +195,7 @@ static const struct xe_ip media_ips[] = {
+@@ -186,7 +196,7 @@ static const struct xe_ip media_ips[] = {
  	{ 3000, "Xe3_LPM", &media_xelpmp },
  	{ 3002, "Xe3_LPM", &media_xelpmp },
  	{ 3500, "Xe3p_LPM", &media_xelpmp },
@@ -226,7 +227,7 @@ index bacfa0327d41..77cdddcc6725 100644
  };
  
  #define MULTI_LRC_MASK \
-@@ -848,6 +858,8 @@ static struct xe_gt *alloc_primary_gt(struct xe_tile *tile,
+@@ -861,6 +871,8 @@ static struct xe_gt *alloc_primary_gt(struct xe_tile *tile,
  	gt->info.type = XE_GT_TYPE_MAIN;
  	gt->info.id = tile->id * xe->info.max_gt_per_tile;
  	gt->info.has_indirect_ring_state = graphics_desc->has_indirect_ring_state;
@@ -235,7 +236,7 @@ index bacfa0327d41..77cdddcc6725 100644
  	gt->info.multi_queue_engine_class_mask = graphics_desc->multi_queue_engine_class_mask;
  	gt->info.engine_mask = graphics_desc->hw_engine_mask;
  	gt->info.num_geometry_xecore_fuse_regs = graphics_desc->num_geometry_xecore_fuse_regs;
-@@ -893,6 +905,7 @@ static struct xe_gt *alloc_media_gt(struct xe_tile *tile,
+@@ -906,6 +918,7 @@ static struct xe_gt *alloc_media_gt(struct xe_tile *tile,
  	gt->info.type = XE_GT_TYPE_MEDIA;
  	gt->info.id = tile->id * xe->info.max_gt_per_tile + 1;
  	gt->info.has_indirect_ring_state = media_desc->has_indirect_ring_state;
@@ -244,10 +245,10 @@ index bacfa0327d41..77cdddcc6725 100644
  
  	return gt;
 diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
-index 08386c5eca27..50e5f9b4d212 100644
+index 5b85e2c24b7b..a3a0782aa9c9 100644
 --- a/drivers/gpu/drm/xe/xe_pci_types.h
 +++ b/drivers/gpu/drm/xe/xe_pci_types.h
-@@ -79,12 +79,14 @@ struct xe_graphics_desc {
+@@ -78,12 +78,14 @@ struct xe_graphics_desc {
  	u8 has_ctx_tlb_inval:1;
  	u8 has_usm:1;
  	u8 has_64bit_timestamp:1;

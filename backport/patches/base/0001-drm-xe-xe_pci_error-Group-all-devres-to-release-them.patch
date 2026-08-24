@@ -23,6 +23,7 @@ Cc: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20260629082802.3690896-8-riana.tauro@intel.com
 Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+
 (cherry-picked from commit 0a0fae3327a537b23e86463240e7381ddb5e31a1 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -32,10 +33,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  3 files changed, 12 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 7595ed3e1..c43ce3ebb 100644
+index aad10899d9ac..15f02d09c4cc 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -537,6 +537,9 @@ struct xe_device {
+@@ -495,6 +495,9 @@ struct xe_device {
  		bool inconsistent_reset;
  	} wedged;
  
@@ -46,18 +47,18 @@ index 7595ed3e1..c43ce3ebb 100644
  	struct xe_bo_dev {
  		/** @bo_device.async_free: Free worker */
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index b00fa7ef7..a3b387f44 100644
+index 3b4f306a8ac1..c8c79032fb08 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -1089,6 +1089,7 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+@@ -1083,6 +1083,7 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
  	const struct xe_device_desc *desc = (const void *)ent->driver_data;
  	const struct xe_subplatform_desc *subplatform_desc;
  	struct xe_device *xe;
 +	void *group;
  	int err;
  
- 	xe_configfs_check_device(pdev);
-@@ -1114,6 +1115,11 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 	subplatform_desc = find_subplatform(desc, pdev->device);
+@@ -1110,6 +1111,11 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
  	if (xe_display_driver_probe_defer(pdev))
  		return -EPROBE_DEFER;
  
@@ -69,7 +70,7 @@ index b00fa7ef7..a3b387f44 100644
  	err = pcim_enable_device(pdev);
  	if (err)
  		return err;
-@@ -1122,6 +1128,8 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+@@ -1118,6 +1124,8 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
  	if (IS_ERR(xe))
  		return PTR_ERR(xe);
  
@@ -79,7 +80,7 @@ index b00fa7ef7..a3b387f44 100644
  
  	xe_pm_assert_unbounded_bridge(xe);
 diff --git a/drivers/gpu/drm/xe/xe_pci_error.c b/drivers/gpu/drm/xe/xe_pci_error.c
-index 10424d038..2f7316266 100644
+index 10424d038e79..2f7316266333 100644
 --- a/drivers/gpu/drm/xe/xe_pci_error.c
 +++ b/drivers/gpu/drm/xe/xe_pci_error.c
 @@ -89,6 +89,7 @@ static pci_ers_result_t xe_pci_error_slot_reset(struct pci_dev *pdev)

@@ -12,7 +12,8 @@ be enabled on that platform.
 Signed-off-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Reviewed-by: Julia Filipchuk <julia.filipchuk@intel.com>
 Link: https://patch.msgid.link/20260706224344.2723462-4-daniele.ceraolospurio@intel.com
-(backported from commit f543084cdbd1 linux-next)
+
+(cherry-picked from commit f543084cdbd142b9cfc1baf6f9d81e7b95fe9505 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/abi/guc_klvs_abi.h | 1 +
@@ -21,22 +22,22 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  3 files changed, 9 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
-index d5d0ab852..a0f6c119f 100644
+index d156ef987020..ec9c22dc21be 100644
 --- a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
 +++ b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
-@@ -501,6 +501,7 @@ enum xe_guc_klv_ids {
- 	GUC_WORKAROUND_KLV_ID_DISABLE_MTP_DURING_ASYNC_COMPUTE				= 0x9007,
- 	GUC_WA_KLV_NP_RD_WRITE_TO_CLEAR_RCSM_AT_CGP_LATE_RESTORE			= 0x9008,
- 	GUC_WORKAROUND_KLV_ID_BACK_TO_BACK_RCS_ENGINE_RESET				= 0x9009,
-+	GUC_WA_KLV_IGNORE_MMIO_READ_SEM_TOKEN_64					= 0x9010,
- 	GUC_WA_KLV_WAKE_POWER_DOMAINS_FOR_OUTBOUND_MMIO					= 0x900a,
- 	GUC_WA_KLV_RESET_BB_STACK_PTR_ON_VF_SWITCH					= 0x900b,
+@@ -513,6 +513,7 @@ enum xe_guc_klv_ids {
  	GUC_WA_KLV_RESTORE_UNSAVED_MEDIA_CONTROL_REG					= 0x900c,
+ 	GUC_WA_KLV_CLR_CS_INDIRECT_RING_STATE_IF_IDLE_AT_CTX_REG			= 0x900e,
+ 	GUC_WA_KLV_REMAP_RANGED_TLB_INV							= 0x900f,
++	GUC_WA_KLV_IGNORE_MMIO_READ_SEM_TOKEN_64					= 0x9010,
+ };
+ 
+ #endif
 diff --git a/drivers/gpu/drm/xe/xe_guc_ads.c b/drivers/gpu/drm/xe/xe_guc_ads.c
-index f75827ffd..4b6679dda 100644
+index f6c1888b36f4..55467f4ac937 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ads.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ads.c
-@@ -344,6 +344,12 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
+@@ -347,6 +347,12 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
  	if (XE_GT_WA(gt, 22022079272) && GUC_FIRMWARE_VER_AT_LEAST(&gt->uc.guc, 70, 62))
  		guc_waklv_enable(ads, NULL, 0, &offset, &remain, GUC_WA_KLV_REMAP_RANGED_TLB_INV);
  
@@ -50,10 +51,10 @@ index f75827ffd..4b6679dda 100644
  	if (!size)
  		return;
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
-index ae27bf1a0..82b51f328 100644
+index a2ccd036abce..5d6574ec9dee 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
-@@ -62,3 +62,5 @@
+@@ -69,3 +69,5 @@
  22022079272	MEDIA_VERSION(3503)
  		GRAPHICS_VERSION(3510)
  		GRAPHICS_VERSION(3511)

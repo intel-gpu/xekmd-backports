@@ -102,7 +102,7 @@ index 4d7dcaff2b91..78d4673665b4 100644
  depends on DRM_XE
  depends on EXPERT
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 0c1acd87f61a..98ab60373604 100644
+index 3c001b2a4aec..21a79bc819ad 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -154,6 +154,7 @@ xe-y += xe_bb.o \
@@ -114,10 +114,10 @@ index 0c1acd87f61a..98ab60373604 100644
  xe-$(CONFIG_DRM_GPUSVM) += xe_userptr.o
  
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 12ee4d03abbf..235dd7b639a6 100644
+index d25d02b24898..adee3a514f30 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -32,6 +32,7 @@
+@@ -33,6 +33,7 @@
  #include "xe_dma_buf.h"
  #include "xe_drm_client.h"
  #include "xe_drv.h"
@@ -125,7 +125,7 @@ index 12ee4d03abbf..235dd7b639a6 100644
  #include "xe_exec.h"
  #include "xe_exec_queue.h"
  #include "xe_force_wake.h"
-@@ -119,6 +120,8 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
+@@ -120,6 +121,8 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
  		put_task_struct(task);
  	}
  
@@ -134,7 +134,7 @@ index 12ee4d03abbf..235dd7b639a6 100644
  	return 0;
  }
  
-@@ -172,6 +175,8 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -173,6 +176,8 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  
  	guard(xe_pm_runtime)(xe);
  
@@ -143,7 +143,7 @@ index 12ee4d03abbf..235dd7b639a6 100644
  	/*
  	 * No need for exec_queue.lock here as there is no contention for it
  	 * when FD is closing as IOCTLs presumably can't be modifying the
-@@ -215,6 +220,7 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
+@@ -216,6 +221,7 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
  			  DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_VM_GET_PROPERTY, xe_vm_get_property_ioctl,
  			  DRM_RENDER_ALLOW),
@@ -151,7 +151,7 @@ index 12ee4d03abbf..235dd7b639a6 100644
  };
  
  static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-@@ -420,6 +426,8 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
+@@ -457,6 +463,8 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
  {
  	struct xe_device *xe = to_xe_device(dev);
  
@@ -160,7 +160,7 @@ index 12ee4d03abbf..235dd7b639a6 100644
  	xe_bo_dev_fini(&xe->bo_device);
  
  	if (xe->preempt_fence_wq)
-@@ -714,6 +722,8 @@ int xe_device_probe_early(struct xe_device *xe)
+@@ -790,6 +798,8 @@ int xe_device_probe_early(struct xe_device *xe)
  	if (IS_SRIOV_VF(xe))
  		vf_update_device_info(xe);
  
@@ -170,10 +170,10 @@ index 12ee4d03abbf..235dd7b639a6 100644
  	 * Check for pcode uncore_init status to confirm if the SoC
  	 * initialization is complete. Until done, any MMIO or lmem access from
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 7686acd2e605..63bac3a785ef 100644
+index e01c922d3545..20c6dde35479 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -315,6 +315,17 @@ struct xe_device {
+@@ -314,6 +314,17 @@ struct xe_device {
  		struct workqueue_struct *wq;
  	} sriov;
  
@@ -190,8 +190,8 @@ index 7686acd2e605..63bac3a785ef 100644
 +
  	/** @usm: unified memory state */
  	struct {
- 		/** @usm.asid: convert a ASID to VM */
-@@ -595,6 +606,23 @@ struct xe_device {
+ 		/** @usm.asid_to_vm: convert an ASID to VM */
+@@ -594,6 +605,23 @@ struct xe_device {
  	atomic_t g2g_test_count;
  #endif
  
@@ -215,7 +215,7 @@ index 7686acd2e605..63bac3a785ef 100644
  	/* private: */
  
  #if IS_ENABLED(CONFIG_DRM_XE_DISPLAY)
-@@ -670,6 +698,14 @@ struct xe_file {
+@@ -669,6 +697,14 @@ struct xe_file {
  
  	/** @refcount: ref count of this xe file */
  	struct kref refcount;
@@ -1605,7 +1605,7 @@ index 000000000000..52d4205e03dd
 +
 +#endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 70b71ab80272..390d723c7322 100644
+index 67819deb45e3..210572fa99ff 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -26,6 +26,7 @@
@@ -1616,7 +1616,7 @@ index 70b71ab80272..390d723c7322 100644
  #include "xe_exec_queue.h"
  #include "xe_gt.h"
  #include "xe_migrate.h"
-@@ -2130,6 +2131,8 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
+@@ -2129,6 +2130,8 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
  
  	args->vm_id = id;
  
@@ -1625,7 +1625,7 @@ index 70b71ab80272..390d723c7322 100644
  	return 0;
  
  err_close_and_put:
-@@ -2161,8 +2164,10 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
+@@ -2160,8 +2163,10 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
  		xa_erase(&xef->vm.xa, args->vm_id);
  	mutex_unlock(&xef->vm.lock);
  
@@ -1638,10 +1638,10 @@ index 70b71ab80272..390d723c7322 100644
  	return err;
  }
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index cadc0a906d30..3775e8ae427f 100644
+index 50c80af4ad4e..05171e798265 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
-@@ -109,6 +109,7 @@ extern "C" {
+@@ -110,6 +110,7 @@ extern "C" {
  #define DRM_XE_VM_QUERY_MEM_RANGE_ATTRS	0x0d
  #define DRM_XE_EXEC_QUEUE_SET_PROPERTY	0x0e
  #define DRM_XE_VM_GET_PROPERTY		0x0f
@@ -1649,7 +1649,7 @@ index cadc0a906d30..3775e8ae427f 100644
  
  /* Must be kept compact -- no holes */
  
-@@ -128,6 +129,7 @@ extern "C" {
+@@ -129,6 +130,7 @@ extern "C" {
  #define DRM_IOCTL_XE_VM_QUERY_MEM_RANGE_ATTRS	DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_VM_QUERY_MEM_RANGE_ATTRS, struct drm_xe_vm_query_mem_range_attr)
  #define DRM_IOCTL_XE_EXEC_QUEUE_SET_PROPERTY	DRM_IOW(DRM_COMMAND_BASE + DRM_XE_EXEC_QUEUE_SET_PROPERTY, struct drm_xe_exec_queue_set_property)
  #define DRM_IOCTL_XE_VM_GET_PROPERTY		DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_VM_GET_PROPERTY, struct drm_xe_vm_get_property)

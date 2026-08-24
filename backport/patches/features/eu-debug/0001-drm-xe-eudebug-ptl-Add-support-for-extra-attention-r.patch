@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Fri, 14 Jun 2024 12:23:35 +0200
-Subject: drm/xe/eudebug/ptl: Add support for extra attention
- register
+Subject: drm/xe/eudebug/ptl: Add support for extra attention register
 
 xe3 can set bits within an additional attention bit register EU_ATT1.
 Recalculate bitmask and make sure we read all required data.
@@ -24,7 +23,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  4 files changed, 88 insertions(+), 61 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index ceb394c03..e0873ed24 100644
+index 56a885fb66c1..cd629c71cfa7 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 @@ -527,7 +527,7 @@
@@ -40,13 +39,13 @@ index ceb394c03..e0873ed24 100644
  #define   THREAD_EX_ARB_MODE			REG_GENMASK(3, 2)
  #define   THREAD_EX_ARB_MODE_RR_AFTER_DEP	REG_FIELD_PREP(THREAD_EX_ARB_MODE, 0x2)
  
--#define EU_ATT_CLR(i)                          XE_REG_MCR(0xe490 + (i) * 4)
+-#define EU_ATT_CLR(i)				XE_REG_MCR(0xe490 + (i) * 4)
 +#define EU_ATT_CLR(reg, row)			XE_REG_MCR((reg ? 0xe698 : 0xe490) + (row) * 4)
  
  #define ROW_CHICKEN3				XE_REG_MCR(0xe49c, XE_REG_OPTION_MASKED)
  #define   XE2_EUPEND_CHK_FLUSH_DIS		REG_BIT(14)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 2704c4ebe..eddcbfb4e 100644
+index 2704c4ebed52..eddcbfb4e911 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -1877,29 +1877,31 @@ static int check_attn_mcr(struct xe_gt *gt, void *data,
@@ -159,7 +158,7 @@ index 2704c4ebe..eddcbfb4e 100644
  	}
  
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.c b/drivers/gpu/drm/xe/xe_gt_debug.c
-index 9a6edbd08..314eef673 100644
+index 9a6edbd08d67..314eef6734c3 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug.c
 +++ b/drivers/gpu/drm/xe/xe_gt_debug.c
 @@ -13,6 +13,11 @@
@@ -249,7 +248,7 @@ index 9a6edbd08..314eef673 100644
  
  	return 0;
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.h b/drivers/gpu/drm/xe/xe_gt_debug.h
-index d91d1f27b..f882770e1 100644
+index d91d1f27b764..f882770e18d3 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug.h
 +++ b/drivers/gpu/drm/xe/xe_gt_debug.h
 @@ -6,11 +6,25 @@

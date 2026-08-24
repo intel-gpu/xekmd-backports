@@ -19,7 +19,8 @@ Cc: dri-devel@lists.freedesktop.org
 Reviewed-by: Arunpravin Paneer Selvam <Arunpravin.PaneerSelvam@amd.com>
 Signed-off-by: Arunpravin Paneer Selvam <Arunpravin.PaneerSelvam@amd.com>
 Link: https://patch.msgid.link/20260806053624.3215216-5-tejas.upadhyay@intel.com
-(cherry-picked from commit 151ebbc20aa2365fa854a77432043b16606b5cfe drm-tip-eudebug)
+
+(cherry-picked from commit 151ebbc20aa2365fa854a77432043b16606b5cfe linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/buddy.c       | 53 +++++++++++++++++++++++++++++++++++++++
@@ -27,10 +28,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  2 files changed, 55 insertions(+)
 
 diff --git a/drivers/gpu/buddy.c b/drivers/gpu/buddy.c
-index 52686672e..0acfcbcbb 100644
+index b12d3a2ac630..300fb91e7c89 100644
 --- a/drivers/gpu/buddy.c
 +++ b/drivers/gpu/buddy.c
-@@ -589,6 +589,59 @@ void gpu_buddy_free_block(struct gpu_buddy *mm,
+@@ -594,6 +594,59 @@ void gpu_buddy_free_block(struct gpu_buddy *mm,
  }
  EXPORT_SYMBOL(gpu_buddy_free_block);
  
@@ -91,10 +92,10 @@ index 52686672e..0acfcbcbb 100644
  				  struct list_head *objects,
  				  bool mark_clear,
 diff --git a/include/linux/gpu_buddy.h b/include/linux/gpu_buddy.h
-index 5fa917ba5..1019e9be3 100644
+index 71941a039648..e7e22fa05ee2 100644
 --- a/include/linux/gpu_buddy.h
 +++ b/include/linux/gpu_buddy.h
-@@ -231,6 +231,8 @@ void gpu_buddy_reset_clear(struct gpu_buddy *mm, bool is_clear);
+@@ -272,6 +272,8 @@ void gpu_buddy_reset_clear(struct gpu_buddy *mm, bool is_clear);
  
  void gpu_buddy_free_block(struct gpu_buddy *mm, struct gpu_buddy_block *block);
  

@@ -51,6 +51,7 @@ Signed-off-by: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
 Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Link: https://patch.msgid.link/20260729121843.1255891-6-naresh.kumar.g@intel.com
 Signed-off-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+
 (cherry-picked from commit 41a74ed31f0bb87035eef9bd4efd92b4e82bcc99 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -58,10 +59,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  1 file changed, 74 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pt.c b/drivers/gpu/drm/xe/xe_pt.c
-index 232f38dd7..d73e1334d 100644
+index d0a1e6c2b55f..3bd29f62b0b3 100644
 --- a/drivers/gpu/drm/xe/xe_pt.c
 +++ b/drivers/gpu/drm/xe/xe_pt.c
-@@ -301,6 +301,14 @@ struct xe_pt_stage_bind_walk {
+@@ -302,6 +302,14 @@ struct xe_pt_stage_bind_walk {
  	bool needs_64K;
  	/** @clear_pt: clear page table entries during the bind walk */
  	bool clear_pt;
@@ -76,7 +77,7 @@ index 232f38dd7..d73e1334d 100644
  	/**
  	 * @vma: VMA being mapped
  	 */
-@@ -513,6 +521,39 @@ xe_pt_is_pte_ps64K(u64 addr, u64 next, struct xe_pt_stage_bind_walk *xe_walk)
+@@ -514,6 +522,39 @@ xe_pt_is_pte_ps64K(u64 addr, u64 next, struct xe_pt_stage_bind_walk *xe_walk)
  	return xe_walk->found_64K;
  }
  
@@ -116,7 +117,7 @@ index 232f38dd7..d73e1334d 100644
  static int
  xe_pt_stage_bind_entry(struct xe_ptw *parent, pgoff_t offset,
  		       unsigned int level, u64 addr, u64 next,
-@@ -530,8 +571,18 @@ xe_pt_stage_bind_entry(struct xe_ptw *parent, pgoff_t offset,
+@@ -531,8 +572,18 @@ xe_pt_stage_bind_entry(struct xe_ptw *parent, pgoff_t offset,
  	int ret = 0;
  	u64 pte;
  
@@ -137,7 +138,7 @@ index 232f38dd7..d73e1334d 100644
  		struct xe_res_cursor *curs = xe_walk->curs;
  		struct xe_bo *bo = xe_vma_bo(xe_walk->vma);
  		bool is_null_or_purged = xe_vma_is_null(xe_walk->vma) ||
-@@ -681,6 +732,26 @@ static bool xe_atomic_for_system(struct xe_vm *vm, struct xe_vma *vma)
+@@ -682,6 +733,26 @@ static bool xe_atomic_for_system(struct xe_vm *vm, struct xe_vma *vma)
  				 (bo && xe_bo_has_single_placement(bo))));
  }
  
@@ -164,7 +165,7 @@ index 232f38dd7..d73e1334d 100644
  /**
   * xe_pt_stage_bind() - Build a disconnected page-table tree for a given address
   * range.
-@@ -773,6 +844,7 @@ xe_pt_stage_bind(struct xe_tile *tile, struct xe_vma *vma,
+@@ -774,6 +845,7 @@ xe_pt_stage_bind(struct xe_tile *tile, struct xe_vma *vma,
  		xe_svm_notifier_unlock(vm);
  	}
  

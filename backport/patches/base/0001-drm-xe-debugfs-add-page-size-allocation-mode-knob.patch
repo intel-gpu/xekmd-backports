@@ -47,6 +47,7 @@ Signed-off-by: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
 Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Link: https://patch.msgid.link/20260729121843.1255891-3-naresh.kumar.g@intel.com
 Signed-off-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+
 (cherry-picked from commit ceb4e4f0df78432128e11dca364207bc7856a339 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -54,10 +55,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  1 file changed, 78 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index ad2d8f179..47a80fa02 100644
+index 17080c8563de..7f0b6a83235e 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
-@@ -509,6 +509,72 @@ static const struct file_operations disable_late_binding_fops = {
+@@ -615,6 +615,72 @@ static const struct file_operations disable_late_binding_fops = {
  	.write = disable_late_binding_set,
  };
  
@@ -130,7 +131,7 @@ index ad2d8f179..47a80fa02 100644
  void xe_debugfs_register(struct xe_device *xe)
  {
  	struct ttm_device *bdev = &xe->ttm;
-@@ -550,6 +616,18 @@ void xe_debugfs_register(struct xe_device *xe)
+@@ -666,6 +732,18 @@ void xe_debugfs_register(struct xe_device *xe)
  	debugfs_create_file("disable_late_binding", 0600, root, xe,
  			    &disable_late_binding_fops);
  

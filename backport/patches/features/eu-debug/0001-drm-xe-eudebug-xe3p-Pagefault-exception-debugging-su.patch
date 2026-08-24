@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Date: Thu, 9 May 2024 11:32:51 +0300
-Subject: drm/xe/eudebug/xe3p: Pagefault exception debugging
- support
+Subject: drm/xe/eudebug/xe3p: Pagefault exception debugging support
 
 Xe3p is the first platform generation introducing the pagefault memory
 exception debugging feature. This feature optionally raises a software
@@ -50,10 +49,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  7 files changed, 27 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_lrc_layout.h b/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
-index b5eff3839..9c4897a9c 100644
+index 4ab86fc369fd..ac8282f8b155 100644
 --- a/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
 +++ b/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
-@@ -40,4 +40,6 @@
+@@ -43,4 +43,6 @@
  #define INDIRECT_CTX_RING_START_UDW	(0x08 + 1)
  #define INDIRECT_CTX_RING_CTL		(0x0a + 1)
  
@@ -61,7 +60,7 @@ index b5eff3839..9c4897a9c 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 79f640155..d9f386c6d 100644
+index 79f640155e68..d9f386c6d68e 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -4348,6 +4348,9 @@ xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm,
@@ -75,10 +74,10 @@ index 79f640155..d9f386c6d 100644
  	vma = xe_vm_find_vma_by_addr(vm, xe_pf->consumer.page_addr);
  	up_read(&vm->lock);
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 77cfd29a6..cccd7d635 100644
+index dd1188a7853d..b39a83f3f803 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -358,9 +358,13 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
+@@ -362,9 +362,13 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
  	if (q->flags & EXEC_QUEUE_FLAG_DISABLE_STATE_CACHE_PERF_FIX)
  		flags |= XE_LRC_DISABLE_STATE_CACHE_PERF_FIX;
  
@@ -95,7 +94,7 @@ index 77cfd29a6..cccd7d635 100644
  
  	err = q->ops->init(q);
  	if (err)
-@@ -1001,7 +1005,8 @@ static int exec_queue_set_state_cache_perf_fix(struct xe_device *xe, struct xe_e
+@@ -1004,7 +1008,8 @@ static int exec_queue_set_state_cache_perf_fix(struct xe_device *xe, struct xe_e
  static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
  				  u64 value)
  {
@@ -105,7 +104,7 @@ index 77cfd29a6..cccd7d635 100644
  	struct xe_guc *guc = &q->gt->uc.guc;
  
  	if (XE_IOCTL_DBG(xe, (q->class != XE_ENGINE_CLASS_RENDER &&
-@@ -1033,6 +1038,9 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+@@ -1036,6 +1041,9 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
  	q->eudebug_flags = EXEC_QUEUE_EUDEBUG_FLAG_ENABLE;
  	q->sched_props.preempt_timeout_us = 0;
  
@@ -116,7 +115,7 @@ index 77cfd29a6..cccd7d635 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index 3cde42045..2ff1aa03a 100644
+index 10be00a3a7af..89acfeb23969 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
 @@ -147,7 +147,8 @@ struct xe_exec_queue {
@@ -130,12 +129,12 @@ index 3cde42045..2ff1aa03a 100644
  
  	union {
 diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
-index 2fa823220..8ce714d2c 100644
+index ef208f78e774..59f031d8b914 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.c
 +++ b/drivers/gpu/drm/xe/xe_lrc.c
-@@ -1557,8 +1557,11 @@ static int xe_lrc_ctx_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe, struct
- 	if (lrc_to_xe(lrc)->info.has_64bit_timestamp)
- 		xe_lrc_write_ctx_reg(lrc, CTX_TIMESTAMP_UDW, 0);
+@@ -1586,8 +1586,11 @@ static int xe_lrc_ctx_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe, struct
+ 		xe_lrc_write_ctx_reg(lrc, CTX_QUEUE_TIMESTAMP_UDW, 0);
+ 	}
  
 -	if (xe->info.has_asid && vm)
 -		xe_lrc_write_ctx_reg(lrc, CTX_ASID, vm->usm.asid);
@@ -148,10 +147,10 @@ index 2fa823220..8ce714d2c 100644
  	lrc->desc = LRC_VALID;
  	lrc->desc |= FIELD_PREP(LRC_ADDRESSING_MODE, LRC_LEGACY_64B_CONTEXT);
 diff --git a/drivers/gpu/drm/xe/xe_lrc.h b/drivers/gpu/drm/xe/xe_lrc.h
-index 544066318..9dcd8e464 100644
+index 7be5e3da8bc8..b065f41a5494 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.h
 +++ b/drivers/gpu/drm/xe/xe_lrc.h
-@@ -50,6 +50,8 @@ struct xe_lrc_snapshot {
+@@ -60,6 +60,8 @@ struct xe_lrc_snapshot {
  #define XE_LRC_CREATE_PXP		BIT(1)
  #define XE_LRC_CREATE_USER_CTX		BIT(2)
  #define XE_LRC_DISABLE_STATE_CACHE_PERF_FIX	BIT(3)
@@ -161,10 +160,10 @@ index 544066318..9dcd8e464 100644
  struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
  			     void *replay_state, u32 ring_size, u16 msix_vec, u32 flags);
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 9d519ea80..586e25683 100644
+index 52243d6661d2..66d4e2993619 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
-@@ -1460,6 +1460,7 @@ struct drm_xe_exec_queue_create {
+@@ -1466,6 +1466,7 @@ struct drm_xe_exec_queue_create {
  #define   DRM_XE_EXEC_QUEUE_SET_DISABLE_STATE_CACHE_PERF_FIX	6
  #define   DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG		7
  #define     DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE		(1 << 0)

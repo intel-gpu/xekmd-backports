@@ -12,6 +12,7 @@ Reviewed-by: Raag Jadav <raag.jadav@intel.com>
 Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20260713074755.1278607-7-riana.tauro@intel.com
 Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+
 (cherry-picked from commit f6d8232d0c6978b299237c7c3dd4140c2e9db7ce linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -21,7 +22,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  3 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_event.c b/drivers/gpu/drm/xe/xe_sysctrl_event.c
-index b4d17329a..da395148e 100644
+index b4d17329af6c..da395148ee9d 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_event.c
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_event.c
 @@ -16,7 +16,7 @@ static void get_pending_event(struct xe_sysctrl *sc, struct xe_sysctrl_mailbox_c
@@ -34,7 +35,7 @@ index b4d17329a..da395148e 100644
  	int ret;
  
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_event_types.h b/drivers/gpu/drm/xe/xe_sysctrl_event_types.h
-index c16c66b9f..348768ca4 100644
+index c16c66b9fa7f..348768ca454a 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_event_types.h
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_event_types.h
 @@ -10,9 +10,6 @@
@@ -48,10 +49,10 @@ index c16c66b9f..348768ca4 100644
   * enum xe_sysctrl_event - Events reported by System Controller
   *
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
-index 84d7c647e..faa973986 100644
+index 6e3753554510..b0c123096969 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
-@@ -48,6 +48,9 @@ struct xe_sysctrl_mailbox_command {
+@@ -52,6 +52,9 @@ struct xe_sysctrl_mailbox_command {
  	size_t data_out_len;
  };
  

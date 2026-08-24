@@ -26,6 +26,7 @@ Signed-off-by: Riana Tauro <riana.tauro@intel.com>
 Reviewed-by: Raag Jadav <raag.jadav@intel.com>
 Link: https://patch.msgid.link/20260810112008.1858731-5-riana.tauro@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+
 (cherry-picked from commit 6fdbfc75eaa1b10ff5d2a45b6b8cf2b57f7a1d03 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -39,10 +40,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  7 files changed, 200 insertions(+)
 
 diff --git a/Documentation/gpu/drm-ras.rst b/Documentation/gpu/drm-ras.rst
-index 4636e68f5678..de07e9ae0e10 100644
+index 83c21853b74b..406e4c49bac1 100644
 --- a/Documentation/gpu/drm-ras.rst
 +++ b/Documentation/gpu/drm-ras.rst
-@@ -54,6 +54,7 @@ User space tools can:
+@@ -56,6 +56,7 @@ User space tools can:
    ``node-id`` and ``error-id`` as parameters.
  * Clear specific error counters with the ``clear-error-counter`` command, using both
    ``node-id`` and ``error-id`` as parameters.
@@ -50,7 +51,7 @@ index 4636e68f5678..de07e9ae0e10 100644
  
  YAML-based Interface
  --------------------
-@@ -109,3 +110,23 @@ Example: Clear an error counter for a given node
+@@ -111,3 +112,23 @@ Example: Clear an error counter for a given node
  
      sudo ynl --family drm_ras --do clear-error-counter --json '{"node-id":0, "error-id":1}'
      None
@@ -301,10 +302,10 @@ index a398643572a5..03ec275aca92 100644
  
  #endif /* _LINUX_DRM_RAS_GEN_H */
 diff --git a/include/drm/drm_ras.h b/include/drm/drm_ras.h
-index f2a787bc4f64..ed8175f62b23 100644
+index 0beede3ddc4e..ee2caa0edc6f 100644
 --- a/include/drm/drm_ras.h
 +++ b/include/drm/drm_ras.h
-@@ -78,9 +78,14 @@ struct drm_device;
+@@ -80,9 +80,14 @@ struct drm_device;
  #if IS_ENABLED(CONFIG_DRM_RAS)
  int drm_ras_node_register(struct drm_ras_node *node);
  void drm_ras_node_unregister(struct drm_ras_node *node);

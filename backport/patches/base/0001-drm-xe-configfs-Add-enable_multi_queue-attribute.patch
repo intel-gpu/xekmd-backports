@@ -40,6 +40,7 @@ Cc: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
 Reviewed-by: Stuart Summers <stuart.summers@intel.com>
 Link: https://patch.msgid.link/20260709200822.3257825-1-shuicheng.lin@intel.com
 Signed-off-by: Shuicheng Lin <shuicheng.lin@intel.com>
+
 (cherry-picked from commit 73c5a253068e8cdf975941a14f032e351730a396 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -53,10 +54,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  7 files changed, 97 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
-index 988280436..6f5144c76 100644
+index ec9c22dc21be..281d4af419d6 100644
 --- a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
 +++ b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
-@@ -492,9 +492,10 @@ enum  {
+@@ -499,9 +499,10 @@ enum  {
  #define GUC_KLV_VF_CFG_ENGINE_GROUP_PREEMPT_TIMEOUT_MIN_LEN	1u
  #define GUC_KLV_VF_CFG_ENGINE_GROUP_PREEMPT_TIMEOUT_MAX_LEN	GUC_MAX_SCHED_GROUPS
  /*
@@ -69,7 +70,7 @@ index 988280436..6f5144c76 100644
  	GUC_WORKAROUND_KLV_DISABLE_PSMI_INTERRUPTS_AT_C6_ENTRY_RESTORE_AT_EXIT		= 0x9004,
  	GUC_WORKAROUND_KLV_ID_GAM_PFQ_SHADOW_TAIL_POLLING				= 0x9005,
 diff --git a/drivers/gpu/drm/xe/xe_configfs.c b/drivers/gpu/drm/xe/xe_configfs.c
-index 32102600a..052cce962 100644
+index 32102600a148..052cce962161 100644
 --- a/drivers/gpu/drm/xe/xe_configfs.c
 +++ b/drivers/gpu/drm/xe/xe_configfs.c
 @@ -237,6 +237,18 @@
@@ -194,7 +195,7 @@ index 32102600a..052cce962 100644
   * xe_configfs_get_ctx_restore_mid_bb - get configfs ctx_restore_mid_bb setting
   * @pdev: pci device
 diff --git a/drivers/gpu/drm/xe/xe_configfs.h b/drivers/gpu/drm/xe/xe_configfs.h
-index 07d62bf0c..4fbbeafba 100644
+index 07d62bf0c152..4fbbeafba473 100644
 --- a/drivers/gpu/drm/xe/xe_configfs.h
 +++ b/drivers/gpu/drm/xe/xe_configfs.h
 @@ -23,6 +23,7 @@ bool xe_configfs_primary_gt_allowed(struct pci_dev *pdev);
@@ -214,11 +215,11 @@ index 07d62bf0c..4fbbeafba 100644
  						     enum xe_engine_class class,
  						     const u32 **cs) { return 0; }
 diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
-index 2feebaf5a..69dcf8653 100644
+index 543f3992bccd..b2528cdfe642 100644
 --- a/drivers/gpu/drm/xe/xe_guc.c
 +++ b/drivers/gpu/drm/xe/xe_guc.c
 @@ -102,6 +102,14 @@ static u32 guc_ctl_feature_flags(struct xe_guc *guc)
- 	if (GRAPHICS_VER(xe) >= 35 && !IS_DGFX(xe) && xe_gt_is_media_type(guc_to_gt(guc)))
+ 	if (xe_device_is_l2_flush_optimized(xe) && xe_gt_is_media_type(guc_to_gt(guc)))
  		flags |= GUC_CTL_ENABLE_L2FLUSH_OPT;
  
 +	/*
@@ -233,7 +234,7 @@ index 2feebaf5a..69dcf8653 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_guc_ads.c b/drivers/gpu/drm/xe/xe_guc_ads.c
-index afb2fd3cf..8e37216d3 100644
+index 55467f4ac937..3c1accd6955f 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ads.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ads.c
 @@ -16,6 +16,7 @@
@@ -244,7 +245,7 @@ index afb2fd3cf..8e37216d3 100644
  #include "xe_gt.h"
  #include "xe_gt_ccs_mode.h"
  #include "xe_gt_mcr.h"
-@@ -387,6 +388,19 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
+@@ -353,6 +354,19 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
  		guc_waklv_enable(ads, NULL, 0, &offset, &remain,
  				 GUC_WA_KLV_IGNORE_MMIO_READ_SEM_TOKEN_64);
  
@@ -265,7 +266,7 @@ index afb2fd3cf..8e37216d3 100644
  	if (!size)
  		return;
 diff --git a/drivers/gpu/drm/xe/xe_guc_fwif.h b/drivers/gpu/drm/xe/xe_guc_fwif.h
-index b73fae063..ae7241e4d 100644
+index 3fbda4798cff..971b850f2136 100644
 --- a/drivers/gpu/drm/xe/xe_guc_fwif.h
 +++ b/drivers/gpu/drm/xe/xe_guc_fwif.h
 @@ -68,6 +68,7 @@ struct guc_update_exec_queue_policy {
@@ -277,7 +278,7 @@ index b73fae063..ae7241e4d 100644
  #define GUC_CTL_DEBUG			3
  #define   GUC_LOG_VERBOSITY		REG_GENMASK(1, 0)
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index 77cdddcc6..635ace764 100644
+index c8c09dc65b2c..713c7af97a72 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
 @@ -22,6 +22,7 @@
@@ -288,7 +289,7 @@ index 77cdddcc6..635ace764 100644
  #include "xe_gt_sriov_vf.h"
  #include "xe_guc.h"
  #include "xe_mmio.h"
-@@ -861,6 +862,10 @@ static struct xe_gt *alloc_primary_gt(struct xe_tile *tile,
+@@ -874,6 +875,10 @@ static struct xe_gt *alloc_primary_gt(struct xe_tile *tile,
  	gt->info.has_uncorrectable_error_reporting =
  		graphics_desc->has_uncorrectable_error_reporting;
  	gt->info.multi_queue_engine_class_mask = graphics_desc->multi_queue_engine_class_mask;

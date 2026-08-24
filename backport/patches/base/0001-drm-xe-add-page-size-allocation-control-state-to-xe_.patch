@@ -45,6 +45,7 @@ Signed-off-by: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
 Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Link: https://patch.msgid.link/20260729121843.1255891-2-naresh.kumar.g@intel.com
 Signed-off-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+
 (cherry-picked from commit 6bea40fc4cf3f708c0eac23bdc7e47edc1cc7a8a linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -55,7 +56,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  4 files changed, 120 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/Kconfig.debug b/drivers/gpu/drm/xe/Kconfig.debug
-index 01227c77f..79118d9ef 100644
+index 01227c77f6d7..79118d9efd93 100644
 --- a/drivers/gpu/drm/xe/Kconfig.debug
 +++ b/drivers/gpu/drm/xe/Kconfig.debug
 @@ -86,6 +86,22 @@ config DRM_XE_KUNIT_TEST
@@ -82,10 +83,10 @@ index 01227c77f..79118d9ef 100644
          bool "Enable extra GuC related debug options"
          depends on DRM_XE_DEBUG
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index e086cc221..9135e23dc 100644
+index af4a14880835..8727d9e589ad 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -871,6 +871,27 @@ static void xe_device_wedged_fini(struct drm_device *drm, void *arg)
+@@ -919,6 +919,27 @@ static void xe_device_wedged_fini(struct drm_device *drm, void *arg)
  		xe_pm_runtime_put(xe);
  }
  
@@ -113,7 +114,7 @@ index e086cc221..9135e23dc 100644
  int xe_device_probe(struct xe_device *xe)
  {
  	struct xe_tile *tile;
-@@ -1008,6 +1029,10 @@ int xe_device_probe(struct xe_device *xe)
+@@ -1062,6 +1083,10 @@ int xe_device_probe(struct xe_device *xe)
  	if (err)
  		return err;
  
@@ -125,10 +126,10 @@ index e086cc221..9135e23dc 100644
  	if (err)
  		return err;
 diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
-index 4bce01108..4e6401f35 100644
+index 913b65f49174..43d6efdb610b 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
-@@ -203,6 +203,54 @@ static inline bool xe_device_wedged(struct xe_device *xe)
+@@ -212,6 +212,54 @@ static inline bool xe_device_wedged(struct xe_device *xe)
  	return atomic_read(&xe->wedged.flag);
  }
  
@@ -184,7 +185,7 @@ index 4bce01108..4e6401f35 100644
  void xe_device_declare_wedged(struct xe_device *xe);
  int xe_device_validate_wedged_mode(struct xe_device *xe, unsigned int mode);
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index ff996c456..7595ed3e1 100644
+index d481746db207..e01c922d3545 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -61,6 +61,23 @@ enum xe_wedged_mode {
@@ -211,7 +212,7 @@ index ff996c456..7595ed3e1 100644
  #define XE_BO_INVALID_OFFSET	LONG_MAX
  
  #define GRAPHICS_VER(xe) ((xe)->info.graphics_verx100 / 100)
-@@ -485,6 +502,20 @@ struct xe_device {
+@@ -474,6 +491,20 @@ struct xe_device {
  	/** @late_bind: xe mei late bind interface */
  	struct xe_late_bind late_bind;
  

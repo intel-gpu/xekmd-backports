@@ -14,17 +14,21 @@ Reviewed-by: Raag Jadav <raag.jadav@intel.com>
 Link: https://patch.msgid.link/20260805071152.1225416-8-mallesh.koujalagi@intel.com
 Acked-by: Maxime Ripard <mripard@kernel.org>
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+
 (cherry-picked from commit 048364a21a4baa6494d3c51d3cf7bccf336d5e35 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
+(cherry-picked from commit 942cbdcc8c07dc74a8d118914fc0a23e8fe76642 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  Documentation/gpu/drm-uapi.rst | 93 ++++++++++++++++++++++++++++++++--
  1 file changed, 88 insertions(+), 5 deletions(-)
 
 diff --git a/Documentation/gpu/drm-uapi.rst b/Documentation/gpu/drm-uapi.rst
-index 579e87cb9ff7..3b3ccef31a49 100644
+index 93df92c4ac8c..52255247a6db 100644
 --- a/Documentation/gpu/drm-uapi.rst
 +++ b/Documentation/gpu/drm-uapi.rst
-@@ -418,7 +418,7 @@ needed.
+@@ -424,7 +424,7 @@ needed.
  Recovery
  --------
  
@@ -33,7 +37,7 @@ index 579e87cb9ff7..3b3ccef31a49 100644
  can use any one, multiple or none. Method(s) of choice will be sent in the
  uevent environment as ``WEDGED=<method1>[,..,<methodN>]`` in order of less to
  more side-effects. See the section `Vendor Specific Recovery`_
-@@ -428,15 +428,16 @@ method is unknown, ``WEDGED=unknown`` will be sent instead.
+@@ -434,15 +434,16 @@ method is unknown, ``WEDGED=unknown`` will be sent instead.
  Userspace consumers can parse this event and attempt recovery as per the
  following expectations.
  
@@ -53,7 +57,7 @@ index 579e87cb9ff7..3b3ccef31a49 100644
  
  No Recovery
  -----------
-@@ -447,6 +448,17 @@ debug purpose in order to root cause the hang. This is useful because the first
+@@ -453,6 +454,17 @@ debug purpose in order to root cause the hang. This is useful because the first
  hang is usually the most critical one which can result in consequential hangs
  or complete wedging.
  
@@ -71,7 +75,7 @@ index 579e87cb9ff7..3b3ccef31a49 100644
  Vendor Specific Recovery
  ------------------------
  
-@@ -510,7 +522,7 @@ Example - rebind
+@@ -516,7 +528,7 @@ Example - rebind
  
  Udev rule::
  
@@ -80,7 +84,7 @@ index 579e87cb9ff7..3b3ccef31a49 100644
      RUN+="/path/to/rebind.sh $env{DEVPATH}"
  
  Recovery script::
-@@ -524,6 +536,77 @@ Recovery script::
+@@ -530,6 +542,77 @@ Recovery script::
      echo -n $DEVICE > $DRIVER/unbind
      echo -n $DEVICE > $DRIVER/bind
  

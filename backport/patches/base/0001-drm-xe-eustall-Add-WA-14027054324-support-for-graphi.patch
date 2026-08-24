@@ -31,6 +31,7 @@ Signed-off-by: Harish Chegondi <harish.chegondi@intel.com>
 Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
 Link: https://patch.msgid.link/16b6b972691943daddebad6e7b93b9d73add5249.1784745545.git.harish.chegondi@intel.com
 Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+
 (cherry-picked from commit a1e4e62ebc799ce69236054672253e0086bf409b linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -53,7 +54,7 @@ index ad93c57edd17..ef4746b7b5d3 100644
  
  #define GU_CNTL_PROTECTED			XE_REG(0x10100C)
 diff --git a/drivers/gpu/drm/xe/xe_eu_stall.c b/drivers/gpu/drm/xe/xe_eu_stall.c
-index dddcdd0bb7a3..7a9e542fbf92 100644
+index 297be3c42b20..1ce61732a39f 100644
 --- a/drivers/gpu/drm/xe/xe_eu_stall.c
 +++ b/drivers/gpu/drm/xe/xe_eu_stall.c
 @@ -7,6 +7,7 @@
@@ -89,7 +90,7 @@ index dddcdd0bb7a3..7a9e542fbf92 100644
  
  static size_t per_xecore_buf_size = SZ_512K;
  
-@@ -661,7 +671,7 @@ static int xe_eu_stall_stream_enable(struct xe_eu_stall_data_stream *stream)
+@@ -682,7 +692,7 @@ static int xe_eu_stall_stream_enable(struct xe_eu_stall_data_stream *stream)
  	struct per_xecore_buf *xecore_buf;
  	struct xe_gt *gt = stream->gt;
  	u16 group, instance;
@@ -98,7 +99,7 @@ index dddcdd0bb7a3..7a9e542fbf92 100644
  
  	/* Take runtime pm ref and forcewake to disable RC6 */
  	xe_pm_runtime_get(gt_to_xe(gt));
-@@ -672,6 +682,18 @@ static int xe_eu_stall_stream_enable(struct xe_eu_stall_data_stream *stream)
+@@ -693,6 +703,18 @@ static int xe_eu_stall_stream_enable(struct xe_eu_stall_data_stream *stream)
  		return -ETIMEDOUT;
  	}
  
@@ -117,7 +118,7 @@ index dddcdd0bb7a3..7a9e542fbf92 100644
  	if (XE_GT_WA(gt, 22016596838))
  		xe_gt_mcr_multicast_write(gt, ROW_CHICKEN2,
  					  REG_MASKED_FIELD_ENABLE(DISABLE_DOP_GATING));
-@@ -708,7 +730,7 @@ static int xe_eu_stall_stream_enable(struct xe_eu_stall_data_stream *stream)
+@@ -730,7 +752,7 @@ static int xe_eu_stall_stream_enable(struct xe_eu_stall_data_stream *stream)
  	reg_value |= XEHPC_EUSTALL_BASE_ENABLE_SAMPLING;
  	xe_gt_mcr_multicast_write(gt, XEHPC_EUSTALL_BASE, reg_value);
  
@@ -126,7 +127,7 @@ index dddcdd0bb7a3..7a9e542fbf92 100644
  }
  
  static void eu_stall_data_buf_poll_work_fn(struct work_struct *work)
-@@ -818,6 +840,7 @@ static int xe_eu_stall_enable_locked(struct xe_eu_stall_data_stream *stream)
+@@ -840,6 +862,7 @@ static int xe_eu_stall_enable_locked(struct xe_eu_stall_data_stream *stream)
  static int xe_eu_stall_disable_locked(struct xe_eu_stall_data_stream *stream)
  {
  	struct xe_gt *gt = stream->gt;
@@ -134,7 +135,7 @@ index dddcdd0bb7a3..7a9e542fbf92 100644
  
  	if (!stream->enabled)
  		return 0;
-@@ -831,11 +854,19 @@ static int xe_eu_stall_disable_locked(struct xe_eu_stall_data_stream *stream)
+@@ -853,11 +876,19 @@ static int xe_eu_stall_disable_locked(struct xe_eu_stall_data_stream *stream)
  	if (XE_GT_WA(gt, 22016596838))
  		xe_gt_mcr_multicast_write(gt, ROW_CHICKEN2,
  					  REG_MASKED_FIELD_DISABLE(DISABLE_DOP_GATING));
@@ -156,10 +157,10 @@ index dddcdd0bb7a3..7a9e542fbf92 100644
  
  static long xe_eu_stall_stream_ioctl_locked(struct xe_eu_stall_data_stream *stream,
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
-index 82b51f328c1a..a10f9265102b 100644
+index 5d6574ec9dee..f02ac9bf7424 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
-@@ -64,3 +64,4 @@
+@@ -71,3 +71,4 @@
  		GRAPHICS_VERSION(3511)
  16029897822	MEDIA_VERSION(3500)
  		GRAPHICS_VERSION(3510)

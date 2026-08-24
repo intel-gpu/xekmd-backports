@@ -11,6 +11,7 @@ Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
 Reviewed-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
 Link: https://patch.msgid.link/20260702092540.1005095-3-karthik.poosa@intel.com
 Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+
 (cherry-picked from commit 0f800465ecabac95c434a98681124382bcec6207 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -18,18 +19,18 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  1 file changed, 33 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index 47a80fa02..8a992c30d 100644
+index 22b471303984..c1d69db7c340 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
-@@ -19,6 +19,7 @@
- #include "xe_gt_printk.h"
+@@ -21,6 +21,7 @@
  #include "xe_guc_ads.h"
+ #include "xe_hw_engine.h"
  #include "xe_mmio.h"
 +#include "xe_pcode.h"
  #include "xe_pm.h"
  #include "xe_psmi.h"
  #include "xe_pxp_debugfs.h"
-@@ -126,6 +127,22 @@ static int workaround_info(struct seq_file *m, void *data)
+@@ -161,6 +162,22 @@ static int workaround_info(struct seq_file *m, void *data)
  	return 0;
  }
  
@@ -52,7 +53,7 @@ index 47a80fa02..8a992c30d 100644
  static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
  {
  	struct xe_device *xe;
-@@ -186,6 +203,10 @@ static const struct drm_info_list debugfs_list[] = {
+@@ -221,6 +238,10 @@ static const struct drm_info_list debugfs_list[] = {
  	{ .name = "workarounds", .show = workaround_info, },
  };
  
@@ -63,7 +64,7 @@ index 47a80fa02..8a992c30d 100644
  static const struct drm_info_list debugfs_residencies[] = {
  	{ .name = "dgfx_pkg_residencies", .show = dgfx_pkg_residencies_show, },
  	{ .name = "dgfx_pcie_link_residencies", .show = dgfx_pcie_link_residencies_show, },
-@@ -598,6 +619,18 @@ void xe_debugfs_register(struct xe_device *xe)
+@@ -567,6 +588,18 @@ void xe_debugfs_register(struct xe_device *xe)
  					  &inject_csc_hw_error);
  	}
  

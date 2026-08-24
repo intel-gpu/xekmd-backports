@@ -3983,6 +3983,24 @@ index 31cfbdcb5..7f55cbc4d 100644
 +};
 +
  #endif /* _UAPI_XE_DRM_PRELIM_H_ */
+diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
+--- a/drivers/gpu/drm/xe/Makefile
++++ b/drivers/gpu/drm/xe/Makefile
+@@ -381,7 +381,7 @@ endif
+ 
+ # header test
+-hdrtest_find_args := -not -path xe_rtp_helpers.h
++hdrtest_find_args := -not -path xe_rtp_helpers.h
+ ifneq ($(CONFIG_DRM_XE_DISPLAY),y)
+ 	hdrtest_find_args += -not -path display/\* -not -path compat-i915-headers/\* -not -path xe_display.h
+ endif
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug_types.hdrtest b/drivers/gpu/drm/xe/prelim/xe_eudebug_types.hdrtest
+new file mode 100644
+index 000000000..e69de29bb
+--- /dev/null
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug_types.hdrtest
+
 -- 
 2.43.0
 

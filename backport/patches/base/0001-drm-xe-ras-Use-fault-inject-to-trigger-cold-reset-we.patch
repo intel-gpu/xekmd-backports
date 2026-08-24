@@ -15,6 +15,7 @@ Signed-off-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Reviewed-by: Raag Jadav <raag.jadav@intel.com>
 Link: https://patch.msgid.link/20260805071152.1225416-10-mallesh.koujalagi@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+
 (cherry-picked from commit f29c2bd7eaeb73afcdbd4e3bbf54d6f8799a9b06 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -24,10 +25,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  3 files changed, 13 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index 68546d53de82..aa33609a16b4 100644
+index 7f0b6a83235e..54759b0efe4f 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
-@@ -40,6 +40,7 @@
+@@ -42,6 +42,7 @@
  
  DECLARE_FAULT_ATTR(gt_reset_failure);
  DECLARE_FAULT_ATTR(inject_csc_hw_error);
@@ -35,7 +36,7 @@ index 68546d53de82..aa33609a16b4 100644
  
  static bool csc_hw_error_available(struct xe_device *xe)
  {
-@@ -60,6 +61,8 @@ static struct {
+@@ -62,6 +63,8 @@ static struct {
  	{ .name = "inject_csc_hw_error",
  	  .attr = &inject_csc_hw_error,
  	  .is_visible = csc_hw_error_available },
@@ -44,7 +45,7 @@ index 68546d53de82..aa33609a16b4 100644
  };
  
  /*
-@@ -74,6 +77,7 @@ bool xe_fault_##name(void)				\
+@@ -76,6 +79,7 @@ bool xe_fault_##name(void)				\
  
  FAULT_ACTION(gt_reset, gt_reset_failure)
  FAULT_ACTION(csc_hw_error, inject_csc_hw_error)
@@ -70,7 +71,7 @@ index cd56f7442b99..0dcd28fd7dc0 100644
  #endif
  
 diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
-index 6ef3533f4f4d..0900155a3281 100644
+index 68d742d6438f..004599c35aee 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
 @@ -3,6 +3,7 @@
@@ -81,7 +82,7 @@ index 6ef3533f4f4d..0900155a3281 100644
  #include "xe_device.h"
  #include "xe_drm_ras.h"
  #include "xe_pm.h"
-@@ -376,6 +377,12 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+@@ -477,6 +478,12 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
  	size_t rlen;
  	int ret;
  
@@ -96,4 +97,3 @@ index 6ef3533f4f4d..0900155a3281 100644
  
 -- 
 2.43.0
-

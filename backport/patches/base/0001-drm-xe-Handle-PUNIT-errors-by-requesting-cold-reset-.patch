@@ -12,6 +12,7 @@ Signed-off-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Reviewed-by: Raag Jadav <raag.jadav@intel.com>
 Link: https://patch.msgid.link/20260805071152.1225416-9-mallesh.koujalagi@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+
 (cherry-picked from commit 9b00f6153614ca495213f1734b63beae844551eb linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -19,10 +20,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  1 file changed, 7 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
-index 6ab0bd8a3611..6ef3533f4f4d 100644
+index 7c237b920e68..68d742d6438f 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
-@@ -221,6 +221,12 @@ static u8 handle_core_compute_errors(struct xe_ras_error_array *arr)
+@@ -306,6 +306,12 @@ static u8 handle_core_compute_errors(struct xe_ras_error_array *arr)
  	return XE_RAS_RECOVERY_ACTION_RECOVERED;
  }
  
@@ -35,7 +36,7 @@ index 6ab0bd8a3611..6ef3533f4f4d 100644
  static u8 handle_soc_internal_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
  {
  	struct xe_ras_soc_error *info = (void *)arr->details;
-@@ -252,7 +258,7 @@ static u8 handle_soc_internal_errors(struct xe_device *xe, struct xe_ras_error_a
+@@ -337,7 +343,7 @@ static u8 handle_soc_internal_errors(struct xe_device *xe, struct xe_ras_error_a
  			xe_err(xe, "[RAS]: PUNIT %s detected: 0x%x\n",
  			       sev_to_str(counter->common.severity),
  			       ieh_error->global_error_status);
@@ -46,4 +47,3 @@ index 6ab0bd8a3611..6ef3533f4f4d 100644
  	}
 -- 
 2.43.0
-

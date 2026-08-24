@@ -18,6 +18,7 @@ Signed-off-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Reviewed-by: Riana Tauro <riana.tauro@intel.com>
 Link: https://patch.msgid.link/20260715085159.424040-2-mallesh.koujalagi@intel.com
 Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+
 (cherry-picked from commit 8cd24184c0f52f9f4e5a8eafa29ed0078ea33ddd linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -29,7 +30,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  5 files changed, 62 insertions(+), 22 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index 8a992c30dc53..68546d53de82 100644
+index c1d69db7c340..17080c8563de 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
 @@ -5,6 +5,7 @@
@@ -40,7 +41,7 @@ index 8a992c30dc53..68546d53de82 100644
  #include <linux/debugfs.h>
  #include <linux/fault-inject.h>
  #include <linux/string_helpers.h>
-@@ -40,6 +41,55 @@
+@@ -42,6 +43,55 @@
  DECLARE_FAULT_ATTR(gt_reset_failure);
  DECLARE_FAULT_ATTR(inject_csc_hw_error);
  
@@ -96,7 +97,7 @@ index 8a992c30dc53..68546d53de82 100644
  static void read_residency_counter(struct xe_device *xe, struct xe_mmio *mmio,
  				   u32 offset, const char *name, struct drm_printer *p)
  {
-@@ -615,8 +665,6 @@ void xe_debugfs_register(struct xe_device *xe)
+@@ -584,8 +634,6 @@ void xe_debugfs_register(struct xe_device *xe)
  		drm_debugfs_create_files(debugfs_residencies,
  					 ARRAY_SIZE(debugfs_residencies),
  					 root, minor);
@@ -105,7 +106,7 @@ index 8a992c30dc53..68546d53de82 100644
  	}
  
  	/*
-@@ -686,7 +734,7 @@ void xe_debugfs_register(struct xe_device *xe)
+@@ -643,7 +691,7 @@ void xe_debugfs_register(struct xe_device *xe)
  
  	xe_psmi_debugfs_register(xe);
  
@@ -137,10 +138,10 @@ index 17f4c2f1b5e4..cd56f7442b99 100644
  #endif
  
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index ef36052fe90d..c7464af74f60 100644
+index d904527a8898..dfdacc0f6de9 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
-@@ -19,6 +19,7 @@
+@@ -21,6 +21,7 @@
  #include "regs/xe_gt_regs.h"
  #include "xe_assert.h"
  #include "xe_bb.h"
@@ -167,7 +168,7 @@ index ef36052fe90d..c7464af74f60 100644
  
  	xe_gt_info(gt, "reset queued from %ps\n", __builtin_return_address(0));
 diff --git a/drivers/gpu/drm/xe/xe_gt.h b/drivers/gpu/drm/xe/xe_gt.h
-index de7e47763411..c7278247215e 100644
+index 4150aa594f05..f8e3ca63aabb 100644
 --- a/drivers/gpu/drm/xe/xe_gt.h
 +++ b/drivers/gpu/drm/xe/xe_gt.h
 @@ -6,8 +6,6 @@
@@ -193,7 +194,7 @@ index de7e47763411..c7278247215e 100644
  int xe_gt_init_early(struct xe_gt *gt);
  int xe_gt_init(struct xe_gt *gt);
 diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
-index 09464982d13b..d5f8073a5c66 100644
+index 4a4b363fc844..5f2abc9485ff 100644
 --- a/drivers/gpu/drm/xe/xe_hw_error.c
 +++ b/drivers/gpu/drm/xe/xe_hw_error.c
 @@ -4,12 +4,12 @@
@@ -231,7 +232,7 @@ index 09464982d13b..d5f8073a5c66 100644
  static void csc_hw_error_work(struct work_struct *work)
  {
  	struct xe_tile *tile = container_of(work, typeof(*tile), csc_hw_error_work);
-@@ -520,7 +513,7 @@ void xe_hw_error_irq_handler(struct xe_tile *tile, const u32 master_ctl)
+@@ -517,7 +510,7 @@ void xe_hw_error_irq_handler(struct xe_tile *tile, const u32 master_ctl)
  {
  	enum hardware_error hw_err;
  

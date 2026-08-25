@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Date: Tue, 25 Aug 2026 14:22:59 +0530
+Subject: fixup! drm/xe: backport compat fixes for paging engine
+ patches
+
+- Add xe_guc_has_paging_engine() prototype to xe_guc.h (added by
+  commit 0c9a7926bd8e in drm-tip but not included in our backport)
+- Replace usm.reserved_bcs_instance with xe_gt_is_usm_hwe() in
+  xe_hw_engine_is_reserved() (struct member renamed in paging engine
+  setup refactor)
+
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc.h       | 2 ++
+ drivers/gpu/drm/xe/xe_hw_engine.c | 3 +--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc.h b/drivers/gpu/drm/xe/xe_guc.h
+index 5be00760392e..263d3e9c276d 100644
+--- a/drivers/gpu/drm/xe/xe_guc.h
++++ b/drivers/gpu/drm/xe/xe_guc.h
+@@ -100,4 +100,6 @@ static inline bool xe_guc_fw_version_at_least(const struct xe_guc *guc, u32 ver)
+ 	return GUC_FIRMWARE_VER(guc) >= ver;
+ }
+ 
++bool xe_guc_has_paging_engine(struct xe_guc *guc);
++
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_hw_engine.c b/drivers/gpu/drm/xe/xe_hw_engine.c
+index 85a8dab1740b..990ba46e226a 100644
+--- a/drivers/gpu/drm/xe/xe_hw_engine.c
++++ b/drivers/gpu/drm/xe/xe_hw_engine.c
+@@ -1055,8 +1055,7 @@ bool xe_hw_engine_is_reserved(struct xe_hw_engine *hwe)
+ 	    hwe->logical_instance >= gt->ccs_mode)
+ 		return true;
+ 
+-	return xe->info.has_usm && hwe->class == XE_ENGINE_CLASS_COPY &&
+-		hwe->instance == gt->usm.reserved_bcs_instance;
++return xe_gt_is_usm_hwe(gt, hwe);
+ }
+ 
+ const char *xe_hw_engine_class_to_str(enum xe_engine_class class)
+-- 
+2.43.0
+

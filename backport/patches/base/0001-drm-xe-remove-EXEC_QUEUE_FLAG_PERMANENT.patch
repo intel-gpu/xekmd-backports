@@ -22,6 +22,7 @@ Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://patch.msgid.link/20260811133753.1742666-6-nitin.r.gote@intel.com
 Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+
 (cherry-picked from commit b7501c4fd941a9f8e7c8a4d073658b4a49dcbde9 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -35,7 +36,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  7 files changed, 9 insertions(+), 20 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 663decb19304..2fd2bd49717c 100644
+index 3bd83dc8e37e..a97283ab60f9 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -207,9 +207,6 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
@@ -49,10 +50,10 @@ index 663decb19304..2fd2bd49717c 100644
  	if (!q)
  		return ERR_PTR(-ENOMEM);
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index 2f5ccf294675..b65235e29b29 100644
+index 66d0fd3fb49b..275e7ca5dc2e 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-@@ -122,20 +122,18 @@ struct xe_exec_queue {
+@@ -135,20 +135,18 @@ struct xe_exec_queue {
  
  /* queue used for kernel submission only */
  #define EXEC_QUEUE_FLAG_KERNEL			BIT(0)
@@ -94,18 +95,18 @@ index aab59dc647fb..524ac56bdcc7 100644
  		xe_gt_err(gt, "Failed to create queue for GSC submission\n");
  		return PTR_ERR(q);
 diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
-index be787f331768..2dcde1dcc614 100644
+index dd5f1398016f..d2e0b319cbe9 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.c
 +++ b/drivers/gpu/drm/xe/xe_migrate.c
-@@ -496,7 +496,6 @@ int xe_migrate_init(struct xe_migrate *m)
+@@ -472,7 +472,6 @@ int xe_migrate_init(struct xe_migrate *m)
  		 */
- 		m->q = xe_exec_queue_create(xe, vm, logical_mask, 1, hwe,
+ 		m->q = xe_exec_queue_create(xe, vm, logical_mask, 1, hwe0,
  					    EXEC_QUEUE_FLAG_KERNEL |
 -					    EXEC_QUEUE_FLAG_PERMANENT |
  					    EXEC_QUEUE_FLAG_HIGH_PRIORITY |
  					    EXEC_QUEUE_FLAG_MIGRATE |
  					    EXEC_QUEUE_FLAG_LOW_LATENCY, 0);
-@@ -504,7 +503,6 @@ int xe_migrate_init(struct xe_migrate *m)
+@@ -480,7 +479,6 @@ int xe_migrate_init(struct xe_migrate *m)
  		m->q = xe_exec_queue_create_class(xe, primary_gt, vm,
  						  XE_ENGINE_CLASS_COPY,
  						  EXEC_QUEUE_FLAG_KERNEL |

@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Date: Mon, 3 Aug 2026 16:05:31 -0700
+Subject: drm/xe/multi_queue: handle CGP_SYNC wait timeout during VF
+ recovery
+
+The CGP_SYNC wait in xe_guc_exec_queue_group_cgp_sync() only woke on
+sync_pending clearing or GuC stop. During VF migration the CT wakes all
+waiters but sync_pending may still be set (the GuC lost the in-flight
+message), causing the timeout path to fire and ban the group.
+
+Add vf_recovery() as a third wake condition and exclude it from the
+error path so a migration-woken wait returns success rather than
+triggering a GT reset.
+
+Assisted-by: Github-Copilot:Claude-opus-4.8
+Signed-off-by: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260803230528.3428029-8-niranjana.vishwanathapura@intel.com
+
+(cherry-picked from commit 713d515168bdac14a230caac1d4df838d263f0e4 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_submit.c | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index 720d63660d96..19ee24fd7cc6 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -815,13 +815,12 @@ static void xe_guc_exec_queue_group_cgp_sync(struct xe_guc *guc,
+ 	 * Hence, no locking is required here.
+ 	 * Wait for any pending CGP_SYNC_DONE response before updating the
+ 	 * CGP page and sending CGP_SYNC message.
+-	 *
+-	 * FIXME: Support VF migration
+ 	 */
+ 	ret = wait_event_timeout(guc->ct.wq,
+ 				 !READ_ONCE(group->sync_pending) ||
+-				 xe_guc_read_stopped(guc), HZ);
+-	if (!ret || xe_guc_read_stopped(guc)) {
++				 xe_guc_read_stopped(guc) || vf_recovery(guc),
++				 HZ);
++	if ((!ret && !vf_recovery(guc)) || xe_guc_read_stopped(guc)) {
+ 		/* CGP_SYNC failed. Reset gt, cleanup the group */
+ 		xe_gt_warn(guc_to_gt(guc), "Wait for CGP_SYNC_DONE response failed!\n");
+ 		set_exec_queue_group_banned(q);
+-- 
+2.43.0
+

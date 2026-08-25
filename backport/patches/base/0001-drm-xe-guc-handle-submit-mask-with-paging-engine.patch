@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Fri, 26 Jun 2026 12:15:28 +0100
+Subject: drm/xe/guc: handle submit mask with paging engine
+
+We need to re-map the submit mask so that we correctly account for the
+logical mask of paging engines, if the GUC_PAGING_CLASS is in play. We
+could also have multiple instances (possible on VF), so we need to
+handle that also.
+
+v2 (Daniele):
+  - Move the implementation to guc_submit.c
+
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Cc: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Link: https://patch.msgid.link/20260626111520.487997-19-matthew.auld@intel.com
+
+(cherry-picked from commit d4438cf37005f7c1e12e5a79844be5c5ca35ea7c linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_submit.c | 24 +++++++++++++++++++++++-
+ 1 file changed, 23 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index ac15b687ae74..7d8225056b44 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -961,6 +961,27 @@ static void __register_exec_queue(struct xe_guc *guc,
+ 	xe_guc_ct_send(&guc->ct, action, ARRAY_SIZE(action), 0, 0);
+ }
+ 
++static u32 xe_hwe_guc_logical_to_submit_mask(struct xe_hw_engine *hwe, u32 logical_mask)
++{
++	struct xe_gt *gt = hwe->gt;
++
++	if (xe_gt_is_usm_hwe(gt, hwe)) {
++		int shift = gt->usm.paging_hwe0->logical_instance;
++		u32 paging_logical_mask = gt->usm.paging_logical_mask;
++
++		xe_gt_assert(gt, (logical_mask & paging_logical_mask) == logical_mask);
++
++		/*
++		 * Remap to GUC_PAGING_CLASS logical instance mask, if
++		 * applicable.
++		 */
++		if (xe_guc_has_paging_engine(&hwe->gt->uc.guc))
++			return logical_mask >> shift;
++	}
++
++	return logical_mask;
++}
++
+ static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
+ {
+ 	struct xe_guc *guc = exec_queue_to_guc(q);
+@@ -974,7 +995,8 @@ static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
+ 	memset(&info, 0, sizeof(info));
+ 	info.context_idx = q->guc->id;
+ 	info.engine_class = xe_hwe_to_guc_class(q->hwe);
+-	info.engine_submit_mask = q->logical_mask;
++	info.engine_submit_mask =
++		xe_hwe_guc_logical_to_submit_mask(q->hwe, q->logical_mask);
+ 	info.hwlrca_lo = lower_32_bits(xe_lrc_descriptor(lrc));
+ 	info.hwlrca_hi = upper_32_bits(xe_lrc_descriptor(lrc));
+ 	info.flags = CONTEXT_REGISTRATION_FLAG_KMD |
+-- 
+2.43.0
+

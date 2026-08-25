@@ -838,7 +838,7 @@ index e596a5883772..0f67c537476b 100644
  
 -	return xe_guc_ct_send(&guc->ct, action,
 -			ARRAY_SIZE(action), 0, 0);
-+	return 0;
++	return ret;
  }
  
  static void set_eu_kernel_debug(struct xe_exec_queue *q)

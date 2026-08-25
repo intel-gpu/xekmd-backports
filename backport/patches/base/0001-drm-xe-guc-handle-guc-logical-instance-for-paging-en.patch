@@ -1,0 +1,231 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Fri, 26 Jun 2026 12:15:27 +0100
+Subject: drm/xe/guc: handle guc logical instance for paging engine
+
+In the GuC backend, we need a different logical instance when referring
+to the reserved paging engine. Under the hood, this is still just the
+same physical BSC engine, however from the GuC POV this is actually
+re-mapped to a separate GUC_PAGING_CLASS, with the logical index
+starting from zero.
+
+The idea is to not leak this into the upper layers, since this is GuC
+version specific, so the changes here are purely on the GuC side.
+
+No functional change.
+
+v2:
+  - Add some kernel-doc to explain the usage.
+  - Move the implementation to guc.c
+
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Cc: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Link: https://patch.msgid.link/20260626111520.487997-18-matthew.auld@intel.com
+
+(backported from commit 07bb6ba65524e934b87e792c8231ff84195e2719 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c |  3 +-
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c  |  3 +-
+ drivers/gpu/drm/xe/xe_guc.c                 | 54 ++++++++++++++++++---
+ drivers/gpu/drm/xe/xe_guc.h                 |  1 +
+ drivers/gpu/drm/xe/xe_guc_ads.c             |  5 +-
+ drivers/gpu/drm/xe/xe_guc_engine_activity.c |  6 ++-
+ drivers/gpu/drm/xe/xe_hw_engine_types.h     |  7 ++-
+ 7 files changed, 65 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c
+index f28c7ae0e8c2..0f242db775e1 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_debugfs.c
+@@ -382,9 +382,10 @@ static ssize_t sched_group_engines_read(struct file *file, char __user *buf,
+ 	if (group < num_groups) {
+ 		for_each_hw_engine(hwe, gt, id) {
+ 			u8 guc_class = xe_hwe_to_guc_class(hwe);
++			u16 guc_logical_instance = xe_hwe_guc_logical_instance(hwe);
+ 			u32 mask = groups[group].engines[guc_class];
+ 
+-			if (mask & BIT(hwe->logical_instance)) {
++			if (mask & BIT(guc_logical_instance)) {
+ 				strlcat(engines, hwe->name, sizeof(engines));
+ 				strlcat(engines, " ", sizeof(engines));
+ 			}
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
+index cf117bf52d41..cdfe194926d3 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_policy.c
+@@ -472,6 +472,7 @@ static void pf_sched_group_media_slices(struct xe_gt *gt, struct guc_sched_group
+ 
+ 	for_each_hw_engine(hwe, gt, id) {
+ 		u8 guc_class = xe_hwe_to_guc_class(hwe);
++		u16 guc_logical_instance = xe_hwe_guc_logical_instance(hwe);
+ 
+ 		switch (hwe->class) {
+ 		case XE_ENGINE_CLASS_VIDEO_DECODE:
+@@ -490,7 +491,7 @@ static void pf_sched_group_media_slices(struct xe_gt *gt, struct guc_sched_group
+ 			slice = 0;
+ 		}
+ 
+-		values[slice_to_group[slice]].engines[guc_class] |= BIT(hwe->logical_instance);
++		values[slice_to_group[slice]].engines[guc_class] |= BIT(guc_logical_instance);
+ 	}
+ 
+ 	*groups = values;
+diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
+index b2528cdfe642..bbf6dfb74532 100644
+--- a/drivers/gpu/drm/xe/xe_guc.c
++++ b/drivers/gpu/drm/xe/xe_guc.c
+@@ -102,14 +102,6 @@ static u32 guc_ctl_feature_flags(struct xe_guc *guc)
+ 	if (xe_device_is_l2_flush_optimized(xe) && xe_gt_is_media_type(guc_to_gt(guc)))
+ 		flags |= GUC_CTL_ENABLE_L2FLUSH_OPT;
+ 
+-	/*
+-	 * On GuC firmware 70.66 and above, the GUC_FEATURE_KLV_DISABLE_MULTI_QUEUE
+-	 * Feature KLV is used instead.
+-	 */
+-	if (!xe_configfs_get_enable_multi_queue(to_pci_dev(xe->drm.dev)) &&
+-	    !GUC_FIRMWARE_VER_AT_LEAST(guc, 70, 66))
+-		flags |= GUC_CTL_DISABLE_MULTI_QUEUE;
+-
+ 	return flags;
+ }
+ 
+@@ -1864,6 +1856,52 @@ bool xe_guc_using_main_gamctrl_queues(struct xe_guc *guc)
+ 	return GT_VER(gt) >= 35;
+ }
+ 
++bool xe_guc_has_paging_engine(struct xe_guc *guc)
++{
++	/*
++	 * On newer platforms the GuC now has a dedicated engine class for the
++	 * special PAGING engine, which is the driver reserved BCS engine used
++	 * for KMD paging/binding operations. GuC requires KMD to refer to this
++	 * using the special PAGING engine class. Note that there is no new hw
++	 * engine here, this is purely a sw view in the GuC itself, which we
++	 * need to respect.
++	 */
++
++	/* TODO: Have some way to query this from the GuC? */
++	return false;
++}
++
++/**
++ * xe_hwe_guc_logical_instance - Get the GuC-aligned logical instance of a
++ * hardware engine.
++ * @hwe: Hardware engine.
++ *
++ * For GuC backend usage, we should no longer use the raw logical instance
++ * directly. This helper must be used to retrieve the logical instance of the
++ * hardware engine, taking care of any necessary adjustments (such as the GuC
++ * PAGING engine mapping). This is assumed to be used in conjunction with the
++ * GuC engine class.
++ *
++ * Return: Logical instance, taking into account for stuff like GuC PAGING
++ * engine mapping.
++ */
++u16 xe_hwe_guc_logical_instance(struct xe_hw_engine *hwe)
++{
++	struct xe_gt *gt = hwe->gt;
++
++	if (xe_guc_has_paging_engine(&hwe->gt->uc.guc) &&
++	    xe_gt_is_usm_hwe(gt, hwe)) {
++		int shift = gt->usm.paging_hwe0->logical_instance;
++
++		xe_gt_assert(gt, shift <= hwe->logical_instance);
++
++		/* GUC_PAGING_CLASS:guc_logical_instance */
++		return hwe->logical_instance - shift;
++	}
++
++	return hwe->logical_instance;
++}
++
+ #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
+ #include "tests/xe_guc_g2g_test.c"
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_guc.h b/drivers/gpu/drm/xe/xe_guc.h
+index 12faf0ba7229..5be00760392e 100644
+--- a/drivers/gpu/drm/xe/xe_guc.h
++++ b/drivers/gpu/drm/xe/xe_guc.h
+@@ -68,6 +68,7 @@ int xe_guc_g2g_test_notification(struct xe_guc *guc, u32 *payload, u32 len);
+ #endif
+ 
+ u16 xe_hwe_to_guc_class(struct xe_hw_engine *hwe);
++u16 xe_hwe_guc_logical_instance(struct xe_hw_engine *hwe);
+ 
+ static inline struct xe_gt *guc_to_gt(struct xe_guc *guc)
+ {
+diff --git a/drivers/gpu/drm/xe/xe_guc_ads.c b/drivers/gpu/drm/xe/xe_guc_ads.c
+index 86b3261704bd..f6e0be16e084 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ads.c
++++ b/drivers/gpu/drm/xe/xe_guc_ads.c
+@@ -592,11 +592,14 @@ static void guc_mapping_table_init(struct xe_gt *gt,
+ 	guc_mapping_table_init_invalid(gt, info_map);
+ 
+ 	for_each_hw_engine(hwe, gt, id) {
++		u16 guc_logical_instance;
+ 		u8 guc_class;
+ 
+ 		guc_class = xe_hwe_to_guc_class(hwe);
++		guc_logical_instance = xe_hwe_guc_logical_instance(hwe);
++
+ 		info_map_write(xe, info_map,
+-			       mapping_table[guc_class][hwe->logical_instance],
++			       mapping_table[guc_class][guc_logical_instance],
+ 			       hwe->instance);
+ 	}
+ }
+diff --git a/drivers/gpu/drm/xe/xe_guc_engine_activity.c b/drivers/gpu/drm/xe/xe_guc_engine_activity.c
+index 150d891d5a09..2feb87492312 100644
+--- a/drivers/gpu/drm/xe/xe_guc_engine_activity.c
++++ b/drivers/gpu/drm/xe/xe_guc_engine_activity.c
+@@ -28,6 +28,7 @@ static struct iosys_map engine_activity_map(struct xe_guc *guc, struct xe_hw_eng
+ 	struct xe_guc_engine_activity *engine_activity = &guc->engine_activity;
+ 	struct engine_activity_buffer *buffer;
+ 	u16 guc_class = xe_hwe_to_guc_class(hwe);
++	u16 guc_logical_instance = xe_hwe_guc_logical_instance(hwe);
+ 	size_t offset;
+ 
+ 	if (engine_activity->num_functions) {
+@@ -39,7 +40,7 @@ static struct iosys_map engine_activity_map(struct xe_guc *guc, struct xe_hw_eng
+ 	}
+ 
+ 	offset += offsetof(struct guc_engine_activity_data,
+-			  engine_activity[guc_class][hwe->logical_instance]);
++			  engine_activity[guc_class][guc_logical_instance]);
+ 
+ 	return IOSYS_MAP_INIT_OFFSET(&buffer->activity_bo->vmap, offset);
+ }
+@@ -151,8 +152,9 @@ static struct engine_activity *hw_engine_to_engine_activity(struct xe_hw_engine
+ 	struct xe_guc *guc = &hwe->gt->uc.guc;
+ 	struct engine_activity_group *eag = &guc->engine_activity.eag[index];
+ 	u16 guc_class = xe_hwe_to_guc_class(hwe);
++	u16 guc_logical_instance = xe_hwe_guc_logical_instance(hwe);
+ 
+-	return &eag->engine[guc_class][hwe->logical_instance];
++	return &eag->engine[guc_class][guc_logical_instance];
+ }
+ 
+ static u64 cpu_ns_to_guc_tsc_tick(ktime_t ns, u32 freq)
+diff --git a/drivers/gpu/drm/xe/xe_hw_engine_types.h b/drivers/gpu/drm/xe/xe_hw_engine_types.h
+index 84c097da9b6f..ff115ab429fb 100644
+--- a/drivers/gpu/drm/xe/xe_hw_engine_types.h
++++ b/drivers/gpu/drm/xe/xe_hw_engine_types.h
+@@ -114,7 +114,12 @@ struct xe_hw_engine {
+ 	enum xe_engine_class class;
+ 	/** @instance: physical instance of this hw engine */
+ 	u16 instance;
+-	/** @logical_instance: logical instance of this hw engine */
++	/**
++	 * @logical_instance: logical instance of this hw engine.
++	 *
++	 * Note: For GuC usage, always use xe_hwe_guc_logical_instance().
++	 * For GuC usage, we should no longer use the raw logical instance.
++	 */
+ 	u16 logical_instance;
+ 	/** @irq_offset: IRQ offset of this hw engine */
+ 	u16 irq_offset;
+-- 
+2.43.0
+

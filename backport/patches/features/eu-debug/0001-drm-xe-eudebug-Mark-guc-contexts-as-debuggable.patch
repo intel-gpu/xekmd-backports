@@ -67,7 +67,7 @@ index 281d4af419d6..95ef329b5e94 100644
  	GUC_WA_KLV_REMAP_RANGED_TLB_INV							= 0x900f,
  	GUC_WA_KLV_IGNORE_MMIO_READ_SEM_TOKEN_64					= 0x9010,
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 8470d6a7679f..73b3f4975cc1 100644
+index a01b067dcda1..62d01c582835 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -19,6 +19,7 @@
@@ -78,7 +78,7 @@ index 8470d6a7679f..73b3f4975cc1 100644
  #include "xe_hw_engine_class_sysfs.h"
  #include "xe_hw_engine_group.h"
  #include "xe_irq.h"
-@@ -1000,6 +1001,7 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+@@ -998,6 +999,7 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
  				  u64 value)
  {
  	const u64 known_flags = DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE;
@@ -86,7 +86,7 @@ index 8470d6a7679f..73b3f4975cc1 100644
  
  	if (XE_IOCTL_DBG(xe, (q->class != XE_ENGINE_CLASS_RENDER &&
  			      q->class != XE_ENGINE_CLASS_COMPUTE)))
-@@ -1011,6 +1013,9 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+@@ -1009,6 +1011,9 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
  	if (XE_IOCTL_DBG(xe, !IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)))
  		return -EOPNOTSUPP;
  
@@ -97,11 +97,11 @@ index 8470d6a7679f..73b3f4975cc1 100644
  		return -EINVAL;
  	/*
 diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
-index b2528cdfe642..8b16da828f95 100644
+index bbf6dfb74532..5c4361c694ec 100644
 --- a/drivers/gpu/drm/xe/xe_guc.c
 +++ b/drivers/gpu/drm/xe/xe_guc.c
-@@ -1864,6 +1864,23 @@ bool xe_guc_using_main_gamctrl_queues(struct xe_guc *guc)
- 	return GT_VER(gt) >= 35;
+@@ -1902,6 +1902,23 @@ u16 xe_hwe_guc_logical_instance(struct xe_hw_engine *hwe)
+ 	return hwe->logical_instance;
  }
  
 +bool xe_guc_has_debug_contexts(struct xe_guc *guc)
@@ -112,9 +112,9 @@ index b2528cdfe642..8b16da828f95 100644
 +
 +	if (MAKE_GUC_VER_STRUCT(*version) < MAKE_GUC_VER_STRUCT(required)) {
 +		xe_gt_info(gt,
-+			   "debug context unsupported in GuC interface v%u.%u.%u, need v%u.%u.%u or higher\n",
-+			   version->major, version->minor, version->patch, required.major,
-+			   required.minor, required.patch);
++					"debug context unsupported in GuC interface v%u.%u.%u, need v%u.%u.%u or higher\n",
++					version->major, version->minor, version->patch, required.major,
++					required.minor, required.patch);
 +		return false;
 +	}
 +
@@ -125,7 +125,7 @@ index b2528cdfe642..8b16da828f95 100644
  #include "tests/xe_guc_g2g_test.c"
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_guc.h b/drivers/gpu/drm/xe/xe_guc.h
-index 02514914f404..9c6b3845d0bc 100644
+index 263d3e9c276d..e9b386ff51cb 100644
 --- a/drivers/gpu/drm/xe/xe_guc.h
 +++ b/drivers/gpu/drm/xe/xe_guc.h
 @@ -29,6 +29,8 @@
@@ -146,12 +146,12 @@ index 02514914f404..9c6b3845d0bc 100644
  #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
  int xe_guc_g2g_test_notification(struct xe_guc *guc, u32 *payload, u32 len);
 diff --git a/drivers/gpu/drm/xe/xe_guc_ads.c b/drivers/gpu/drm/xe/xe_guc_ads.c
-index 3c1accd6955f..44b114788615 100644
+index f6e0be16e084..eb31efb152b7 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ads.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ads.c
-@@ -367,6 +367,23 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
- 				 GUC_FEATURE_KLV_DISABLE_MULTI_QUEUE);
- 	}
+@@ -397,6 +397,23 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
+ 		guc_waklv_enable(ads, NULL, 0, &offset, &remain,
+ 				 GUC_WA_KLV_IGNORE_MMIO_READ_SEM_TOKEN_64);
  
 +#if IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)
 +	if (XE_GT_WA(gt, 14022766366)) {
@@ -160,7 +160,7 @@ index 3c1accd6955f..44b114788615 100644
 +					GUC_WA_KLV_RESET_DEP_ENGINES_ON_DEBUG_CTX_SWITCH);
 +		} else  {
 +			const struct xe_uc_fw_version required =
-+					XE_UC_FW_VERSION_DEBUG_CONTEXTS;
++				XE_UC_FW_VERSION_DEBUG_CONTEXTS;
 +
 +			xe_gt_info(gt, "eudebug needs GuC version %u.%u.%u or greater\n",
 +					required.major,
@@ -174,7 +174,7 @@ index 3c1accd6955f..44b114788615 100644
  	if (!size)
  		return;
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 80b69f7d0dc9..c0f4b984e3d6 100644
+index f32180b67be0..20e7aa52a513 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
 @@ -916,6 +916,34 @@ static void __register_exec_queue_group(struct xe_exec_queue *q,
@@ -212,7 +212,7 @@ index 80b69f7d0dc9..c0f4b984e3d6 100644
  static void __register_mlrc_exec_queue(struct xe_guc *guc,
  				       struct xe_exec_queue *q,
  				       struct guc_ctxt_registration_info *info)
-@@ -3210,6 +3238,9 @@ static void deregister_exec_queue(struct xe_guc *guc, struct xe_exec_queue *q)
+@@ -3160,6 +3188,9 @@ static void deregister_exec_queue(struct xe_guc *guc, struct xe_exec_queue *q)
  	else
  		xe_guc_ct_send_g2h_handler(&guc->ct, action,
  					   ARRAY_SIZE(action));

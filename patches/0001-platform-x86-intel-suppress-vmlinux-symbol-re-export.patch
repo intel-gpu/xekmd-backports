@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akanksha Hotta <akanksha.hotta@intel.com>
+Date: Tue, 25 Aug 2026 21:07:09 +0530
+Subject: platform/x86/intel: suppress vmlinux symbol re-exports for
+ PMT/VSEC
+
+When building against kernels that have CONFIG_INTEL_PMT_CLASS=y or
+CONFIG_INTEL_VSEC=y (built-in, not module), the backport modules re-export the
+same symbols that are already in vmlinux which causing compilation failure.
+
+Add guards in respective files that turn EXPORT_SYMBOL_NS_GPL and
+EXPORT_SYMBOL_GPL into no-ops when CONFIG_INTEL_PMT_CLASS or CONFIG_INTEL_VSEC
+is enabled in the target kernel's config, which resolves exported symbol
+twice" errors without affecting module-build kernels.
+
+Reference:
+   d908084385a4 platform/x86/intel/pmt: Add INTEL_PMT module namespace
+
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/platform/x86/intel/pmt/class.h    | 7 +++++++
+ drivers/platform/x86/intel/pmt/features.c | 1 +
+ drivers/platform/x86/intel/vsec.c         | 5 +++++
+ 3 files changed, 13 insertions(+)
+
+diff --git a/drivers/platform/x86/intel/pmt/class.h b/drivers/platform/x86/intel/pmt/class.h
+index b355aec..67b6d8b 100644
+--- a/drivers/platform/x86/intel/pmt/class.h
++++ b/drivers/platform/x86/intel/pmt/class.h
+@@ -11,6 +11,13 @@
+ 
+ #include "telemetry.h"
+ 
++#ifdef CONFIG_INTEL_PMT_CLASS
++#undef EXPORT_SYMBOL_NS_GPL
++#define EXPORT_SYMBOL_NS_GPL(sym, ns)
++#undef EXPORT_SYMBOL_GPL
++#define EXPORT_SYMBOL_GPL(sym)
++#endif
++
+ /* PMT access types */
+ #define ACCESS_BARID		2
+ #define ACCESS_LOCAL		3
+diff --git a/drivers/platform/x86/intel/pmt/features.c b/drivers/platform/x86/intel/pmt/features.c
+index 8a39cdd..733fdf7 100644
+--- a/drivers/platform/x86/intel/pmt/features.c
++++ b/drivers/platform/x86/intel/pmt/features.c
+@@ -10,6 +10,7 @@
+ #include <linux/types.h>
+ 
+ #include <linux/intel_pmt_features.h>
++#include "class.h"
+ 
+ const char * const pmt_feature_names[] = {
+ 	[FEATURE_PER_CORE_PERF_TELEM]	= "per_core_performance_telemetry",
+diff --git a/drivers/platform/x86/intel/vsec.c b/drivers/platform/x86/intel/vsec.c
+index 581fa52..389efb0 100644
+--- a/drivers/platform/x86/intel/vsec.c
++++ b/drivers/platform/x86/intel/vsec.c
+@@ -33,6 +33,11 @@
+ #define PMT_XA_MAX			INT_MAX
+ #define PMT_XA_LIMIT			XA_LIMIT(PMT_XA_START, PMT_XA_MAX)
+ 
++#ifdef CONFIG_INTEL_VSEC
++#undef EXPORT_SYMBOL_NS_GPL
++#define EXPORT_SYMBOL_NS_GPL(sym, ns)
++#endif
++
+ static DEFINE_IDA(intel_vsec_ida);
+ static DEFINE_IDA(intel_vsec_sdsi_ida);
+ static DEFINE_XARRAY_ALLOC(auxdev_array);
+-- 
+2.43.0
+

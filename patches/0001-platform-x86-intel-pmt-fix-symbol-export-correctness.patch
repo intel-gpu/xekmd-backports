@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akanksha Hotta <akanksha.hotta@intel.com>
+Date: Tue, 25 Aug 2026 23:21:06 +0530
+Subject: platform/x86/intel/pmt: fix symbol export correctness and
+ vmlinux conflict
+
+Change EXPORT_SYMBOL to EXPORT_SYMBOL_GPL for intel_pmt_get_regions_by_feature()
+and intel_pmt_put_feature_group(), which are GPL-only backport APIs that were
+mistakenly exported without the GPL restriction
+
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/platform/x86/intel/pmt/telemetry.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/platform/x86/intel/pmt/telemetry.c b/drivers/platform/x86/intel/pmt/telemetry.c
+index 3e20a4d..3af6fd4 100644
+--- a/drivers/platform/x86/intel/pmt/telemetry.c
++++ b/drivers/platform/x86/intel/pmt/telemetry.c
+@@ -288,13 +288,13 @@ struct pmt_feature_group *intel_pmt_get_regions_by_feature(enum pmt_feature_id i
+ 
+ 	return no_free_ptr(feature_group);
+ }
+-EXPORT_SYMBOL(intel_pmt_get_regions_by_feature);
++EXPORT_SYMBOL_GPL(intel_pmt_get_regions_by_feature);
+ 
+ void intel_pmt_put_feature_group(struct pmt_feature_group *feature_group)
+ {
+ 	kref_put(&feature_group->kref, pmt_feature_group_release);
+ }
+-EXPORT_SYMBOL(intel_pmt_put_feature_group);
++EXPORT_SYMBOL_GPL(intel_pmt_put_feature_group);
+ 
+ int pmt_telem_read(struct telem_endpoint *ep, u32 id, u64 *data, u32 count)
+ {
+-- 
+2.43.0
+

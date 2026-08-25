@@ -32,10 +32,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  3 files changed, 8 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 82bc222de73d..1ff752544072 100644
+index 683100534..3e8cbbaf8 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -587,6 +587,9 @@
+@@ -582,6 +582,9 @@
  #define   QID_WAIT_FOR_THREAD_NOT_RUN_DISABLE	REG_BIT(12)
  #define   EUSTALL_PERF_SAMPLING_DISABLE		REG_BIT(5)
  
@@ -46,7 +46,7 @@ index 82bc222de73d..1ff752544072 100644
  #define   DISABLE_D8_D16_COASLESCE		REG_BIT(30)
  #define   WR_REQ_CHAINING_DIS			REG_BIT(26)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 1df47db92607..8dfbb969d721 100644
+index 1df47db92..8dfbb969d 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -2458,6 +2458,10 @@ static void xe_eudebug_reinit_hw_engine(struct xe_hw_engine *hwe, bool enable)
@@ -61,11 +61,11 @@ index 1df47db92607..8dfbb969d721 100644
  		add_sr_entry(hwe, TD_CTL,
  			     TD_CTL_BREAKPOINT_ENABLE |
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
-index 91c62fc30928..552264e8e13f 100644
+index f90aa848d..eef123a7b 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
-@@ -64,6 +64,7 @@
- 
+@@ -55,6 +55,7 @@
+ 14015474168	PLATFORM(PVC)
  14022766366	GRAPHICS_VERSION_RANGE(2001, 2004)
  		GRAPHICS_VERSION_RANGE(3000, 3005)
 +14024339748	GRAPHICS_VERSION(3510)

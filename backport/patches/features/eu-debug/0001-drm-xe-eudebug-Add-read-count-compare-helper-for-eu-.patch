@@ -12,15 +12,17 @@ have changed on a state between eu attentions.
 Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 091a0aa0321f8d3b0b2fdec6c5d7cd8157b73d53 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit e32d22ddba2a397e195c6e5a3dc1b9b43b886cb6 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/xe_gt_debug.c | 64 ++++++++++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_gt_debug.h |  6 +++
  2 files changed, 70 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.c b/drivers/gpu/drm/xe/xe_gt_debug.c
-index 314eef673..8386a527a 100644
+index 314eef6734c3..8386a527adf0 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug.c
 +++ b/drivers/gpu/drm/xe/xe_gt_debug.c
 @@ -3,6 +3,7 @@
@@ -99,7 +101,7 @@ index 314eef673..8386a527a 100644
 +	return count;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.h b/drivers/gpu/drm/xe/xe_gt_debug.h
-index f882770e1..aba36bc5f 100644
+index f882770e18d3..aba36bc5f85d 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug.h
 +++ b/drivers/gpu/drm/xe/xe_gt_debug.h
 @@ -38,4 +38,10 @@ int xe_gt_eu_attention_bitmap_size(struct xe_gt *gt);

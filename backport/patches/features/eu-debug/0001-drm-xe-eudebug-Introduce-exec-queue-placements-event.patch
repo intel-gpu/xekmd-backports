@@ -15,8 +15,10 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Co-authored-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Reviewed-by: Andrzej Hajda <andrzej.hajda@intel.com>
 Reviewed-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
-(backported from commit 7b2b75faf8d29c5689dc7fe1e79b0edc8b451661 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit 0edce123cdf3da1c41140671e30e6335f2b33e8a drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/xe_eudebug.c       | 100 +++++++++++++++++++++++---
  drivers/gpu/drm/xe/xe_eudebug_types.h |  32 +++++++++
@@ -24,7 +26,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  3 files changed, 151 insertions(+), 22 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index d9f386c6d..1df47db92 100644
+index 5c8789d6325b..f87100580adc 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -920,7 +920,7 @@ static struct xe_eudebug_event *
@@ -45,7 +47,7 @@ index d9f386c6d..1df47db92 100644
  	long ret = 0;
  
  	if (XE_IOCTL_DBG(xe, copy_from_user(&user_event, user_orig, sizeof(user_event))))
-@@ -2879,12 +2879,88 @@ static int send_exec_queue_event(struct xe_eudebug *d, u32 flags,
+@@ -2881,12 +2881,88 @@ static int send_exec_queue_event(struct xe_eudebug *d, u32 flags,
  	return xe_eudebug_queue_event(d, event);
  }
  
@@ -136,7 +138,7 @@ index d9f386c6d..1df47db92 100644
  
  	if (!xe_exec_queue_is_debuggable(q))
  		return 0;
-@@ -2925,9 +3001,15 @@ static int exec_queue_create_event(struct xe_eudebug *d,
+@@ -2927,9 +3003,15 @@ static int exec_queue_create_event(struct xe_eudebug *d,
  	 * we disconnect
  	 */
  
@@ -155,7 +157,7 @@ index d9f386c6d..1df47db92 100644
  }
  
  static int exec_queue_destroy_event(struct xe_eudebug *d,
-@@ -2990,7 +3072,7 @@ void xe_eudebug_exec_queue_create(struct xe_file *xef, struct xe_exec_queue *q)
+@@ -2992,7 +3074,7 @@ void xe_eudebug_exec_queue_create(struct xe_file *xef, struct xe_exec_queue *q)
  	if (!d)
  		return;
  
@@ -164,7 +166,7 @@ index d9f386c6d..1df47db92 100644
  }
  
  void xe_eudebug_exec_queue_destroy(struct xe_file *xef, struct xe_exec_queue *q)
-@@ -3723,7 +3805,7 @@ static int discover_client(struct xe_eudebug *d, struct xe_file *xef)
+@@ -3729,7 +3811,7 @@ static int discover_client(struct xe_eudebug *d, struct xe_file *xef)
  		if (!exec_queue_class_is_tracked(q->class))
  			continue;
  
@@ -174,10 +176,10 @@ index d9f386c6d..1df47db92 100644
  			break;
  	}
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index 5d4301fc6..88b1d2eb5 100644
+index 7bd4032e19c4..9ae5bb129223 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
-@@ -494,4 +494,36 @@ struct xe_eudebug_event_sync_host {
+@@ -495,4 +495,36 @@ struct xe_eudebug_event_sync_host {
  	u64 lrc_handle;
  };
  
@@ -215,7 +217,7 @@ index 5d4301fc6..88b1d2eb5 100644
 +
  #endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
-index 9af458bbf..e72fc8ba3 100644
+index 9af458bbff15..e72fc8ba330e 100644
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ b/include/uapi/drm/xe_drm_eudebug.h
 @@ -28,19 +28,20 @@ struct drm_xe_eudebug_event {

@@ -13,8 +13,10 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 8e4e6ae84dc7ba2ddd3b6a3adc9809be81e1daa6 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit e3574aac035633606b65b6352a267948ace258f1 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h |  4 +-
  drivers/gpu/drm/xe/xe_eudebug.c      | 82 +++++++++++++++-------------
@@ -23,7 +25,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  4 files changed, 88 insertions(+), 61 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 56a885fb66c1..cd629c71cfa7 100644
+index a830ae9edd16..46694163c0bc 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 @@ -527,7 +527,7 @@
@@ -45,10 +47,10 @@ index 56a885fb66c1..cd629c71cfa7 100644
  #define ROW_CHICKEN3				XE_REG_MCR(0xe49c, XE_REG_OPTION_MASKED)
  #define   XE2_EUPEND_CHK_FLUSH_DIS		REG_BIT(14)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 2704c4ebed52..eddcbfb4e911 100644
+index 061688c92fb2..33458c294b62 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -1877,29 +1877,31 @@ static int check_attn_mcr(struct xe_gt *gt, void *data,
+@@ -1879,29 +1879,31 @@ static int check_attn_mcr(struct xe_gt *gt, void *data,
  {
  	struct ss_iter *iter = data;
  	struct xe_eudebug *d = iter->debugger;
@@ -97,7 +99,7 @@ index 2704c4ebed52..eddcbfb4e911 100644
  		}
  	}
  
-@@ -1911,35 +1913,37 @@ static int clear_attn_mcr(struct xe_gt *gt, void *data,
+@@ -1913,35 +1915,37 @@ static int clear_attn_mcr(struct xe_gt *gt, void *data,
  {
  	struct ss_iter *iter = data;
  	struct xe_eudebug *d = iter->debugger;

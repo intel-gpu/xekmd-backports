@@ -26,8 +26,10 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 9f71a01d99d2bc728a5eea70c16fc09a1c3e888f drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit 6af96b5c82d5608aa15f5ebc38fc16c93aac45ee drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h  |   2 +
  drivers/gpu/drm/xe/xe_eudebug.c       | 521 +++++++++++++++++++++++++-
@@ -38,7 +40,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  6 files changed, 596 insertions(+), 25 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 1becdab1c7c0..74d7bdf900c3 100644
+index b386a7a8b329..2e6460a4ad2a 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 @@ -538,6 +538,8 @@
@@ -51,7 +53,7 @@ index 1becdab1c7c0..74d7bdf900c3 100644
  #define   XE2_EUPEND_CHK_FLUSH_DIS		REG_BIT(14)
  #define   DIS_EU_GRF_POISON_TO_LSC		REG_BIT(13)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index e48c0fd50a19..b803685ca4dc 100644
+index c3422f5afa78..7cfefb15cba4 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -23,6 +23,7 @@
@@ -382,7 +384,7 @@ index e48c0fd50a19..b803685ca4dc 100644
  static int send_attention_event(struct xe_eudebug *d, struct xe_exec_queue *q, int lrc_idx)
  {
  	struct xe_eudebug_event_eu_attention *ea;
-@@ -1280,6 +1521,261 @@ static void attention_scan_flush(struct xe_device *xe)
+@@ -1282,6 +1523,261 @@ static void attention_scan_flush(struct xe_device *xe)
  	mod_delayed_work(system_wq, &xe->eudebug.attention_scan, 0);
  }
  
@@ -644,7 +646,7 @@ index e48c0fd50a19..b803685ca4dc 100644
  static void discovery_work_fn(struct work_struct *work);
  
  static int
-@@ -1339,6 +1835,7 @@ xe_eudebug_connect(struct xe_device *xe,
+@@ -1341,6 +1837,7 @@ xe_eudebug_connect(struct xe_device *xe,
  		goto err_detach;
  	}
  
@@ -653,10 +655,10 @@ index e48c0fd50a19..b803685ca4dc 100644
  	queue_work(xe->eudebug.ordered_wq, &d->discovery_work);
  	attention_scan_flush(xe);
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index 3ecce8e4c800..4a4e192a6194 100644
+index 3d0212996e75..430615c4effc 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
-@@ -19,8 +19,12 @@
+@@ -20,8 +20,12 @@
  
  struct xe_device;
  struct task_struct;
@@ -669,7 +671,7 @@ index 3ecce8e4c800..4a4e192a6194 100644
  
  #define CONFIG_DRM_XE_DEBUGGER_EVENT_QUEUE_SIZE 64
  
-@@ -66,6 +70,24 @@ struct xe_eudebug_resources {
+@@ -67,6 +71,24 @@ struct xe_eudebug_resources {
  	struct xe_eudebug_resource rt[XE_EUDEBUG_RES_TYPE_COUNT];
  };
  
@@ -694,7 +696,7 @@ index 3ecce8e4c800..4a4e192a6194 100644
  /**
   * struct xe_eudebug - Top level struct for eudebug: the connection
   */
-@@ -130,6 +152,8 @@ struct xe_eudebug {
+@@ -131,6 +153,8 @@ struct xe_eudebug {
  		atomic_long_t seqno;
  	} events;
  

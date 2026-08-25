@@ -15,18 +15,20 @@ v4: removed the empty bracket at the end of engine_tunings (Maciej)
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Andrzej Hajda <andrzej.hajda@intel.com>
 Reviewed-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
-(backported from commit f922a77a2c00ff4336ff887d5f167930aad0fdb1 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit ecbfd65606569ad9bfd354f9a51d8666c4a056e2 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h | 1 +
  drivers/gpu/drm/xe/xe_tuning.c       | 4 ++++
  2 files changed, 5 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index 5fe12e5d6..47582c959 100644
+index dd1738a2ace3..f215fa03bb86 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -555,6 +555,7 @@
+@@ -556,6 +556,7 @@
  #define   TILEY_LOCALID				REG_BIT(2)
  
  #define ROW_CHICKEN				XE_REG_MCR(0xe4f0, XE_REG_OPTION_MASKED)
@@ -35,10 +37,10 @@ index 5fe12e5d6..47582c959 100644
  #define   MDQ_ARBITRATION_MODE			REG_BIT(12)
  #define   STALL_DOP_GATING_DISABLE		REG_BIT(5)
 diff --git a/drivers/gpu/drm/xe/xe_tuning.c b/drivers/gpu/drm/xe/xe_tuning.c
-index bf3fad9cd..bc67d63cb 100644
+index bcec40ca2d35..3c88204415e2 100644
 --- a/drivers/gpu/drm/xe/xe_tuning.c
 +++ b/drivers/gpu/drm/xe/xe_tuning.c
-@@ -129,6 +129,10 @@ static const struct xe_rtp_table_sr engine_tunings = XE_RTP_TABLE_SR(
+@@ -130,6 +130,10 @@ static const struct xe_rtp_table_sr engine_tunings = XE_RTP_TABLE_SR(
  		       FUNC(xe_rtp_match_first_render_or_compute)),
  	  XE_RTP_ACTIONS(SET(TDL_TSL_CHICKEN2, TILEY_LOCALID))
  	},

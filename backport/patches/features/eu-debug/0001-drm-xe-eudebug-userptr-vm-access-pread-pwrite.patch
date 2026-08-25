@@ -29,14 +29,16 @@ Cc: Joonas Lahtinen <joonas.lahtinen@linux.intel.com>
 Cc: Simona Vetter <simona@ffwll.ch>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 58a67b8e3449ab73e70b5cbe591bac3c7dbda0b8 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit 774619b9cac3c1b8b34b827f7c80524adde42271 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/xe_eudebug.c | 22 ++++++++++++++++++++++
  1 file changed, 22 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 99449462d..e240073ae 100644
+index 04e1ebef6e7a..c7a487d446eb 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -37,6 +37,7 @@
@@ -47,7 +49,7 @@ index 99449462d..e240073ae 100644
  #include "xe_vm.h"
  #include "xe_wa.h"
  
-@@ -3015,6 +3016,27 @@ static int xe_eudebug_vma_access(struct xe_vma *vma,
+@@ -3021,6 +3022,27 @@ static int xe_eudebug_vma_access(struct xe_vma *vma,
  
  		xe_bo_put(bo);
  

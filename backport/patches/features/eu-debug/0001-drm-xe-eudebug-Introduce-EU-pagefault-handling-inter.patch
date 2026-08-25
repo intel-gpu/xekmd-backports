@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Date: Mon, 11 Nov 2024 13:36:56 +0200
-Subject: drm/xe/eudebug: Introduce EU pagefault handling
- interface
+Subject: drm/xe/eudebug: Introduce EU pagefault handling interface
 
 The XE2 (and PVC) HW has a limitation that the pagefault due to invalid
 access will halt the corresponding EUs. To solve this problem, introduce
@@ -69,8 +68,10 @@ Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Jan Maslak <jan.maslak@intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Reviewed-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
-(backported from commit 7a0c384f114ce8ff2d2eac1ac55af1fb2c28d6f9 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit 11cf296898fcefbd91330e0295962ef71895fef9 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/xe_eudebug.c       | 510 +++++++++++++++++++++++++-
  drivers/gpu/drm/xe/xe_eudebug.h       |  18 +
@@ -79,7 +80,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  4 files changed, 632 insertions(+), 13 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 3dcdc9857..e84183d96 100644
+index d29c6b8c5081..a21baa188ec0 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -237,10 +237,17 @@ static void xe_eudebug_free(struct kref *ref)
@@ -146,7 +147,7 @@ index 3dcdc9857..e84183d96 100644
  
  	switch (arg->cmd) {
  	case DRM_XE_EUDEBUG_EU_CONTROL_CMD_INTERRUPT_ALL:
-@@ -1728,10 +1749,6 @@ static int xe_eudebug_handle_gt_attention(struct xe_gt *gt)
+@@ -1730,10 +1751,6 @@ static int xe_eudebug_handle_gt_attention(struct xe_gt *gt)
  {
  	int ret;
  
@@ -157,7 +158,7 @@ index 3dcdc9857..e84183d96 100644
  	ret = xe_send_gt_attention(gt);
  
  	/* Discovery in progress, fake it */
-@@ -1741,6 +1758,188 @@ static int xe_eudebug_handle_gt_attention(struct xe_gt *gt)
+@@ -1743,6 +1760,188 @@ static int xe_eudebug_handle_gt_attention(struct xe_gt *gt)
  	return ret;
  }
  
@@ -346,7 +347,7 @@ index 3dcdc9857..e84183d96 100644
  #define XE_EUDEBUG_ATTENTION_INTERVAL 100
  static void attention_scan_fn(struct work_struct *work)
  {
-@@ -1757,19 +1956,25 @@ static void attention_scan_fn(struct work_struct *work)
+@@ -1759,19 +1958,25 @@ static void attention_scan_fn(struct work_struct *work)
  
  	if (xe_pm_runtime_get_if_active(xe)) {
  		for_each_gt(gt, xe, gt_id) {
@@ -379,7 +380,7 @@ index 3dcdc9857..e84183d96 100644
  			}
  		}
  
-@@ -2080,6 +2285,8 @@ xe_eudebug_connect(struct xe_device *xe,
+@@ -2082,6 +2287,8 @@ xe_eudebug_connect(struct xe_device *xe,
  	kref_init(&d->ref);
  	spin_lock_init(&d->connection.lock);
  	mutex_init(&d->eu_lock);
@@ -388,7 +389,7 @@ index 3dcdc9857..e84183d96 100644
  	init_waitqueue_head(&d->events.write_done);
  	init_waitqueue_head(&d->events.read_done);
  	init_completion(&d->discovery);
-@@ -3462,6 +3669,8 @@ static void discovery_work_fn(struct work_struct *work)
+@@ -3468,6 +3675,8 @@ static void discovery_work_fn(struct work_struct *work)
  
  	up_write(&xe->eudebug.discovery_lock);
  
@@ -397,7 +398,7 @@ index 3dcdc9857..e84183d96 100644
  	xe_eudebug_put(d);
  }
  
-@@ -3921,6 +4130,281 @@ xe_eudebug_vm_open_ioctl(struct xe_eudebug *d, unsigned long arg)
+@@ -3927,6 +4136,281 @@ xe_eudebug_vm_open_ioctl(struct xe_eudebug *d, unsigned long arg)
  	return ret;
  }
  
@@ -680,7 +681,7 @@ index 3dcdc9857..e84183d96 100644
  #include "tests/xe_eudebug.c"
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
-index 605e4f050..aae9b2ae5 100644
+index 605e4f050548..aae9b2ae56e5 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
 @@ -12,6 +12,7 @@ struct drm_device;
@@ -730,10 +731,10 @@ index 605e4f050..aae9b2ae5 100644
  
  #endif /* _XE_EUDEBUG_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index 461ce00e7..c228014fd 100644
+index d64da2342dc0..f00462b038a7 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
-@@ -17,6 +17,8 @@
+@@ -18,6 +18,8 @@
  
  #include <uapi/drm/xe_drm.h>
  
@@ -742,7 +743,7 @@ index 461ce00e7..c228014fd 100644
  struct xe_device;
  struct task_struct;
  struct xe_eudebug;
-@@ -25,6 +27,8 @@ struct xe_hw_engine;
+@@ -26,6 +28,8 @@ struct xe_hw_engine;
  struct workqueue_struct;
  struct xe_exec_queue;
  struct xe_lrc;
@@ -751,7 +752,7 @@ index 461ce00e7..c228014fd 100644
  
  #define CONFIG_DRM_XE_DEBUGGER_EVENT_QUEUE_SIZE 64
  
-@@ -163,6 +167,16 @@ struct xe_eudebug {
+@@ -164,6 +168,16 @@ struct xe_eudebug {
  
  	/** @ops: operations for eu_control */
  	struct xe_eudebug_eu_control_ops *ops;
@@ -768,7 +769,7 @@ index 461ce00e7..c228014fd 100644
  };
  
  /**
-@@ -355,4 +369,94 @@ struct xe_eudebug_event_vm_bind_op_metadata {
+@@ -356,4 +370,94 @@ struct xe_eudebug_event_vm_bind_op_metadata {
  	u64 metadata_cookie;
  };
  
@@ -825,28 +826,28 @@ index 461ce00e7..c228014fd 100644
 +
 +	/** @fault: pagefault raw partial data passed from guc*/
 +	struct {
-+		/** @addr: ppgtt address where the pagefault occurred */
++		/** @fault.addr: ppgtt address where the pagefault occurred */
 +		u64 addr;
-+		/** @type: type of fault */
++		/** @fault.type: type of fault */
 +		int type;
-+		/** @level: level of fault */
++		/** @fault.level: level of fault */
 +		int level;
-+		/** @access: access type */
++		/** @fault.access: access type */
 +		int access;
 +	} fault;
 +
 +	/** @attentions: struct holding aggregated attensions */
 +	struct {
-+		/** @before: state of attention bits before page fault WA processing*/
++		/** @attentions.before: state of attention bits before page fault WA processing*/
 +		struct xe_eu_attentions before;
 +		/**
-+		 * @after: status of attention bits during page fault WA processing.
++		 * @attentions.after: status of attention bits during page fault WA processing.
 +		 * It includes eu threads where attention bits are turned on for
 +		 * reasons other than page fault WA (breakpoint, interrupt, etc.).
 +		 */
 +		struct xe_eu_attentions after;
 +		/**
-+		 * @resolved: state of the attention bits after page fault WA.
++		 * @attentions.resolved: state of the attention bits after page fault WA.
 +		 * It includes the eu thread that caused the page fault.
 +		 * To determine the eu thread that caused the page fault,
 +		 * do XOR attentions.after and attentions.resolved.
@@ -864,7 +865,7 @@ index 461ce00e7..c228014fd 100644
 +
  #endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
-index ffeac4254..4cf516fc8 100644
+index ffeac4254575..4cf516fc8216 100644
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ b/include/uapi/drm/xe_drm_eudebug.h
 @@ -39,6 +39,7 @@ struct drm_xe_eudebug_event {

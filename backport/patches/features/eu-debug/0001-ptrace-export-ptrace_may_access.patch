@@ -31,17 +31,19 @@ Cc: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
 Reviewed-by: Andi Shyti <andi.shyti@linux.intel.com>
-(backported from commit a5e9f6abf20c83189665a7476c5bf3f0ee50e56c drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit 61cc369779cb1babe9ea9acfbe37792272e4d652 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  kernel/ptrace.c | 1 +
  1 file changed, 1 insertion(+)
 
 diff --git a/kernel/ptrace.c b/kernel/ptrace.c
-index 130043bfc..0e0e1ffdf 100644
+index d041645d9d17..cc7531a17484 100644
 --- a/kernel/ptrace.c
 +++ b/kernel/ptrace.c
-@@ -364,6 +364,7 @@ bool ptrace_may_access(struct task_struct *task, unsigned int mode)
+@@ -379,6 +379,7 @@ bool ptrace_may_access(struct task_struct *task, unsigned int mode)
  	task_unlock(task);
  	return !err;
  }

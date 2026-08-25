@@ -12,17 +12,20 @@ Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Lucas De Marchi <lucas.demarchi@intel.com> #v4
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit a37d1d883359a8482cb27d07ceea6c0eb3edcaee drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit b235ec922d60d7bf8dd845057f06bb019c46c96f drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/tests/xe_eudebug.c |  8 +++-
+ drivers/gpu/drm/xe/xe_device.c        |  4 +-
  drivers/gpu/drm/xe/xe_device_types.h  |  5 ++-
  drivers/gpu/drm/xe/xe_eudebug.c       | 57 ++++++++++++++++++++++-----
  drivers/gpu/drm/xe/xe_eudebug.h       |  4 ++
  drivers/gpu/drm/xe/xe_eudebug_types.h | 13 ++++++
  drivers/gpu/drm/xe/xe_exec_queue.c    |  4 +-
  drivers/gpu/drm/xe/xe_gt.c            |  3 +-
- 7 files changed, 78 insertions(+), 16 deletions(-)
+ 8 files changed, 80 insertions(+), 18 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/tests/xe_eudebug.c b/drivers/gpu/drm/xe/tests/xe_eudebug.c
 index 6dac76d50e6f..41df9d28f47a 100644
@@ -43,8 +46,30 @@ index 6dac76d50e6f..41df9d28f47a 100644
  
  	kunit_printk(KERN_DEBUG, test, "Test eudebug WAs for graphics version: %u\n",
  		     GRAPHICS_VERx100(xe));
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index e2ca6fcf8b57..af6c4e4fcad7 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -594,8 +594,6 @@ int xe_device_init_early(struct xe_device *xe)
+ 	if (err)
+ 		return err;
+ 
+-	xe_eudebug_init(xe);
+-
+ 	xe->preempt_fence_wq = alloc_ordered_workqueue("xe-preempt-fence-wq",
+ 						       WQ_MEM_RECLAIM);
+ 	xe->ordered_wq = alloc_ordered_workqueue("xe-ordered-wq", 0);
+@@ -811,6 +809,8 @@ int xe_device_probe_early(struct xe_device *xe)
+ 	if (IS_SRIOV_VF(xe))
+ 		vf_update_device_info(xe);
+ 
++	xe_eudebug_init(xe);
++
+ 	/*
+ 	 * Check for pcode uncore_init status to confirm if the SoC
+ 	 * initialization is complete. Until done, any MMIO or lmem access from
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index ec3d54c7628d..da534839b80f 100644
+index 174472a2f696..5fee2a473086 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -14,6 +14,7 @@
@@ -55,7 +80,7 @@ index ec3d54c7628d..da534839b80f 100644
  #include "xe_heci_gsc.h"
  #include "xe_late_bind_fw_types.h"
  #include "xe_oa_types.h"
-@@ -624,8 +625,8 @@ struct xe_device {
+@@ -627,8 +628,8 @@ struct xe_device {
  		/** @eudebug.discovery_lock: used for discovery to block xe ioctls */
  		struct rw_semaphore discovery_lock;
  
@@ -67,7 +92,7 @@ index ec3d54c7628d..da534839b80f 100644
  		/** @eudebug.attention_scan: attention scan worker */
  		struct delayed_work attention_scan;
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index e84183d964b5..783bc7cb1b76 100644
+index a21baa188ec0..1423f92d7f17 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -40,6 +40,7 @@
@@ -78,7 +103,7 @@ index e84183d964b5..783bc7cb1b76 100644
  #include "xe_sync.h"
  #include "xe_svm.h"
  #include "xe_vm.h"
-@@ -2342,12 +2343,20 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
+@@ -2344,12 +2345,20 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
  
  	lockdep_assert_held(&xe->eudebug.discovery_lock);
  
@@ -100,7 +125,7 @@ index e84183d964b5..783bc7cb1b76 100644
  static void add_sr_entry(struct xe_hw_engine *hwe,
  			 struct xe_reg_mcr mcr_reg,
  			 u32 mask, bool enable)
-@@ -2395,6 +2404,7 @@ static void xe_eudebug_reinit_hw_engine(struct xe_hw_engine *hwe, bool enable)
+@@ -2397,6 +2406,7 @@ static void xe_eudebug_reinit_hw_engine(struct xe_hw_engine *hwe, bool enable)
  static int xe_eudebug_enable(struct xe_device *xe, bool enable)
  {
  	struct xe_gt *gt;
@@ -108,7 +133,7 @@ index e84183d964b5..783bc7cb1b76 100644
  	int i;
  	u8 id;
  
-@@ -2404,16 +2414,31 @@ static int xe_eudebug_enable(struct xe_device *xe, bool enable)
+@@ -2406,16 +2416,31 @@ static int xe_eudebug_enable(struct xe_device *xe, bool enable)
  	 */
  	down_write(&xe->eudebug.discovery_lock);
  
@@ -141,7 +166,7 @@ index e84183d964b5..783bc7cb1b76 100644
  	for_each_gt(gt, xe, id) {
  		for (i = 0; i < ARRAY_SIZE(gt->hw_engines); i++) {
  			if (!(gt->info.engine_mask & BIT(i)))
-@@ -2426,13 +2451,18 @@ static int xe_eudebug_enable(struct xe_device *xe, bool enable)
+@@ -2428,13 +2453,18 @@ static int xe_eudebug_enable(struct xe_device *xe, bool enable)
  		flush_work(&gt->reset.worker);
  	}
  
@@ -163,7 +188,7 @@ index e84183d964b5..783bc7cb1b76 100644
  
  	return 0;
  }
-@@ -2441,7 +2471,7 @@ static ssize_t enable_eudebug_show(struct device *dev, struct device_attribute *
+@@ -2443,7 +2473,7 @@ static ssize_t enable_eudebug_show(struct device *dev, struct device_attribute *
  {
  	struct xe_device *xe = pdev_to_xe_device(to_pci_dev(dev));
  
@@ -172,7 +197,7 @@ index e84183d964b5..783bc7cb1b76 100644
  }
  
  static ssize_t enable_eudebug_store(struct device *dev, struct device_attribute *attr,
-@@ -2483,6 +2513,12 @@ void xe_eudebug_init(struct xe_device *xe)
+@@ -2485,6 +2515,12 @@ void xe_eudebug_init(struct xe_device *xe)
  	INIT_LIST_HEAD(&xe->clients.list);
  	init_rwsem(&xe->eudebug.discovery_lock);
  	INIT_DELAYED_WORK(&xe->eudebug.attention_scan, attention_scan_fn);
@@ -185,7 +210,7 @@ index e84183d964b5..783bc7cb1b76 100644
  
  	xe->eudebug.ordered_wq = alloc_ordered_workqueue("xe-eudebug-ordered-wq", 0);
  	if (!xe->eudebug.ordered_wq) {
-@@ -2491,10 +2527,13 @@ void xe_eudebug_init(struct xe_device *xe)
+@@ -2493,10 +2529,13 @@ void xe_eudebug_init(struct xe_device *xe)
  	}
  
  	ret = sysfs_create_file(&xe->drm.dev->kobj, &dev_attr_enable_eudebug.attr);
@@ -225,10 +250,10 @@ index aae9b2ae56e5..0e2b6e3c722b 100644
  static inline void xe_eudebug_fini(struct xe_device *xe) { }
  
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index c228014fd16b..5276ff671790 100644
+index f00462b038a7..f975c8799b6d 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
-@@ -179,6 +179,19 @@ struct xe_eudebug {
+@@ -180,6 +180,19 @@ struct xe_eudebug {
  	struct dma_fence *pf_fence;
  };
  
@@ -249,10 +274,10 @@ index c228014fd16b..5276ff671790 100644
   * struct xe_eudebug_event - Internal base event struct for eudebug
   */
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index f2f53037f4d4..aae10fcbfab7 100644
+index 06db0e3fbb58..980d88e658ac 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -1024,10 +1024,8 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+@@ -1022,10 +1022,8 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
  			 !(value & DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)))
  		return -EINVAL;
  
@@ -265,10 +290,10 @@ index f2f53037f4d4..aae10fcbfab7 100644
  	q->eudebug_flags = EXEC_QUEUE_EUDEBUG_FLAG_ENABLE;
  	q->sched_props.preempt_timeout_us = 0;
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index 5fdda90fc449..113ba578f9bf 100644
+index 0a7301a86c08..c75f6169ea17 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
-@@ -22,6 +22,7 @@
+@@ -24,6 +24,7 @@
  #include "xe_bb.h"
  #include "xe_debugfs.h"
  #include "xe_device.h"

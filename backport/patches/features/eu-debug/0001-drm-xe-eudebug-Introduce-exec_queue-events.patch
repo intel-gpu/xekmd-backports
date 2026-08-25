@@ -20,8 +20,10 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 07b6f4cb541d6fd34c63a991c87454c65c6c34a5 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit fb907e7eef4e477ff11632890e29a074f00dbd91 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/xe_eudebug.c       | 189 +++++++++++++++++++++++++-
  drivers/gpu/drm/xe/xe_eudebug.h       |   7 +
@@ -31,7 +33,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  5 files changed, 240 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 7fb865e3f..c595ea386 100644
+index 7fb865e3fe7c..c595ea386ab0 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -14,6 +14,7 @@
@@ -261,7 +263,7 @@ index 7fb865e3f..c595ea386 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
-index 5928a39a0..c1fdfc288 100644
+index 5928a39a031c..c1fdfc288741 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
 @@ -11,6 +11,7 @@ struct drm_file;
@@ -293,10 +295,10 @@ index 5928a39a0..c1fdfc288 100644
  
  #endif /* _XE_EUDEBUG_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index be94e4b9a..c1ac938c0 100644
+index 6f5034780d0a..71d8e58a3829 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
-@@ -51,7 +51,9 @@ struct xe_eudebug_resource {
+@@ -52,7 +52,9 @@ struct xe_eudebug_resource {
  
  #define XE_EUDEBUG_RES_TYPE_CLIENT	0
  #define XE_EUDEBUG_RES_TYPE_VM		1
@@ -307,7 +309,7 @@ index be94e4b9a..c1ac938c0 100644
  
  /**
   * struct xe_eudebug_resources - eudebug resources for all types
-@@ -175,4 +177,31 @@ struct xe_eudebug_event_vm {
+@@ -176,4 +178,31 @@ struct xe_eudebug_event_vm {
  	u64 vm_handle;
  };
  
@@ -340,7 +342,7 @@ index be94e4b9a..c1ac938c0 100644
 +
  #endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 071b8c41d..49f569bb3 100644
+index 9f3d022a1463..bccb3ea09d75 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -29,6 +29,7 @@
@@ -351,7 +353,7 @@ index 071b8c41d..49f569bb3 100644
  
  /**
   * DOC: Execution Queue
-@@ -1420,6 +1421,8 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
+@@ -1435,6 +1436,8 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
  
  	args->exec_queue_id = id;
  
@@ -360,7 +362,7 @@ index 071b8c41d..49f569bb3 100644
  	return 0;
  
  del_hw_engine_group:
-@@ -1618,6 +1621,7 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
+@@ -1633,6 +1636,7 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
  		xe_hw_engine_group_del_exec_queue(q->hwe->hw_engine_group, q);
  
  	xe_exec_queue_kill(q);
@@ -369,7 +371,7 @@ index 071b8c41d..49f569bb3 100644
  	trace_xe_exec_queue_close(q);
  	xe_exec_queue_put(q);
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
-index d926d3736..0a3e8e057 100644
+index d926d3736032..0a3e8e057a64 100644
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ b/include/uapi/drm/xe_drm_eudebug.h
 @@ -28,6 +28,7 @@ struct drm_xe_eudebug_event {

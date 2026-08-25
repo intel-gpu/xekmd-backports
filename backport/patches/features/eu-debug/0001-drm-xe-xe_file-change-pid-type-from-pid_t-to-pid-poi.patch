@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Andrzej Hajda <andrzej.hajda@intel.com>
 Date: Tue, 2 Dec 2025 17:17:24 +0100
-Subject: drm/xe/xe_file: change pid type from pid_t to pid
- pointer
+Subject: drm/xe/xe_file: change pid type from pid_t to pid pointer
 
 Some xe structures can outlive xef->drm pointer, but they need to
 access associated process info. struct pid is refcounted (in contrast to
@@ -12,8 +11,10 @@ The patch is necessary for incoming eudebug feature.
 
 Signed-off-by: Andrzej Hajda <andrzej.hajda@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 1eb860f066d8a71f4e56f569dfc08657f5d0e231 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit 93484994a50b6b94d8582f0914b8ca81de74cd98 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/xe_devcoredump.c  | 2 +-
  drivers/gpu/drm/xe/xe_device.c       | 5 +++--
@@ -22,10 +23,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  4 files changed, 8 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_devcoredump.c b/drivers/gpu/drm/xe/xe_devcoredump.c
-index 558a1a984..5b816beda 100644
+index 5f2b90b18f97..74ca42f2575f 100644
 --- a/drivers/gpu/drm/xe/xe_devcoredump.c
 +++ b/drivers/gpu/drm/xe/xe_devcoredump.c
-@@ -334,7 +334,7 @@ static void devcoredump_snapshot(struct xe_devcoredump *coredump,
+@@ -336,7 +336,7 @@ static void devcoredump_snapshot(struct xe_devcoredump *coredump,
  
  	if (q->vm && q->vm->xef) {
  		process_name = q->vm->xef->process_name;
@@ -35,10 +36,10 @@ index 558a1a984..5b816beda 100644
  
  	strscpy(ss->process_name, process_name);
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 7f9fce523..6be605889 100644
+index bc98b8298b1a..c7445d4d06ac 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -112,10 +112,10 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
+@@ -115,10 +115,10 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
  	file->driver_priv = xef;
  	kref_init(&xef->refcount);
  
@@ -51,7 +52,7 @@ index 7f9fce523..6be605889 100644
  		put_task_struct(task);
  	}
  
-@@ -132,6 +132,7 @@ static void xe_file_destroy(struct kref *ref)
+@@ -135,6 +135,7 @@ static void xe_file_destroy(struct kref *ref)
  	mutex_destroy(&xef->exec_queue.lock);
  	xa_destroy(&xef->vm.xa);
  	mutex_destroy(&xef->vm.lock);
@@ -60,10 +61,10 @@ index 7f9fce523..6be605889 100644
  	xe_drm_client_put(xef->client);
  	kfree(xef->process_name);
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 3e2ed16ed..a26e51a2f 100644
+index 5fee2a473086..d5b4ef547ca2 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -656,10 +656,10 @@ struct xe_file {
+@@ -704,10 +704,10 @@ struct xe_file {
  	char *process_name;
  
  	/**
@@ -78,10 +79,10 @@ index 3e2ed16ed..a26e51a2f 100644
  	/** @refcount: ref count of this xe file */
  	struct kref refcount;
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index bd0087dd0..5226982b1 100644
+index b4bd579105c1..24a9d9ad0c29 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -1641,7 +1641,7 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+@@ -1685,7 +1685,7 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
  
  	if (q->vm && q->vm->xef) {
  		process_name = q->vm->xef->process_name;

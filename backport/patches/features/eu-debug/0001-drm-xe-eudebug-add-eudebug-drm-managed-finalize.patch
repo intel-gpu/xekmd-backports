@@ -31,8 +31,10 @@ Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com> #v2
 Reviewed-by: Christoph Manszewski <christoph.manszewski@intel.com>
 Reviewed-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com> #v2
-(backported from commit da6f2ca8f813cb825c1e250642d2cc0a19c6e731 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit 3781a973d3f739bbce9461b1ed01bdc6cf279f50 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/xe_device.c  |  2 --
  drivers/gpu/drm/xe/xe_eudebug.c | 33 ++++++++++++++++++++++-----------
@@ -40,10 +42,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  3 files changed, 22 insertions(+), 15 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 48bcb8818..7f9fce523 100644
+index af6c4e4fcad7..bc98b8298b1a 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -435,8 +435,6 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
+@@ -474,8 +474,6 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
  {
  	struct xe_device *xe = to_xe_device(dev);
  
@@ -53,10 +55,10 @@ index 48bcb8818..7f9fce523 100644
  
  	if (xe->preempt_fence_wq)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 783bc7cb1..76d800e3f 100644
+index 1423f92d7f17..a1d191ce1af5 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -2501,9 +2501,18 @@ static void xe_eudebug_sysfs_fini(void *arg)
+@@ -2503,9 +2503,18 @@ static void xe_eudebug_sysfs_fini(void *arg)
  	sysfs_remove_file(&xe->drm.dev->kobj, &dev_attr_enable_eudebug.attr);
  }
  
@@ -76,7 +78,7 @@ index 783bc7cb1..76d800e3f 100644
  	int ret;
  
  	spin_lock_init(&xe->eudebug.lock);
-@@ -2526,23 +2535,25 @@ void xe_eudebug_init(struct xe_device *xe)
+@@ -2528,23 +2537,25 @@ void xe_eudebug_init(struct xe_device *xe)
  		return;
  	}
  
@@ -113,7 +115,7 @@ index 783bc7cb1..76d800e3f 100644
  
  static int send_open_event(struct xe_eudebug *d, u32 flags, const u64 handle,
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
-index 0e2b6e3c7..cf2690b7f 100644
+index 0e2b6e3c722b..cf2690b7fada 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
 @@ -32,7 +32,6 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,

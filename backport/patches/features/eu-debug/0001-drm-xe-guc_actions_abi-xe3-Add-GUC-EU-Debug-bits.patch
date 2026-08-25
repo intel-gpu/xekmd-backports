@@ -7,17 +7,19 @@ Adds eu debug related changes in GuC interface.
 
 Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Reviewed-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
-(backported from commit 54525a630b1c6d3d63e914a8590924573dc53a70 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit 0065ff85657a3ef9121edadfa334e1bdc9814d96 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/abi/guc_actions_abi.h | 4 ++++
  1 file changed, 4 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/abi/guc_actions_abi.h b/drivers/gpu/drm/xe/abi/guc_actions_abi.h
-index 805fc5068..4c0587a5b 100644
+index 76b3c616721f..7c60c53a3a5b 100644
 --- a/drivers/gpu/drm/xe/abi/guc_actions_abi.h
 +++ b/drivers/gpu/drm/xe/abi/guc_actions_abi.h
-@@ -162,6 +162,7 @@ enum xe_guc_action {
+@@ -163,6 +163,7 @@ enum xe_guc_action {
  	XE_GUC_ACTION_NOTIFY_CRASH_DUMP_POSTED = 0x8004,
  	XE_GUC_ACTION_NOTIFY_EXCEPTION = 0x8005,
  	XE_GUC_ACTION_EU_KERNEL_DEBUG = 0x8006,
@@ -25,7 +27,7 @@ index 805fc5068..4c0587a5b 100644
  	XE_GUC_ACTION_TEST_G2G_SEND = 0xF001,
  	XE_GUC_ACTION_TEST_G2G_RECV = 0xF002,
  	XE_GUC_ACTION_LIMIT
-@@ -286,6 +287,9 @@ enum xe_guc_g2g_type {
+@@ -287,6 +288,9 @@ enum xe_guc_g2g_type {
  #define XE_GUC_CAT_ERR_TYPE_INVALID 0xdeadbeef
  
  enum  xe_guc_eu_kernel_debug_request_type {

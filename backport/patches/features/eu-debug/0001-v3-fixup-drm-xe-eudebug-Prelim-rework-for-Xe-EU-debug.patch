@@ -1,0 +1,128 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Date: Tue, 25 Aug 2026 22:27:11 +0530
+Subject: fixup! drm/xe/eudebug: Prelim rework for Xe EU debug
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fix remaining non-prefixed symbols in prelim eudebug:
+- DRM_XE_EUDEBUG_EU_CONTROL_CMD_* → PRELIM_DRM_XE_EUDEBUG_EU_CONTROL_CMD_*
+- DRM_XE_EUDEBUG_EVENT_* → PRELIM_DRM_XE_EUDEBUG_EVENT_*
+- struct drm_xe_eudebug_event_eu_attention → prelim_drm_xe_eudebug_event_eu_attention
+- xe_eudebug_vm_init → prelim_xe_eudebug_vm_init
+- xe_eudebug_put → prelim_xe_eudebug_put
+- xe_gt_eu_attention_bitmap → prelim_xe_gt_eu_attention_bitmap
+- struct xe_eu_attentions → struct prelim_xe_eu_attentions
+
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c       | 26 ++++++++++----------
+ drivers/gpu/drm/xe/prelim/xe_eudebug_types.h |  6 ++---
+ 2 files changed, 16 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+index 0df6c4f998ad..18c02d71d857 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+@@ -1180,19 +1180,19 @@ static int do_eu_control(struct xe_eudebug *d,
+ 	attention_scan_cancel(xe);
+ 
+ 	switch (arg->cmd) {
+-	case DRM_XE_EUDEBUG_EU_CONTROL_CMD_INTERRUPT_ALL:
++	case PRELIM_DRM_XE_EUDEBUG_EU_CONTROL_CMD_INTERRUPT_ALL:
+ 		/* Make sure we dont promise anything but interrupting all */
+ 		if (!attn_size)
+ 			ret = d->ops->interrupt_all(d, q, lrc);
+ 		break;
+-	case DRM_XE_EUDEBUG_EU_CONTROL_CMD_STOPPED:
++	case PRELIM_DRM_XE_EUDEBUG_EU_CONTROL_CMD_STOPPED:
+ 		if (d->ops->stopped)
+ 			ret = d->ops->stopped(d, q, lrc, bits, attn_size);
+ 		break;
+-	case DRM_XE_EUDEBUG_EU_CONTROL_CMD_RESUME:
++	case PRELIM_DRM_XE_EUDEBUG_EU_CONTROL_CMD_RESUME:
+ 		ret = d->ops->resume(d, q, lrc, bits, attn_size);
+ 		break;
+-	case DRM_XE_EUDEBUG_EU_CONTROL_CMD_UNLOCK:
++	case PRELIM_DRM_XE_EUDEBUG_EU_CONTROL_CMD_UNLOCK:
+ 		if (d->ops->unlock)
+ 			ret = d->ops->unlock(d, q, lrc, bits, attn_size);
+ 		break;
+@@ -1689,20 +1689,20 @@ static int send_attention_event(struct xe_eudebug *d, struct xe_exec_queue *q, i
+ 	if (h_lrc < 0)
+ 		return h_lrc;
+ 
+-	event = xe_eudebug_create_event(d, DRM_XE_EUDEBUG_EVENT_EU_ATTENTION, 0,
+-					DRM_XE_EUDEBUG_EVENT_STATE_CHANGE, sz);
++	event = xe_eudebug_create_event(d, PRELIM_DRM_XE_EUDEBUG_EVENT_EU_ATTENTION, 0,
++					PRELIM_DRM_XE_EUDEBUG_EVENT_STATE_CHANGE, sz);
+ 
+ 	if (!event)
+ 		return -ENOSPC;
+ 
+ 	ea = cast_event(ea, event);
+-	write_member(struct drm_xe_eudebug_event_eu_attention, ea, client_handle, (u64)h_c);
+-	write_member(struct drm_xe_eudebug_event_eu_attention, ea, exec_queue_handle, (u64)h_queue);
+-	write_member(struct drm_xe_eudebug_event_eu_attention, ea, lrc_handle, (u64)h_lrc);
+-	write_member(struct drm_xe_eudebug_event_eu_attention, ea, bitmask_size, size);
++	write_member(struct prelim_drm_xe_eudebug_event_eu_attention, ea, client_handle, (u64)h_c);
++	write_member(struct prelim_drm_xe_eudebug_event_eu_attention, ea, exec_queue_handle, (u64)h_queue);
++	write_member(struct prelim_drm_xe_eudebug_event_eu_attention, ea, lrc_handle, (u64)h_lrc);
++	write_member(struct prelim_drm_xe_eudebug_event_eu_attention, ea, bitmask_size, size);
+ 
+ 	event->seqno = atomic_long_inc_return(&d->events.seqno);
+-	ret = xe_gt_eu_attention_bitmap(q->gt, &ea->bitmask[0], ea->bitmask_size);
++	ret = prelim_xe_gt_eu_attention_bitmap(q->gt, &ea->bitmask[0], ea->bitmask_size);
+ 
+ 	if (ret) {
+ 		kfree(event);
+@@ -3419,7 +3419,7 @@ static int vm_bind_ufence_event(struct xe_eudebug *d,
+ 	return xe_eudebug_queue_event(d, event);
+ }
+ 
+-void xe_eudebug_vm_init(struct xe_vm *vm)
++void prelim_xe_eudebug_vm_init(struct xe_vm *vm)
+ {
+ 	INIT_LIST_HEAD(&vm->eudebug.events);
+ 	spin_lock_init(&vm->eudebug.lock);
+@@ -4631,7 +4631,7 @@ prelim_xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf, bool is_er
+ 		attention_scan_flush(gt_to_xe(gt));
+ 		mutex_unlock(&d->eu_lock);
+ 
+-		xe_eudebug_put(d);
++		prelim_xe_eudebug_put(d);
+ 	}
+ 
+ 	if (is_err) {
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug_types.h b/drivers/gpu/drm/xe/prelim/xe_eudebug_types.h
+index 3bdb45b89f1d..b301066de294 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug_types.h
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug_types.h
+@@ -454,20 +454,20 @@ struct xe_eudebug_pagefault {
+ 	/** @attentions: struct holding aggregated attensions */
+ 	struct {
+ 		/** @attentions.before: state of attention bits before page fault WA processing*/
+-		struct xe_eu_attentions before;
++		struct prelim_xe_eu_attentions before;
+ 		/**
+ 		 * @attentions.after: status of attention bits during page fault WA processing.
+ 		 * It includes eu threads where attention bits are turned on for
+ 		 * reasons other than page fault WA (breakpoint, interrupt, etc.).
+ 		 */
+-		struct xe_eu_attentions after;
++		struct prelim_xe_eu_attentions after;
+ 		/**
+ 		 * @attentions.resolved: state of the attention bits after page fault WA.
+ 		 * It includes the eu thread that caused the page fault.
+ 		 * To determine the eu thread that caused the page fault,
+ 		 * do XOR attentions.after and attentions.resolved.
+ 		 */
+-		struct xe_eu_attentions resolved;
++		struct prelim_xe_eu_attentions resolved;
+ 	} attentions;
+ 
+ 	/**
+-- 
+2.43.0
+

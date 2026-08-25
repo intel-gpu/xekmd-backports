@@ -26,15 +26,17 @@ Cc: Chris Wilson <chris@chris-wilson.co.uk>
 Cc: Joonas Lahtinen <joonas.lahtinen@linux.intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit b476daba4f313c30239484ac355b2781dd7ae0c3 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit 2cbcf4ace94731b075e39ea2796508b78a9b21b3 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h |  1 +
  drivers/gpu/drm/xe/xe_gt.c           | 38 ++++++++++++++++++++++++++++
  2 files changed, 39 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index cd629c71cfa7..d9f0178baca6 100644
+index 46694163c0bc..1d5f307b8807 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 @@ -276,6 +276,7 @@

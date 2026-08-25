@@ -9,19 +9,18 @@ push it after each connection. Moreover, when rescheduled immediately
 it may collide with discovery.
 
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-Signed-off-by: Sanjay Yadav <sanjay.kumar.yadav@intel.com>
-Reviewed-by: Jan Sokolowski <jan.sokolowski@intel.com>
-Reviewed-by: Jakub Legowski <jakub.legowski@intel.com>
-Reviewed-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
-(backported from commit 0844542b5018635d244998c398e94bbe98ecd967 drm-tip-eudebug)
+
+(cherry-picked from commit 398eb3f72623624ae6bc599a436b63c638de6de7 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
- drivers/gpu/drm/xe/prelim/xe_eudebug.c | 1 -
+ drivers/gpu/drm/xe/xe_eudebug.c | 1 -
  1 file changed, 1 deletion(-)
 
-diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
-index fe6041fcf013..d4a3e7d58d87 100644
---- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
-+++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
+index c2eea5ca3b8d..ce5dbcb9ba20 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -2395,7 +2395,6 @@ xe_eudebug_connect(struct xe_device *xe,
  
  	kref_get(&d->ref);
@@ -31,5 +30,5 @@ index fe6041fcf013..d4a3e7d58d87 100644
  	eu_dbg(d, "connected session %lld", d->session);
  
 -- 
-2.52.0
+2.43.0
 

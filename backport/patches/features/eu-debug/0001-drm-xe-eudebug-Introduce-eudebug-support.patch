@@ -61,8 +61,10 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
 Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com>
 Acked-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit fd2f4b3dcd06ff90cfce7b938f5cb1e0b519a065 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit 55ed863839139490ff38e08e6dd5edfdfae786b5 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/Kconfig            |   10 +
  drivers/gpu/drm/xe/Makefile           |    1 +
@@ -70,11 +72,11 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  drivers/gpu/drm/xe/xe_device_types.h  |   36 +
  drivers/gpu/drm/xe/xe_eudebug.c       | 1138 +++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_eudebug.h       |   47 +
- drivers/gpu/drm/xe/xe_eudebug_types.h |  171 ++++
+ drivers/gpu/drm/xe/xe_eudebug_types.h |  172 ++++
  drivers/gpu/drm/xe/xe_vm.c            |    7 +-
  include/uapi/drm/xe_drm.h             |   21 +
  include/uapi/drm/xe_drm_eudebug.h     |   59 ++
- 10 files changed, 1499 insertions(+), 1 deletion(-)
+ 10 files changed, 1500 insertions(+), 1 deletion(-)
  create mode 100644 drivers/gpu/drm/xe/xe_eudebug.c
  create mode 100644 drivers/gpu/drm/xe/xe_eudebug.h
  create mode 100644 drivers/gpu/drm/xe/xe_eudebug_types.h
@@ -102,7 +104,7 @@ index 4d7dcaff2b91..78d4673665b4 100644
  depends on DRM_XE
  depends on EXPERT
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 3c001b2a4aec..21a79bc819ad 100644
+index 44ed055439d4..49d6ee5dc320 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -154,6 +154,7 @@ xe-y += xe_bb.o \
@@ -114,7 +116,7 @@ index 3c001b2a4aec..21a79bc819ad 100644
  xe-$(CONFIG_DRM_GPUSVM) += xe_userptr.o
  
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index d25d02b24898..adee3a514f30 100644
+index d25d02b24898..0101d63017df 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -33,6 +33,7 @@
@@ -160,17 +162,17 @@ index d25d02b24898..adee3a514f30 100644
  	xe_bo_dev_fini(&xe->bo_device);
  
  	if (xe->preempt_fence_wq)
-@@ -790,6 +798,8 @@ int xe_device_probe_early(struct xe_device *xe)
- 	if (IS_SRIOV_VF(xe))
- 		vf_update_device_info(xe);
+@@ -575,6 +583,8 @@ int xe_device_init_early(struct xe_device *xe)
+ 	if (err)
+ 		return err;
  
 +	xe_eudebug_init(xe);
 +
- 	/*
- 	 * Check for pcode uncore_init status to confirm if the SoC
- 	 * initialization is complete. Until done, any MMIO or lmem access from
+ 	xe->preempt_fence_wq = alloc_ordered_workqueue("xe-preempt-fence-wq",
+ 						       WQ_MEM_RECLAIM);
+ 	xe->ordered_wq = alloc_ordered_workqueue("xe-ordered-wq", 0);
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index e01c922d3545..20c6dde35479 100644
+index 03a7bb08adf7..8eb96a53e49f 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -314,6 +314,17 @@ struct xe_device {
@@ -191,7 +193,7 @@ index e01c922d3545..20c6dde35479 100644
  	/** @usm: unified memory state */
  	struct {
  		/** @usm.asid_to_vm: convert an ASID to VM */
-@@ -594,6 +605,23 @@ struct xe_device {
+@@ -598,6 +609,23 @@ struct xe_device {
  	atomic_t g2g_test_count;
  #endif
  
@@ -215,7 +217,7 @@ index e01c922d3545..20c6dde35479 100644
  	/* private: */
  
  #if IS_ENABLED(CONFIG_DRM_XE_DISPLAY)
-@@ -669,6 +697,14 @@ struct xe_file {
+@@ -673,6 +701,14 @@ struct xe_file {
  
  	/** @refcount: ref count of this xe file */
  	struct kref refcount;
@@ -1429,11 +1431,12 @@ index 000000000000..5928a39a031c
 +#endif /* _XE_EUDEBUG_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
 new file mode 100644
-index 000000000000..52d4205e03dd
+index 000000000000..37c81c9390d5
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
-@@ -0,0 +1,171 @@
+@@ -0,0 +1,172 @@
 +/* SPDX-License-Identifier: MIT */
++
 +/*
 + * Copyright © 2023-2025 Intel Corporation
 + */
@@ -1513,11 +1516,11 @@ index 000000000000..52d4205e03dd
 +
 +	/** @connection: eu debug connection status */
 +	struct {
-+		/** @status: connected = 1, disconnected = error */
++		/** @connection.status: connected = 1, disconnected = error */
 +#define XE_EUDEBUG_STATUS_CONNECTED 1
 +		int status;
 +
-+		/** @lock: guards access to status */
++		/** @connection.lock: guards access to status */
 +		spinlock_t lock;
 +	} connection;
 +
@@ -1535,21 +1538,21 @@ index 000000000000..52d4205e03dd
 +
 +	/** @events: kfifo queue of to-be-delivered events */
 +	struct {
-+		/** @lock: guards access to fifo */
++		/** @events.lock: guards access to fifo */
 +		spinlock_t lock;
 +
-+		/** @fifo: queue of events pending */
++		/** @events.fifo: queue of events pending */
 +		DECLARE_KFIFO(fifo,
 +			      struct xe_eudebug_event *,
 +			      CONFIG_DRM_XE_DEBUGGER_EVENT_QUEUE_SIZE);
 +
-+		/** @write_done: waitqueue for signalling write to fifo */
++		/** @events.write_done: waitqueue for signalling write to fifo */
 +		wait_queue_head_t write_done;
 +
-+		/** @read_done: waitqueue for signalling read from fifo */
++		/** @events.read_done: waitqueue for signalling read from fifo */
 +		wait_queue_head_t read_done;
 +
-+		/** @event_seqno: seqno counter to stamp events for fifo */
++		/** @events.seqno: seqno counter to stamp events for fifo */
 +		atomic_long_t seqno;
 +	} events;
 +
@@ -1605,7 +1608,7 @@ index 000000000000..52d4205e03dd
 +
 +#endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 67819deb45e3..210572fa99ff 100644
+index 9e0176861cb6..904c68aa1587 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -26,6 +26,7 @@
@@ -1616,7 +1619,7 @@ index 67819deb45e3..210572fa99ff 100644
  #include "xe_exec_queue.h"
  #include "xe_gt.h"
  #include "xe_migrate.h"
-@@ -2129,6 +2130,8 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
+@@ -2143,6 +2144,8 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
  
  	args->vm_id = id;
  
@@ -1625,7 +1628,7 @@ index 67819deb45e3..210572fa99ff 100644
  	return 0;
  
  err_close_and_put:
-@@ -2160,8 +2163,10 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
+@@ -2174,8 +2177,10 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
  		xa_erase(&xef->vm.xa, args->vm_id);
  	mutex_unlock(&xef->vm.lock);
  
@@ -1638,7 +1641,7 @@ index 67819deb45e3..210572fa99ff 100644
  	return err;
  }
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 50c80af4ad4e..05171e798265 100644
+index 509202a7b13e..750b38ebb7d5 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -110,6 +110,7 @@ extern "C" {

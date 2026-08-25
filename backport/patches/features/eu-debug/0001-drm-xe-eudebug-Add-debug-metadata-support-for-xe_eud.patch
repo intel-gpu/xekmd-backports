@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Thu, 19 Oct 2023 11:16:12 +0200
-Subject: drm/xe/eudebug: Add debug metadata support for
- xe_eudebug
+Subject: drm/xe/eudebug: Add debug metadata support for xe_eudebug
 
 Reflect debug metadata resource creation/destroy as events passed to the
 debugger. Introduce ioctl allowing to read metadata content on demand.
@@ -21,8 +20,10 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 0325306f12bc80defca26b8a4195795d472bb2ae drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit d0f6260f4b9197e0a9a2e6b7882ce31e29c33cc9 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/xe_debug_metadata.c |   7 +-
  drivers/gpu/drm/xe/xe_eudebug.c        | 330 ++++++++++++++++++++++++-
@@ -33,7 +34,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  6 files changed, 416 insertions(+), 12 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_debug_metadata.c b/drivers/gpu/drm/xe/xe_debug_metadata.c
-index 2863ca68e..23419e24a 100644
+index 2863ca68e8e6..23419e24ae04 100644
 --- a/drivers/gpu/drm/xe/xe_debug_metadata.c
 +++ b/drivers/gpu/drm/xe/xe_debug_metadata.c
 @@ -9,6 +9,7 @@
@@ -72,7 +73,7 @@ index 2863ca68e..23419e24a 100644
  
  	return 0;
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 836c048df..522531282 100644
+index 29f211fcd0a1..5daf6d88e408 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -20,15 +20,18 @@
@@ -215,7 +216,7 @@ index 836c048df..522531282 100644
  	default:
  		ret = -EINVAL;
  	}
-@@ -2596,19 +2686,145 @@ static int vm_bind_op_event(struct xe_eudebug *d,
+@@ -2600,19 +2690,145 @@ static int vm_bind_op_event(struct xe_eudebug *d,
  	return xe_eudebug_queue_bind_event(d, vm, event);
  }
  
@@ -363,7 +364,7 @@ index 836c048df..522531282 100644
  	return 0;
  }
  
-@@ -2719,9 +2935,11 @@ void xe_eudebug_vm_bind_start(struct xe_vm *vm)
+@@ -2725,9 +2941,11 @@ void xe_eudebug_vm_bind_start(struct xe_vm *vm)
  	xe_eudebug_put(d);
  }
  
@@ -376,7 +377,7 @@ index 836c048df..522531282 100644
  	u32 flags;
  
  	if (!xe_vm_in_lr_mode(vm))
-@@ -2734,7 +2952,17 @@ void xe_eudebug_vm_bind_op_add(struct xe_vm *vm, u32 op, u64 addr, u64 range)
+@@ -2740,7 +2958,17 @@ void xe_eudebug_vm_bind_op_add(struct xe_vm *vm, u32 op, u64 addr, u64 range)
  	switch (op) {
  	case DRM_XE_VM_BIND_OP_MAP:
  	case DRM_XE_VM_BIND_OP_MAP_USERPTR: {
@@ -394,7 +395,7 @@ index 836c048df..522531282 100644
  		break;
  	}
  	case DRM_XE_VM_BIND_OP_UNMAP:
-@@ -2749,7 +2977,8 @@ void xe_eudebug_vm_bind_op_add(struct xe_vm *vm, u32 op, u64 addr, u64 range)
+@@ -2755,7 +2983,8 @@ void xe_eudebug_vm_bind_op_add(struct xe_vm *vm, u32 op, u64 addr, u64 range)
  	if (!flags)
  		return;
  
@@ -404,7 +405,7 @@ index 836c048df..522531282 100644
  }
  
  static struct xe_eudebug_event *fetch_bind_event(struct xe_vm * const vm)
-@@ -2909,8 +3138,89 @@ int xe_eudebug_vm_bind_ufence(struct xe_user_fence *ufence)
+@@ -2915,8 +3144,89 @@ int xe_eudebug_vm_bind_ufence(struct xe_user_fence *ufence)
  	return err;
  }
  
@@ -494,7 +495,7 @@ index 836c048df..522531282 100644
  	struct xe_exec_queue *q;
  	struct xe_vm *vm;
  	unsigned long i;
-@@ -2920,6 +3230,12 @@ static int discover_client(struct xe_eudebug *d, struct xe_file *xef)
+@@ -2926,6 +3236,12 @@ static int discover_client(struct xe_eudebug *d, struct xe_file *xef)
  	if (err)
  		return err;
  
@@ -508,7 +509,7 @@ index 836c048df..522531282 100644
  		err = vm_create_event(d, xef, vm);
  		if (err)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
-index 2d42359e6..996b28c4d 100644
+index 2d42359e6ff2..996b28c4d012 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
 @@ -17,6 +17,8 @@ struct xe_vma;
@@ -568,10 +569,10 @@ index 2d42359e6..996b28c4d 100644
  
  #endif /* _XE_EUDEBUG_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index 0e00b4202..461ce00e7 100644
+index 9a83fb8b73a2..d64da2342dc0 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
-@@ -57,7 +57,8 @@ struct xe_eudebug_resource {
+@@ -58,7 +58,8 @@ struct xe_eudebug_resource {
  #define XE_EUDEBUG_RES_TYPE_VM		1
  #define XE_EUDEBUG_RES_TYPE_EXEC_QUEUE	2
  #define XE_EUDEBUG_RES_TYPE_LRC		3
@@ -581,7 +582,7 @@ index 0e00b4202..461ce00e7 100644
  
  /**
   * struct xe_eudebug_resources - eudebug resources for all types
-@@ -319,4 +320,39 @@ struct xe_eudebug_event_vm_bind_ufence {
+@@ -320,4 +321,39 @@ struct xe_eudebug_event_vm_bind_ufence {
  	u64 vm_bind_ref_seqno;
  };
  
@@ -622,10 +623,10 @@ index 0e00b4202..461ce00e7 100644
 +
  #endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 1ecc62bba..549c3e009 100644
+index f30dd39a00b3..3eecd34d4ae2 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -4123,7 +4123,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -4151,7 +4151,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		if (err)
  			goto unwind_ops;
  
@@ -635,7 +636,7 @@ index 1ecc62bba..549c3e009 100644
  #ifdef TEST_VM_OPS_ERROR
  		if (flags & FORCE_OP_ERROR) {
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
-index b1695cb9e..ffeac4254 100644
+index b1695cb9e80a..ffeac4254575 100644
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ b/include/uapi/drm/xe_drm_eudebug.h
 @@ -21,6 +21,7 @@ extern "C" {

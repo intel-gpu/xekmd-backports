@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Wed, 28 Aug 2024 14:12:38 +0200
-Subject: drm/xe/eudebug/ptl: Add RCU_DEBUG_1 register support
- for xe3
+Subject: drm/xe/eudebug/ptl: Add RCU_DEBUG_1 register support for xe3
 
 Format of Register_RenderControlUnitDebug1 is different from
 previous gens. Adjust it so it matches PTL/xe3 format.
@@ -11,14 +10,16 @@ Acked-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit bffb950b1b47f0039aa71d9b54365acaf679b3af drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit 48b6ecb8dae5e7ecac75994f488fe5e8d6f4600f drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/xe_eudebug.c | 13 +++++++++++++
  1 file changed, 13 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index eddcbfb4e..3dcdc9857 100644
+index 33458c294b62..d29c6b8c5081 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -1464,6 +1464,17 @@ static u32 engine_status_xe2(const struct xe_hw_engine * const hwe,

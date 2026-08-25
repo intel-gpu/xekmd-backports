@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Date: Mon, 11 Nov 2024 12:03:47 +0200
-Subject: drm/xe/vm: Support for adding null page VMA to VM on
- request
+Subject: drm/xe/vm: Support for adding null page VMA to VM on request
 
 The XE2 (and PVC) HW has a limitation that the pagefault due to invalid
 access will halt the corresponding EUs. So, in order to activate the
@@ -29,18 +28,20 @@ Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Jan Maslak <jan.maslak@intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 8fedde4598cce31eabc0c4141fb371ebd9f72966 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit 7b988d62bf34e18aff33e8892738d68d9b0064b6 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/xe_vm.c | 33 +++++++++++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_vm.h |  1 +
  2 files changed, 34 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 549c3e009..51143f8c2 100644
+index 3eecd34d4ae2..d44cdfcab3c3 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -5070,3 +5070,36 @@ void xe_vm_remove_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
+@@ -5098,3 +5098,36 @@ void xe_vm_remove_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
  	}
  	up_write(&vm->exec_queues.lock);
  }
@@ -78,7 +79,7 @@ index 549c3e009..51143f8c2 100644
 +	return vma;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index c5b900f38..c7402b474 100644
+index c5b900f38ded..c7402b474525 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
 @@ -436,4 +436,5 @@ static inline struct drm_exec *xe_vm_validation_exec(struct xe_vm *vm)

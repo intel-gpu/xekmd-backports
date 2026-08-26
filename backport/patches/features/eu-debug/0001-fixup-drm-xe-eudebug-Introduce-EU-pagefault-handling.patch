@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Sanjay Yadav <sanjay.kumar.yadav@intel.com>
-Date: Wed, 29 Jul 2026 16:34:50 +0530
+From: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Date: Thu, 9 Jul 2026 18:26:06 +0200
 Subject: fixup! drm/xe/eudebug: Introduce EU pagefault handling
  interface
 
@@ -15,19 +15,18 @@ Stop/start attention worker from critical section so that actions are
 always synchronized. The attention worker may stop using eu_lock then.
 
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-Signed-off-by: Sanjay Yadav <sanjay.kumar.yadav@intel.com>
-Reviewed-by: Jan Sokolowski <jan.sokolowski@intel.com>
-Reviewed-by: Jakub Legowski <jakub.legowski@intel.com>
-Reviewed-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
-(backported from commit 706aeb86823c6c3208cafe35bdc62ca7d28b7058 drm-tip-eudebug)
+
+(cherry-picked from commit 3bdfd62cde947afdf09fd7bb1d09ec156ef60970 drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
- drivers/gpu/drm/xe/prelim/xe_eudebug.c | 25 ++++++++++---------------
+ drivers/gpu/drm/xe/xe_eudebug.c | 25 ++++++++++---------------
  1 file changed, 10 insertions(+), 15 deletions(-)
 
-diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
-index 5fdea2e91..461331fee 100644
---- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
-+++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
+index ce5dbcb9ba20..a20ceb4979a4 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -1159,12 +1159,7 @@ static int do_eu_control(struct xe_eudebug *d,
  		goto out_free;
  	}
@@ -50,7 +49,7 @@ index 5fdea2e91..461331fee 100644
 +	attention_scan_cancel(xe);
 +
  	switch (arg->cmd) {
- 	case PRELIM_DRM_XE_EUDEBUG_EU_CONTROL_CMD_INTERRUPT_ALL:
+ 	case DRM_XE_EUDEBUG_EU_CONTROL_CMD_INTERRUPT_ALL:
  		/* Make sure we dont promise anything but interrupting all */
 @@ -1204,7 +1202,8 @@ static int do_eu_control(struct xe_eudebug *d,
  
@@ -71,17 +70,17 @@ index 5fdea2e91..461331fee 100644
  }
  
 @@ -1703,10 +1701,8 @@ static int send_attention_event(struct xe_eudebug *d, struct xe_exec_queue *q, i
- 	write_member(struct prelim_drm_xe_eudebug_event_eu_attention, ea, lrc_handle, (u64)h_lrc);
- 	write_member(struct prelim_drm_xe_eudebug_event_eu_attention, ea, bitmask_size, size);
+ 	write_member(struct drm_xe_eudebug_event_eu_attention, ea, lrc_handle, (u64)h_lrc);
+ 	write_member(struct drm_xe_eudebug_event_eu_attention, ea, bitmask_size, size);
  
 -	mutex_lock(&d->eu_lock);
  	event->seqno = atomic_long_inc_return(&d->events.seqno);
- 	ret = prelim_xe_gt_eu_attention_bitmap(q->gt, &ea->bitmask[0], ea->bitmask_size);
+ 	ret = xe_gt_eu_attention_bitmap(q->gt, &ea->bitmask[0], ea->bitmask_size);
 -	mutex_unlock(&d->eu_lock);
  
- 	if (ret)
- 		return ret;
-@@ -4477,8 +4473,6 @@ prelim_xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm,
+ 	if (ret) {
+ 		kfree(event);
+@@ -4479,8 +4475,6 @@ xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm,
  	if (!pf)
  		goto err_put_fw;
  
@@ -90,7 +89,7 @@ index 5fdea2e91..461331fee 100644
  	mutex_lock(&d->eu_lock);
  	fence = dma_fence_get(d->pf_fence);
  
-@@ -4498,6 +4492,9 @@ prelim_xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm,
+@@ -4500,6 +4494,9 @@ xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm,
  		goto err_unlock_eu_lock;
  
  	d->pf_fence = &pf_fence->base;
@@ -100,7 +99,7 @@ index 5fdea2e91..461331fee 100644
  	mutex_unlock(&d->eu_lock);
  
  	INIT_LIST_HEAD(&pf->list);
-@@ -4541,7 +4538,6 @@ prelim_xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm,
+@@ -4543,7 +4540,6 @@ xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm,
  
  err_unlock_eu_lock:
  	mutex_unlock(&d->eu_lock);
@@ -108,15 +107,15 @@ index 5fdea2e91..461331fee 100644
  	kfree(pf);
  err_put_fw:
  	xe_force_wake_put(gt_to_fw(gt), fw_ref);
-@@ -4608,6 +4604,7 @@ prelim_xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf, bool is_er
+@@ -4610,6 +4606,7 @@ xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf, bool is_err)
  		}
  
  		d->pf_fence = NULL;
 +		attention_scan_flush(gt_to_xe(gt));
  		mutex_unlock(&d->eu_lock);
  
- 		prelim_xe_eudebug_put(d);
-@@ -4618,8 +4615,6 @@ prelim_xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf, bool is_er
+ 		xe_eudebug_put(d);
+@@ -4620,8 +4617,6 @@ xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf, bool is_err)
  		xe_vm_put(pf->vm);
  		kfree(pf);
  	}
@@ -126,5 +125,5 @@ index 5fdea2e91..461331fee 100644
  
  static int send_sync_host_event(struct xe_eudebug *d,
 -- 
-2.52.0
+2.43.0
 

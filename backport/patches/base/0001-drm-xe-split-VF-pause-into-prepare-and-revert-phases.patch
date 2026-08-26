@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Date: Mon, 3 Aug 2026 16:05:30 -0700
+Subject: drm/xe: split VF pause into prepare and revert phases
+
+Extract xe_sched_submission_stop() + cancel_delayed_work_sync() into a
+new guc_exec_queue_pause_prepare() helper, then call it in a first pass
+over all queues before the existing revert loop in
+xe_guc_submit_pause_vf().
+
+In a multi-queue group a secondary's run_job() can register the primary
+queue, which must not race an in-progress revert of a sibling queue.
+Stopping every scheduler before reverting any queue prevents that race.
+
+No functional change outside the VF migration path.
+
+Assisted-by: Github-Copilot:Claude-opus-4.8
+Signed-off-by: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260803230528.3428029-7-niranjana.vishwanathapura@intel.com
+
+(cherry-picked from commit 245d86b3d5cef572c3b87f1c8bd55a833b415889 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_submit.c | 26 +++++++++++++++++++++++---
+ 1 file changed, 23 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index 28e53572e01e..720d63660d96 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -2648,17 +2648,24 @@ static void lrc_parallel_clear(struct xe_lrc *lrc)
+  * during VF resume flows. The function scans the queue state, make adjustments
+  * as needed, and queues jobs / messages which replayed upon unpause.
+  */
+-static void guc_exec_queue_pause(struct xe_guc *guc, struct xe_exec_queue *q)
++static void guc_exec_queue_pause_prepare(struct xe_guc *guc, struct xe_exec_queue *q)
+ {
+ 	struct xe_gpu_scheduler *sched = &q->guc->sched;
+-	struct xe_sched_job *job;
+-	int i;
+ 
+ 	lockdep_assert_held(&guc->submission_state.lock);
+ 
+ 	/* Stop scheduling + flush any DRM scheduler operations */
+ 	xe_sched_submission_stop(sched);
+ 	cancel_delayed_work_sync(&sched->base.work_tdr);
++}
++
++static void guc_exec_queue_pause(struct xe_guc *guc, struct xe_exec_queue *q)
++{
++	struct xe_gpu_scheduler *sched = &q->guc->sched;
++	struct xe_sched_job *job;
++	int i;
++
++	lockdep_assert_held(&guc->submission_state.lock);
+ 
+ 	guc_exec_queue_revert_pending_state_change(guc, q);
+ 
+@@ -2717,6 +2724,19 @@ void xe_guc_submit_pause_vf(struct xe_guc *guc)
+ 	xe_gt_assert(guc_to_gt(guc), vf_recovery(guc));
+ 
+ 	mutex_lock(&guc->submission_state.lock);
++	/*
++	 * Stop all schedulers before reverting any queue: in a multi-queue
++	 * group a secondary's run_job() can register the primary, which must
++	 * not race an in-progress revert.
++	 */
++	xa_for_each(&guc->submission_state.exec_queue_lookup, index, q) {
++		/* Prevent redundant attempts to stop parallel queues */
++		if (q->guc->id != index)
++			continue;
++
++		guc_exec_queue_pause_prepare(guc, q);
++	}
++
+ 	xa_for_each(&guc->submission_state.exec_queue_lookup, index, q) {
+ 		/* Prevent redundant attempts to stop parallel queues */
+ 		if (q->guc->id != index)
+-- 
+2.43.0
+

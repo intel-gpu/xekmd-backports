@@ -23,8 +23,10 @@ Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Acked-by: Matthew Brost <matthew.brost@intel.com> #locking
 Acked-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 72d7c76597410b0add2159092c1ab3283560d1dc drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+
+(cherry-picked from commit 11875f5840086743a1ec4722f34d7152e7eeff5c drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
  drivers/gpu/drm/xe/xe_device.c        |  10 +-
  drivers/gpu/drm/xe/xe_device.h        |  34 +++++++
@@ -34,10 +36,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  5 files changed, 185 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 1503a5448..62ae80f6b 100644
+index 0101d63017df..5e42533c9468 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -232,8 +232,11 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+@@ -235,8 +235,11 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
  
  	ACQUIRE(xe_pm_runtime_ioctl, pm)(xe);
  	ret = ACQUIRE_ERR(xe_pm_runtime_ioctl, &pm);
@@ -50,7 +52,7 @@ index 1503a5448..62ae80f6b 100644
  
  	return ret;
  }
-@@ -250,8 +253,11 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
+@@ -253,8 +256,11 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
  
  	ACQUIRE(xe_pm_runtime_ioctl, pm)(xe);
  	ret = ACQUIRE_ERR(xe_pm_runtime_ioctl, &pm);
@@ -64,7 +66,7 @@ index 1503a5448..62ae80f6b 100644
  	return ret;
  }
 diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
-index e4b9de8d8..5ca7f7332 100644
+index 6c4cfaebc44a..0fb6ffcb4254 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
 @@ -7,6 +7,7 @@
@@ -75,7 +77,7 @@ index e4b9de8d8..5ca7f7332 100644
  
  #include "xe_device_types.h"
  #include "xe_gt_types.h"
-@@ -225,4 +226,37 @@ struct xe_vm *xe_device_asid_to_vm(struct xe_device *xe, u32 asid);
+@@ -297,4 +298,37 @@ static inline bool xe_device_is_admin_only(const struct xe_device *xe)
  #define LNL_FLUSH_WORK(wrk__) \
  	flush_work(wrk__)
  
@@ -114,10 +116,10 @@ index e4b9de8d8..5ca7f7332 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 08fb5543a..4ed01d81c 100644
+index 8eb96a53e49f..b7ccffd6e818 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -575,6 +575,12 @@ struct xe_device {
+@@ -623,6 +623,12 @@ struct xe_device {
  
  		/** @eudebug.available: is the debugging functionality available */
  		bool available;
@@ -131,7 +133,7 @@ index 08fb5543a..4ed01d81c 100644
  #endif
  
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 79b25f6bb..7fb865e3f 100644
+index 79b25f6bb5be..7fb865e3fe7c 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -311,6 +311,8 @@ static bool xe_eudebug_detach(struct xe_device *xe,
@@ -365,10 +367,10 @@ index 79b25f6bb..7fb865e3f 100644
 +	xe_eudebug_put(d);
 +}
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index 52d4205e0..be94e4b9a 100644
+index 37c81c9390d5..6f5034780d0a 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
-@@ -20,6 +20,7 @@
+@@ -21,6 +21,7 @@
  struct xe_device;
  struct task_struct;
  struct xe_eudebug_event;
@@ -376,7 +378,7 @@ index 52d4205e0..be94e4b9a 100644
  
  #define CONFIG_DRM_XE_DEBUGGER_EVENT_QUEUE_SIZE 64
  
-@@ -98,6 +99,12 @@ struct xe_eudebug {
+@@ -99,6 +100,12 @@ struct xe_eudebug {
  	/** @session: session number for this connection (for logs) */
  	u64 session;
  
@@ -388,7 +390,7 @@ index 52d4205e0..be94e4b9a 100644
 +
  	/** @events: kfifo queue of to-be-delivered events */
  	struct {
- 		/** @lock: guards access to fifo */
+ 		/** @events.lock: guards access to fifo */
 -- 
 2.43.0
 

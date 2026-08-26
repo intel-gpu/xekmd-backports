@@ -15,7 +15,8 @@ Cc: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20260717141650.2487761-8-riana.tauro@intel.com
 Signed-off-by: Riana Tauro <riana.tauro@intel.com>
-(backported from commit 942cbdcc8c07 linux-next)
+
+(cherry-picked from commit 942cbdcc8c07dc74a8d118914fc0a23e8fe76642 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_ras.c       | 33 +++++++++++++++++++++++++++++++
@@ -23,7 +24,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  2 files changed, 53 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
-index b5b62048921d..6ab0bd8a3611 100644
+index 8f7d079f7f03..19c1989c4988 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
 @@ -261,6 +261,36 @@ static u8 handle_soc_internal_errors(struct xe_device *xe, struct xe_ras_error_a
@@ -74,7 +75,7 @@ index b5b62048921d..6ab0bd8a3611 100644
  				/* For any other component, reset */
  				action = XE_RAS_RECOVERY_ACTION_RESET;
 diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
-index 2d46c506068f..cbe574336bf2 100644
+index 066c1c39fc89..99b2466e2062 100644
 --- a/drivers/gpu/drm/xe/xe_ras_types.h
 +++ b/drivers/gpu/drm/xe/xe_ras_types.h
 @@ -12,6 +12,10 @@
@@ -88,7 +89,7 @@ index 2d46c506068f..cbe574336bf2 100644
  
  /**
   * enum xe_ras_recovery_action - RAS recovery actions
-@@ -225,4 +229,20 @@ struct xe_ras_ieh_error {
+@@ -225,6 +229,22 @@ struct xe_ras_ieh_error {
  	u32 info[10];
  } __packed;
  
@@ -108,7 +109,8 @@ index 2d46c506068f..cbe574336bf2 100644
 +	u32 reserved2[10];
 +} __packed;
 +
- #endif
+ /**
+  * struct xe_ras_get_health_request - Request structure for obtaining gpu health
+  */
 -- 
 2.43.0
-

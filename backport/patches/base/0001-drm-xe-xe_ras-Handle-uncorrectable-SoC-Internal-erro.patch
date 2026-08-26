@@ -17,7 +17,8 @@ PUNIT uncorrectable errors can only be recovered through a cold reset.
 Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20260717141650.2487761-7-riana.tauro@intel.com
 Signed-off-by: Riana Tauro <riana.tauro@intel.com>
-(backported from commit 573f9e7ed1a9 linux-next)
+
+(cherry-picked from commit 573f9e7ed1a97daf7db9c134fa49cad9b7f9c142 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_ras.c       | 44 ++++++++++++++++++++++++++++
@@ -25,7 +26,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  2 files changed, 92 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
-index 845b0e99754c..b5b62048921d 100644
+index ed609912fda1..73f9949286b4 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
 @@ -8,6 +8,7 @@
@@ -36,7 +37,7 @@ index 845b0e99754c..b5b62048921d 100644
  #include "xe_sysctrl.h"
  #include "xe_sysctrl_event_types.h"
  #include "xe_sysctrl_mailbox.h"
-@@ -220,6 +221,46 @@ static u8 handle_core_compute_errors(struct xe_ras_error_array *arr)
+@@ -235,6 +236,46 @@ static u8 handle_core_compute_errors(struct xe_ras_error_array *arr)
  	return XE_RAS_RECOVERY_ACTION_RECOVERED;
  }
  
@@ -83,7 +84,7 @@ index 845b0e99754c..b5b62048921d 100644
  void xe_ras_counter_threshold_crossed(struct xe_device *xe,
  				      struct xe_sysctrl_event_response *response)
  {
-@@ -343,6 +384,9 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+@@ -358,6 +399,9 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
  			case XE_RAS_COMP_CORE_COMPUTE:
  				action = handle_core_compute_errors(arr);
  				break;
@@ -94,7 +95,7 @@ index 845b0e99754c..b5b62048921d 100644
  				/* For any other component, reset */
  				action = XE_RAS_RECOVERY_ACTION_RESET;
 diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
-index 8d344691b549..2d46c506068f 100644
+index 766b4b41768e..066c1c39fc89 100644
 --- a/drivers/gpu/drm/xe/xe_ras_types.h
 +++ b/drivers/gpu/drm/xe/xe_ras_types.h
 @@ -10,6 +10,8 @@
@@ -106,7 +107,7 @@ index 8d344691b549..2d46c506068f 100644
  
  /**
   * enum xe_ras_recovery_action - RAS recovery actions
-@@ -177,4 +179,50 @@ struct xe_ras_compute_error {
+@@ -177,6 +179,52 @@ struct xe_ras_compute_error {
  	u32 reserved[15];
  } __packed;
  
@@ -156,7 +157,9 @@ index 8d344691b549..2d46c506068f 100644
 +	u32 info[10];
 +} __packed;
 +
- #endif
+ /**
+  * struct xe_ras_get_health_request - Request structure for obtaining gpu health
+  */
 -- 
 2.43.0
 

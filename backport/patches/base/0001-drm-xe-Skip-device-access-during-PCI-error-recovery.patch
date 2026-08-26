@@ -17,6 +17,7 @@ Cc: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20260629082802.3690896-9-riana.tauro@intel.com
 Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+
 (cherry-picked from commit e46ee82f120f7f6ac4a2bf8ee6199ef65ceaea1a linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -28,10 +29,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  5 files changed, 36 insertions(+), 8 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
-index 82a712998308..45ec16262a1a 100644
+index 975768a6a9c8..913b65f49174 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
-@@ -181,6 +181,21 @@ static inline bool xe_device_has_mert(struct xe_device *xe)
+@@ -181,6 +181,21 @@ static inline bool xe_device_has_mert(const struct xe_device *xe)
  	return xe->info.has_mert;
  }
  
@@ -54,10 +55,10 @@ index 82a712998308..45ec16262a1a 100644
  
  void xe_device_snapshot_print(struct xe_device *xe, struct drm_printer *p);
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index c76df85f0871..7686acd2e605 100644
+index 15f02d09c4cc..d481746db207 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -515,6 +515,9 @@ struct xe_device {
+@@ -483,6 +483,9 @@ struct xe_device {
  	/** @needs_flr_on_fini: requests function-reset on fini */
  	bool needs_flr_on_fini;
  
@@ -68,7 +69,7 @@ index c76df85f0871..7686acd2e605 100644
  	struct {
  		/** @wedged.flag: Xe device faced a critical error and is now blocked. */
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index 8a31c963c372..ef36052fe90d 100644
+index 783eb6d631b5..d904527a8898 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -917,6 +917,9 @@ static void gt_reset_worker(struct work_struct *w)
@@ -108,10 +109,10 @@ index 8a31c963c372..ef36052fe90d 100644
  
  void xe_gt_suspend_prepare(struct xe_gt *gt)
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index e2d9c2490fd2..732e7ffe1fb1 100644
+index 1c92b96e4c32..d13f98983721 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -1520,7 +1520,7 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+@@ -1521,7 +1521,7 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
  	 * If devcoredump not captured and GuC capture for the job is not ready
  	 * do manual capture first and decide later if we need to use it
  	 */
@@ -120,7 +121,7 @@ index e2d9c2490fd2..732e7ffe1fb1 100644
  	    !xe_guc_capture_get_matching_and_lock(q)) {
  		/* take force wake before engine register manual capture */
  		CLASS(xe_force_wake, fw_ref)(gt_to_fw(q->gt), XE_FORCEWAKE_ALL);
-@@ -1542,8 +1542,8 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+@@ -1543,8 +1543,8 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
  	set_exec_queue_banned(q);
  
  	/* Kick job / queue off hardware */
@@ -131,7 +132,7 @@ index e2d9c2490fd2..732e7ffe1fb1 100644
  		int ret;
  
  		if (exec_queue_reset(primary))
-@@ -1611,7 +1611,8 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+@@ -1612,7 +1612,8 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
  
  	trace_xe_sched_job_timedout(job);
  

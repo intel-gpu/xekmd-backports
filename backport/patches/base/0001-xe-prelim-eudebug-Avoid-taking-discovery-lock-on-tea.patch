@@ -1,0 +1,197 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Date: Fri, 23 Jan 2026 18:20:24 +0200
+Subject: xe/prelim/eudebug: Avoid taking discovery lock on teardown
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Display teardown path will close the drm client
+and eudebug tries to send the client close event.
+
+For doing so it needs discovery lock. However there
+is cyclical dependency between framebuffer lock -> drm_clientlist
+and then the discovery lock.
+
+As the discovery process itself is dependent on client list,
+there is already a lock xe->clients.lock for this purpose.
+
+So omit taking discovery lock in file_close() and instead
+trust the client list to be the authority here and
+avoid the circular dependency on the display teardown.
+
+As the client list can now be changing as discover,
+we create a temporary discovery list with refs to all
+clients. And then proceed with discovering.
+
+Note that eudebug-v4+ implementations avoid this problem
+by not having the clients in behind the discovery lock in
+the first place as debugger:drm_client mapping is 1:1.
+
+v2: take & free xef ref on client addition & deletion (Michal)
+v3: make a list copy for safe iteration (Mika)
+v4: wait for discovery after close (Maciej)
+
+Cc: Jan Maslak <jan.maslak@intel.com>
+Acked-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Signed-off-by: MichaÅ‚ Grzelak <michal.grzelak@intel.com>
+(cherry-picked from commit 7035ced690bb56b01ead56946713a8e73a1beadd xe internal)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c | 49 +++++++++++++++++++-------
+ drivers/gpu/drm/xe/prelim/xe_eudebug.h |  2 ++
+ drivers/gpu/drm/xe/xe_device_types.h   | 11 +++++-
+ 3 files changed, 48 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+index 461331fee9f5..ee2d1fd3abc1 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+@@ -2697,11 +2697,14 @@ void prelim_xe_eudebug_file_open(struct xe_file *xef)
+ 	struct xe_eudebug *d;
+ 
+ 	INIT_LIST_HEAD(&xef->eudebug.client_link);
++	INIT_LIST_HEAD(&xef->eudebug.discovery_link);
+ 	mutex_init(&xef->eudebug.metadata.lock);
+ 	xa_init_flags(&xef->eudebug.metadata.xa, XA_FLAGS_ALLOC1);
+ 
+ 	down_read(&xef->xe->eudebug.discovery_lock);
+ 
++	xe_file_get(xef);
++
+ 	spin_lock(&xef->xe->clients.lock);
+ 	list_add_tail(&xef->eudebug.client_link, &xef->xe->clients.list);
+ 	spin_unlock(&xef->xe->clients.lock);
+@@ -2719,10 +2722,17 @@ void prelim_xe_eudebug_file_close(struct xe_file *xef)
+ 	unsigned long idx;
+ 	struct prelim_xe_debug_metadata *mdata;
+ 
+-	down_read(&xef->xe->eudebug.discovery_lock);
+-	d = prelim_xe_eudebug_get(xef);
+-	if (d)
++	spin_lock(&xef->xe->clients.lock);
++	list_del_init(&xef->eudebug.client_link);
++	spin_unlock(&xef->xe->clients.lock);
++
++	xe_file_put(xef);
++
++	d = _xe_eudebug_get(xef);
++	if (d) {
++		wait_for_completion(&d->discovery);
+ 		xe_eudebug_event_put(d, client_destroy_event(d, xef));
++	}
+ 
+ 	mutex_lock(&xef->eudebug.metadata.lock);
+ 	xa_for_each(&xef->eudebug.metadata.xa, idx, mdata)
+@@ -2731,12 +2741,6 @@ void prelim_xe_eudebug_file_close(struct xe_file *xef)
+ 
+ 	xa_destroy(&xef->eudebug.metadata.xa);
+ 	mutex_destroy(&xef->eudebug.metadata.lock);
+-
+-	spin_lock(&xef->xe->clients.lock);
+-	list_del_init(&xef->eudebug.client_link);
+-	spin_unlock(&xef->xe->clients.lock);
+-
+-	up_read(&xef->xe->eudebug.discovery_lock);
+ }
+ 
+ static int send_vm_event(struct xe_eudebug *d, u32 flags,
+@@ -3786,6 +3790,9 @@ static int discover_client(struct xe_eudebug *d, struct xe_file *xef)
+ 	unsigned long i;
+ 	int err;
+ 
++	if (!prelim_xe_eudebug_client_tracked(xef))
++		return 0;
++
+ 	err = client_create_event(d, xef);
+ 	if (err)
+ 		return err;
+@@ -3836,13 +3843,19 @@ static bool xe_eudebug_task_match(struct xe_eudebug *d, struct xe_file *xef)
+ 
+ static void discover_clients(struct xe_device *xe, struct xe_eudebug *d)
+ {
+-	struct xe_file *xef;
+-	int err;
++	struct xe_file *xef, *tmp;
++	LIST_HEAD(dlist);
++	int err = 0;
+ 
++	spin_lock(&xe->clients.lock);
+ 	list_for_each_entry(xef, &xe->clients.list, eudebug.client_link) {
+-		if (xe_eudebug_detached(d))
+-			break;
++		xe_file_get(xef);
++		XE_WARN_ON(!list_empty(&xef->eudebug.discovery_link));
++		list_add_tail(&xef->eudebug.discovery_link, &dlist);
++	}
++	spin_unlock(&xe->clients.lock);
+ 
++	list_for_each_entry(xef, &dlist, eudebug.discovery_link) {
+ 		if (xe_eudebug_task_match(d, xef))
+ 			err = discover_client(d, xef);
+ 		else
+@@ -3853,6 +3866,11 @@ static void discover_clients(struct xe_device *xe, struct xe_eudebug *d)
+ 			break;
+ 		}
+ 	}
++
++	list_for_each_entry_safe(xef, tmp, &dlist, eudebug.discovery_link) {
++		list_del_init(&xef->eudebug.discovery_link);
++		xe_file_put(xef);
++	}
+ }
+ 
+ static void discovery_work_fn(struct work_struct *work)
+@@ -4681,6 +4699,11 @@ int prelim_xe_eudebug_sync_host(struct xe_exec_queue *q, struct xe_lrc *lrc)
+ 	return err;
+ }
+ 
++bool prelim_xe_eudebug_client_tracked(struct xe_file *xef)
++{
++	return !list_empty_careful(&xef->eudebug.client_link);
++}
++
+ #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
+ #include "tests/prelim/xe_eudebug.c"
+ #endif
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.h b/drivers/gpu/drm/xe/prelim/xe_eudebug.h
+index 1aeff5f07ffd..63a05c07f62e 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.h
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.h
+@@ -63,6 +63,8 @@ void prelim_xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf, bool
+ 
+ int prelim_xe_eudebug_sync_host(struct xe_exec_queue *q, struct xe_lrc *lrc);
+ 
++bool prelim_xe_eudebug_client_tracked(struct xe_file *xef);
++
+ #else
+ 
+ static inline int prelim_xe_eudebug_connect_ioctl(struct drm_device *dev,
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index 393aa064e983..72b990da0497 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -713,9 +713,18 @@ struct xe_file {
+ #if IS_ENABLED(CONFIG_PRELIM_DRM_XE_EUDEBUG)
+ 	/** @eudebug: stores link to drm client and debug metadata */
+ 	struct {
+-		/** @eudebug.client_link: list entry in xe_device.clients.list */
++		/**
++		 * @eudebug.client_link: list entry in xe_device.clients.list.
++		 * protected by xe_device.clients.lock
++		 */
+ 		struct list_head client_link;
+ 
++		/**
++		 * @eudebug.discovery_link: list entry for current discovery process.
++		 * protected by single-walker discovery via eudebug.ordered_wq
++		 */
++		struct list_head discovery_link;
++
+ 		/** @eudebug.metadata: debug metadata handling */
+ 		struct {
+ 			/** @eudebug.metadata.xa: xarray to store debug metadata */
+-- 
+2.43.0
+

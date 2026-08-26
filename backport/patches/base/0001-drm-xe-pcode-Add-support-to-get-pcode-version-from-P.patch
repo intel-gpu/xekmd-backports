@@ -10,16 +10,17 @@ Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
 Reviewed-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
 Link: https://patch.msgid.link/20260702092540.1005095-2-karthik.poosa@intel.com
 Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
-(cherry-picked from commit f7c05238ab72ae72b5f6bd5516b02e7a24fdfd0d linux-next)
+
+(backported from commit f7c05238ab72ae72b5f6bd5516b02e7a24fdfd0d linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_pmt.h |  2 ++
  drivers/gpu/drm/xe/xe_pcode.c    | 32 ++++++++++++++++++++++++++++++++
- drivers/gpu/drm/xe/xe_pcode.h    |  7 +++++++
- 3 files changed, 41 insertions(+)
+ drivers/gpu/drm/xe/xe_pcode.h    |  9 ++++++++-
+ 3 files changed, 42 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_pmt.h b/drivers/gpu/drm/xe/regs/xe_pmt.h
-index 240d57993..a62ab05c6 100644
+index 240d57993ea6..a62ab05c6b4c 100644
 --- a/drivers/gpu/drm/xe/regs/xe_pmt.h
 +++ b/drivers/gpu/drm/xe/regs/xe_pmt.h
 @@ -15,6 +15,8 @@
@@ -32,7 +33,7 @@ index 240d57993..a62ab05c6 100644
  #define BMG_TELEMETRY_OFFSET		(SOC_BASE + BMG_TELEMETRY_BASE_OFFSET)
  
 diff --git a/drivers/gpu/drm/xe/xe_pcode.c b/drivers/gpu/drm/xe/xe_pcode.c
-index dc66d0c7e..22d89d08e 100644
+index dc66d0c7ee06..22d89d08e3c0 100644
 --- a/drivers/gpu/drm/xe/xe_pcode.c
 +++ b/drivers/gpu/drm/xe/xe_pcode.c
 @@ -11,10 +11,14 @@
@@ -83,10 +84,10 @@ index dc66d0c7e..22d89d08e 100644
 +	return 0;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_pcode.h b/drivers/gpu/drm/xe/xe_pcode.h
-index 490e4f269..d42440415 100644
+index 490e4f269607..8fb3e4ba13a6 100644
 --- a/drivers/gpu/drm/xe/xe_pcode.h
 +++ b/drivers/gpu/drm/xe/xe_pcode.h
-@@ -12,6 +12,12 @@ struct drm_device;
+@@ -12,7 +12,14 @@ struct drm_device;
  struct xe_device;
  struct xe_tile;
  
@@ -97,8 +98,10 @@ index 490e4f269..d42440415 100644
 +};
 +
  void xe_pcode_init(struct xe_tile *tile);
++int xe_pcode_init_early(struct xe_tile *tile);
  int xe_pcode_probe_early(struct xe_device *xe);
  int xe_pcode_ready(struct xe_device *xe, bool locked);
+ int xe_pcode_init_min_freq_table(struct xe_tile *tile, u32 min_gt_freq,
 @@ -22,6 +28,7 @@ int xe_pcode_write_timeout(struct xe_tile *tile, u32 mbox, u32 val,
  			   int timeout_ms);
  int xe_pcode_write64_timeout(struct xe_tile *tile, u32 mbox, u32 data0,

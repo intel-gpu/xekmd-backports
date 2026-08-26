@@ -12,19 +12,18 @@ eudebug ioctl doing attention clear operations. This results in
 sending empty attention event.
 
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-Signed-off-by: Sanjay Yadav <sanjay.kumar.yadav@intel.com>
-Reviewed-by: Jan Sokolowski <jan.sokolowski@intel.com>
-Reviewed-by: Jakub Legowski <jakub.legowski@intel.com>
-Reviewed-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
-(backported from commit e7a445611c14cfc87da2ae57ba5a045711433253 drm-tip-eudebug)
+
+(cherry-picked from commit 6ceb6c7f22630593c26d8111e1c6cced236543db drm-tip-eudebug)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+
 ---
- drivers/gpu/drm/xe/prelim/xe_eudebug.c | 30 +++++++++++++++-----------
+ drivers/gpu/drm/xe/xe_eudebug.c | 30 ++++++++++++++++++------------
  1 file changed, 18 insertions(+), 12 deletions(-)
 
-diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
-index 7897bfae5907..fe6041fcf013 100644
---- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
-+++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
+index f87100580adc..c2eea5ca3b8d 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -1076,6 +1076,17 @@ xe_eudebug_ack_event_ioctl(struct xe_eudebug *d,
  	return 0;
  }
@@ -41,8 +40,8 @@ index 7897bfae5907..fe6041fcf013 100644
 +}
 +
  static int do_eu_control(struct xe_eudebug *d,
- 			 const struct prelim_drm_xe_eudebug_eu_control * const arg,
- 			 struct prelim_drm_xe_eudebug_eu_control __user * const user_ptr)
+ 			 const struct drm_xe_eudebug_eu_control * const arg,
+ 			 struct drm_xe_eudebug_eu_control __user * const user_ptr)
 @@ -1148,6 +1159,12 @@ static int do_eu_control(struct xe_eudebug *d,
  		goto out_free;
  	}
@@ -84,5 +83,5 @@ index 7897bfae5907..fe6041fcf013 100644
  				       struct xe_exec_queue *q,
  				       struct xe_lrc *lrc)
 -- 
-2.52.0
+2.43.0
 

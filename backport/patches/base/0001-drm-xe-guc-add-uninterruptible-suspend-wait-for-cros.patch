@@ -1,0 +1,123 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Date: Mon, 13 Jul 2026 13:23:18 -0700
+Subject: drm/xe/guc: add uninterruptible suspend wait for
+ cross-process cleanup
+
+Add a suspend_wait_blocking() exec queue op: an uninterruptible variant
+of suspend_wait() for callers that must complete a suspend on behalf of a
+queue that may belong to a different process than the calling task (e.g.
+cleanup/undo paths). An interruptible suspend_wait() returns -ERESTARTSYS
+when the calling task is signalled, which would leave the other process's
+queue suspended forever - a cross-process DoS.
+
+The blocking variant waits uninterruptibly and, on a genuine GuC timeout,
+bans and tears down the queue like suspend_wait() (shared via
+guc_exec_queue_suspend_timeout_ban()). It deliberately does not handle VF
+recovery since a blocking caller cannot retry.
+
+Assisted-by: Github-Copilot:Claude-opus-4.8
+Signed-off-by: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260713202317.2187787-11-niranjana.vishwanathapura@intel.com
+
+(cherry-picked from commit 412c885692cade356a394835934d3f36ae8f6aca linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue_types.h |  9 ++++++
+ drivers/gpu/drm/xe/xe_execlist.c         |  1 +
+ drivers/gpu/drm/xe/xe_guc_submit.c       | 39 ++++++++++++++++++++++++
+ 3 files changed, 49 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
+index 2f5ccf294675..d69eade6280e 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
++++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
+@@ -310,6 +310,15 @@ struct xe_exec_queue_ops {
+ 	 * avoidance mechanism.
+ 	 */
+ 	int (*suspend_wait)(struct xe_exec_queue *q);
++	/**
++	 * @suspend_wait_blocking: Like @suspend_wait, but waits uninterruptibly
++	 * (does not abort on the calling task's signals). For cleanup/undo paths
++	 * that must complete a suspend on behalf of a queue that may belong to a
++	 * different process than the caller: a signal to the caller must not
++	 * abandon the wait, which would leave the other process's queue
++	 * suspended forever (cross-process DoS). A timeout bans like suspend_wait.
++	 */
++	int (*suspend_wait_blocking)(struct xe_exec_queue *q);
+ 	/**
+ 	 * @resume: Resume exec queue execution, exec queue must be in a suspended
+ 	 * state and dma fence returned from most recent suspend call must be
+diff --git a/drivers/gpu/drm/xe/xe_execlist.c b/drivers/gpu/drm/xe/xe_execlist.c
+index 0fe4fb226ef4..1112868ff1c7 100644
+--- a/drivers/gpu/drm/xe/xe_execlist.c
++++ b/drivers/gpu/drm/xe/xe_execlist.c
+@@ -475,6 +475,7 @@ static const struct xe_exec_queue_ops execlist_exec_queue_ops = {
+ 	.set_preempt_timeout = execlist_exec_queue_set_preempt_timeout,
+ 	.suspend = execlist_exec_queue_suspend,
+ 	.suspend_wait = execlist_exec_queue_suspend_wait,
++	.suspend_wait_blocking = execlist_exec_queue_suspend_wait,
+ 	.resume = execlist_exec_queue_resume,
+ 	.reset_status = execlist_exec_queue_reset_status,
+ 	.active = execlist_exec_queue_active,
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index 7d8225056b44..6d31d41d8f25 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -2257,6 +2257,44 @@ static int guc_exec_queue_suspend_wait(struct xe_exec_queue *q)
+ 	return ret < 0 ? ret : 0;
+ }
+ 
++static int guc_exec_queue_suspend_wait_blocking(struct xe_exec_queue *q)
++{
++	struct xe_guc *guc = exec_queue_to_guc(q);
++	struct xe_device *xe = guc_to_xe(guc);
++	int ret;
++
++	/*
++	 * Uninterruptible variant of guc_exec_queue_suspend_wait() for callers
++	 * that must complete the wait on behalf of a queue possibly owned by a
++	 * different process (e.g. cleanup/undo paths). An interruptible wait
++	 * could return -ERESTARTSYS if the calling task is signalled, leaving
++	 * that queue suspended forever (cross-process DoS).
++	 *
++	 * A timeout is still a real per-queue fault, so it bans and cleans up
++	 * like suspend_wait(). VF recovery is deliberately not handled (no
++	 * -EAGAIN) since a blocking caller cannot retry.
++	 */
++	q = xe_exec_queue_multi_queue_primary(q);
++
++#define WAIT_COND \
++	(!READ_ONCE(q->guc->suspend_pending) ||	exec_queue_killed(q) || \
++	 xe_guc_read_stopped(guc))
++
++	if (IS_SRIOV_VF(xe))
++		ret = wait_event_timeout(guc->ct.wq, WAIT_COND, HZ * 5);
++	else
++		ret = wait_event_timeout(q->guc->suspend_wait, WAIT_COND, HZ * 5);
++
++#undef WAIT_COND
++
++	if (!ret) {
++		guc_exec_queue_suspend_timeout_ban(q);
++		return -ETIME;
++	}
++
++	return 0;
++}
++
+ static void guc_exec_queue_resume(struct xe_exec_queue *q)
+ {
+ 	struct xe_gpu_scheduler *sched = &q->guc->sched;
+@@ -2304,6 +2342,7 @@ static const struct xe_exec_queue_ops guc_exec_queue_ops = {
+ 	.set_multi_queue_priority = guc_exec_queue_set_multi_queue_priority,
+ 	.suspend = guc_exec_queue_suspend,
+ 	.suspend_wait = guc_exec_queue_suspend_wait,
++	.suspend_wait_blocking = guc_exec_queue_suspend_wait_blocking,
+ 	.resume = guc_exec_queue_resume,
+ 	.reset_status = guc_exec_queue_reset_status,
+ 	.active = guc_exec_queue_active,
+-- 
+2.43.0
+

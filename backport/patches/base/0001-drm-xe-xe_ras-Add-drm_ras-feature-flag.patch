@@ -9,6 +9,7 @@ exposing RAS error counters via netlink.
 Reviewed-by: Raag Jadav <raag.jadav@intel.com>
 Link: https://patch.msgid.link/20260618060633.2790109-14-riana.tauro@intel.com
 Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+
 (cherry-picked from commit 63dfab5786ca925f6bc90903b7a7b77c99f4708f linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
@@ -20,10 +21,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  5 files changed, 8 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index c37007a50531..12ee4d03abbf 100644
+index af4a14880835..955109e8bb9c 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -670,6 +670,7 @@ static void vf_update_device_info(struct xe_device *xe)
+@@ -740,6 +740,7 @@ static void vf_update_device_info(struct xe_device *xe)
  	xe->info.has_late_bind = 0;
  	xe->info.skip_guc_pc = 1;
  	xe->info.skip_pcode = 1;
@@ -32,10 +33,10 @@ index c37007a50531..12ee4d03abbf 100644
  
  static int xe_device_vram_alloc(struct xe_device *xe)
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 5cdedc538f4a..7686acd2e605 100644
+index aad10899d9ac..8442b9c7e44e 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -172,6 +172,8 @@ struct xe_device {
+@@ -156,6 +156,8 @@ struct xe_device {
  		u8 has_cached_pt:1;
  		/** @info.has_device_atomics_on_smem: Supports device atomics on SMEM */
  		u8 has_device_atomics_on_smem:1;
@@ -45,10 +46,10 @@ index 5cdedc538f4a..7686acd2e605 100644
  		u8 has_fan_control:1;
  		/** @info.has_flat_ccs: Whether flat CCS metadata is used */
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index a3b387f442f3..9bc6209a2cc2 100644
+index 9cd873708136..765402915ed5 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -367,6 +367,7 @@ static const __maybe_unused struct xe_device_desc pvc_desc = {
+@@ -355,6 +355,7 @@ static const __maybe_unused struct xe_device_desc pvc_desc = {
  	PLATFORM(PVC),
  	.dma_mask_size = 52,
  	.has_display = false,
@@ -56,7 +57,7 @@ index a3b387f442f3..9bc6209a2cc2 100644
  	.has_gsc_nvm = 1,
  	.has_heci_gscfi = 1,
  	.max_gt_per_tile = 1,
-@@ -468,6 +469,7 @@ static const struct xe_device_desc cri_desc = {
+@@ -457,6 +458,7 @@ static const struct xe_device_desc cri_desc = {
  	PLATFORM(CRESCENTISLAND),
  	.dma_mask_size = 52,
  	.has_display = false,
@@ -64,7 +65,7 @@ index a3b387f442f3..9bc6209a2cc2 100644
  	.has_flat_ccs = false,
  	.has_gsc_nvm = 1,
  	.has_i2c = true,
-@@ -758,6 +760,7 @@ static int xe_info_init_early(struct xe_device *xe,
+@@ -760,6 +762,7 @@ static int xe_info_init_early(struct xe_device *xe,
  
  	xe->info.is_dgfx = desc->is_dgfx;
  	xe->info.has_cached_pt = desc->has_cached_pt;
@@ -73,7 +74,7 @@ index a3b387f442f3..9bc6209a2cc2 100644
  	/* runtime fusing may force flat_ccs to disabled later */
  	xe->info.has_flat_ccs = desc->has_flat_ccs;
 diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
-index 50e5f9b4d212..9765a731e934 100644
+index 5b85e2c24b7b..24d4a3d00517 100644
 --- a/drivers/gpu/drm/xe/xe_pci_types.h
 +++ b/drivers/gpu/drm/xe/xe_pci_types.h
 @@ -40,6 +40,7 @@ struct xe_device_desc {

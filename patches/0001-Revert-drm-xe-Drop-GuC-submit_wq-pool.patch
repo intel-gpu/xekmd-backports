@@ -131,9 +131,8 @@ diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_subm
 index fb916dd..ef95cfe 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -1943,6 +2006,10 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
- 	timeout = (q->vm && xe_vm_in_lr_mode(q->vm)) ? MAX_SCHEDULE_TIMEOUT :
- 		  msecs_to_jiffies(q->sched_props.job_timeout_ms);
+@@ -1943,5 +2006,9 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
+ 	strscpy(ge->name, q->name, sizeof(ge->name));
  
 +#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
 +	submit_wq = get_submit_wq(guc);

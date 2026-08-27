@@ -10,6 +10,12 @@
 #include <linux/bitops.h>
 #endif /* >= 4.19 */
 
+#include <linux/overflow.h>
+
+#ifndef BITS_PER_TYPE
+#define BITS_PER_TYPE(type)     (sizeof(type) * BITS_PER_BYTE)
+#endif
+
 #ifdef BPM_GENMASK_U32_NOT_PRESENT
 /*
  * Generate a mask for the specified type @t. Additional checks are made to
@@ -26,6 +32,7 @@
 	     (type_max(t) << (l) &				\
 	      type_max(t) >> (BITS_PER_TYPE(t) - 1 - (h)))))
 
+#define GENMASK_U16(h, l)	GENMASK_TYPE(u16, h, l)
 #define GENMASK_U32(h, l)	GENMASK_TYPE(u32, h, l)
 #define GENMASK_U64(h, l)	GENMASK_TYPE(u64, h, l)
 
@@ -42,6 +49,7 @@
 #define BIT_INPUT_CHECK(type, nr) \
 	BUILD_BUG_ON_ZERO(const_true((nr) >= BITS_PER_TYPE(type)))
 #define BIT_TYPE(type, nr) ((type)(BIT_INPUT_CHECK(type, nr) + BIT_ULL(nr)))
+#define BIT_U16(nr)	BIT_TYPE(u16, nr)
 #define BIT_U32(nr)	BIT_TYPE(u32, nr)
 
 #endif

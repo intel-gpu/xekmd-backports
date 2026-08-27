@@ -25,6 +25,7 @@
 #include "xe_gt_printk.h"
 #include "xe_gt_sriov_vf.h"
 #include "xe_guc.h"
+#include "xe_log.h"
 #include "xe_mmio.h"
 #include "xe_module.h"
 #include "xe_pci_error.h"
@@ -587,14 +588,14 @@ static bool id_blocked(u16 device_id)
 }
 
 static const struct xe_subplatform_desc *
-find_subplatform(const struct xe_device *xe, const struct xe_device_desc *desc)
+find_subplatform(const struct xe_device_desc *desc, u16 devid)
 {
 	const struct xe_subplatform_desc *sp;
 	const u16 *id;
 
 	for (sp = desc->subplatforms; sp && sp->subplatform; sp++)
 		for (id = sp->pciidlist; *id; id++)
-			if (*id == xe->info.devid)
+			if (*id == devid)
 				return sp;
 
 	return NULL;
@@ -738,6 +739,16 @@ static int handle_gmdid(struct xe_device *xe,
 	return 0;
 }
 
+static void init_devid(struct xe_device *xe)
+{
+	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+
+	KUNIT_STATIC_STUB_REDIRECT(init_devid, xe);
+
+	xe->info.devid = pdev->device;
+	xe->info.revid = pdev->revision;
+}
+
 /*
  * Initialize device info content that only depends on static driver_data
  * passed to the driver at probe time from PCI ID table.
@@ -752,6 +763,8 @@ static int xe_info_init_early(struct xe_device *xe,
 	xe->info.platform = desc->platform;
 	xe->info.subplatform = subplatform_desc ?
 		subplatform_desc->subplatform : XE_SUBPLATFORM_NONE;
+
+	init_devid(xe);
 
 	xe->info.dma_mask_size = desc->dma_mask_size;
 	xe->info.va_bits = desc->va_bits;
@@ -791,6 +804,7 @@ static int xe_info_init_early(struct xe_device *xe,
 	xe->info.probe_display = IS_ENABLED(CPTCFG_DRM_XE_DISPLAY) &&
 				 xe_modparam.probe_display &&
 				 desc->has_display;
+	xe->info.force_execlist = xe_modparam.force_execlist;
 
 	xe_assert(xe, desc->max_gt_per_tile > 0);
 	xe_assert(xe, desc->max_gt_per_tile <= XE_MAX_GT_PER_TILE);
@@ -1087,12 +1101,10 @@ static void xe_pci_remove(struct pci_dev *pdev)
  * caller. Therefore there is no consequence on those specific callers when
  * function error injection skips the whole function.
  */
+static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *desc);
 static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	const struct xe_device_desc *desc = (const void *)ent->driver_data;
-	const struct xe_subplatform_desc *subplatform_desc;
-	struct xe_device *xe;
-	void *group;
 	int err;
 
 	xe_configfs_check_device(pdev);
@@ -1110,13 +1122,32 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	if (id_blocked(pdev->device)) {
-		dev_info(&pdev->dev, "Probe blocked for device [%04x:%04x].\n",
-			 pdev->vendor, pdev->device);
+		xe_log_info(pdev, PROBE, "driver loading blocked for device '%04x'\n",
+			    pdev->device);
 		return -ENODEV;
 	}
 
 	if (xe_display_driver_probe_defer(pdev))
 		return -EPROBE_DEFER;
+
+	err = __xe_pci_probe(pdev, desc);
+	if (err) {
+		xe_log_err_fatal(pdev, PROBE, err, "driver loading failed for device '%04x'\n",
+				 pdev->device);
+		return err;
+	}
+
+	return 0;
+}
+
+static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *desc)
+{
+	const struct xe_subplatform_desc *subplatform_desc;
+	struct xe_device *xe;
+	void *group;
+	int err;
+
+	subplatform_desc = find_subplatform(desc, pdev->device);
 
 	/* Group all devres so xe_pci_error_slot_reset() can release them as a unit. */
 	group = devres_open_group(&pdev->dev, NULL, GFP_KERNEL);
@@ -1127,7 +1158,7 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (err)
 		return err;
 
-	xe = xe_device_create(pdev, ent);
+	xe = xe_device_create(pdev);
 	if (IS_ERR(xe))
 		return PTR_ERR(xe);
 
@@ -1136,7 +1167,6 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	pci_set_drvdata(pdev, &xe->drm);
 
 	xe_pm_assert_unbounded_bridge(xe);
-	subplatform_desc = find_subplatform(xe, desc);
 
 	pci_set_master(pdev);
 
@@ -1191,7 +1221,7 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		str_yes_no(xe_device_has_sriov(xe)),
 		xe_sriov_mode_to_string(xe_device_sriov_mode(xe)));
 
-	err = xe_pm_init_early(xe);
+	err = xe_pm_probe(xe);
 	if (err)
 		return err;
 
@@ -1202,9 +1232,6 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	err = xe_pm_init(xe);
 	if (err)
 		goto err_driver_cleanup;
-
-	drm_dbg(&xe->drm, "d3cold: capable=%s\n",
-		str_yes_no(xe->d3cold.capable));
 
 	return 0;
 

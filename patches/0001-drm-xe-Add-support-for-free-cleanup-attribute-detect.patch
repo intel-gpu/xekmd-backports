@@ -25,46 +25,48 @@ invocation of __pf_show_provisioning_lmem() (reported by kmemleak via
 sriov_numvfs_store() -> xe_pci_sriov_configure()). Add a common exit path
 that frees the bitmap when the cleanup attribute is not present.
 
+v3: Fix hunk failure on 7.2 kernel [Jagadeesh]
+
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
 ---
- drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 12 ++++++++++--
- 1 file changed, 10 insertions(+), 2 deletions(-)
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-index b44eed2..e95b80c 100644
+index 2c9b85b..7df58be 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-@@ -1844,7 +1844,11 @@ static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
- 					unsigned int num_vfs, bool provisioned)
+@@ -1941,7 +1941,11 @@ static void __pf_show_provisioned(struct xe_gt *gt, unsigned int first_vf,
+ 				  const char *what)
  {
  	unsigned int allvfs = 1 + xe_gt_sriov_pf_get_totalvfs(gt); /* PF plus VFs */
--	unsigned long *bitmap __free(bitmap) = bitmap_zalloc(allvfs, GFP_KERNEL);
-+	#ifdef BPM_FREE_ATTRIBUTE_NOT_PRESENT
-+		unsigned long *bitmap = bitmap_zalloc(allvfs, GFP_KERNEL);
-+	#else
-+		unsigned long *bitmap __free(bitmap) = bitmap_zalloc(allvfs, GFP_KERNEL);
-+	#endif
++#ifdef BPM_FREE_ATTRIBUTE_NOT_PRESENT
++	unsigned long *bitmap = bitmap_zalloc(allvfs, GFP_KERNEL);
++#else
+ 	unsigned long *bitmap __free(bitmap) = bitmap_zalloc(allvfs, GFP_KERNEL);
++#endif
  	unsigned int weight;
  	unsigned int n;
- 
-@@ -1858,11 +1862,15 @@ static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
- 
+ 	bool pf;
+@@ -1960,12 +1964,16 @@ static void __pf_show_provisioned(struct xe_gt *gt, unsigned int first_vf,
+ 	pf = test_and_clear_bit(0, bitmap);
  	weight = bitmap_weight(bitmap, allvfs);
- 	if (!weight)
+ 	if (!pf && !weight)
 -		return;
 +		goto out;
  
- 	xe_gt_sriov_info(gt, "VF%s%*pbl %s provisioned with VRAM\n",
- 			 weight > 1 ? "s " : "", allvfs, bitmap,
- 			 provisioned ? "already" : "not");
+ 	xe_gt_sriov_info(gt, "%s%s%s%s%*pbl %s provisioned with %s\n",
+ 			 pf ? "PF" : "", pf && weight ? " and " : "",
+ 			 weight ? "VF" : "", weight > 1 ? "s " : "",
+ 			 allvfs, bitmap, provisioned ? "already" : "not", what);
 +out:
 +#ifdef BPM_FREE_ATTRIBUTE_NOT_PRESENT
 +	bitmap_free(bitmap);
 +#endif
  }
  
- static void pf_show_all_provisioned_lmem(struct xe_gt *gt)
+ static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
 -- 
 2.43.0
 

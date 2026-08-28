@@ -8,8 +8,7 @@
 #define PENDING_ERROR 1
 struct dma_fence_array *dma_fence_array_create(int num_fences,
                                                struct dma_fence **fences,
-                                               u64 context, unsigned seqno,
-                                               bool signal_on_any)
+                                               u64 context, unsigned seqno)
 {
         struct dma_fence_array *array;
 
@@ -18,7 +17,7 @@ struct dma_fence_array *dma_fence_array_create(int num_fences,
                 return NULL;
 
         dma_fence_array_init(array, num_fences, fences,
-                             context, seqno, signal_on_any);
+                             context, seqno);
 
         return array;
 }
@@ -41,8 +40,7 @@ static void irq_dma_fence_array_work(struct irq_work *wrk)
 }
 void dma_fence_array_init(struct dma_fence_array *array,
                           int num_fences, struct dma_fence **fences,
-                          u64 context, unsigned seqno,
-                          bool signal_on_any)
+                          u64 context, unsigned seqno)
 {
         WARN_ON(!num_fences || !fences);
 
@@ -53,7 +51,7 @@ void dma_fence_array_init(struct dma_fence_array *array,
                        context, seqno);
         init_irq_work(&array->work, irq_dma_fence_array_work);
 
-        atomic_set(&array->num_pending, signal_on_any ? 1 : num_fences);
+        atomic_set(&array->num_pending, num_fences);
         array->fences = fences;
 
         array->base.error = PENDING_ERROR;

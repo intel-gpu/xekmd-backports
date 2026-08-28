@@ -29,6 +29,17 @@ struct xe_ttm_vram_mgr {
 	struct mutex lock;
 	/** @mem_type: The TTM memory type */
 	u32 mem_type;
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	/** @pin: pinned VRAM accounting in bytes, protected by xe->pinned.lock */
+	struct {
+		/** @pin.dmabuf_limit: max bytes pinnable via dma-buf, 0 = unlimited */
+		u64 dmabuf_limit;
+		/** @pin.dmabuf_used: bytes currently pinned via dma-buf */
+		u64 dmabuf_used;
+		/** @pin.total_used: bytes currently pinned via any path */
+		u64 total_used;
+	} pin;
+#endif
 };
 
 /**

@@ -90,6 +90,16 @@ struct xe_bo {
 	/** @ccs_cleared: true means that CCS region of BO is already cleared */
 	bool ccs_cleared;
 
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	/**
+	 * @dmabuf_pin_count: number of active dma-buf pins. 0->1 charges the
+	 * VRAM limit and adds to the restore list; N->0 uncharges and removes.
+	 * Independent of ttm pin_count, which also counts display pins that
+	 * bypass xe_bo_pin_external.
+	 */
+	u32 dmabuf_pin_count;
+#endif
+
 	/** @bb_ccs: BB instructions of CCS read/write. Valid only for VF */
 	struct xe_mem_pool_node *bb_ccs[XE_SRIOV_VF_CCS_CTX_COUNT];
 

@@ -13,6 +13,9 @@
 
 #include "xe_pci.h"
 #include "xe_pm.h"
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+#include "xe_ttm_vram_mgr.h"
+#endif
 
 static bool p2p_enabled(struct dma_buf_test_params *params)
 {
@@ -285,8 +288,106 @@ static void xe_dma_buf_kunit(struct kunit *test)
 	dma_buf_run_device(xe);
 }
 
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+static void xe_dma_buf_pin_limit_kunit(struct kunit *test)
+{
+	struct xe_device *xe = test->priv;
+	struct ttm_resource_manager *man;
+	struct xe_ttm_vram_mgr *mgr;
+	/* dynamic importer + force_different_devices required for dma_buf_pin */
+	struct dma_buf_test_params p = {
+		.base.id = XE_TEST_LIVE_DMA_BUF,
+		.mem_mask = XE_BO_FLAG_VRAM0,
+		.attach_ops = &xe_dma_buf_attach_ops,
+		.force_different_devices = true,
+	};
+	struct drm_gem_object *import;
+	struct dma_buf_attachment *attach;
+	struct dma_buf *dmabuf;
+	struct xe_bo *bo;
+	u64 orig_limit;
+	int err;
+
+	guard(xe_pm_runtime)(xe);
+
+	man = ttm_manager_type(&xe->ttm, XE_PL_VRAM0);
+	if (!man) {
+		kunit_skip(test, "no VRAM\n");
+		return;
+	}
+	mgr = to_xe_ttm_vram_mgr(man);
+
+	test->priv = &p;
+	bo = xe_bo_create_user(xe, NULL, SZ_64K,
+			DRM_XE_GEM_CPU_CACHING_WC,
+			XE_BO_FLAG_VRAM0, NULL);
+	if (IS_ERR(bo)) {
+		KUNIT_FAIL(test, "bo create err=%pe\n", bo);
+		return;
+	}
+
+	dmabuf = xe_gem_prime_export(&bo->ttm.base, 0);
+	if (IS_ERR(dmabuf)) {
+		KUNIT_FAIL(test, "export err=%pe\n", dmabuf);
+		goto put_bo;
+	}
+	bo->ttm.base.dma_buf = dmabuf;
+
+	import = xe_gem_prime_import(&xe->drm, dmabuf);
+	if (IS_ERR(import)) {
+		KUNIT_FAIL(test, "import err=%pe\n", import);
+		goto put_dmabuf;
+	}
+
+	attach = list_first_entry_or_null(&dmabuf->attachments,
+			typeof(*attach), node);
+	if (!attach) {
+		KUNIT_FAIL(test, "no attachment\n");
+		goto put_import;
+	}
+
+	/* dma_buf_pin requires dmabuf->resv to be held */
+	xe_bo_lock(bo, false);
+	/* Force reject: limit = current used + less than one BO */
+	spin_lock(&xe->pinned.lock);
+	orig_limit = mgr->pin.dmabuf_limit;
+	mgr->pin.dmabuf_limit = mgr->pin.dmabuf_used + SZ_4K;
+	spin_unlock(&xe->pinned.lock);
+
+	err = dma_buf_pin(attach);
+	KUNIT_EXPECT_EQ(test, err, -ENOSPC);
+
+	/* Lift limit: pin must succeed */
+	spin_lock(&xe->pinned.lock);
+	mgr->pin.dmabuf_limit = 0;
+	spin_unlock(&xe->pinned.lock);
+
+	err = dma_buf_pin(attach);
+	KUNIT_EXPECT_EQ(test, err, 0);
+	if (!err)
+		dma_buf_unpin(attach);
+
+	xe_bo_unlock(bo);
+
+	spin_lock(&xe->pinned.lock);
+	mgr->pin.dmabuf_limit = orig_limit;
+	spin_unlock(&xe->pinned.lock);
+
+put_import:
+	drm_gem_object_put(import);
+put_dmabuf:
+	bo->ttm.base.dma_buf = NULL;
+	dma_buf_put(dmabuf);
+put_bo:
+	xe_bo_put(bo);
+}
+#endif
+
 static struct kunit_case xe_dma_buf_tests[] = {
 	KUNIT_CASE_PARAM(xe_dma_buf_kunit, xe_pci_live_device_gen_param),
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	KUNIT_CASE_PARAM(xe_dma_buf_pin_limit_kunit, xe_pci_live_device_gen_param),
+#endif
 	{}
 };
 

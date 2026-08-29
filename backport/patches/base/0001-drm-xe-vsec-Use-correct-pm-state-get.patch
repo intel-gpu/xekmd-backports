@@ -1,0 +1,66 @@
+From e652a3d7c61dfa33c68e6893ec8f0210492f494e Mon Sep 17 00:00:00 2001
+From: "Michael J. Ruhl" <michael.j.ruhl@intel.com>
+Date: Mon, 24 Aug 2026 09:23:20 -0700
+Subject: drm/xe/vsec: Use correct pm state get
+
+Crashlog needs to be collected at all times.  The current pm
+check assumes telemetry only.
+
+Update read path to enable device for crashlog instances.
+
+Signed-off-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
+Fixes: 2c402a801c19 ("platform/x86/intel/pmt: support BMG crashlog")
+(cherry-picked from commit 30417f9d8e172746987f3c0e505a06a821010c7a drm_tip)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vsec.c | 21 +++++++++++++++++----
+ 1 file changed, 17 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_vsec.c b/drivers/gpu/drm/xe/xe_vsec.c
+index bd83a33ae..8d99a3770 100644
+--- a/drivers/gpu/drm/xe/xe_vsec.c
++++ b/drivers/gpu/drm/xe/xe_vsec.c
+@@ -145,6 +145,7 @@ int xe_pmt_telem_read(struct device *dev, u32 guid, u64 *data, loff_t user_offse
+ {
+ 	struct xe_device *xe = kdev_to_xe_device(dev);
+ 	void __iomem *telem_addr = xe->mmio.regs + BMG_TELEMETRY_OFFSET;
++	u32 cap_type = FIELD_GET(GUID_CAP_TYPE, guid);
+ 	u32 mem_region;
+ 	u32 offset;
+ 	int ret;
+@@ -158,16 +159,28 @@ int xe_pmt_telem_read(struct device *dev, u32 guid, u64 *data, loff_t user_offse
+ 
+ 	telem_addr += offset + user_offset;
+ 
+-	guard(mutex)(&xe->pmt.lock);
++	/* Always allow crashlog. Telemetry, only when powered */
++	switch (cap_type) {
++	case CRASHLOG:
++		xe_pm_runtime_get(xe);
++		break;
++	case TELEMETRY:
++		if (!xe_pm_runtime_get_if_active(xe))
++			return -ENODATA;
++		break;
++	case WATCHER:
++		return -EINVAL;
++	}
+ 
+-	/* indicate that we are not at an appropriate power level */
+-	if (!xe_pm_runtime_get_if_active(xe))
+-		return -ENODATA;
++	mutex_lock(&xe->pmt.lock);
+ 
+ 	/* set SoC re-mapper index register based on GUID memory region */
+ 	xe->soc_remapper.set_telem_region(xe, mem_region);
+ 
+ 	memcpy_fromio(data, telem_addr, count);
++
++	mutex_unlock(&xe->pmt.lock);
++
+ 	xe_pm_runtime_put(xe);
+ 
+ 	return count;
+-- 
+2.43.0
+

@@ -1,0 +1,117 @@
+From bdd5eeffcf8b317cf426475583e99b94275a17ed Mon Sep 17 00:00:00 2001
+From: "Michael J. Ruhl" <michael.j.ruhl@intel.com>
+Date: Mon, 24 Aug 2026 09:23:18 -0700
+Subject: platform/x86/intel/pmt: Add register access callbacks
+
+Some HW does not have direct MMIO access to PMT control and data
+features.
+
+Augment the current callback infrastructure (data access) to allow
+a registered driver to customize read/write access to the control
+paths for PMT usage.
+
+Signed-off-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
+(cherry-picked from commit 49a0b18247c99fcd33f904d5c32d332f644b7fa2 drm_tip)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/platform/x86/intel/pmt/crashlog.c | 39 +++++++++++++++++++++--
+ include/linux/intel_vsec.h                | 14 +++++++-
+ 2 files changed, 49 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/platform/x86/intel/pmt/crashlog.c b/drivers/platform/x86/intel/pmt/crashlog.c
+index f936daf99..5923ad7ab 100644
+--- a/drivers/platform/x86/intel/pmt/crashlog.c
++++ b/drivers/platform/x86/intel/pmt/crashlog.c
+@@ -129,7 +129,19 @@ static void pmt_crashlog_rmw(struct crashlog_entry *crashlog, u32 bit, bool set)
+ {
+ 	const struct crashlog_control *control = &crashlog->info->control;
+ 	struct intel_pmt_entry *entry = &crashlog->entry;
+-	u32 reg = readl(entry->disc_table + control->offset);
++	u32 guid = entry->header.guid;
++	u32 reg;
++	int err;
++
++	if (entry->cb && entry->cb->read_reg) {
++		err = entry->cb->read_reg(entry->dev, guid, &reg, control->offset);
++		if (err) {
++			pr_err("%s: failed to read reg: %d\n", __func__, err);
++			return;
++		}
++	} else {
++		reg = readl(entry->disc_table + control->offset);
++	}
+ 
+ 	reg &= ~control->trigger_mask;
+ 
+@@ -138,14 +150,35 @@ static void pmt_crashlog_rmw(struct crashlog_entry *crashlog, u32 bit, bool set)
+ 	else
+ 		reg &= ~bit;
+ 
+-	writel(reg, entry->disc_table + control->offset);
++	if (entry->cb && entry->cb->write_reg) {
++		err = entry->cb->write_reg(entry->dev, guid, reg, control->offset);
++		if (err) {
++			pr_err("%s: failed to write reg: %d\n", __func__, err);
++			return;
++		}
++	} else {
++		writel(reg, entry->disc_table + control->offset);
++	}
+ }
+ 
+ /* Read the status register and see if the specified @bit is set */
+ static bool pmt_crashlog_rc(struct crashlog_entry *crashlog, u32 bit)
+ {
+ 	const struct crashlog_status *status = &crashlog->info->status;
+-	u32 reg = readl(crashlog->entry.disc_table + status->offset);
++	struct intel_pmt_entry *entry = &crashlog->entry;
++	u32 guid = entry->header.guid;
++	u32 reg;
++	int err;
++
++	if (entry->cb && entry->cb->read_reg) {
++		err = entry->cb->read_reg(entry->dev, guid, &reg, status->offset);
++		if (err) {
++			pr_err("%s: failed to read reg: %d\n", __func__, err);
++			return false;
++		}
++	} else {
++		reg = readl(crashlog->entry.disc_table + status->offset);
++	}
+ 
+ 	return !!(reg & bit);
+ }
+diff --git a/include/linux/intel_vsec.h b/include/linux/intel_vsec.h
+index be4667cd1..3060ede16 100644
+--- a/include/linux/intel_vsec.h
++++ b/include/linux/intel_vsec.h
+@@ -90,13 +90,25 @@ enum intel_vsec_quirks {
+  * @read_telem: when specified, called by client driver to access PMT
+  * data (instead of direct copy).
+  * * dev:   device reference for the callback's use
+- * * guid:  ID of data to acccss
++ * * guid:  ID of data to access
+  * * data:  buffer for the data to be copied
+  * * off:   offset into the requested buffer
+  * * count: size of buffer
++ * @read_reg: when specified called by client driver to read PMT state
++ * * dev:      device reference for the callback's use
++ * * guid:     ID of data to access
++ * * reg_data: register data
++ * * offset:   offset of register to read
++ * @write_reg: when specified called by client driver to write PMT state
++ * * dev:      device reference for the callback's use
++ * * guid:     ID of data to access
++ * * reg_data: register data
++ * * offset:   offset of register to write
+  */
+ struct pmt_callbacks {
+ 	int (*read_telem)(struct device *dev, u32 guid, u64 *data, loff_t off, u32 count);
++	int (*read_reg)(struct device *dev, u32 guid, u32 *reg_data, u32 offset);
++	int (*write_reg)(struct device *dev, u32 guid, u32 reg_data, u32 offset);
+ };
+ 
+ struct vsec_feature_dependency {
+-- 
+2.43.0
+

@@ -1,0 +1,56 @@
+From a4a4150df4ec8580d1afb550ba6dc0c5fce0f32b Mon Sep 17 00:00:00 2001
+From: "Michael J. Ruhl" <michael.j.ruhl@intel.com>
+Date: Mon, 24 Aug 2026 09:23:19 -0700
+Subject: drm/xe/vsec: Protect against missing config
+
+Some init paths (VF) will not provide soc-remapper
+callbacks.
+
+BMG PMT access requires the soc-remapper.
+
+If the soc-remapper is not configured, do not register for
+PMT, and block read access.
+
+Signed-off-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
+(cherry-picked from commit 125978caeb2baf7fc2cb4ed6a4aa85eb571ce86a drm_tip)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vsec.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_vsec.c b/drivers/gpu/drm/xe/xe_vsec.c
+index a9baf0bfe..bd83a33ae 100644
+--- a/drivers/gpu/drm/xe/xe_vsec.c
++++ b/drivers/gpu/drm/xe/xe_vsec.c
+@@ -149,6 +149,9 @@ int xe_pmt_telem_read(struct device *dev, u32 guid, u64 *data, loff_t user_offse
+ 	u32 offset;
+ 	int ret;
+ 
++	if (!xe->soc_remapper.set_telem_region)
++		return -ENODEV;
++
+ 	ret = xe_guid_decode(guid, &mem_region, &offset);
+ 	if (ret)
+ 		return ret;
+@@ -157,9 +160,6 @@ int xe_pmt_telem_read(struct device *dev, u32 guid, u64 *data, loff_t user_offse
+ 
+ 	guard(mutex)(&xe->pmt.lock);
+ 
+-	if (!xe->soc_remapper.set_telem_region)
+-		return -ENODEV;
+-
+ 	/* indicate that we are not at an appropriate power level */
+ 	if (!xe_pm_runtime_get_if_active(xe))
+ 		return -ENODATA;
+@@ -210,6 +210,8 @@ void xe_vsec_init(struct xe_device *xe)
+ 
+ 	switch (platform) {
+ 	case XE_VSEC_BMG:
++		if (!xe->soc_remapper.set_telem_region)
++			return;
+ 		info->priv_data = &xe_pmt_cb;
+ 		break;
+ 	default:
+-- 
+2.43.0
+

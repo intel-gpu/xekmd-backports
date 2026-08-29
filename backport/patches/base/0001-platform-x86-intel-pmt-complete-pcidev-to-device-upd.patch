@@ -1,0 +1,94 @@
+From 21a7f82beaa21e2af67e858273b4a7645521ed1e Mon Sep 17 00:00:00 2001
+From: "Michael J. Ruhl" <michael.j.ruhl@intel.com>
+Date: Mon, 24 Aug 2026 09:23:17 -0700
+Subject: platform/x86/intel/pmt: complete pcidev to device
+ update
+
+Previously the pcidev usage was moved to the struct device.
+The struct device is set for only the telemetry endpoints.
+
+This usage prevents other PMT features (crashlog) from using
+the callback mechanism.
+
+Use struct device in the intel_pmt_entry.
+Update callback usage to os the pmt entry rather than the
+telemetry endpoint.
+
+Fixes: 353042d54d82 ("platform/x86/intel/vsec: Switch exported helpers from pci_dev to device")
+Signed-off-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 6dba773fea03bcb7a39abcbcda61dbfc5ed3939c drm_tip)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/platform/x86/intel/pmt/class.c     | 5 ++---
+ drivers/platform/x86/intel/pmt/class.h     | 3 +--
+ drivers/platform/x86/intel/pmt/discovery.c | 2 +-
+ 3 files changed, 4 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/platform/x86/intel/pmt/class.c b/drivers/platform/x86/intel/pmt/class.c
+index d0ab8e33c..402d51df8 100644
+--- a/drivers/platform/x86/intel/pmt/class.c
++++ b/drivers/platform/x86/intel/pmt/class.c
+@@ -100,7 +100,7 @@ intel_pmt_read(struct file *filp, struct kobject *kobj,
+ 	if (count > entry->size - off)
+ 		count = entry->size - off;
+ 
+-	count = pmt_telem_read_mmio(entry->ep->dev, entry->cb, entry->header.guid, buf,
++	count = pmt_telem_read_mmio(entry->dev, entry->cb, entry->header.guid, buf,
+ 				    entry->base, off, count);
+ 
+ 	return count;
+@@ -286,8 +286,6 @@ static int pmt_resolve_access_pci(struct intel_pmt_entry *entry,
+ 		return -EINVAL;
+ 	}
+ 
+-	entry->pcidev = pci_dev;
+-
+ 	return 0;
+ }
+ 
+@@ -365,6 +363,7 @@ static int intel_pmt_populate_entry(struct intel_pmt_entry *entry,
+ 	entry->guid = header->guid;
+ 	entry->size = header->size;
+ 	entry->cb = ivdev->priv_data;
++	entry->dev = ivdev->dev;
+ 
+ 	return 0;
+ }
+diff --git a/drivers/platform/x86/intel/pmt/class.h b/drivers/platform/x86/intel/pmt/class.h
+index a0ece4fc3..258cb460e 100644
+--- a/drivers/platform/x86/intel/pmt/class.h
++++ b/drivers/platform/x86/intel/pmt/class.h
+@@ -20,7 +20,6 @@
+ #define GET_ADDRESS(v)		((v) & GENMASK(31, 3))
+ 
+ struct device;
+-struct pci_dev;
+ extern struct class intel_pmt_class;
+ 
+ struct telem_endpoint {
+@@ -42,7 +41,7 @@ struct intel_pmt_header {
+ 
+ struct intel_pmt_entry {
+ 	struct telem_endpoint	*ep;
+-	struct pci_dev		*pcidev;
++	struct device		*dev;
+ 	struct intel_pmt_header	header;
+ 	u32			disc_header[PMT_DISC_DWORDS];
+ 	struct bin_attribute	pmt_bin_attr;
+diff --git a/drivers/platform/x86/intel/pmt/discovery.c b/drivers/platform/x86/intel/pmt/discovery.c
+index c482368bf..f4203d240 100644
+--- a/drivers/platform/x86/intel/pmt/discovery.c
++++ b/drivers/platform/x86/intel/pmt/discovery.c
+@@ -609,7 +609,7 @@ void intel_pmt_get_features(struct intel_pmt_entry *entry)
+ 
+ 	mutex_lock(&feature_list_lock);
+ 	list_for_each_entry(feature, &pmt_feature_list, list) {
+-		if (feature->priv->parent != entry->ep->dev)
++		if (feature->priv->parent != entry->dev)
+ 			continue;
+ 
+ 		pmt_get_features(entry, feature);
+-- 
+2.43.0
+

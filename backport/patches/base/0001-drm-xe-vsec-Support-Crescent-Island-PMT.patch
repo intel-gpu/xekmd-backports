@@ -1,0 +1,119 @@
+From 401e2f4ff605496a27ddeef9a6e3b4620c33251b Mon Sep 17 00:00:00 2001
+From: "Michael J. Ruhl" <michael.j.ruhl@intel.com>
+Date: Mon, 24 Aug 2026 09:23:22 -0700
+Subject: drm/xe/vsec: Support Crescent Island PMT
+
+Crescent Island (CRI) supports PMT telemetry and crashlog.
+
+Add Crescent Island (CRI) discovery structure (DVSEC)
+information to allow for Xe registration.
+
+Signed-off-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
+(cherry-picked from commit 9d779fe4315259280905d37559b05170ccdfeb3f drm_tip)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_pmt.h |  5 ++++
+ drivers/gpu/drm/xe/xe_vsec.c     | 46 ++++++++++++++++++++++++++++++--
+ 2 files changed, 49 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_pmt.h b/drivers/gpu/drm/xe/regs/xe_pmt.h
+index a62ab05c6..fc9c9cb6a 100644
+--- a/drivers/gpu/drm/xe/regs/xe_pmt.h
++++ b/drivers/gpu/drm/xe/regs/xe_pmt.h
+@@ -20,6 +20,11 @@
+ #define BMG_TELEMETRY_BASE_OFFSET	0xE0000
+ #define BMG_TELEMETRY_OFFSET		(SOC_BASE + BMG_TELEMETRY_BASE_OFFSET)
+ 
++#define CRI_TELEMETRY_BASE_OFFSET	0xE0000
++/* for CRI discovery and telemetry are in an indexed window */
++#define CRI_DISCOVERY_OFFSET		(SOC_BASE + CRI_TELEMETRY_BASE_OFFSET)
++#define CRI_TELEMETRY_OFFSET		(SOC_BASE + CRI_TELEMETRY_BASE_OFFSET)
++
+ #define BMG_MODS_RESIDENCY_OFFSET		(0x4D0)
+ #define BMG_G2_RESIDENCY_OFFSET		(0x530)
+ #define BMG_G6_RESIDENCY_OFFSET		(0x538)
+diff --git a/drivers/gpu/drm/xe/xe_vsec.c b/drivers/gpu/drm/xe/xe_vsec.c
+index 8abe11e63..6345b0b4b 100644
+--- a/drivers/gpu/drm/xe/xe_vsec.c
++++ b/drivers/gpu/drm/xe/xe_vsec.c
+@@ -21,8 +21,19 @@
+ 
+ #include "regs/xe_pmt.h"
+ 
+-/* PMT GUID value for BMG devices.  NOTE: this is NOT a PCI id */
++/* PMT GUID value for BMG and CRI devices.  NOTE: this is NOT a PCI id */
+ #define BMG_DEVICE_ID 0xE2F8
++#define CRI_DEVICE_ID 0xE2FA
++
++/*
++ * sizeof(Crashlog Type1 Version2) = 0x18 (24) bytes
++ * For BMG and CRI PUNIT and OOBMSMS crashlogs are consecutive.
++ */
++#define BMG_CRASHLOG_PUNIT_DISC_OFFSET (0x60)
++#define BMG_CRASHLOG_OOBMSM_DISC_OFFSET (BMG_CRASHLOG_PUNIT_DISC_OFFSET + 0x18)
++
++#define CRI_CRASHLOG_PUNIT_DISC_OFFSET (0x80)
++#define CRI_CRASHLOG_OOBMSM_DISC_OFFSET (CRI_CRASHLOG_PUNIT_DISC_OFFSET + 0x18)
+ 
+ static struct intel_vsec_header bmg_telemetry = {
+ 	.rev = 1,
+@@ -41,7 +52,7 @@ static struct intel_vsec_header bmg_crashlog = {
+ 	.num_entries = 2,
+ 	.entry_size = 6,
+ 	.tbir = 0,
+-	.offset = BMG_DISCOVERY_OFFSET + 0x60,
++	.offset = BMG_DISCOVERY_OFFSET + BMG_CRASHLOG_PUNIT_DISC_OFFSET,
+ };
+ 
+ static struct intel_vsec_header *bmg_capabilities[] = {
+@@ -50,9 +61,36 @@ static struct intel_vsec_header *bmg_capabilities[] = {
+ 	NULL
+ };
+ 
++static struct intel_vsec_header cri_telemetry = {
++	.rev = 1,
++	.length = 0x10,
++	.id = VSEC_ID_TELEMETRY,
++	.num_entries = 3,
++	.entry_size = 4,
++	.tbir = 0,
++	.offset = CRI_DISCOVERY_OFFSET,
++};
++
++static struct intel_vsec_header cri_crashlog = {
++	.rev = 1,
++	.length = 0x10,
++	.id = VSEC_ID_CRASHLOG,
++	.num_entries = 2,
++	.entry_size = 6,
++	.tbir = 0,
++	.offset = CRI_DISCOVERY_OFFSET + CRI_CRASHLOG_PUNIT_DISC_OFFSET,
++};
++
++static struct intel_vsec_header *cri_capabilities[] = {
++	&cri_telemetry,
++	&cri_crashlog,
++	NULL
++};
++
+ enum xe_vsec {
+ 	XE_VSEC_UNKNOWN = 0,
+ 	XE_VSEC_BMG,
++	XE_VSEC_CRI,
+ };
+ 
+ static struct intel_vsec_platform_info xe_vsec_info[] = {
+@@ -60,6 +98,10 @@ static struct intel_vsec_platform_info xe_vsec_info[] = {
+ 		.caps = VSEC_CAP_TELEMETRY | VSEC_CAP_CRASHLOG,
+ 		.headers = bmg_capabilities,
+ 	},
++	[XE_VSEC_CRI] = {
++		.caps = VSEC_CAP_TELEMETRY | VSEC_CAP_CRASHLOG,
++		.headers = cri_capabilities,
++	},
+ 	{ }
+ };
+ 
+-- 
+2.43.0
+

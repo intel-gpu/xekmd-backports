@@ -31,6 +31,9 @@
 #include "xe_pat.h"
 #include "xe_pm.h"
 #include "xe_preempt_fence.h"
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+#include "xe_printk.h"
+#endif
 #include "xe_pxp.h"
 #include "xe_res_cursor.h"
 #include "xe_shrinker.h"
@@ -38,6 +41,9 @@
 #include "xe_tile.h"
 #include "xe_trace_bo.h"
 #include "xe_ttm_stolen_mgr.h"
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+#include "xe_ttm_vram_mgr.h"
+#endif
 #include "xe_vm.h"
 #include "xe_vram_types.h"
 
@@ -3119,6 +3125,17 @@ uint64_t vram_region_gpu_offset(struct ttm_resource *res)
 	return 0;
 }
 
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+static struct xe_ttm_vram_mgr *xe_bo_pin_vram_mgr(struct xe_bo *bo)
+{
+	struct ttm_resource *res = bo->ttm.resource;
+
+	if (!res || !mem_type_is_vram(res->mem_type))
+		return NULL;
+
+	return to_xe_ttm_vram_mgr(ttm_manager_type(bo->ttm.bdev, res->mem_type));
+}
+#endif
 /**
  * xe_bo_pin_external - pin an external BO
  * @bo: buffer object to be pinned
@@ -3134,6 +3151,10 @@ uint64_t vram_region_gpu_offset(struct ttm_resource *res)
 int xe_bo_pin_external(struct xe_bo *bo, bool in_place, struct drm_exec *exec)
 {
 	struct xe_device *xe = xe_bo_device(bo);
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	struct xe_ttm_vram_mgr *mgr;
+	u64 size = xe_bo_size(bo);
+#endif
 	int err;
 
 	xe_assert(xe, !bo->vm);
@@ -3145,12 +3166,47 @@ int xe_bo_pin_external(struct xe_bo *bo, bool in_place, struct drm_exec *exec)
 			if (err)
 				return err;
 		}
-
-		spin_lock(&xe->pinned.lock);
-		list_add_tail(&bo->pinned_link, &xe->pinned.late.external);
-		spin_unlock(&xe->pinned.lock);
 	}
 
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	mgr = xe_bo_pin_vram_mgr(bo);
+	spin_lock(&xe->pinned.lock);
+
+	if (bo->dmabuf_pin_count++ == 0) {
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+		if (mgr && mgr->pin.dmabuf_limit &&
+		    mgr->pin.dmabuf_used + size > mgr->pin.dmabuf_limit) {
+			u64 used = mgr->pin.dmabuf_used;
+			u64 limit = mgr->pin.dmabuf_limit;
+
+			bo->dmabuf_pin_count--;
+			spin_unlock(&xe->pinned.lock);
+			xe_err_ratelimited(xe,
+					   "dma-buf VRAM pin limit reached (used %lluM, limit %lluM), rejecting with -ENOSPC\n",
+					   used >> 20, limit >> 20);
+			/*
+			 * No SMEM fallback: non-P2P callers migrate to TT before
+			 * reaching here; a VRAM mgr means VRAM is genuinely required.
+			 */
+			return -ENOSPC;
+		}
+#endif
+		if (mgr) {
+			mgr->pin.dmabuf_used += size;
+			mgr->pin.total_used += size;
+		}
+	}
+
+	if (!xe_bo_is_pinned(bo))
+		list_add_tail(&bo->pinned_link, &xe->pinned.late.external);
+
+	spin_unlock(&xe->pinned.lock);
+#else
+	spin_lock(&xe->pinned.lock);
+	list_add_tail(&bo->pinned_link, &xe->pinned.late.external);
+	spin_unlock(&xe->pinned.lock);
+#endif
+	
 	ttm_bo_pin(&bo->ttm);
 	if (bo->ttm.ttm && ttm_tt_is_populated(bo->ttm.ttm))
 		xe_ttm_tt_account_subtract(xe, bo->ttm.ttm);
@@ -3201,7 +3257,15 @@ int xe_bo_pin(struct xe_bo *bo, struct drm_exec *exec)
 		return err;
 
 	if (mem_type_is_vram(place->mem_type) || bo->flags & XE_BO_FLAG_GGTT) {
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+		struct xe_ttm_vram_mgr *mgr = xe_bo_pin_vram_mgr(bo);
+#endif
+
 		spin_lock(&xe->pinned.lock);
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+		if (mgr)
+			mgr->pin.total_used += xe_bo_size(bo);
+#endif
 		if (bo->flags & XE_BO_FLAG_PINNED_LATE_RESTORE)
 			list_add_tail(&bo->pinned_link, &xe->pinned.late.kernel_bo_present);
 		else
@@ -3224,6 +3288,7 @@ int xe_bo_pin(struct xe_bo *bo, struct drm_exec *exec)
 
 /**
  * xe_bo_unpin_external - unpin an external BO
+#endif
  * @bo: buffer object to be unpinned
  *
  * Unpin an external (not tied to a VM, can be exported via dma-buf / prime FD)
@@ -3235,14 +3300,30 @@ int xe_bo_pin(struct xe_bo *bo, struct drm_exec *exec)
 void xe_bo_unpin_external(struct xe_bo *bo)
 {
 	struct xe_device *xe = xe_bo_device(bo);
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	struct xe_ttm_vram_mgr *mgr = xe_bo_pin_vram_mgr(bo);
+	u64 size = xe_bo_size(bo);
+#endif
 
 	xe_assert(xe, !bo->vm);
 	xe_assert(xe, xe_bo_is_pinned(bo));
 	xe_assert(xe, xe_bo_is_user(bo));
 
 	spin_lock(&xe->pinned.lock);
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	/* display may hold a concurrent pin; use dmabuf_pin_count not ttm pin_count */
+	if (--bo->dmabuf_pin_count == 0) {
+		if (mgr) {
+			mgr->pin.dmabuf_used -= size;
+			mgr->pin.total_used -= size;
+		}
+		if (!list_empty(&bo->pinned_link))
+			list_del_init(&bo->pinned_link);
+	}
+#else
 	if (bo->ttm.pin_count == 1 && !list_empty(&bo->pinned_link))
 		list_del_init(&bo->pinned_link);
+#endif
 	spin_unlock(&xe->pinned.lock);
 
 	ttm_bo_unpin(&bo->ttm);
@@ -3265,7 +3346,14 @@ void xe_bo_unpin(struct xe_bo *bo)
 	xe_assert(xe, xe_bo_is_pinned(bo));
 
 	if (mem_type_is_vram(place->mem_type) || bo->flags & XE_BO_FLAG_GGTT) {
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+		struct xe_ttm_vram_mgr *mgr = xe_bo_pin_vram_mgr(bo);
+#endif
 		spin_lock(&xe->pinned.lock);
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+		if (mgr)
+			mgr->pin.total_used -= xe_bo_size(bo);
+#endif
 		xe_assert(xe, !list_empty(&bo->pinned_link));
 		list_del_init(&bo->pinned_link);
 		spin_unlock(&xe->pinned.lock);

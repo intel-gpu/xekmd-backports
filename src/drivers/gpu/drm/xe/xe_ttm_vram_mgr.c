@@ -8,11 +8,18 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_buddy.h>
 
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+#include <linux/math64.h>
+#endif
+
 #include <drm/ttm/ttm_placement.h>
 #include <drm/ttm/ttm_range_manager.h>
 
 #include "xe_bo.h"
 #include "xe_device.h"
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+#include "xe_module.h"
+#endif
 #include "xe_res_cursor.h"
 #include "xe_ttm_vram_mgr.h"
 #include "xe_vram_types.h"
@@ -207,8 +214,21 @@ static void xe_ttm_vram_mgr_del(struct ttm_resource_manager *man,
 static void xe_ttm_vram_mgr_debug(struct ttm_resource_manager *man,
 				  struct drm_printer *printer)
 {
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	struct xe_device *xe = ttm_to_xe_device(man->bdev);
+#endif
 	struct xe_ttm_vram_mgr *mgr = to_xe_ttm_vram_mgr(man);
 	struct gpu_buddy *mm = &mgr->mm;
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	u64 dmabuf_used, dmabuf_limit, total_used;
+
+	/* snapshot pin counters under their own lock before sleeping on mgr->lock */
+	spin_lock(&xe->pinned.lock);
+	dmabuf_used  = mgr->pin.dmabuf_used;
+	dmabuf_limit = mgr->pin.dmabuf_limit;
+	total_used   = mgr->pin.total_used;
+	spin_unlock(&xe->pinned.lock);
+#endif
 
 	mutex_lock(&mgr->lock);
 	drm_printf(printer, "default_page_size: %lluKiB\n",
@@ -217,6 +237,14 @@ static void xe_ttm_vram_mgr_debug(struct ttm_resource_manager *man,
 		   (u64)mgr->visible_avail >> 20);
 	drm_printf(printer, "visible_size: %lluMiB\n",
 		   (u64)mgr->visible_size >> 20);
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	drm_printf(printer, "pin_dmabuf_used: %lluMiB\n",
+		   dmabuf_used >> 20);
+	drm_printf(printer, "pin_dmabuf_limit: %lluMiB\n",
+		   dmabuf_limit >> 20);
+	drm_printf(printer, "pin_total_used: %lluMiB\n",
+		   total_used >> 20);
+#endif
 
 	drm_buddy_print(mm, printer);
 	mutex_unlock(&mgr->lock);
@@ -320,15 +348,22 @@ int __xe_ttm_vram_mgr_init(struct xe_device *xe, struct xe_ttm_vram_mgr *mgr,
 	struct ttm_resource_manager *man = &mgr->manager;
 	int err;
 
+#ifndef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
 	if (mem_type != XE_PL_STOLEN) {
 		const char *name = mem_type == XE_PL_VRAM0 ? "vram0" : "vram1";
 		man->cg = drmm_cgroup_register_region(&xe->drm, name, size);
 		if (IS_ERR(man->cg))
 			return PTR_ERR(man->cg);
 	}
+#endif
 
 	man->func = &xe_ttm_vram_mgr_func;
 	mgr->mem_type = mem_type;
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	if (xe_modparam.pin_vram_percent)
+		mgr->pin.dmabuf_limit =
+			mul_u64_u32_div(size, xe_modparam.pin_vram_percent, 100);
+#endif
 	mutex_init(&mgr->lock);
 	mgr->default_page_size = default_page_size;
 	mgr->visible_size = io_size;

@@ -80,10 +80,15 @@ static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
 		}
 	}
 
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	return xe_bo_pin_external(bo, !allow_vram, exec);
+#else
 	ret = xe_bo_pin_external(bo, !allow_vram, exec);
 	xe_assert(xe, !ret);
 
 	return 0;
+#endif
+
 }
 
 static void xe_dma_buf_unpin(struct dma_buf_attachment *attach)

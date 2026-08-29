@@ -25,6 +25,9 @@ struct xe_modparam {
 #endif
 	unsigned int wedged_mode;
 	u32 svm_notifier_size;
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	unsigned int pin_vram_percent;
+#endif
 };
 
 extern struct xe_modparam xe_modparam;

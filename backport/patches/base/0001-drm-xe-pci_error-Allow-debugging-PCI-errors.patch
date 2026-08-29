@@ -1,0 +1,40 @@
+From 5184ae07376f64586aee8dd91ff4c9f9a85de110 Mon Sep 17 00:00:00 2001
+From: Raag Jadav <raag.jadav@intel.com>
+Date: Wed, 19 Aug 2026 17:05:19 +0530
+Subject: drm/xe/pci_error: Allow debugging PCI errors
+
+Update PCI error handling path to disconnect the device when
+XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET is set. This prevents bus
+reset and preserves the device state so that it is available to
+the user for debugging.
+
+Signed-off-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Riana Tauro <riana.tauro@intel.com>
+Link: https://patch.msgid.link/20260819113519.510853-1-raag.jadav@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit 9b8234d176bb linux-next)
+Signed-off-by:  Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci_error.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci_error.c b/drivers/gpu/drm/xe/xe_pci_error.c
+index fb965f52b..79ce0c671 100644
+--- a/drivers/gpu/drm/xe/xe_pci_error.c
++++ b/drivers/gpu/drm/xe/xe_pci_error.c
+@@ -84,6 +84,12 @@ static pci_ers_result_t xe_pci_error_mmio_enabled(struct pci_dev *pdev)
+ 	xe_info(xe, "PCI error: MMIO enabled\n");
+ 	action = xe_ras_process_errors(xe);
+ 
++	/* User wants to debug the error, prevent reset */
++	if (xe->wedged.mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET) {
++		xe_device_declare_wedged(xe);
++		return PCI_ERS_RESULT_DISCONNECT;
++	}
++
+ 	return ras_action_to_pci_result(pdev, action);
+ }
+ 
+-- 
+2.43.0
+

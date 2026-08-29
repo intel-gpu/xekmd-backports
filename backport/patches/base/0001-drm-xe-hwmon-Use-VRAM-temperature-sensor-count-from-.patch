@@ -1,0 +1,131 @@
+From bd11317da601ae18ce0721194b876bd1d9e12d36 Mon Sep 17 00:00:00 2001
+From: Karthik Poosa <karthik.poosa@intel.com>
+Date: Tue, 25 Aug 2026 00:11:32 +0530
+Subject: drm/xe/hwmon: Use VRAM temperature sensor count from
+ thermal config on CRI
+
+Read the number of VRAM temperature sensor channels from the second byte
+of READ_THERMAL_CONFIG on CRI platforms. Use the reported count to avoid
+exposing hwmon attributes for unavailable VRAM temperature sensors, while
+retaining the maximum supported channel count on non-CRI platforms.
+
+Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
+(cherry-picked from commit 31cce1d245cc8d32a89aef5499c69954fbbc53fe drm_tip)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hwmon.c     | 35 ++++++++++++++++++++++++++-----
+ drivers/gpu/drm/xe/xe_pcode_api.h |  1 +
+ 2 files changed, 31 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
+index edd0a58c5..e84b9b756 100644
+--- a/drivers/gpu/drm/xe/xe_hwmon.c
++++ b/drivers/gpu/drm/xe/xe_hwmon.c
+@@ -39,7 +39,8 @@ enum xe_hwmon_reg_operation {
+ 	REG_READ64,
+ };
+ 
+-#define MAX_VRAM_CHANNELS      (16)
++/* Maximum number of VRAM channels supported by Xe */
++#define MAX_VRAM_CHANNELS      (80)
+ 
+ enum xe_hwmon_channel {
+ 	CHANNEL_CARD,
+@@ -48,6 +49,7 @@ enum xe_hwmon_channel {
+ 	CHANNEL_MCTRL,
+ 	CHANNEL_PCIE,
+ 	CHANNEL_VRAM_N,
++	/* Compile-time upper bound; actual channel count is hwmon->temp.vram_count */
+ 	CHANNEL_VRAM_N_MAX = CHANNEL_VRAM_N + MAX_VRAM_CHANNELS - 1,
+ 	CHANNEL_MAX,
+ };
+@@ -144,10 +146,12 @@ struct xe_hwmon_thermal_info {
+ 	};
+ 	/** @count: no of temperature sensors available for the platform */
+ 	u8 count;
++	/** @vram_count: number of VRAM temperature sensors available for the platform */
++	u8 vram_count;
+ 	/** @value: signed value from each sensor */
+ 	s8 value[U8_MAX];
+-	/** @vram_label: vram label names */
+-	char vram_label[MAX_VRAM_CHANNELS][MAX_LABEL_SIZE];
++	/** @vram_label: vram label names, dynamically allocated based on vram_count */
++	char (*vram_label)[MAX_LABEL_SIZE];
+ };
+ 
+ /**
+@@ -271,7 +275,7 @@ static struct xe_reg xe_hwmon_get_reg(struct xe_hwmon *hwmon, enum xe_hwmon_reg
+ 				return BMG_PACKAGE_TEMPERATURE;
+ 			else if (channel == CHANNEL_VRAM)
+ 				return BMG_VRAM_TEMPERATURE;
+-			else if (in_range(channel, CHANNEL_VRAM_N, MAX_VRAM_CHANNELS))
++			else if (in_range(channel, CHANNEL_VRAM_N, hwmon->temp.vram_count))
+ 				return BMG_VRAM_TEMPERATURE_N(channel - CHANNEL_VRAM_N);
+ 		} else if (xe->info.platform == XE_DG2) {
+ 			if (channel == CHANNEL_PKG)
+@@ -816,6 +820,17 @@ static int xe_hwmon_pcode_read_thermal_info(struct xe_hwmon *hwmon)
+ 	drm_dbg(&hwmon->xe->drm, "thermal config count 0x%x\n", config);
+ 	hwmon->temp.count = REG_FIELD_GET(TEMP_MASK, config);
+ 
++	if (hwmon->xe->info.platform >= XE_CRESCENTISLAND) {
++		hwmon->temp.vram_count = REG_FIELD_GET(VRAM_COUNT_MASK, config);
++		if (hwmon->temp.vram_count > MAX_VRAM_CHANNELS && hwmon->temp.vram_count) {
++			drm_warn(&hwmon->xe->drm, "VRAM channel count %d exceeds max %d, clamping\n",
++				 hwmon->temp.vram_count, MAX_VRAM_CHANNELS);
++			hwmon->temp.vram_count = MAX_VRAM_CHANNELS;
++		}
++	} else {
++		hwmon->temp.vram_count = 16; /* For older platforms, max is 16 VRAM channels */
++	}
++
+ 	return ret;
+ }
+ 
+@@ -994,6 +1009,9 @@ static inline bool is_vram_ch_available(struct xe_hwmon *hwmon, int channel)
+ 	u32 reg_val;
+ 	u8 temp;
+ 
++	if (vram_id >= hwmon->temp.vram_count)
++		return false;
++
+ 	vram_reg = xe_hwmon_get_reg(hwmon, REG_TEMP, channel);
+ 	if (!xe_reg_is_valid(vram_reg))
+ 		return false;
+@@ -1522,7 +1540,7 @@ static int xe_hwmon_read_label(struct device *dev,
+ 			*str = "mctrl";
+ 		else if (channel == CHANNEL_PCIE)
+ 			*str = "pcie";
+-		else if (in_range(channel, CHANNEL_VRAM_N, MAX_VRAM_CHANNELS))
++		else if (in_range(channel, CHANNEL_VRAM_N, hwmon->temp.vram_count))
+ 			*str = hwmon->temp.vram_label[channel - CHANNEL_VRAM_N];
+ 		return 0;
+ 	case hwmon_power:
+@@ -1651,6 +1669,13 @@ int xe_hwmon_register(struct xe_device *xe)
+ 
+ 	xe_hwmon_get_preregistration_info(hwmon);
+ 
++	hwmon->temp.vram_label = devm_kcalloc(dev, hwmon->temp.vram_count,
++					      MAX_LABEL_SIZE, GFP_KERNEL);
++	if (!hwmon->temp.vram_label) {
++		xe->hwmon = NULL;
++		return -ENOMEM;
++	}
++
+ 	drm_dbg(&xe->drm, "Register xe hwmon interface\n");
+ 
+ 	/*  hwmon_dev points to device hwmon<i> */
+diff --git a/drivers/gpu/drm/xe/xe_pcode_api.h b/drivers/gpu/drm/xe/xe_pcode_api.h
+index d762226a9..fe5225489 100644
+--- a/drivers/gpu/drm/xe/xe_pcode_api.h
++++ b/drivers/gpu/drm/xe/xe_pcode_api.h
+@@ -54,6 +54,7 @@
+ #define   PCODE_THERMAL_INFO			0x25
+ #define     READ_THERMAL_LIMITS			0x0
+ #define     READ_THERMAL_CONFIG			0x1
++#define       VRAM_COUNT_MASK			REG_GENMASK(15, 8)
+ #define     READ_THERMAL_DATA			0x2
+ #define       PCIE_SENSOR_GROUP_ID		0x2
+ #define       PCIE_SENSOR_MASK			REG_GENMASK(31, 16)
+-- 
+2.43.0
+

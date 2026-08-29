@@ -1,0 +1,77 @@
+From 52eb27ef2b4ae7496f68d06f92dd205bb605997c Mon Sep 17 00:00:00 2001
+From: "David E. Box" <david.e.box@linux.intel.com>
+Date: Fri, 12 Jun 2026 14:01:42 -0700
+Subject: platform/x86/intel/pmt: Add pre/post decode hooks
+ around header parsing
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add optional pre- and post-decode callbacks to the PMT class so namespaces
+can perform setup and cleanup steps around header parsing.
+
+  - Add pmt_pre_decode() and pmt_post_decode() to struct
+    intel_pmt_namespace.
+  - Update intel_pmt_dev_create() to invoke, in order:
+      pre → header_decode() → post.
+  - Keep the existing pmt_header_decode() callback unchanged.
+
+No functional changes. This adds flexibility for upcoming decoders while
+preserving current behavior.
+
+Signed-off-by: David E. Box <david.e.box@linux.intel.com>
+Reviewed-by: Ilpo Järvinen <ilpo.jarvinen@linux.intel.com>
+Link: https://patch.msgid.link/b178a341601ca694db99c3b738fe4ed9e0c2bede.1781294741.git.david.e.box@linux.intel.com
+Signed-off-by: Ilpo Järvinen <ilpo.jarvinen@linux.intel.com>
+(cherry-picked from commit acd3b94f8604aeee2b62f8fd18e95a0474546288 drm_tip)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/platform/x86/intel/pmt/class.c | 12 ++++++++++++
+ drivers/platform/x86/intel/pmt/class.h |  4 ++++
+ 2 files changed, 16 insertions(+)
+
+diff --git a/drivers/platform/x86/intel/pmt/class.c b/drivers/platform/x86/intel/pmt/class.c
+index b4c9964df..9b315334a 100644
+--- a/drivers/platform/x86/intel/pmt/class.c
++++ b/drivers/platform/x86/intel/pmt/class.c
+@@ -381,10 +381,22 @@ int intel_pmt_dev_create(struct intel_pmt_entry *entry, struct intel_pmt_namespa
+ 	if (IS_ERR(entry->disc_table))
+ 		return PTR_ERR(entry->disc_table);
+ 
++	if (ns->pmt_pre_decode) {
++		ret = ns->pmt_pre_decode(intel_vsec_dev, entry);
++		if (ret)
++			return ret;
++	}
++
+ 	ret = ns->pmt_header_decode(entry, dev);
+ 	if (ret)
+ 		return ret;
+ 
++	if (ns->pmt_post_decode) {
++		ret = ns->pmt_post_decode(intel_vsec_dev, entry);
++		if (ret)
++			return ret;
++	}
++
+ 	ret = intel_pmt_populate_entry(entry, intel_vsec_dev, disc_res);
+ 	if (ret)
+ 		return ret;
+diff --git a/drivers/platform/x86/intel/pmt/class.h b/drivers/platform/x86/intel/pmt/class.h
+index 1ae56a5ba..ff39014b2 100644
+--- a/drivers/platform/x86/intel/pmt/class.h
++++ b/drivers/platform/x86/intel/pmt/class.h
+@@ -62,6 +62,10 @@ struct intel_pmt_namespace {
+ 	struct xarray *xa;
+ 	int (*pmt_header_decode)(struct intel_pmt_entry *entry,
+ 				 struct device *dev);
++	int (*pmt_pre_decode)(struct intel_vsec_device *ivdev,
++			      struct intel_pmt_entry *entry);
++	int (*pmt_post_decode)(struct intel_vsec_device *ivdev,
++			       struct intel_pmt_entry *entry);
+ 	int (*pmt_add_endpoint)(struct intel_vsec_device *ivdev,
+ 				struct intel_pmt_entry *entry);
+ };
+-- 
+2.43.0
+

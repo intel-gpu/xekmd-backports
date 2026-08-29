@@ -1,0 +1,33 @@
+From aba08b56542e59949c1523f0ebf565c17acbd983 Mon Sep 17 00:00:00 2001
+From: Karthik Poosa <karthik.poosa@intel.com>
+Date: Tue, 25 Aug 2026 00:11:33 +0530
+Subject: drm/xe/hwmon: Correct group selection for memory
+ controller temperature
+
+Read all the necessary groups when reading memory controller
+temperature in get_mc_temp().
+
+Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
+Fixes: 3a0cb885e111 ("drm/xe/hwmon: Expose memory controller temperature")
+(cherry-picked from commit 3087a4eca102766a02767f0e4902b95eb89a4e88 drm_tip)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hwmon.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
+index e84b9b756..7a121384c 100644
+--- a/drivers/gpu/drm/xe/xe_hwmon.c
++++ b/drivers/gpu/drm/xe/xe_hwmon.c
+@@ -850,7 +850,7 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ 	int ret, i, count = 0;
+ 	s32 average = 0;
+ 
+-	for (i = 0; i < DIV_ROUND_UP(TEMP_LIMIT_MAX, sizeof(u32)); i++) {
++	for (i = 0; i < DIV_ROUND_UP(hwmon->temp.count, sizeof(u32)); i++) {
+ 		ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_DATA, i),
+ 				    (dword + i), NULL);
+ 		if (ret)
+-- 
+2.43.0
+

@@ -1,0 +1,168 @@
+From cbd2a5f6fb56362408a26d799d217058272746cd Mon Sep 17 00:00:00 2001
+From: Karthik Poosa <karthik.poosa@intel.com>
+Date: Tue, 25 Aug 2026 00:11:31 +0530
+Subject: drm/xe/hwmon: Detect unavailable temperature sensors
+
+Add is_temp_valid() to validate sensor presence.
+A temperature reading of 0xFF on CRI platforms indicates that the
+corresponding sensor is not present and should be treated as unavailable.
+
+Use this check from xe_hwmon_temp_is_visible() callback so that attributes
+for unavailable sensors are not exposed during hwmon device registration.
+
+Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
+(cherry-picked from commit debae9a627d0b3f6bcd61e0464ef5d5a0713415f drm_tip)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hwmon.c | 79 +++++++++++++++++++++++++++++------
+ 1 file changed, 66 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
+index db48594fc..edd0a58c5 100644
+--- a/drivers/gpu/drm/xe/xe_hwmon.c
++++ b/drivers/gpu/drm/xe/xe_hwmon.c
+@@ -819,12 +819,21 @@ static int xe_hwmon_pcode_read_thermal_info(struct xe_hwmon *hwmon)
+ 	return ret;
+ }
+ 
++static inline bool is_temp_valid(const struct xe_hwmon *hwmon, u8 value)
++{
++	/* Value of 0xFF indicates unavailable sensor for platforms from CRI. */
++	if (hwmon->xe->info.platform >= XE_CRESCENTISLAND)
++		return value != U8_MAX;
++	else
++		return value != 0;
++}
++
+ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ {
+ 	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
+ 	u32 *dword = (u32 *)hwmon->temp.value;
++	int ret, i, count = 0;
+ 	s32 average = 0;
+-	int ret, i;
+ 
+ 	for (i = 0; i < DIV_ROUND_UP(TEMP_LIMIT_MAX, sizeof(u32)); i++) {
+ 		ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_DATA, i),
+@@ -834,11 +843,25 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ 		drm_dbg(&hwmon->xe->drm, "thermal data for group %d val 0x%x\n", i, dword[i]);
+ 	}
+ 
+-	for (i = TEMP_INDEX_MCTRL; i < hwmon->temp.count - 1; i++)
+-		average += hwmon->temp.value[i];
++	for (i = TEMP_INDEX_MCTRL; i < hwmon->temp.count - 1; i++) {
++		if (is_temp_valid(hwmon, hwmon->temp.value[i])) {
++			average += hwmon->temp.value[i];
++			count++;
++		} else {
++			drm_dbg(&hwmon->xe->drm, "mc temp sensor %d not available, val 0x%x\n",
++				i, hwmon->temp.value[i]);
++		}
++	}
++
++	if (!count) {
++		drm_warn(&hwmon->xe->drm, "no memory temp sensors available!\n");
++		return -ENXIO;
++	}
++
++	average /= count;
++	if (val)
++		*val = average * MILLIDEGREE_PER_DEGREE;
+ 
+-	average /= (hwmon->temp.count - TEMP_INDEX_MCTRL - 1);
+-	*val = average * MILLIDEGREE_PER_DEGREE;
+ 	return 0;
+ }
+ 
+@@ -858,7 +881,13 @@ static int get_pcie_temp(struct xe_hwmon *hwmon, long *val)
+ 		data = REG_FIELD_GET(PCIE_SENSOR_MASK, data);
+ 
+ 	data = REG_FIELD_GET(TEMP_MASK, data);
+-	*val = (s8)data * MILLIDEGREE_PER_DEGREE;
++	if (!is_temp_valid(hwmon, data)) {
++		drm_warn(&hwmon->xe->drm, "pcie temp sensor not available, val 0x%x\n", data);
++		return -ENXIO;
++	}
++
++	if (val)
++		*val = (s8)data * MILLIDEGREE_PER_DEGREE;
+ 
+ 	return 0;
+ }
+@@ -962,11 +991,21 @@ static inline bool is_vram_ch_available(struct xe_hwmon *hwmon, int channel)
+ 	struct xe_mmio *mmio = xe_root_tile_mmio(hwmon->xe);
+ 	int vram_id = channel - CHANNEL_VRAM_N;
+ 	struct xe_reg vram_reg;
++	u32 reg_val;
++	u8 temp;
+ 
+ 	vram_reg = xe_hwmon_get_reg(hwmon, REG_TEMP, channel);
+-	if (!xe_reg_is_valid(vram_reg) || !xe_mmio_read32(mmio, vram_reg))
++	if (!xe_reg_is_valid(vram_reg))
+ 		return false;
+ 
++	reg_val = xe_mmio_read32(mmio, vram_reg);
++	temp = REG_FIELD_GET(TEMP_MASK, reg_val);
++	if (!is_temp_valid(hwmon, temp)) {
++		drm_dbg(&hwmon->xe->drm, "vram channel %d unavailable, val 0x%x\n", vram_id,
++			reg_val);
++		return false;
++	}
++
+ 	/* Create label only for available vram channel */
+ 	sprintf(hwmon->temp.vram_label[vram_id], "vram_ch_%d", vram_id);
+ 	return true;
+@@ -983,8 +1022,9 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
+ 		case CHANNEL_VRAM:
+ 			return hwmon->temp.limit[TEMP_LIMIT_MEM_SHUTDOWN] ? 0444 : 0;
+ 		case CHANNEL_MCTRL:
++			return !get_mc_temp(hwmon, NULL) && hwmon->temp.count ? 0444 : 0;
+ 		case CHANNEL_PCIE:
+-			return hwmon->temp.count ? 0444 : 0;
++			return !get_pcie_temp(hwmon, NULL) && hwmon->temp.count ? 0444 : 0;
+ 		case CHANNEL_VRAM_N...CHANNEL_VRAM_N_MAX:
+ 			return (is_vram_ch_available(hwmon, channel) &&
+ 				hwmon->temp.limit[TEMP_LIMIT_MEM_SHUTDOWN]) ? 0444 : 0;
+@@ -998,8 +1038,9 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
+ 		case CHANNEL_VRAM:
+ 			return hwmon->temp.limit[TEMP_LIMIT_MEM_CRIT] ? 0444 : 0;
+ 		case CHANNEL_MCTRL:
++			return !get_mc_temp(hwmon, NULL) && hwmon->temp.count ? 0444 : 0;
+ 		case CHANNEL_PCIE:
+-			return hwmon->temp.count ? 0444 : 0;
++			return !get_pcie_temp(hwmon, NULL) && hwmon->temp.count ? 0444 : 0;
+ 		case CHANNEL_VRAM_N...CHANNEL_VRAM_N_MAX:
+ 			return (is_vram_ch_available(hwmon, channel) &&
+ 				hwmon->temp.limit[TEMP_LIMIT_MEM_CRIT]) ? 0444 : 0;
+@@ -1017,12 +1058,24 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
+ 	case hwmon_temp_label:
+ 		switch (channel) {
+ 		case CHANNEL_PKG:
+-		case CHANNEL_VRAM:
+-			return xe_reg_is_valid(xe_hwmon_get_reg(hwmon, REG_TEMP,
+-								channel)) ? 0444 : 0;
++		case CHANNEL_VRAM: {
++			struct xe_mmio *mmio = xe_root_tile_mmio(hwmon->xe);
++			struct xe_reg reg = xe_hwmon_get_reg(hwmon, REG_TEMP, channel);
++			u32 reg_val;
++			u8 temp;
++
++			if (!xe_reg_is_valid(reg))
++				return 0;
++
++			reg_val = xe_mmio_read32(mmio, reg);
++			temp = REG_FIELD_GET(TEMP_MASK, reg_val);
++
++			return is_temp_valid(hwmon, temp) ? 0444 : 0;
++		}
+ 		case CHANNEL_MCTRL:
++			return !get_mc_temp(hwmon, NULL) && hwmon->temp.count ? 0444 : 0;
+ 		case CHANNEL_PCIE:
+-			return hwmon->temp.count ? 0444 : 0;
++			return !get_pcie_temp(hwmon, NULL) && hwmon->temp.count ? 0444 : 0;
+ 		case CHANNEL_VRAM_N...CHANNEL_VRAM_N_MAX:
+ 			return is_vram_ch_available(hwmon, channel) ? 0444 : 0;
+ 		default:
+-- 
+2.43.0
+

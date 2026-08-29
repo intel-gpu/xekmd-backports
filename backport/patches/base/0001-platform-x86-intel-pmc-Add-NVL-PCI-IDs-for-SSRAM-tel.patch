@@ -1,0 +1,59 @@
+From ce21b7499cfd2a4e766d1a3c851ddfb5f2a470b0 Mon Sep 17 00:00:00 2001
+From: "David E. Box" <david.e.box@linux.intel.com>
+Date: Fri, 12 Jun 2026 14:01:56 -0700
+Subject: platform/x86/intel/pmc: Add NVL PCI IDs for SSRAM
+ telemetry discovery
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add Nova Lake S PMC device IDs to enable binding of the SSRAM telemetry
+driver on NVL platforms, and map them to the ACPI-based discovery policy.
+
+Signed-off-by: David E. Box <david.e.box@linux.intel.com>
+Link: https://patch.msgid.link/fc0e8bb00e2765fb7d145fef2ed1b0236b935c08.1781294741.git.david.e.box@linux.intel.com
+Reviewed-by: Ilpo Järvinen <ilpo.jarvinen@linux.intel.com>
+Signed-off-by: Ilpo Järvinen <ilpo.jarvinen@linux.intel.com>
+(cherry-picked from commit 50022e56dc89fbf1ec22826edf03dc2e5b9076cc drm_tip)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/platform/x86/intel/pmc/ssram_telemetry.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/drivers/platform/x86/intel/pmc/ssram_telemetry.c b/drivers/platform/x86/intel/pmc/ssram_telemetry.c
+index 9a8922045..8e280ec52 100644
+--- a/drivers/platform/x86/intel/pmc/ssram_telemetry.c
++++ b/drivers/platform/x86/intel/pmc/ssram_telemetry.c
+@@ -45,6 +45,16 @@ static const struct ssram_type pci_main = {
+ 	.p_index = PMC_IDX_MAIN,
+ };
+ 
++static const struct ssram_type acpi_main = {
++	.method = RES_METHOD_ACPI,
++	.p_index = PMC_IDX_MAIN,
++};
++
++static const struct ssram_type acpi_pch = {
++	.method = RES_METHOD_ACPI,
++	.p_index = PMC_IDX_PCH,
++};
++
+ enum pmc_ssram_state {
+ 	PMC_SSRAM_UNPROBED = 0,
+ 	PMC_SSRAM_PROBING,
+@@ -453,6 +463,12 @@ static const struct pci_device_id pmc_ssram_telemetry_pci_ids[] = {
+ 		.driver_data = (kernel_ulong_t)&pci_main },
+ 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PMC_DEVID_WCL_PCDN),
+ 		.driver_data = (kernel_ulong_t)&pci_main },
++	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PMC_DEVID_NVL_PCDH),
++		.driver_data = (kernel_ulong_t)&acpi_main },
++	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PMC_DEVID_NVL_PCDS),
++		.driver_data = (kernel_ulong_t)&acpi_main },
++	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PMC_DEVID_NVL_PCHS),
++		.driver_data = (kernel_ulong_t)&acpi_pch },
+ 	{ }
+ };
+ MODULE_DEVICE_TABLE(pci, pmc_ssram_telemetry_pci_ids);
+-- 
+2.43.0
+

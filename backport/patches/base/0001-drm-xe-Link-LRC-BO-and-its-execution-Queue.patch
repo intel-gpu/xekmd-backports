@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Date: Sat, 29 Aug 2026 19:17:41 +0200
+Subject: drm/xe: Link LRC BO and its execution Queue
+
+To establish a link between an LRC BO (Logical Ring Context
+Buffer Object) and its corresponding execution Queue in the
+drm/xe driver, you need to store a back-pointer to the queue
+within the BO's private data structure. This allows the
+driver to identify and take corrective action on the specific
+queue if the LRC BO encounters an error (e.g., memory
+corruption or eviction issues).
+
+V2(MattB):
+- Handle multiqueue
+
+Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Link:[V21] https://lore.kernel.org/all/20260519122817.45770-16-tejas.upadhyay@intel.com/
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_bo_types.h   | 3 +++
+ drivers/gpu/drm/xe/xe_exec_queue.c | 6 ++++++
+ drivers/gpu/drm/xe/xe_lrc.c        | 1 +
+ 3 files changed, 10 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo_types.h b/drivers/gpu/drm/xe/xe_bo_types.h
+index e45f24301050..a9c48e440669 100644
+--- a/drivers/gpu/drm/xe/xe_bo_types.h
++++ b/drivers/gpu/drm/xe/xe_bo_types.h
+@@ -20,6 +20,7 @@
+ struct xe_device;
+ struct xe_mem_pool_node;
+ struct xe_vm;
++struct xe_exec_queue;
+ 
+ #define XE_BO_MAX_PLACEMENTS	3
+ 
+@@ -42,6 +43,8 @@ struct xe_bo {
+ 	u32 flags;
+ 	/** @vm: VM this BO is attached to, for extobj this will be NULL */
+ 	struct xe_vm *vm;
++	/** @q: Queue this BO is attached to, mostly for LRC BO, NULL otherwise */
++	struct xe_exec_queue *q;
+ 	/** @tile: Tile this BO is attached to (kernel BO only) */
+ 	struct xe_tile *tile;
+ 	/** @placements: valid placements for this BO */
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index c4213bb9c137..91ed6c0fac84 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -387,6 +387,12 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
+ 				goto err_lrc;
+ 			}
+ 
++			/*
++			 * The queue ref counts the LRCs, thus it safe for the LRC BO to hold a
++			 * pointer to queue without reference.  The reader holds dma_resv (
++			 * xe_bo_lock) which serializes with xe_lrc_finish().
++			 */
++			WRITE_ONCE(lrc->bo->q, xe_exec_queue_multi_queue_primary(q));
+ 			xe_exec_queue_set_lrc(q, lrc, i);
+ 
+ 			if (__lrc)
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index 35b4e8289b5f..675902753735 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1066,6 +1066,7 @@ static void xe_lrc_set_ppgtt(struct xe_lrc *lrc, struct xe_vm *vm)
+ static void xe_lrc_finish(struct xe_lrc *lrc)
+ {
+ 	xe_hw_fence_ctx_finish(&lrc->fence_ctx);
++	WRITE_ONCE(lrc->bo->q, NULL);
+ 	xe_bo_unpin_map_no_vm(lrc->bo);
+ 	xe_bo_unpin_map_no_vm(lrc->seqno_bo);
+ }

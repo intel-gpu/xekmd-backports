@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Date: Sat, 29 Aug 2026 19:17:41 +0200
+Subject: drm/xe/ras: Cache bad_page_reservation policy at init
+
+The configfs bad_page_reservation attribute can only be set before
+device bind, so its value is immutable at runtime. Cache it in
+struct xe_drm_ras during xe_drm_ras_init() to avoid repeated configfs
+lookups on every fault.
+
+Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+(cherry-picked from [V21] https://lore.kernel.org/all/20260519122817.45770-22-tejas.upadhyay@intel.com/ )
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_drm_ras_types.h | 3 +++
+ drivers/gpu/drm/xe/xe_ras.c           | 5 +++++
+ 2 files changed, 8 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_drm_ras_types.h b/drivers/gpu/drm/xe/xe_drm_ras_types.h
+index 8d729ad6a264..83899cf04793 100644
+--- a/drivers/gpu/drm/xe/xe_drm_ras_types.h
++++ b/drivers/gpu/drm/xe/xe_drm_ras_types.h
+@@ -43,6 +43,9 @@ struct xe_drm_ras {
+ 
+ 	/** @info: info array for all types of errors */
+ 	struct xe_drm_ras_counter *info[DRM_XE_RAS_ERR_SEV_MAX];
++
++	/** @bad_page_reservation: cached configfs policy, immutable after init */
++	bool bad_page_reservation;
+ };
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index d25d25f77531..c7e86ae0e8ad 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -3,6 +3,7 @@
+  * Copyright © 2026 Intel Corporation
+  */
+ 
++#include "xe_configfs.h"
+ #include "xe_debugfs.h"
+ #include "xe_device.h"
+ #include "xe_drm_ras.h"
+@@ -775,9 +775,13 @@ void xe_ras_init(struct xe_device *xe)
+ {
+ 	int ret;
+ 
+ 	if (!xe->info.has_drm_ras)
+ 		return;
+ 
++	if (xe->info.platform == XE_CRESCENTISLAND)
++		xe->ras.bad_page_reservation =
++			xe_configfs_get_bad_page_reservation(to_pci_dev(xe->drm.dev));
++
+ 	xe_drm_ras_init(xe);
+ 
+ 	if (!xe->info.has_sysctrl)

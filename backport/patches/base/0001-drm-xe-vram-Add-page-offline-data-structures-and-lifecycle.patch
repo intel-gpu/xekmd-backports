@@ -1,0 +1,130 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Date: Sat, 29 Aug 2026 19:17:41 +0200
+Subject: drm/xe/vram: Add page offline data structures and lifecycle
+
+Add xe_ttm_vram_offline_resource to track individual offlined VRAM
+pages, and extend xe_ttm_vram_mgr with offlined_pages/queued_pages
+lists and their counters.
+
+Initialize the lists in __xe_ttm_vram_mgr_init() and add
+xe_ttm_vram_free_bad_pages() to release all tracked pages during
+xe_ttm_vram_mgr_fini() teardown.
+
+v2(Himal):
+- Address possible leak in xe_ttm_vram_mgr_fini()
+- Remove unused dev and add comment for used_visible_size 0
+
+Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+(backported from [V21] drm/xe/vram: Add page offline data structures and lifecycle)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_ttm_vram_mgr.c       | 25 ++++++++++++++
+ drivers/gpu/drm/xe/xe_ttm_vram_mgr_types.h | 38 ++++++++++++++++++++++
+ 2 files changed, 63 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
+index 16ecea497780..1253989a8d06 100644
+--- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
++++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
+@@ -301,13 +301,36 @@ static const struct ttm_resource_manager_func xe_ttm_vram_mgr_func = {
+ };
+ 
++static void xe_ttm_vram_free_bad_pages(struct xe_ttm_vram_mgr *mgr)
++{
++	struct xe_ttm_vram_offline_resource *pos, *n;
++
++	list_for_each_entry_safe(pos, n, &mgr->offlined_pages, offlined_link) {
++		list_del_rcu(&pos->offlined_link);
++		xe_ttm_vram_buddy_free(mgr, &pos->blocks, pos->used_visible_size);
++		--mgr->n_offlined_pages;
++		kfree_rcu(pos, rcu);
++	}
++	list_for_each_entry_safe(pos, n, &mgr->queued_pages, queued_link) {
++		list_del_rcu(&pos->queued_link);
++		/* queued entries have no buddy reservation yet */
++		xe_ttm_vram_buddy_free(mgr, &pos->blocks, 0);
++		--mgr->n_queued_pages;
++		kfree_rcu(pos, rcu);
++	}
++}
++
+ static void xe_ttm_vram_mgr_fini(struct drm_device *dev, void *arg)
+ {
+ 	struct xe_device *xe = to_xe_device(dev);
+ 	struct xe_ttm_vram_mgr *mgr = arg;
+ 	struct ttm_resource_manager *man = &mgr->manager;
+ 
++	mutex_lock(&mgr->lock);
++	xe_ttm_vram_free_bad_pages(mgr);
++	mutex_unlock(&mgr->lock);
++
+ 	ttm_resource_manager_set_used(man, false);
+ 
+ 	if (ttm_resource_manager_evict_all(&xe->ttm, man))
+ 		return;
+ 
+@@ -339,6 +362,8 @@ int __xe_ttm_vram_mgr_init(struct xe_device *xe, struct xe_ttm_vram_mgr *mgr,
+ 	man->func = &xe_ttm_vram_mgr_func;
+ 	mgr->mem_type = mem_type;
+ 	mutex_init(&mgr->lock);
++	INIT_LIST_HEAD(&mgr->offlined_pages);
++	INIT_LIST_HEAD(&mgr->queued_pages);
+ 	mgr->default_page_size = default_page_size;
+ 	mgr->visible_size = io_size;
+ 	mgr->visible_avail = io_size;
+diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr_types.h b/drivers/gpu/drm/xe/xe_ttm_vram_mgr_types.h
+index 9106da056b49..dc97b0ad0e51 100644
+--- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr_types.h
++++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr_types.h
+@@ -19,6 +19,14 @@ struct xe_ttm_vram_mgr {
+ 	struct ttm_resource_manager manager;
+ 	/** @mm: DRM buddy allocator which manages the VRAM */
+ 	struct gpu_buddy mm;
++	/** @offlined_pages: List of offlined pages */
++	struct list_head offlined_pages;
++	/** @n_offlined_pages: Number of offlined pages */
++	u16 n_offlined_pages;
++	/** @queued_pages: List of queued pages */
++	struct list_head queued_pages;
++	/** @n_queued_pages: Number of queued pages */
++	u16 n_queued_pages;
+ 	/** @visible_size: Proped size of the CPU visible portion */
+ 	u64 visible_size;
+ 	/** @visible_avail: CPU visible portion still unallocated */
+@@ -45,4 +53,34 @@ struct xe_ttm_vram_mgr_resource {
+ 	unsigned long flags;
+ };
+ 
++/**
++ * enum xe_page_reserve_status - Buddy reservation status
++ * @XE_PAGE_RESERVE_PENDING: reservation in progress
++ * @XE_PAGE_RESERVE_FAIL: reservation failed
++ */
++enum xe_page_reserve_status {
++	XE_PAGE_RESERVE_PENDING = 0,
++	XE_PAGE_RESERVE_FAIL,
++};
++
++/**
++ * struct xe_ttm_vram_offline_resource - Tracks a single offlined VRAM page
++ */
++struct xe_ttm_vram_offline_resource {
++	/** @offlined_link: Link into mgr->offlined_pages */
++	struct list_head offlined_link;
++	/** @queued_link: Link into mgr->queued_pages */
++	struct list_head queued_link;
++	/** @blocks: Buddy blocks reserved for this page */
++	struct list_head blocks;
++	/** @used_visible_size: CPU-visible bytes consumed */
++	u64 used_visible_size;
++	/** @addr: Faulty DPA reported by HW */
++	u64 addr;
++	/** @status: buddy reservation status */
++	enum xe_page_reserve_status status;
++	/** @rcu: RCU head for deferred freeing */
++	struct rcu_head rcu;
++};
++
+ #endif

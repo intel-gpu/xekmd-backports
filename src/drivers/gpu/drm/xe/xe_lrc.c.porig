@@ -1587,14 +1587,8 @@ static int xe_lrc_ctx_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe, struct 
 	if (lrc_to_xe(lrc)->info.has_64bit_timestamp)
 		xe_lrc_write_ctx_reg(lrc, CTX_TIMESTAMP_UDW, 0);
 
-	if (xe->info.has_asid && vm) {
-		u32 asid = vm->usm.asid;
-		asid |= init_flags & XE_LRC_CREATE_SUP_TRANS_CATERR ? SUP_TRANS_CATERR : 0;
-		xe_lrc_write_ctx_reg(lrc, CTX_ASID, asid);
-	}
-
-	if (GRAPHICS_VER(xe) >= 20 && hwe->class == XE_ENGINE_CLASS_RENDER)
-		xe_lrc_set_gpgpu_preemption_level(lrc, gt);
+	if (xe->info.has_asid && vm)
+		xe_lrc_write_ctx_reg(lrc, CTX_ASID, vm->usm.asid);
 
 	lrc->desc = LRC_VALID;
 	lrc->desc |= FIELD_PREP(LRC_ADDRESSING_MODE, LRC_LEGACY_64B_CONTEXT);
@@ -1698,16 +1692,6 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe, struct xe_v
 
 	if (vm && vm->xef)
 		xe_drm_client_add_bo(vm->xef->client, lrc->bo);
-
-	if (init_flags & XE_LRC_CREATE_RUNALONE) {
-		u32 ctx_control = xe_lrc_read_ctx_reg(lrc, CTX_CONTEXT_CONTROL);
-
-		drm_dbg(&xe->drm, "read CTX_CONTEXT_CONTROL: 0x%x\n", ctx_control);
-		ctx_control |= REG_MASKED_FIELD_ENABLE(CTX_CTRL_RUN_ALONE);
-		drm_dbg(&xe->drm, "written CTX_CONTEXT_CONTROL: 0x%x\n", ctx_control);
-
-		xe_lrc_write_ctx_reg(lrc, CTX_CONTEXT_CONTROL, ctx_control);
-	}
 
 	return 0;
 

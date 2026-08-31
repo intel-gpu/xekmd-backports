@@ -32,3 +32,24 @@ AC_DEFUN([AC_SYSTEM_PERCPU_WQ_NOT_PRESENT], [
                         [system_percpu_wq not available])
         ])
 ])
+
+dnl #
+dnl # v7.1 - 86898fa6b8cd
+dnl # workqueue: Implement disable/enable for (delayed) work items
+dnl #
+AC_DEFUN([AC_DISABLE_DELAYED_WORK_SYNC_NOT_PRESENT], [
+        AC_KERNEL_DO_BACKGROUND([
+                AC_KERNEL_TRY_COMPILE([
+                        #include <linux/workqueue.h>
+                ],[
+                        struct delayed_work dwork;
+                        bool ret;
+                        ret = disable_delayed_work_sync(&dwork);
+                        (void)ret;
+                ],[
+                ],[
+                        AC_DEFINE(BPM_DISABLE_DELAYED_WORK_SYNC_NOT_PRESENT, 1,
+                                [disable_delayed_work_sync is not declared in linux/workqueue.h])
+                ])
+        ])
+])

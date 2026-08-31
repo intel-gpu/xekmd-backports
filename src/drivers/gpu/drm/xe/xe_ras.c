@@ -68,6 +68,14 @@ enum xe_ras_response_status {
 	XE_RAS_STATUS_MAX
 };
 
+/* GPU health values */
+enum xe_ras_health {
+	XE_RAS_HEALTH_OK = 0,
+	XE_RAS_HEALTH_WARNING,
+	XE_RAS_HEALTH_CRITICAL,
+	XE_RAS_HEALTH_MAX
+};
+
 static const char *const xe_ras_severities[] = {
 	[XE_RAS_SEV_NOT_SUPPORTED]		= "Not Supported",
 	[XE_RAS_SEV_CORRECTABLE]		= "Correctable Error",
@@ -86,6 +94,13 @@ static const char *const xe_ras_components[] = {
 	[XE_RAS_COMP_SOC_INTERNAL]		= "SoC Internal",
 };
 static_assert(ARRAY_SIZE(xe_ras_components) == XE_RAS_COMP_MAX);
+
+static const char * const gpu_health_states[] = {
+	[XE_RAS_HEALTH_OK]              = "ok",
+	[XE_RAS_HEALTH_WARNING]         = "warning",
+	[XE_RAS_HEALTH_CRITICAL]        = "critical",
+};
+static_assert(ARRAY_SIZE(gpu_health_states) == XE_RAS_HEALTH_MAX);
 
 static int get_counter(struct xe_device *xe, struct xe_ras_error_class *counter, u32 *value);
 
@@ -617,6 +632,139 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
 	return 0;
 }
 
+static ssize_t gpu_health_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct xe_ras_get_health_response response = {0};
+	struct xe_sysctrl_mailbox_command command = {0};
+	struct xe_ras_get_health_request request = {0};
+	struct xe_device *xe = kdev_to_xe_device(dev);
+	const char *health;
+	size_t rlen;
+	int ret;
+
+	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_GET_HEALTH,
+				  &request, sizeof(request), &response, sizeof(response));
+	guard(xe_pm_runtime)(xe);
+	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
+	if (ret) {
+		xe_err(xe, "sysctrl: failed to get health %d\n", ret);
+		return ret;
+	}
+
+	if (rlen != sizeof(response)) {
+		xe_err(xe, "sysctrl: unexpected get health response length %zu (expected %zu)\n",
+		       rlen, sizeof(response));
+		return -EIO;
+	}
+	if (response.health >= XE_RAS_HEALTH_MAX) {
+		xe_err(xe, "sysctrl: invalid health state %u\n",
+		       response.health);
+		return -EIO;
+	}
+
+	health = gpu_health_states[response.health];
+
+	xe_dbg(xe, "[RAS]: get health: %s\n", health);
+
+	return sysfs_emit(buf, "%s\n", health);
+}
+
+static ssize_t gpu_health_store(struct device *dev, struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct xe_ras_set_health_response response = {0};
+	struct xe_sysctrl_mailbox_command command = {0};
+	struct xe_ras_set_health_request request = {0};
+	struct xe_device *xe = kdev_to_xe_device(dev);
+	const char *health;
+	size_t rlen;
+	int state;
+	int ret;
+
+	state = sysfs_match_string(gpu_health_states, buf);
+	if (state < 0)
+		return -EINVAL;
+
+	request.health = state;
+
+	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_SET_HEALTH,
+				  &request, sizeof(request), &response, sizeof(response));
+	guard(xe_pm_runtime)(xe);
+	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
+	if (ret) {
+		xe_err(xe, "sysctrl: failed to set health %d\n", ret);
+		return ret;
+	}
+
+	if (rlen != sizeof(response)) {
+		xe_err(xe, "sysctrl: unexpected set health response length %zu (expected %zu)\n",
+		       rlen, sizeof(response));
+		return -EIO;
+	}
+
+	ret = ras_status_to_errno(response.status);
+	if (ret) {
+		xe_err(xe, "sysctrl: set health command failed with status %#x\n",
+		       response.status);
+		return ret;
+	}
+
+	if (response.health >= XE_RAS_HEALTH_MAX) {
+		xe_err(xe, "sysctrl: invalid health state %u\n",
+		       response.health);
+		return -EIO;
+	}
+
+	health = gpu_health_states[response.health];
+
+	xe_dbg(xe, "[RAS]: set health: %s\n", health);
+
+	return count;
+}
+static DEVICE_ATTR_RW(gpu_health);
+
+static struct attribute *gpu_health_attrs[] = {
+	&dev_attr_gpu_health.attr,
+	NULL
+};
+
+/**
+ * DOC: GPU Health Indicator
+ *
+ * On Intel Xe platforms that support the gpu health indicator interface,
+ * the driver exposes this sysfs attribute for in-band access to the gpu
+ * health state::
+ *
+ *     /sys/bus/pci/devices/<device>/gpu_health
+ *
+ * Reading the attribute is available to all users and returns a single
+ * line containing the current gpu health state, whereas writing is
+ * restricted to administrative users and updates the state to one of the
+ * valid values.
+ *
+ * Management tools and administrators use this interface to query the
+ * current gpu health state (e.g. for telemetry/monitoring) and to
+ * update it - for example, to mark the gpu as ``warning`` or ``critical``
+ * after diagnostics, or reset it back to ``ok`` once remediated.
+ *
+ * The valid values for the gpu health state are:
+ *
+ * - ``ok``
+ *     The gpu is healthy and operating within normal parameters.
+ *
+ * - ``warning``
+ *     The gpu is experiencing minor issues but remains operational.
+ *
+ * - ``critical``
+ *     The gpu is in a critical state and may not be operational.
+ *
+ * See Documentation/ABI/testing/sysfs-driver-intel-xe-ras for the ABI
+ * specification.
+ */
+static const struct attribute_group gpu_health_group = {
+	.attrs = gpu_health_attrs,
+};
+
 /**
  * xe_ras_init - Initialize Xe RAS
  * @xe: xe device instance
@@ -625,6 +773,8 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
  */
 void xe_ras_init(struct xe_device *xe)
 {
+	int ret;
+
 	if (!xe->info.has_drm_ras)
 		return;
 
@@ -642,4 +792,7 @@ void xe_ras_init(struct xe_device *xe)
 	 * causing the driver to enter survivability mode.
 	 */
 	xe_ras_process_errors(xe);
+	ret = devm_device_add_group(xe->drm.dev, &gpu_health_group);
+	if (ret)
+		xe_err(xe, "Failed to create GPU health sysfs, err=%d\n", ret);
 }

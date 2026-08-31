@@ -184,6 +184,48 @@ struct xe_ras_compute_error {
 } __packed;
 
 /**
+ * struct xe_ras_get_health_request - Request structure for obtaining gpu health
+ */
+struct xe_ras_get_health_request {
+	/** @reserved: Reserved for future use. */
+	u32 reserved[2];
+} __packed;
+
+/**
+ * struct xe_ras_get_health_response - Response structure for obtaining gpu health
+ */
+struct xe_ras_get_health_response {
+	/** @health: gpu health value */
+	u8 health;
+	/** @reserved: Reserved for future use */
+	u8 reserved[3];
+} __packed;
+
+/**
+ * struct xe_ras_set_health_request - Request structure for setting gpu health
+ */
+struct xe_ras_set_health_request {
+	/** @health: gpu health value */
+	u8 health;
+	/** @reserved: Reserved for future use */
+	u8 reserved[3];
+} __packed;
+
+/**
+ * struct xe_ras_set_health_response - Response structure for setting gpu health
+ */
+struct xe_ras_set_health_response {
+	/** @status: Status of set health operation */
+	u32 status;
+	/** @health: Resulting gpu health value */
+	u8 health;
+	/** @reserved: Reserved for future use */
+	u8 reserved[3];
+	/** @reserved1: Reserved for future use */
+	u32 reserved1[2];
+} __packed;
+
+/**
  * struct xe_ras_soc_error_source - Source of SoC error
  */
 struct xe_ras_soc_error_source {

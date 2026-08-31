@@ -39,7 +39,8 @@ enum xe_hwmon_reg_operation {
 	REG_READ64,
 };
 
-#define MAX_VRAM_CHANNELS      (16)
+/* Maximum number of VRAM channels supported by Xe */
+#define MAX_VRAM_CHANNELS      (80)
 
 enum xe_hwmon_channel {
 	CHANNEL_CARD,
@@ -48,6 +49,7 @@ enum xe_hwmon_channel {
 	CHANNEL_MCTRL,
 	CHANNEL_PCIE,
 	CHANNEL_VRAM_N,
+	/* Compile-time upper bound; actual channel count is hwmon->temp.vram_count */
 	CHANNEL_VRAM_N_MAX = CHANNEL_VRAM_N + MAX_VRAM_CHANNELS - 1,
 	CHANNEL_MAX,
 };
@@ -144,10 +146,12 @@ struct xe_hwmon_thermal_info {
 	};
 	/** @count: no of temperature sensors available for the platform */
 	u8 count;
+	/** @vram_count: number of VRAM temperature sensors available for the platform */
+	u8 vram_count;
 	/** @value: signed value from each sensor */
 	s8 value[U8_MAX];
-	/** @vram_label: vram label names */
-	char vram_label[MAX_VRAM_CHANNELS][MAX_LABEL_SIZE];
+	/** @vram_label: vram label names, dynamically allocated based on vram_count */
+	char (*vram_label)[MAX_LABEL_SIZE];
 };
 
 /**
@@ -271,7 +275,7 @@ static struct xe_reg xe_hwmon_get_reg(struct xe_hwmon *hwmon, enum xe_hwmon_reg 
 				return BMG_PACKAGE_TEMPERATURE;
 			else if (channel == CHANNEL_VRAM)
 				return BMG_VRAM_TEMPERATURE;
-			else if (in_range(channel, CHANNEL_VRAM_N, MAX_VRAM_CHANNELS))
+			else if (in_range(channel, CHANNEL_VRAM_N, hwmon->temp.vram_count))
 				return BMG_VRAM_TEMPERATURE_N(channel - CHANNEL_VRAM_N);
 		} else if (xe->info.platform == XE_DG2) {
 			if (channel == CHANNEL_PKG)
@@ -517,9 +521,15 @@ xe_hwmon_energy_get(struct xe_hwmon *hwmon, int channel, long *energy)
 
 	if (hwmon->xe->info.platform == XE_BATTLEMAGE) {
 		u64 pmt_val;
+		u32 guid;
 
-		ret = xe_pmt_telem_read(hwmon->xe->drm.dev,
-					xe_mmio_read32(mmio, PUNIT_TELEMETRY_GUID),
+		guid = xe_vsec_get_guid(hwmon->xe);
+		if (!guid) {
+			drm_warn(&hwmon->xe->drm, "PMT device is not powered\n");
+			*energy = 0;
+			return;
+		}
+		ret = xe_pmt_telem_read(hwmon->xe->drm.dev, guid,
 					&pmt_val, BMG_ENERGY_STATUS_PMT_OFFSET,	sizeof(pmt_val));
 		if (ret != sizeof(pmt_val)) {
 			drm_warn(&hwmon->xe->drm, "energy read from pmt failed, ret %d\n", ret);
@@ -575,23 +585,36 @@ xe_hwmon_power_max_interval_show(struct device *dev, struct device_attribute *at
 
 	mutex_unlock(&hwmon->hwmon_lock);
 
-	x = REG_FIELD_GET(PWR_LIM_TIME_X, reg_val);
-	y = REG_FIELD_GET(PWR_LIM_TIME_Y, reg_val);
+	if (hwmon->xe->info.platform >= XE_CRESCENTISLAND) {
+		/**
+		 * On CRI and newer platforms, the interval encoding changed.
+		 * The value is now stored directly in milliseconds as U5.2,
+		 * replacing the older 1.x * 2^y representation.
+		 * Bits [6:2] hold the integer part and bits [1:0] the fraction,
+		 * so convert to milliseconds by extracting integer/fractional parts.
+		 * Round fraction value to 1 when it is >= 0.5.
+		 */
+		reg_val = REG_FIELD_GET(PWR_LIM_TIME, reg_val);
+		out = (u64)((reg_val >> 2) + ((reg_val & 0x3) >= 2));
+	} else {
+		x = REG_FIELD_GET(PWR_LIM_TIME_X, reg_val);
+		y = REG_FIELD_GET(PWR_LIM_TIME_Y, reg_val);
 
-	/*
-	 * tau = (1 + (x / 4)) * power(2,y), x = bits(23:22), y = bits(21:17)
-	 *     = (4 | x) << (y - 2)
-	 *
-	 * Here (y - 2) ensures a 1.x fixed point representation of 1.x
-	 * As x is 2 bits so 1.x can be 1.0, 1.25, 1.50, 1.75
-	 *
-	 * As y can be < 2, we compute tau4 = (4 | x) << y
-	 * and then add 2 when doing the final right shift to account for units
-	 */
-	tau4 = (u64)((1 << x_w) | x) << y;
+		/*
+		 * tau = (1 + (x / 4)) * power(2,y), x = bits(23:22), y = bits(21:17)
+		 *     = (4 | x) << (y - 2)
+		 *
+		 * Here (y - 2) ensures a 1.x fixed point representation of 1.x
+		 * As x is 2 bits so 1.x can be 1.0, 1.25, 1.50, 1.75
+		 *
+		 * As y can be < 2, we compute tau4 = (4 | x) << y
+		 * and then add 2 when doing the final right shift to account for units
+		 */
+		tau4 = (u64)((1 << x_w) | x) << y;
 
-	/* val in hwmon interface units (millisec) */
-	out = mul_u64_u32_shr(tau4, SF_TIME, hwmon->scl_shift_time + x_w);
+		/* val in hwmon interface units (millisec) */
+		out = mul_u64_u32_shr(tau4, SF_TIME, hwmon->scl_shift_time + x_w);
+	}
 
 	return sysfs_emit(buf, "%llu\n", out);
 }
@@ -637,24 +660,35 @@ xe_hwmon_power_max_interval_store(struct device *dev, struct device_attribute *a
 	if (val > max_win)
 		return -EINVAL;
 
-	/* val in hw units */
-	val = DIV_ROUND_CLOSEST_ULL((u64)val << hwmon->scl_shift_time, SF_TIME) + 1;
-
-	/*
-	 * Convert val to 1.x * power(2,y)
-	 * y = ilog2(val)
-	 * x = (val - (1 << y)) >> (y - 2)
-	 */
-	if (!val) {
-		y = 0;
-		x = 0;
+	if (hwmon->xe->info.platform >= XE_CRESCENTISLAND) {
+		/**
+		 * On CRI and newer platforms, the interval encoding changed.
+		 * The value is now stored directly in milliseconds as U5.2,
+		 * replacing the older 1.x * 2^y representation.
+		 * Bits [6:2] hold the integer part and bits [1:0] the fraction,so
+		 * convert from milliseconds by shifting the value left by 2 to fit into the field.
+		 */
+		rxy = REG_FIELD_PREP(PWR_LIM_TIME, (val << 2));
 	} else {
-		y = ilog2(val);
-		x = (val - (1ul << y)) << x_w >> y;
-	}
+		/* val in hw units */
+		val = DIV_ROUND_CLOSEST_ULL((u64)val << hwmon->scl_shift_time, SF_TIME) + 1;
 
-	rxy = REG_FIELD_PREP(PWR_LIM_TIME_X, x) |
-			       REG_FIELD_PREP(PWR_LIM_TIME_Y, y);
+		/*
+		 * Convert val to 1.x * power(2,y)
+		 * y = ilog2(val)
+		 * x = (val - (1 << y)) >> (y - 2)
+		 */
+		if (!val) {
+			y = 0;
+			x = 0;
+		} else {
+			y = ilog2(val);
+			x = (val - (1ul << y)) << x_w >> y;
+		}
+
+		rxy = REG_FIELD_PREP(PWR_LIM_TIME_X, x) |
+				       REG_FIELD_PREP(PWR_LIM_TIME_Y, y);
+	}
 
 	guard(xe_pm_runtime)(hwmon->xe);
 
@@ -786,17 +820,37 @@ static int xe_hwmon_pcode_read_thermal_info(struct xe_hwmon *hwmon)
 	drm_dbg(&hwmon->xe->drm, "thermal config count 0x%x\n", config);
 	hwmon->temp.count = REG_FIELD_GET(TEMP_MASK, config);
 
+	if (hwmon->xe->info.platform >= XE_CRESCENTISLAND) {
+		hwmon->temp.vram_count = REG_FIELD_GET(VRAM_COUNT_MASK, config);
+		if (hwmon->temp.vram_count > MAX_VRAM_CHANNELS && hwmon->temp.vram_count) {
+			drm_warn(&hwmon->xe->drm, "VRAM channel count %d exceeds max %d, clamping\n",
+				 hwmon->temp.vram_count, MAX_VRAM_CHANNELS);
+			hwmon->temp.vram_count = MAX_VRAM_CHANNELS;
+		}
+	} else {
+		hwmon->temp.vram_count = 16; /* For older platforms, max is 16 VRAM channels */
+	}
+
 	return ret;
+}
+
+static inline bool is_temp_valid(const struct xe_hwmon *hwmon, u8 value)
+{
+	/* Value of 0xFF indicates unavailable sensor for platforms from CRI. */
+	if (hwmon->xe->info.platform >= XE_CRESCENTISLAND)
+		return value != U8_MAX;
+	else
+		return value != 0;
 }
 
 static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
 {
 	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
 	u32 *dword = (u32 *)hwmon->temp.value;
+	int ret, i, count = 0;
 	s32 average = 0;
-	int ret, i;
 
-	for (i = 0; i < DIV_ROUND_UP(TEMP_LIMIT_MAX, sizeof(u32)); i++) {
+	for (i = 0; i < DIV_ROUND_UP(hwmon->temp.count, sizeof(u32)); i++) {
 		ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_DATA, i),
 				    (dword + i), NULL);
 		if (ret)
@@ -804,11 +858,25 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
 		drm_dbg(&hwmon->xe->drm, "thermal data for group %d val 0x%x\n", i, dword[i]);
 	}
 
-	for (i = TEMP_INDEX_MCTRL; i < hwmon->temp.count - 1; i++)
-		average += hwmon->temp.value[i];
+	for (i = TEMP_INDEX_MCTRL; i < hwmon->temp.count - 1; i++) {
+		if (is_temp_valid(hwmon, hwmon->temp.value[i])) {
+			average += hwmon->temp.value[i];
+			count++;
+		} else {
+			drm_dbg(&hwmon->xe->drm, "mc temp sensor %d not available, val 0x%x\n",
+				i, hwmon->temp.value[i]);
+		}
+	}
 
-	average /= (hwmon->temp.count - TEMP_INDEX_MCTRL - 1);
-	*val = average * MILLIDEGREE_PER_DEGREE;
+	if (!count) {
+		drm_warn(&hwmon->xe->drm, "no memory temp sensors available!\n");
+		return -ENXIO;
+	}
+
+	average /= count;
+	if (val)
+		*val = average * MILLIDEGREE_PER_DEGREE;
+
 	return 0;
 }
 
@@ -828,7 +896,13 @@ static int get_pcie_temp(struct xe_hwmon *hwmon, long *val)
 		data = REG_FIELD_GET(PCIE_SENSOR_MASK, data);
 
 	data = REG_FIELD_GET(TEMP_MASK, data);
-	*val = (s8)data * MILLIDEGREE_PER_DEGREE;
+	if (!is_temp_valid(hwmon, data)) {
+		drm_warn(&hwmon->xe->drm, "pcie temp sensor not available, val 0x%x\n", data);
+		return -ENXIO;
+	}
+
+	if (val)
+		*val = (s8)data * MILLIDEGREE_PER_DEGREE;
 
 	return 0;
 }
@@ -932,10 +1006,23 @@ static inline bool is_vram_ch_available(struct xe_hwmon *hwmon, int channel)
 	struct xe_mmio *mmio = xe_root_tile_mmio(hwmon->xe);
 	int vram_id = channel - CHANNEL_VRAM_N;
 	struct xe_reg vram_reg;
+	u32 reg_val;
+	u8 temp;
+
+	if (vram_id >= hwmon->temp.vram_count)
+		return false;
 
 	vram_reg = xe_hwmon_get_reg(hwmon, REG_TEMP, channel);
-	if (!xe_reg_is_valid(vram_reg) || !xe_mmio_read32(mmio, vram_reg))
+	if (!xe_reg_is_valid(vram_reg))
 		return false;
+
+	reg_val = xe_mmio_read32(mmio, vram_reg);
+	temp = REG_FIELD_GET(TEMP_MASK, reg_val);
+	if (!is_temp_valid(hwmon, temp)) {
+		drm_dbg(&hwmon->xe->drm, "vram channel %d unavailable, val 0x%x\n", vram_id,
+			reg_val);
+		return false;
+	}
 
 	/* Create label only for available vram channel */
 	sprintf(hwmon->temp.vram_label[vram_id], "vram_ch_%d", vram_id);
@@ -953,8 +1040,9 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
 		case CHANNEL_VRAM:
 			return hwmon->temp.limit[TEMP_LIMIT_MEM_SHUTDOWN] ? 0444 : 0;
 		case CHANNEL_MCTRL:
+			return !get_mc_temp(hwmon, NULL) && hwmon->temp.count ? 0444 : 0;
 		case CHANNEL_PCIE:
-			return hwmon->temp.count ? 0444 : 0;
+			return !get_pcie_temp(hwmon, NULL) && hwmon->temp.count ? 0444 : 0;
 		case CHANNEL_VRAM_N...CHANNEL_VRAM_N_MAX:
 			return (is_vram_ch_available(hwmon, channel) &&
 				hwmon->temp.limit[TEMP_LIMIT_MEM_SHUTDOWN]) ? 0444 : 0;
@@ -968,8 +1056,9 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
 		case CHANNEL_VRAM:
 			return hwmon->temp.limit[TEMP_LIMIT_MEM_CRIT] ? 0444 : 0;
 		case CHANNEL_MCTRL:
+			return !get_mc_temp(hwmon, NULL) && hwmon->temp.count ? 0444 : 0;
 		case CHANNEL_PCIE:
-			return hwmon->temp.count ? 0444 : 0;
+			return !get_pcie_temp(hwmon, NULL) && hwmon->temp.count ? 0444 : 0;
 		case CHANNEL_VRAM_N...CHANNEL_VRAM_N_MAX:
 			return (is_vram_ch_available(hwmon, channel) &&
 				hwmon->temp.limit[TEMP_LIMIT_MEM_CRIT]) ? 0444 : 0;
@@ -987,12 +1076,24 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
 	case hwmon_temp_label:
 		switch (channel) {
 		case CHANNEL_PKG:
-		case CHANNEL_VRAM:
-			return xe_reg_is_valid(xe_hwmon_get_reg(hwmon, REG_TEMP,
-								channel)) ? 0444 : 0;
+		case CHANNEL_VRAM: {
+			struct xe_mmio *mmio = xe_root_tile_mmio(hwmon->xe);
+			struct xe_reg reg = xe_hwmon_get_reg(hwmon, REG_TEMP, channel);
+			u32 reg_val;
+			u8 temp;
+
+			if (!xe_reg_is_valid(reg))
+				return 0;
+
+			reg_val = xe_mmio_read32(mmio, reg);
+			temp = REG_FIELD_GET(TEMP_MASK, reg_val);
+
+			return is_temp_valid(hwmon, temp) ? 0444 : 0;
+		}
 		case CHANNEL_MCTRL:
+			return !get_mc_temp(hwmon, NULL) && hwmon->temp.count ? 0444 : 0;
 		case CHANNEL_PCIE:
-			return hwmon->temp.count ? 0444 : 0;
+			return !get_pcie_temp(hwmon, NULL) && hwmon->temp.count ? 0444 : 0;
 		case CHANNEL_VRAM_N...CHANNEL_VRAM_N_MAX:
 			return is_vram_ch_available(hwmon, channel) ? 0444 : 0;
 		default:
@@ -1439,7 +1540,7 @@ static int xe_hwmon_read_label(struct device *dev,
 			*str = "mctrl";
 		else if (channel == CHANNEL_PCIE)
 			*str = "pcie";
-		else if (in_range(channel, CHANNEL_VRAM_N, MAX_VRAM_CHANNELS))
+		else if (in_range(channel, CHANNEL_VRAM_N, hwmon->temp.vram_count))
 			*str = hwmon->temp.vram_label[channel - CHANNEL_VRAM_N];
 		return 0;
 	case hwmon_power:
@@ -1567,6 +1668,13 @@ int xe_hwmon_register(struct xe_device *xe)
 	xe->hwmon = hwmon;
 
 	xe_hwmon_get_preregistration_info(hwmon);
+
+	hwmon->temp.vram_label = devm_kcalloc(dev, hwmon->temp.vram_count,
+					      MAX_LABEL_SIZE, GFP_KERNEL);
+	if (!hwmon->temp.vram_label) {
+		xe->hwmon = NULL;
+		return -ENOMEM;
+	}
 
 	drm_dbg(&xe->drm, "Register xe hwmon interface\n");
 

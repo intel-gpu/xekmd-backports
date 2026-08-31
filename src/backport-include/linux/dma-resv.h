@@ -73,11 +73,12 @@ struct dma_fence *dma_resv_iter_first_unlocked(struct dma_resv_iter *cursor);
 #define dma_resv_iter_next_unlocked	LINUX_BACKPORT(dma_resv_iter_next_unlocked)
 struct dma_fence *dma_resv_iter_next_unlocked(struct dma_resv_iter *cursor);
 
-/* This baseline kernel predates the native unlocked walker too. */
+#ifdef BPM_DMA_RESV_FOR_EACH_FENCE_UNLOCKED_NOT_PRESENT
 #define dma_resv_for_each_fence_unlocked(cursor, fence)		\
 	for ((fence) = dma_resv_iter_first_unlocked((cursor));		\
 	     (fence);							\
 	     (fence) = dma_resv_iter_next_unlocked((cursor)))
+#endif
 
 #define dma_resv_wait_timeout		LINUX_BACKPORT(dma_resv_wait_timeout)
 long dma_resv_wait_timeout(struct dma_resv *obj, enum dma_resv_usage usage,

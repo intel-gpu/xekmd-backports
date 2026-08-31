@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Date: Mon, 16 Mar 2026 12:08:43 +0100
-Subject: drm/xe/eudebug: Prelim rework for Xe EU debug
+Subject: [PATCH] drm/xe/eudebug: Prelim rework for Xe EU debug
 
 Moved all xe_eudebug declarations and definitions to xe_drm_prelim.h.
 Removed xe_drm_eudebug.h. Moved eudebug related files into prelim/ directory.
@@ -74,7 +74,7 @@ index 78d467366..714ff3cad 100644
  	depends on DRM_XE
  	default y
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index d09989a05..f057de788 100644
+index 8b577c5c9..e762c59e3 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -58,7 +58,7 @@ xe-y += xe_bb.o \
@@ -86,10 +86,10 @@ index d09989a05..f057de788 100644
  	xe_gt_mcr.o \
  	xe_gt_sysfs.o \
  	xe_gt_throttle.o \
-@@ -155,8 +155,8 @@ xe-y += xe_bb.o \
- 	xe_wopcm.o
+@@ -157,8 +157,8 @@ xe-y += xe_bb.o \
  
- xe-$(CONFIG_I2C)	+= xe_i2c.o
+ xe-$(CONFIG_I2C)	+= xe_i2c.o \
+ 			   xe_amc.o
 -xe-$(CONFIG_DRM_XE_EUDEBUG) += xe_eudebug.o \
 -	xe_debug_metadata.o
 +xe-$(CONFIG_PRELIM_DRM_XE_EUDEBUG) += prelim/xe_eudebug.o \
@@ -2406,7 +2406,7 @@ index 65d66153a..000000000
 -
 -#endif
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 42bb194cd..d37adfb56 100644
+index 917bf641b..b00c8abb3 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -29,11 +29,11 @@
@@ -2423,7 +2423,7 @@ index 42bb194cd..d37adfb56 100644
  #include "xe_exec.h"
  #include "xe_exec_queue.h"
  #include "xe_force_wake.h"
-@@ -121,7 +121,7 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
+@@ -122,7 +122,7 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
  		put_task_struct(task);
  	}
  
@@ -2432,7 +2432,7 @@ index 42bb194cd..d37adfb56 100644
  
  	return 0;
  }
-@@ -177,7 +177,7 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -178,7 +178,7 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  
  	guard(xe_pm_runtime)(xe);
  
@@ -2441,7 +2441,7 @@ index 42bb194cd..d37adfb56 100644
  
  	/*
  	 * No need for exec_queue.lock here as there is no contention for it
-@@ -230,10 +230,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
+@@ -231,10 +231,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
  			  DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_VM_GET_PROPERTY, xe_vm_get_property_ioctl,
  			  DRM_RENDER_ALLOW),
@@ -2455,7 +2455,7 @@ index 42bb194cd..d37adfb56 100644
  			  DRM_RENDER_ALLOW),
  };
  
-@@ -740,7 +740,7 @@ int xe_device_probe_early(struct xe_device *xe)
+@@ -767,7 +767,7 @@ int xe_device_probe_early(struct xe_device *xe)
  	if (IS_SRIOV_VF(xe))
  		vf_update_device_info(xe);
  
@@ -2465,7 +2465,7 @@ index 42bb194cd..d37adfb56 100644
  	/*
  	 * Check for pcode uncore_init status to confirm if the SoC
 diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
-index bf5061aa6..c93c6398f 100644
+index 7a23ab7ba..9fa92d56f 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
 @@ -294,7 +294,7 @@ struct xe_vm *xe_device_asid_to_vm(struct xe_device *xe, u32 asid);
@@ -2499,7 +2499,7 @@ index bf5061aa6..c93c6398f 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 596635f08..a7585b027 100644
+index 07a111213..bdb32a19e 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -14,7 +14,7 @@
@@ -2520,7 +2520,7 @@ index 596635f08..a7585b027 100644
  	/** @clients: eudebug clients info */
  	struct {
  		/** @clients.lock: Protects client list */
-@@ -607,7 +607,7 @@ struct xe_device {
+@@ -615,7 +615,7 @@ struct xe_device {
  	atomic_t g2g_test_count;
  #endif
  
@@ -2529,7 +2529,7 @@ index 596635f08..a7585b027 100644
  	/** @eudebug: connection list and globals for device */
  	struct {
  		/** @eudebug.lock: protects the list of connections */
-@@ -709,7 +709,7 @@ struct xe_file {
+@@ -717,7 +717,7 @@ struct xe_file {
  	/** @refcount: ref count of this xe file */
  	struct kref refcount;
  
@@ -2768,7 +2768,7 @@ index 2ff1aa03a..76d5a2dfc 100644
  #define EXEC_QUEUE_EUDEBUG_FLAG_ENABLE			BIT(0)
  #define EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE	BIT(1)
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index b0edefff1..342a7b087 100644
+index 036cb7fed..aac62c9ce 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -22,7 +22,7 @@
@@ -2789,7 +2789,7 @@ index b0edefff1..342a7b087 100644
  #include "xe_guc_exec_queue_types.h"
  #include "xe_guc_pc.h"
  #include "xe_guc_rc.h"
-@@ -734,7 +734,7 @@ int xe_gt_init(struct xe_gt *gt)
+@@ -741,7 +741,7 @@ int xe_gt_init(struct xe_gt *gt)
  	if (err)
  		return err;
  
@@ -2798,7 +2798,7 @@ index b0edefff1..342a7b087 100644
  	if (err)
  		return err;
  
-@@ -861,7 +861,7 @@ static int do_gt_reset(struct xe_gt *gt)
+@@ -868,7 +868,7 @@ static int do_gt_reset(struct xe_gt *gt)
  
  	xe_gsc_wa_14015076503(gt, true);
  
@@ -2807,7 +2807,7 @@ index b0edefff1..342a7b087 100644
  		do_render_reset(gt);
  
  	xe_mmio_write32(&gt->mmio, GDRST, GRDOM_FULL);
-@@ -990,7 +990,7 @@ static void gt_reset_worker(struct work_struct *w)
+@@ -997,7 +997,7 @@ static void gt_reset_worker(struct work_struct *w)
  	xe_guc_rc_disable(&gt->uc.guc);
  	xe_uc_stop_prepare(&gt->uc);
  	xe_pagefault_reset(gt_to_xe(gt), gt);
@@ -2938,10 +2938,10 @@ index 21da149d1..0205360cf 100644
  #include "xe_force_wake.h"
  #include "xe_gpu_scheduler.h"
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index f12636fb7..e3f6bc884 100644
+index aba376c59..61989c421 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
-@@ -19,7 +19,7 @@
+@@ -20,7 +20,7 @@
  #include "xe_svm.h"
  #include "xe_trace_bo.h"
  #include "xe_vm.h"
@@ -2950,7 +2950,7 @@ index f12636fb7..e3f6bc884 100644
  /**
   * DOC: Xe page faults
   *
-@@ -187,7 +187,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf,
+@@ -188,7 +188,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf,
  	if (IS_ERR(vm))
  		return PTR_ERR(vm);
  
@@ -2959,7 +2959,7 @@ index f12636fb7..e3f6bc884 100644
  
  	/*
  	 * TODO: Change to read lock? Using write lock for simplicity.
-@@ -242,7 +242,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf,
+@@ -243,7 +243,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf,
  	up_write(&vm->lock);
  
  	if (destroy_eudbg_pf) {

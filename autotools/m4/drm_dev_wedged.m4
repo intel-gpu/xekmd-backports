@@ -53,3 +53,21 @@ AC_DEFUN([AC_DRM_DEV_WEDGED_EVENT_ARG3_NOT_PRESENT], [
                 ])
         ])
 ])
+
+dnl #
+dnl # v6.17-3a4d995cb926
+dnl # drm: Add DRM_WEDGE_RECOVERY_COLD_RESET recovery method
+dnl #
+AC_DEFUN([AC_DRM_WEDGE_RECOVERY_COLD_RESET_NOT_PRESENT], [
+        AC_KERNEL_DO_BACKGROUND([
+                AC_KERNEL_TRY_COMPILE([
+                        #include <drm/drm_device.h>
+                ],[
+                        (void)(DRM_WEDGE_RECOVERY_COLD_RESET);
+                ],[
+                ],[
+                        AC_DEFINE(BPM_DRM_WEDGE_RECOVERY_COLD_RESET_NOT_PRESENT, 1,
+                                [DRM_WEDGE_RECOVERY_COLD_RESET is not available])
+                ])
+        ])
+])

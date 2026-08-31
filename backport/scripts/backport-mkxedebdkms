@@ -123,7 +123,11 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
         BUILT_MODULE_LOCATION[20]="src/drivers/misc/mei"
         DEST_MODULE_LOCATION[20]="/updates"
 
-	i=21
+	BUILT_MODULE_NAME[21]="drm_ras"
+	BUILT_MODULE_LOCATION[21]="src"
+	DEST_MODULE_LOCATION[21]="/updates"
+
+	i=22
 
 	select_build_full_vfio() {
 		if [ -z "\$kernelver" ]; then

@@ -32,4 +32,8 @@ struct drm_wedge_task_info {
 #define DRM_WEDGE_RECOVERY_VENDOR       BIT(3)  /* vendor specific recovery */
 #endif
 
+#ifdef BPM_DRM_WEDGE_RECOVERY_COLD_RESET_NOT_PRESENT
+#define DRM_WEDGE_RECOVERY_COLD_RESET   BIT(4)  /* remove device + slot power cycle + rescan */
+#endif
+
 #endif

@@ -133,4 +133,9 @@ static inline void __iomem *pcim_iomap_region(struct pci_dev *pdev, int bar, con
 }
 #endif
 
+#ifdef BPM_PCI_CLEAR_AND_SET_CONFIG_DWORD_NOT_PRESENT
+void pci_clear_and_set_config_dword(const struct pci_dev *dev, int pos,
+                                    u32 clear, u32 set);
+#endif
+
 #endif /* _BACKPORT_LINUX_PCI_H */

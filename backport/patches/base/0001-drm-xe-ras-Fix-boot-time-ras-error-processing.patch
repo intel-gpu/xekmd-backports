@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Raag Jadav <raag.jadav@intel.com>
+Date: Thu, 30 Jul 2026 16:36:34 +0530
+Subject: drm/xe/ras: Fix boot-time ras error processing
+
+Currently, we xe_ras_process_errors() inside xe_ras_init() to handle boot
+time errors. But this can potentially result in declaring the device as
+wedged quite early in the driver load sequence, which is problematic due to
+the lack of registered drm device or required wedged cleanup hooks at this
+point.
+
+Call xe_ras_process_errors() only after the prerequisites are available.
+
+Fixes: d9732e498f5f ("drm/xe/xe_ras: Query errors from system controller on probe")
+Signed-off-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Tested-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20260730110635.925537-1-raag.jadav@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(backported from commit 3799dc5d778552e20bc5894d80df54b30fe764c8 linux-next)
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c | 7 +++++++
+ drivers/gpu/drm/xe/xe_ras.c    | 6 ------
+ 2 files changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index b072acd91..64385ef34 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -1083,6 +1083,13 @@ int xe_device_probe(struct xe_device *xe)
+ 	if (err)
+ 		goto err_unregister_display;
+ 
++	/*
++	 * Process and log any errors detected by hardware. Possible results can
++	 * include declaring the device as wedged, which must be done only after
++	 * xe_device_wedged_fini() is registered.
++	 */
++	xe_ras_process_errors(xe);
++
+ 	err = devm_add_action_or_reset(xe->drm.dev, xe_device_sanitize, xe);
+ 	if (err)
+ 		goto err_unregister_display;
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index c96e77f83..8c2aa14d2 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -916,12 +916,6 @@ void xe_ras_init(struct xe_device *xe)
+ 	if (IS_ENABLED(CONFIG_PCIEAER))
+ 		ras_usp_aer_init(xe);
+ 
+-	/*
+-	 * During probe, process and log any errors detected by firmware while the driver was not
+-	 * loaded. Critical errors such as Punit and CSC are reported through Pcode init failure,
+-	 * causing the driver to enter survivability mode.
+-	 */
+-	xe_ras_process_errors(xe);
+ 	ret = devm_device_add_group(xe->drm.dev, &gpu_health_group);
+ 	if (ret)
+ 		xe_err(xe, "Failed to create GPU health sysfs, err=%d\n", ret);
+-- 
+2.34.1
+

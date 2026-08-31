@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Raag Jadav <raag.jadav@intel.com>
+Date: Mon, 10 Aug 2026 18:11:01 +0530
+Subject: drm/xe/drm_ras: Move has_drm_ras check to drm_ras layer
+
+has_drm_ras flag is meant to facilitate drm_ras feature. Move it to the
+correct layer where it belongs.
+
+Fixes: 63dfab5786ca ("drm/xe/xe_ras: Add drm_ras feature flag")
+Signed-off-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Riana Tauro <riana.tauro@intel.com>
+Link: https://patch.msgid.link/20260810124101.105832-1-raag.jadav@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(backported from commit f3c0140332fdb8f343a384570f01b879794ddae8 linux-next)
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/xe/xe_drm_ras.c | 3 +++
+ drivers/gpu/drm/xe/xe_ras.c     | 3 ---
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_drm_ras.c b/drivers/gpu/drm/xe/xe_drm_ras.c
+index 8b6be1da7..7f3695707 100644
+--- a/drivers/gpu/drm/xe/xe_drm_ras.c
++++ b/drivers/gpu/drm/xe/xe_drm_ras.c
+@@ -264,6 +264,9 @@ int xe_drm_ras_init(struct xe_device *xe)
+ 	struct drm_ras_node *node;
+ 	int err;
+ 
++	if (!xe->info.has_drm_ras)
++		return 0;
++
+ 	node = drmm_kcalloc(&xe->drm, DRM_XE_RAS_ERR_SEV_MAX, sizeof(*node), GFP_KERNEL);
+ 	if (!node)
+ 		return -ENOMEM;
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 8c2aa14d2..543a0fde1 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -905,9 +905,6 @@ void xe_ras_init(struct xe_device *xe)
+ {
+ 	int ret;
+ 
+-	if (!xe->info.has_drm_ras)
+-		return;
+-
+ 	xe_drm_ras_init(xe);
+ 
+ 	if (!xe->info.has_sysctrl)
+-- 
+2.34.1
+

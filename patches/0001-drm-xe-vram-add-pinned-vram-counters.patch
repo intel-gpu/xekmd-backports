@@ -16,7 +16,7 @@ diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr_types.h b/drivers/gpu/drm/xe/xe_
 index 9106da056..6e38001ec 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr_types.h
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr_types.h
-@@ -29,6 +29,17 @@ struct xe_ttm_vram_mgr {
+@@ -29,8 +29,19 @@ struct xe_ttm_vram_mgr {
  	struct mutex lock;
  	/** @mem_type: The TTM memory type */
  	u32 mem_type;
@@ -31,6 +31,8 @@ index 9106da056..6e38001ec 100644
 +		u64 total_used;
 +	} pin;
 +#endif
+ 	/** @max_pages: max pages that can be in offline queue retrieved from FW */
+ 	u16 max_pages;
  };
  
  /**

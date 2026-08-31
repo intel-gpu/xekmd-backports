@@ -35,8 +35,8 @@ diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c b/drivers/gpu/drm/xe/xe_
 index b44eed2..e95b80c 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_config.c
-@@ -1844,7 +1844,11 @@ static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
- 					unsigned int num_vfs, bool provisioned)
+@@ -1941,8 +1941,12 @@ static void __pf_show_provisioned(struct xe_gt *gt, unsigned int first_vf,
+ 				  const char *what)
  {
  	unsigned int allvfs = 1 + xe_gt_sriov_pf_get_totalvfs(gt); /* PF plus VFs */
 -	unsigned long *bitmap __free(bitmap) = bitmap_zalloc(allvfs, GFP_KERNEL);
@@ -47,24 +47,26 @@ index b44eed2..e95b80c 100644
 +	#endif
  	unsigned int weight;
  	unsigned int n;
+ 	bool pf;
  
-@@ -1858,11 +1862,15 @@ static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
- 
+@@ -1960,12 +1964,16 @@ static void __pf_show_provisioned(struct xe_gt *gt, unsigned int first_vf,
+ 	pf = test_and_clear_bit(0, bitmap);
  	weight = bitmap_weight(bitmap, allvfs);
- 	if (!weight)
+ 	if (!pf && !weight)
 -		return;
 +		goto out;
  
- 	xe_gt_sriov_info(gt, "VF%s%*pbl %s provisioned with VRAM\n",
- 			 weight > 1 ? "s " : "", allvfs, bitmap,
- 			 provisioned ? "already" : "not");
+ 	xe_gt_sriov_info(gt, "%s%s%s%s%*pbl %s provisioned with %s\n",
+ 			 pf ? "PF" : "", pf && weight ? " and " : "",
+ 			 weight ? "VF" : "", weight > 1 ? "s " : "",
+ 			 allvfs, bitmap, provisioned ? "already" : "not", what);
 +out:
 +#ifdef BPM_FREE_ATTRIBUTE_NOT_PRESENT
 +	bitmap_free(bitmap);
 +#endif
  }
  
- static void pf_show_all_provisioned_lmem(struct xe_gt *gt)
+ static void __pf_show_provisioning_lmem(struct xe_gt *gt, unsigned int first_vf,
 -- 
 2.43.0
 

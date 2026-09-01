@@ -71,26 +71,32 @@ diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vr
 index 5d22dafec..6e42d289a 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-@@ -7,12 +7,18 @@
- #include <drm/drm_managed.h>
+@@ -10,18 +10,24 @@
  #include <drm/drm_drv.h>
  #include <drm/drm_buddy.h>
 +#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
 +#include <linux/math64.h>
 +#endif
+ #include <uapi/drm/xe_drm.h>
  
  #include <drm/ttm/ttm_placement.h>
  #include <drm/ttm/ttm_range_manager.h>
  
+ #include "regs/xe_regs.h"
  #include "xe_bo.h"
+ #include "xe_configfs.h"
  #include "xe_device.h"
 +#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
 +#include "xe_module.h"
 +#endif
+ #include "xe_exec_queue.h"
+ #include "xe_lrc.h"
+ #include "xe_mmio.h"
  #include "xe_res_cursor.h"
+ #include "xe_ttm_stolen_mgr.h"
  #include "xe_ttm_vram_mgr.h"
  #include "xe_vram_types.h"
-@@ -303,17 +309,24 @@ int __xe_ttm_vram_mgr_init(struct xe_device *xe, struct xe_ttm_vram_mgr *mgr,
+@@ -361,17 +367,24 @@ int __xe_ttm_vram_mgr_init(struct xe_device *xe, struct xe_ttm_vram_mgr *mgr,
  	struct ttm_resource_manager *man = &mgr->manager;
  	int err;
  
@@ -111,10 +117,10 @@ index 5d22dafec..6e42d289a 100644
 +			mul_u64_u32_div(size, xe_modparam.pin_vram_percent, 100);
 +#endif
  	mutex_init(&mgr->lock);
+ 	INIT_LIST_HEAD(&mgr->offlined_pages);
+ 	INIT_LIST_HEAD(&mgr->queued_pages);
  	mgr->default_page_size = default_page_size;
  	mgr->visible_size = io_size;
- 	mgr->visible_avail = io_size;
- 
 -- 
 2.43.0
 

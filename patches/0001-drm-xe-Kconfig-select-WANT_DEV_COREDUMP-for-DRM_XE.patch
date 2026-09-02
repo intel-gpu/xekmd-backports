@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akanksha Hotta <akanksha.hotta@intel.com>
+Date: Wed, 2 Sep 2026 13:21:33 +0530
+Subject: drm/xe/Kconfig: select WANT_DEV_COREDUMP for DRM_XE
+
+When CONFIG_WANT_DEV_COREDUMP is not enabled in kernel configs, so
+during compilation build it will not compile xe files as it has
+dependency to enable config DRM_XE entirely.
+
+So, by changing dependency device coredump support is automatically selected
+if and only if the config is enabled in their respective kernel config.
+
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/Kconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/Kconfig b/drivers/gpu/drm/xe/Kconfig
+index 13e0fde..3205c9b 100644
+--- a/drivers/gpu/drm/xe/Kconfig
++++ b/drivers/gpu/drm/xe/Kconfig
+@@ -79,7 +79,7 @@ config DRM_XE
+ 	select DRM_GPUVM if BUILD_XE_DRM_GPUVM
+ 	depends on DRM_SCHED
+ 	depends on MMU_NOTIFIER
+-	depends on WANT_DEV_COREDUMP
++	select WANT_DEV_COREDUMP
+ 	depends on AUXILIARY_BUS
+ 	select REGMAP if I2C
+ 	help
+-- 
+2.43.0
+

@@ -1,4 +1,4 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 15da3378bcf92d6398557b520d8c0c54133a30e6 Mon Sep 17 00:00:00 2001
 From: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Date: Sat, 29 Aug 2026 19:17:41 +0200
 Subject: drm/xe: Add fault-inject based VRAM page offline injection
@@ -40,7 +40,6 @@ v3(Himal):
 Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
 (backported from [V21] drm/xe: Add fault-inject based VRAM page offline injection)
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
-
 ---
  drivers/gpu/drm/xe/xe_debugfs.c      | 47 +++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_debugfs.h      |  2 ++
@@ -49,10 +48,10 @@ Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
  4 files changed, 102 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index e19eafffbb08..003abf4af2e3 100644
+index a9ce5e3e7..f4934b5f8 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
-@@ -45,12 +45,18 @@
+@@ -42,12 +42,18 @@
  DECLARE_FAULT_ATTR(gt_reset_failure);
  DECLARE_FAULT_ATTR(inject_csc_hw_error);
  DECLARE_FAULT_ATTR(wedge_cold_reset);
@@ -71,7 +70,7 @@ index e19eafffbb08..003abf4af2e3 100644
  /*
   * Fault injection table.  Each entry registers a debugfs attribute; add a
   * matching FAULT_ACTION() below for every entry added here.
-@@ -67,6 +73,9 @@ static struct {
+@@ -64,6 +70,9 @@ static struct {
  	  .is_visible = csc_hw_error_available },
  	{ .name = "wedge_cold_reset",
  	  .attr = &wedge_cold_reset },
@@ -81,7 +80,7 @@ index e19eafffbb08..003abf4af2e3 100644
  };
  
  /*
-@@ -82,6 +91,39 @@ bool xe_fault_##name(void)				\
+@@ -79,6 +88,39 @@ bool xe_fault_##name(void)				\
  FAULT_ACTION(gt_reset, gt_reset_failure)
  FAULT_ACTION(csc_hw_error, inject_csc_hw_error)
  FAULT_ACTION(wedge_cold_reset, wedge_cold_reset)
@@ -121,7 +120,7 @@ index e19eafffbb08..003abf4af2e3 100644
  
  static void xe_fault_inject_debugfs_register(struct xe_device *xe,
  					     struct dentry *root)
-@@ -96,6 +138,11 @@ static void xe_fault_inject_debugfs_register(struct xe_device *xe,
+@@ -93,6 +135,11 @@ static void xe_fault_inject_debugfs_register(struct xe_device *xe,
  		fault_create_debugfs_attr(xe_fault_inject_entry[i].name, root,
  					  xe_fault_inject_entry[i].attr);
  	}
@@ -132,9 +131,9 @@ index e19eafffbb08..003abf4af2e3 100644
 +	}
  }
  
- static void read_residency_counter(struct xe_device *xe, u32 offset, const char *name,
+ static void read_residency_counter(struct xe_device *xe, struct xe_mmio *mmio,
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.h b/drivers/gpu/drm/xe/xe_debugfs.h
-index 0dcd28fd7dc0..88d91c78036b 100644
+index 0dcd28fd7..88d91c780 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.h
 +++ b/drivers/gpu/drm/xe/xe_debugfs.h
 @@ -14,11 +14,13 @@ struct xe_device;
@@ -152,10 +151,10 @@ index 0dcd28fd7dc0..88d91c78036b 100644
  #endif
  
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-index 8f583f1631bf..c54ad017725f 100644
+index d712ea8d8..64e9a98d1 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-@@ -895,6 +895,58 @@ int xe_ttm_vram_handle_addr_fault(struct xe_device *xe, u64 addr)
+@@ -825,6 +825,58 @@ int xe_ttm_vram_handle_addr_fault(struct xe_device *xe, u64 addr)
  }
  EXPORT_SYMBOL(xe_ttm_vram_handle_addr_fault);
  
@@ -215,7 +214,7 @@ index 8f583f1631bf..c54ad017725f 100644
  {
  	struct xe_device *xe = m->private;
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h
-index f354c26c4257..8878e36292b2 100644
+index f354c26c4..8878e3629 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h
 @@ -33,6 +33,7 @@ void xe_ttm_vram_get_used(struct ttm_resource_manager *man,
@@ -226,3 +225,6 @@ index f354c26c4257..8878e36292b2 100644
  void xe_ttm_vram_debugfs_init(struct xe_device *xe, struct dentry *root);
  static inline struct xe_ttm_vram_mgr_resource *
  to_xe_ttm_vram_mgr_resource(struct ttm_resource *res)
+-- 
+2.43.0
+

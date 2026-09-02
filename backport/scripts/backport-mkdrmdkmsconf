@@ -133,4 +133,25 @@ sed -e '/^DEL/d' -e 's/^\t*//' <<EOF
 	BUILT_MODULE_NAME[22]="mei-vsc-hw"
 	BUILT_MODULE_LOCATION[22]="src/drivers/misc/mei"
 	DEST_MODULE_LOCATION[22]="/updates"
+
+	select_drm_gpuvm() {
+		if [ -z "\$kernelver" ]; then
+			echo "false"
+			return
+		fi
+		KSRC="/usr/src/kernels/\$kernelver"
+		if [ ! -d "\$KSRC" ]; then
+			KSRC="/lib/modules/\$kernelver/build"
+		fi
+		if [ -f "\$KSRC/Module.symvers" ] && grep -qw "drm_gpuvm_init" "\$KSRC/Module.symvers"; then
+			echo "false"
+			return
+		fi
+		echo "true"
+	}
+	if [ "\$(select_drm_gpuvm)" = "true" ]; then
+		BUILT_MODULE_NAME[23]="drm_gpuvm"
+		BUILT_MODULE_LOCATION[23]="src"
+		DEST_MODULE_LOCATION[23]="/updates"
+	fi
 EOF

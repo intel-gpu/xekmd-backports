@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Wed, 2 Sep 2026 12:00:00 +0530
+Subject: [PATCH] drm/xe/guc: skip stale pagefault ack when runtime suspended
+
+Pagefault acks are sent from xe_pagefault_queue_work() without holding an
+explicit runtime PM reference. In fault-mode VM teardown, ASID is removed
+before destroy_work drops the VM lifetime LR PM ref; stale queued faults can
+then be drained after autosuspend.
+
+In that window guc_ack_fault() can reach guc_ct_send_locked() while the device
+is runtime suspended, tripping xe_device_assert_mem_access(). The send is not
+useful in this state anyway since CT is disabled and the send path would return
+-ENODEV.
+
+Use xe_pm_runtime_get_if_active() in guc_ack_fault() and skip ack when the
+device is not active. When active, hold/put the reference around
+xe_guc_ct_send().
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_pagefault.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_pagefault.c b/drivers/gpu/drm/xe/xe_guc_pagefault.c
+index 0f4d1c5..4b7934f 100644
+--- a/drivers/gpu/drm/xe/xe_guc_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_guc_pagefault.c
+@@ -8,6 +8,7 @@
+ #include "xe_guc_pagefault.h"
+ #include "xe_pagefault.h"
+ #include "xe_pagefault_types.h"
++#include "xe_pm.h"
+ 
+ static void guc_ack_fault(struct xe_pagefault *pf, int err)
+ {
+@@ -37,10 +38,17 @@ static void guc_ack_fault(struct xe_pagefault *pf, int err)
+ 		FIELD_PREP(PFR_PDATA, pdata),
+ 	};
+ 	struct xe_guc *guc = pf->producer.private;
++	struct xe_device *xe = guc_to_xe(guc);
++
++	/* Device suspended means stale fault and disabled CT, so skip ack. */
++	if (!xe_pm_runtime_get_if_active(xe))
++		return;
+ 
+ 	xe_guc_ct_send(&guc->ct, action, ARRAY_SIZE(action), 0, 0);
++
++	xe_pm_runtime_put(xe);
+ }
+ 
+ static const struct xe_pagefault_ops guc_pagefault_ops = {
+ 	.ack_fault = guc_ack_fault,
+ };
+-- 
+2.34.1

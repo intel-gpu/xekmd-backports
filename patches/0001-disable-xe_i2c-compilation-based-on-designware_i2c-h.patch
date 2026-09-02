@@ -15,12 +15,13 @@ diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
 index 72b1480..1b135e0 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -154,7 +154,9 @@ xe-y += xe_bb.o \
+@@ -154,8 +154,10 @@ xe-y += xe_bb.o \
  	xe_wait_user_fence.o \
  	xe_wopcm.o
  
 +ifneq ($(wildcard $(KLIB_BUILD)/include/linux/designware_i2c.h),)
- xe-$(CONFIG_I2C)	+= xe_i2c.o
+ xe-$(CONFIG_I2C)	+= xe_i2c.o \
+ 			   xe_amc.o
 +endif
  xe-$(CONFIG_PRELIM_DRM_XE_EUDEBUG) += prelim/xe_eudebug.o \
  	prelim/xe_debug_metadata.o

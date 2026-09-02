@@ -116,4 +116,9 @@ static inline int backport_pci_resize_resource(struct pci_dev *dev,
 	backport_pci_resize_resource(dev, resno, size, exclude_bars)
 #endif /* BPM_PCI_RESIZE_RESOURCE_VF_BARS_NOT_PRESENT */
 
+#ifdef BPM_PCI_CLEAR_AND_SET_CONFIG_DWORD_NOT_PRESENT
+void pci_clear_and_set_config_dword(const struct pci_dev *dev, int pos,
+                                    u32 clear, u32 set);
+#endif
+
 #endif /* _BACKPORT_LINUX_PCI_H */

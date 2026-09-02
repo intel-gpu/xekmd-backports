@@ -56,3 +56,21 @@ AC_DEFUN([AC_DRIVER_MANAGED_DMA_NOT_PRESENT], [
 		])
 	])
 ])
+
+dnl #
+dnl # v6.8-ac16087134b8
+dnl # PCI: Move pci_clear_and_set_dword() helper to PCI header
+dnl #
+AC_DEFUN([AC_PCI_CLEAR_AND_SET_CONFIG_DWORD_NOT_PRESENT], [
+        AC_KERNEL_DO_BACKGROUND([
+                AC_KERNEL_TRY_COMPILE([
+                        #include <linux/pci.h>
+                ],[
+                        pci_clear_and_set_config_dword(NULL, 0, 0, 0);
+                ],[
+                ],[
+                        AC_DEFINE([BPM_PCI_CLEAR_AND_SET_CONFIG_DWORD_NOT_PRESENT], 1,
+                        [pci_clear_and_set_config_dword() function not available])
+                ])
+        ])
+])

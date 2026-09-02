@@ -36,13 +36,17 @@ diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
 index 8c2aa14d2..543a0fde1 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
-@@ -905,9 +905,6 @@ void xe_ras_init(struct xe_device *xe)
+@@ -879,13 +879,10 @@ void xe_ras_init(struct xe_device *xe)
  {
  	int ret;
  
 -	if (!xe->info.has_drm_ras)
 -		return;
 -
+ 	if (xe->info.platform == XE_CRESCENTISLAND)
+ 		xe->ras.bad_page_reservation =
+ 			xe_configfs_get_bad_page_reservation(to_pci_dev(xe->drm.dev));
+ 
  	xe_drm_ras_init(xe);
  
  	if (!xe->info.has_sysctrl)

@@ -1,0 +1,138 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jarkko Nikula <jarkko.nikula@linux.intel.com>
+Date: Tue, 29 Sep 2026 23:33:18 +0530
+Subject: i2c: designware: Implement generic polling mode code
+
+Add a generic polling transfer mode to the DesignWare master driver.
+Maintain a software shadow (sw_mask) of the interrupt mask in the
+DW_IC_INTR_MASK accessors so that, when ACCESS_POLLING is set, the
+controller runs with hardware interrupts masked and the master ISR is
+driven by hand from a timeout loop (i2c_dw_wait_transfer()). In polling
+mode the interrupt status is derived from DW_IC_RAW_INTR_STAT masked by
+the software shadow.
+
+This is required by controllers that expose no usable IRQ line (for
+example the Intel Xe GPU I2C/SMBus controller).
+
+Signed-off-by: Jarkko Nikula jarkko.nikula@linux.intel.com
+Link: https://patchwork.ozlabs.org/project/linux-i2c/patch/20240131141653.2689260-8-jarkko.nikula@linux.intel.com/
+(backported from 197ecadad842855437a36ffc161648418ae02a97 linux-stable)
+Signed-off-by: Nitin Gote nitin.r.gote@intel.com
+---
+ drivers/i2c/busses/i2c-designware-core.h   | 12 ++++++--
+ drivers/i2c/busses/i2c-designware-master.c | 36 ++++++++++++++++++++--
+ 2 files changed, 44 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/i2c/busses/i2c-designware-core.h b/drivers/i2c/busses/i2c-designware-core.h
+index 9aeacc557..296f434b7 100644
+--- a/drivers/i2c/busses/i2c-designware-core.h
++++ b/drivers/i2c/busses/i2c-designware-core.h
+@@ -262,6 +262,7 @@ struct dw_i2c_dev {
+ 	u32			abort_source;
+ 	int			irq;
+ 	u32			flags;
++	unsigned int		sw_mask;
+ 	struct i2c_adapter	adapter;
+ 	u32			functionality;
+ 	u32			master_cfg;
+@@ -293,6 +294,7 @@ struct dw_i2c_dev {
+ 
+ #define ACCESS_INTR_MASK	BIT(0)
+ #define ACCESS_NO_IRQ_SUSPEND	BIT(1)
++#define ACCESS_POLLING          BIT(2)
+ 
+ #define MODEL_MSCC_OCELOT	BIT(8)
+ #define MODEL_BAIKAL_BT1	BIT(9)
+@@ -336,13 +338,19 @@ static inline void __i2c_dw_disable_nowait(struct dw_i2c_dev *dev)
+ static inline void __i2c_dw_write_intr_mask(struct dw_i2c_dev *dev,
+ 					    unsigned int intr_mask)
+ {
+-	regmap_write(dev->map, DW_IC_INTR_MASK, intr_mask);
++	unsigned int val = dev->flags & ACCESS_POLLING ? 0 : intr_mask;
++
++	dev->sw_mask = intr_mask;
++	regmap_write(dev->map, DW_IC_INTR_MASK, val);
+ }
+ 
+ static inline void __i2c_dw_read_intr_mask(struct dw_i2c_dev *dev,
+ 					   unsigned int *intr_mask)
+ {
+-	regmap_read(dev->map, DW_IC_INTR_MASK, intr_mask);
++	if (dev->flags & ACCESS_POLLING)
++		*intr_mask = dev->sw_mask;
++	else
++		regmap_read(dev->map, DW_IC_INTR_MASK, intr_mask);
+ }
+ 
+ void __i2c_dw_disable(struct dw_i2c_dev *dev);
+diff --git a/drivers/i2c/busses/i2c-designware-master.c b/drivers/i2c/busses/i2c-designware-master.c
+index ba26c2134..de1418b5c 100644
+--- a/drivers/i2c/busses/i2c-designware-master.c
++++ b/drivers/i2c/busses/i2c-designware-master.c
+@@ -16,6 +16,7 @@
+ #include <linux/i2c.h>
+ #include <linux/interrupt.h>
+ #include <linux/io.h>
++#include <linux/jiffies.h>
+ #include <linux/module.h>
+ #include <linux/pm_runtime.h>
+ #include <linux/regmap.h>
+@@ -572,6 +573,32 @@ i2c_dw_read(struct dw_i2c_dev *dev)
+ 	}
+ }
+ 
++static int i2c_dw_irq_handler_master(struct dw_i2c_dev *dev);
++
++/*
++ * Wait for the current transfer to finish. In interrupt mode we sleep on the
++ * completion, in polling mode we drive the master ISR by hand.
++ */
++static int i2c_dw_wait_transfer(struct dw_i2c_dev *dev, unsigned long timeout)
++{
++	if (!(dev->flags & ACCESS_POLLING))
++		return wait_for_completion_timeout(&dev->cmd_complete, timeout) ?
++			0 : -ETIMEDOUT;
++
++	timeout += jiffies;
++	do {
++		if (try_wait_for_completion(&dev->cmd_complete))
++			return 0;
++
++		i2c_dw_irq_handler_master(dev);
++
++		/* Try to save some power */
++		usleep_range(3, 25);
++	} while (time_before(jiffies, timeout));
++
++	return -ETIMEDOUT;
++}
++
+ /*
+  * Prepare controller for a transaction and call i2c_dw_xfer_msg.
+  */
+@@ -623,7 +650,7 @@ i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
+ 	i2c_dw_xfer_init(dev);
+ 
+ 	/* Wait for tx to complete */
+-	if (!wait_for_completion_timeout(&dev->cmd_complete, adap->timeout)) {
++	if (i2c_dw_wait_transfer(dev, adap->timeout)) {
+ 		dev_err(dev->dev, "controller timed out\n");
+ 		/* i2c_dw_init implicitly disables the adapter */
+ 		i2c_recover_bus(&dev->adapter);
+@@ -700,7 +727,12 @@ static u32 i2c_dw_read_clear_intrbits(struct dw_i2c_dev *dev)
+ 	 *
+ 	 * The raw version might be useful for debugging purposes.
+ 	 */
+-	regmap_read(dev->map, DW_IC_INTR_STAT, &stat);
++	if (!(dev->flags & ACCESS_POLLING)) {
++		regmap_read(dev->map, DW_IC_INTR_STAT, &stat);
++	} else {
++		regmap_read(dev->map, DW_IC_RAW_INTR_STAT, &stat);
++		stat &= dev->sw_mask;
++	}
+ 
+ 	/*
+ 	 * Do not use the IC_CLR_INTR register to clear interrupts, or
+-- 
+2.50.1
+

@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Date: Tue, 1 Sep 2026 17:51:29 +0530
+Subject: i2c: designware: Add quirk for Intel Xe
+
+The xe driver registers the DesignWare I2C host controller as a platform
+device whose parent is the GPU PCI device, and installs a regmap on that
+parent which translates register accesses into GPU MMIO (with the required
+Xe specific handling of DW_IC_ENABLE and friends). The controller has no
+MMIO resource of its own, so devm_platform_ioremap_resource() cannot be
+used.
+
+When the platform device is marked compatible with "intel,xe-i2c", fetch
+the regmap from the parent device instead of mapping a resource. velinux
+i2c_dw_init_regmap() already honours a pre-populated dev->map, so no further
+change is needed there.
+
+device_is_compatible() is not available on velinux 5.15, so match the
+"compatible" property directly via fwnode_property_match_string().
+
+Signed-off-by: Heikki Krogerus heikki.krogerus@linux.intel.com
+Link: https://lore.kernel.org/r/20250701122252.2590230-3-heikki.krogerus@linux.intel.com
+(backported from commit f6a8e9f3de4567c71ef9f5f13719df69a8b96081 linux-stable)
+Signed-off-by: Nitin Gote nitin.r.gote@intel.com
+---
+ drivers/i2c/busses/i2c-designware-platdrv.c | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/drivers/i2c/busses/i2c-designware-platdrv.c b/drivers/i2c/busses/i2c-designware-platdrv.c
+index eea51f91c1af..6aa5ab574d7d 100644
+--- a/drivers/i2c/busses/i2c-designware-platdrv.c
++++ b/drivers/i2c/busses/i2c-designware-platdrv.c
+@@ -176,11 +176,30 @@ static void dw_i2c_plat_pm_cleanup(struct dw_i2c_dev *dev)
+ 		pm_runtime_put_noidle(dev->dev);
+ }
+ 
++static int dw_i2c_get_parent_regmap(struct dw_i2c_dev *dev)
++{
++	dev->map = dev_get_regmap(dev->dev->parent, NULL);
++	if (!dev->map)
++		return -ENODEV;
++
++	return 0;
++}
++
+ static int dw_i2c_plat_request_regs(struct dw_i2c_dev *dev)
+ {
+ 	struct platform_device *pdev = to_platform_device(dev->dev);
+ 	int ret;
+ 
++	/*
++	 * The Intel Xe I2C controller is a child of the GPU device and its
++	 * registers are reached through a regmap installed on the parent, so
++	 * take that regmap instead of mapping an MMIO resource.
++	 */
++	if (dev_fwnode(dev->dev) &&
++	    !fwnode_property_match_string(dev_fwnode(dev->dev), "compatible",
++					  "intel,xe-i2c"))
++		return dw_i2c_get_parent_regmap(dev);
++
+ 	switch (dev->flags & MODEL_MASK) {
+ 	case MODEL_BAIKAL_BT1:
+ 		ret = bt1_i2c_request_regs(dev);
+-- 
+2.50.1
+

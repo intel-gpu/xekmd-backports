@@ -1111,9 +1111,7 @@ int xe_device_probe(struct xe_device *xe)
 	for_each_gt(gt, xe, id)
 		xe_gt_sanitize_freq(gt);
 
-	err = xe_vsec_init(xe);
-	if (err)
-		goto err_unregister_display;
+	xe_vsec_init(xe);
 
 	err = xe_sriov_init_late(xe);
 	if (err)
@@ -1124,6 +1122,13 @@ int xe_device_probe(struct xe_device *xe)
 	err = drmm_add_action_or_reset(&xe->drm, xe_device_wedged_fini, xe);
 	if (err)
 		goto err_unregister_display;
+
+	/*
+	 * Process and log any errors detected by hardware. Possible results can
+	 * include declaring the device as wedged, which must be done only after
+	 * xe_device_wedged_fini() is registered.
+	 */
+	xe_ras_process_errors(xe);
 
 	err = devm_add_action_or_reset(xe->drm.dev, xe_device_sanitize, xe);
 	if (err)

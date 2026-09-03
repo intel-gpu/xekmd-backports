@@ -20,6 +20,7 @@
 #define GET_ADDRESS(v)		((v) & GENMASK(31, 3))
 
 struct device;
+struct pci_dev;
 extern struct class intel_pmt_class;
 
 struct telem_endpoint {
@@ -36,14 +37,12 @@ struct intel_pmt_header {
 	u32	size;
 	u32	guid;
 	u8	access_type;
-	u8	telem_type;
 };
 
 struct intel_pmt_entry {
 	struct telem_endpoint	*ep;
-	struct device		*dev;
+	struct pci_dev		*pcidev;
 	struct intel_pmt_header	header;
-	u32			disc_header[PMT_DISC_DWORDS];
 	struct bin_attribute	pmt_bin_attr;
 	const struct attribute_group *attr_grp;
 	struct kobject		*kobj;
@@ -63,10 +62,6 @@ struct intel_pmt_namespace {
 	struct xarray *xa;
 	int (*pmt_header_decode)(struct intel_pmt_entry *entry,
 				 struct device *dev);
-	int (*pmt_pre_decode)(struct intel_vsec_device *ivdev,
-			      struct intel_pmt_entry *entry);
-	int (*pmt_post_decode)(struct intel_vsec_device *ivdev,
-			       struct intel_pmt_entry *entry);
 	int (*pmt_add_endpoint)(struct intel_vsec_device *ivdev,
 				struct intel_pmt_entry *entry);
 };

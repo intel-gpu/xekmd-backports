@@ -29,7 +29,6 @@
 #include "xe_sriov_vf.h"
 #include "xe_step.h"
 #include "xe_tile_debugfs.h"
-#include "xe_ttm_vram_mgr.h"
 #include "xe_vsec.h"
 #include "xe_wa.h"
 
@@ -42,16 +41,10 @@
 DECLARE_FAULT_ATTR(gt_reset_failure);
 DECLARE_FAULT_ATTR(inject_csc_hw_error);
 DECLARE_FAULT_ATTR(wedge_cold_reset);
-DECLARE_FAULT_ATTR(inject_mempage_offline);
 
 static bool csc_hw_error_available(struct xe_device *xe)
 {
 	return !IS_SRIOV_VF(xe) && xe->info.platform == XE_BATTLEMAGE;
-}
-
-static bool is_crescent_island_pf(struct xe_device *xe)
-{
-	return !IS_SRIOV_VF(xe) && xe->info.platform == XE_CRESCENTISLAND;
 }
 
 /*
@@ -70,9 +63,6 @@ static struct {
 	  .is_visible = csc_hw_error_available },
 	{ .name = "wedge_cold_reset",
 	  .attr = &wedge_cold_reset },
-	{ .name = "inject_mempage_offline",
-	  .attr = &inject_mempage_offline,
-	  .is_visible = is_crescent_island_pf },
 };
 
 /*
@@ -88,39 +78,6 @@ bool xe_fault_##name(void)				\
 FAULT_ACTION(gt_reset, gt_reset_failure)
 FAULT_ACTION(csc_hw_error, inject_csc_hw_error)
 FAULT_ACTION(wedge_cold_reset, wedge_cold_reset)
-FAULT_ACTION(mempage_offline, inject_mempage_offline)
-
-static ssize_t inject_mempage_offline_trigger(struct file *f,
-					      const char __user *ubuf,
-					      size_t size, loff_t *pos)
-{
-	struct xe_device *xe = file_inode(f)->i_private;
-	struct xe_tile *tile = xe_device_get_root_tile(xe);
-	struct xe_vram_region *vr = tile->mem.vram;
-	u64 pfn;
-	int ret;
-
-	if (!vr)
-		return -ENODEV;
-
-	ret = kstrtou64_from_user(ubuf, size, 0, &pfn);
-	if (ret)
-		return ret;
-
-	if (!xe_fault_mempage_offline())
-		return size;
-
-	if (pfn == 0)
-		return xe_ttm_vram_inject_fault(xe) ?: size;
-
-	/* User provided PFN - convert to DPA and inject */
-	return xe_ttm_vram_handle_addr_fault(xe, pfn << PAGE_SHIFT) ?: size;
-}
-
-static const struct file_operations inject_mempage_offline_fops = {
-	.owner = THIS_MODULE,
-	.write = inject_mempage_offline_trigger,
-};
 
 static void xe_fault_inject_debugfs_register(struct xe_device *xe,
 					     struct dentry *root)
@@ -134,11 +91,6 @@ static void xe_fault_inject_debugfs_register(struct xe_device *xe,
 
 		fault_create_debugfs_attr(xe_fault_inject_entry[i].name, root,
 					  xe_fault_inject_entry[i].attr);
-	}
-
-	if (is_crescent_island_pf(xe)) {
-		debugfs_create_file("inject_mempage_offline_trigger", 0200,
-				    root, xe, &inject_mempage_offline_fops);
 	}
 }
 
@@ -820,9 +772,6 @@ void xe_debugfs_register(struct xe_device *xe)
 	man = ttm_manager_type(bdev, XE_PL_STOLEN);
 	if (man)
 		ttm_resource_manager_create_debugfs(man, root, "stolen_mm");
-
-	if (xe->info.platform == XE_CRESCENTISLAND)
-		xe_ttm_vram_debugfs_init(xe, root);
 
 	for_each_tile(tile, xe, tile_id)
 		xe_tile_debugfs_register(tile);

@@ -31,9 +31,7 @@
 #define gpu_buddy_print_tree drm_buddy_print_tree
 #define gpu_buddy_block_trim drm_buddy_block_trim
 #define gpu_buddy_driver_set_lock(mm, lock) do { (void)(mm); (void)(lock); } while (0)
-struct drm_buddy_block *
-backport_gpu_buddy_allocated_addr_to_block(struct drm_buddy *mm, u64 addr);
-#define gpu_buddy_allocated_addr_to_block backport_gpu_buddy_allocated_addr_to_block
+
 #endif /* HAVE_LINUX_GPU_BUDDY_H_AVAILABLE || CPTCFG_BUILD_XE_DRM_BUDDY */
 
 #endif /* _BACKPORT_LINUX_GPU_BUDDY_H_ */

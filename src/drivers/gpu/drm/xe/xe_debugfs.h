@@ -14,7 +14,6 @@ struct xe_device;
 bool xe_fault_gt_reset(void);
 bool xe_fault_csc_hw_error(void);
 bool xe_fault_wedge_cold_reset(void);
-bool xe_fault_mempage_offline(void);
 void xe_debugfs_register(struct xe_device *xe);
 #ifdef BPM_DRM_MINOR_DEBUGFS_SYMLINK_NOT_PRESENT
 void xe_debugfs_cleanup_compat_structure(struct xe_device *xe);
@@ -23,7 +22,6 @@ void xe_debugfs_cleanup_compat_structure(struct xe_device *xe);
 static inline bool xe_fault_gt_reset(void) { return false; }
 static inline bool xe_fault_csc_hw_error(void) { return false; }
 static inline bool xe_fault_wedge_cold_reset(void) { return false; }
-static inline bool xe_fault_mempage_offline(void) { return false; }
 static inline void xe_debugfs_register(struct xe_device *xe) { }
 #ifdef BPM_DRM_MINOR_DEBUGFS_SYMLINK_NOT_PRESENT
 static inline void xe_debugfs_cleanup_compat_structure(struct xe_device *xe) { }

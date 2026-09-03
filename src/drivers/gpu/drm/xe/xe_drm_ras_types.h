@@ -43,9 +43,6 @@ struct xe_drm_ras {
 
 	/** @info: info array for all types of errors */
 	struct xe_drm_ras_counter *info[DRM_XE_RAS_ERR_SEV_MAX];
-
-	/** @bad_page_reservation: cached configfs policy, immutable after init */
-	bool bad_page_reservation;
 };
 
 #endif

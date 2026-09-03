@@ -17,10 +17,9 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 1 file changed, 19 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-index 0000001..0000002 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-@@ -130,9 +130,10 @@
+@@ -81,9 +81,10 @@
  
  	if (place->flags & TTM_PL_FLAG_TOPDOWN)
  		vres->flags |= GPU_BUDDY_TOPDOWN_ALLOCATION;
@@ -32,7 +31,7 @@ index 0000001..0000002 100644
  
  	if (place->fpfn || lpfn != man->size >> PAGE_SHIFT)
  		vres->flags |= GPU_BUDDY_RANGE_ALLOCATION;
-@@ -163,7 +164,17 @@
+@@ -114,11 +115,27 @@
  		goto error_unlock;
  	}
  
@@ -46,11 +45,9 @@ index 0000001..0000002 100644
 +	}
 +#endif
 +
- 	err = xe_ttm_vram_buddy_alloc(mgr, (u64)place->fpfn << PAGE_SHIFT,
- 				      (u64)lpfn << PAGE_SHIFT, size,
- 				      min_page_size, &vres->blocks, vres->flags,
- 				      tbo, &vres->used_visible_size);
-@@ -170,3 +181,9 @@
+ 	err = gpu_buddy_alloc_blocks(mm, (u64)place->fpfn << PAGE_SHIFT,
+ 				     (u64)lpfn << PAGE_SHIFT, size,
+ 				     min_page_size, &vres->blocks, vres->flags);
  	if (err)
  		goto error_unlock;
 +#ifdef BPM_DRM_BUDDY_CONTIGUOUS_ALLOCATION_NOT_PRESENT
@@ -59,6 +56,8 @@ index 0000001..0000002 100644
 +			size = vres->base.size;
 +	}
 +#endif
- 	mutex_unlock(&mgr->lock);
+ 
+ 	if (lpfn <= mgr->visible_size >> PAGE_SHIFT) {
+ 		vres->used_visible_size = size;
 -- 
 2.43.0

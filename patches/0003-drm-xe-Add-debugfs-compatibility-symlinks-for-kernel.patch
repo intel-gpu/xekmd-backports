@@ -91,10 +91,9 @@ diff --git a/drivers/gpu/drm/xe/xe_debugfs.h b/drivers/gpu/drm/xe/xe_debugfs.h
 index 0dcd28f..5b8f254 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.h
 +++ b/drivers/gpu/drm/xe/xe_debugfs.h
-@@ -15,13 +15,19 @@ bool xe_fault_gt_reset(void);
+@@ -15,11 +15,17 @@ bool xe_fault_gt_reset(void);
  bool xe_fault_csc_hw_error(void);
  bool xe_fault_wedge_cold_reset(void);
- bool xe_fault_mempage_offline(void);
  void xe_debugfs_register(struct xe_device *xe);
 +#ifdef BPM_DRM_MINOR_DEBUGFS_SYMLINK_NOT_PRESENT
 +void xe_debugfs_cleanup_compat_structure(struct xe_device *xe);
@@ -103,7 +102,6 @@ index 0dcd28f..5b8f254 100644
  static inline bool xe_fault_gt_reset(void) { return false; }
  static inline bool xe_fault_csc_hw_error(void) { return false; }
  static inline bool xe_fault_wedge_cold_reset(void) { return false; }
- static inline bool xe_fault_mempage_offline(void) { return false; }
  static inline void xe_debugfs_register(struct xe_device *xe) { }
 +#ifdef BPM_DRM_MINOR_DEBUGFS_SYMLINK_NOT_PRESENT
 +static inline void xe_debugfs_cleanup_compat_structure(struct xe_device *xe) { }

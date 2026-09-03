@@ -4,7 +4,6 @@
  */
 
 #include "xe_debugfs.h"
-#include "xe_configfs.h"
 #include "xe_device.h"
 #include "xe_drm_ras.h"
 #include "xe_log.h"
@@ -879,10 +878,6 @@ static const struct attribute_group gpu_health_group = {
 void xe_ras_init(struct xe_device *xe)
 {
 	int ret;
-
-	if (xe->info.platform == XE_CRESCENTISLAND)
-		xe->ras.bad_page_reservation =
-			xe_configfs_get_bad_page_reservation(to_pci_dev(xe->drm.dev));
 
 	xe_drm_ras_init(xe);
 

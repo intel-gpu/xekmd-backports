@@ -20,7 +20,6 @@
 struct xe_device;
 struct xe_mem_pool_node;
 struct xe_vm;
-struct xe_exec_queue;
 
 #define XE_BO_MAX_PLACEMENTS	3
 
@@ -43,8 +42,6 @@ struct xe_bo {
 	u32 flags;
 	/** @vm: VM this BO is attached to, for extobj this will be NULL */
 	struct xe_vm *vm;
-	/** @q: Queue this BO is attached to, mostly for LRC BO, NULL otherwise */
-	struct xe_exec_queue *q;
 	/** @tile: Tile this BO is attached to (kernel BO only) */
 	struct xe_tile *tile;
 	/** @placements: valid placements for this BO */

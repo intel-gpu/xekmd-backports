@@ -151,6 +151,9 @@ struct xe_exec_queue {
 #define EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE	BIT(1)
 	unsigned long eudebug_flags;
 
+	/** @ban_reason: Bitmask of ban reasons (DRM_XE_EXEC_QUEUE_BAN_REASON_*) */
+	atomic_t ban_reason;
+
 	union {
 		/** @multi_gt_list: list head for VM bind engines if multi-GT */
 		struct list_head multi_gt_list;
@@ -324,8 +327,8 @@ struct xe_exec_queue_ops {
 	 * signalled when this function is called.
 	 */
 	void (*resume)(struct xe_exec_queue *q);
-	/** @reset_status: check exec queue reset status */
-	bool (*reset_status)(struct xe_exec_queue *q);
+	/** @reset_status: check exec queue ban status, returns ban reason bitmask */
+	u64 (*reset_status)(struct xe_exec_queue *q);
 	/** @active: check exec queue is active */
 	bool (*active)(struct xe_exec_queue *q);
 };

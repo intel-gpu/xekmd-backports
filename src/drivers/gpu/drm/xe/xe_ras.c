@@ -4,6 +4,7 @@
  */
 
 #include "xe_debugfs.h"
+#include "xe_configfs.h"
 #include "xe_device.h"
 #include "xe_drm_ras.h"
 #include "xe_log.h"
@@ -198,6 +199,24 @@ static inline const char *comp_to_str(u8 component)
 		component = XE_RAS_COMP_NOT_SUPPORTED;
 
 	return xe_ras_components[component];
+}
+
+static bool ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter)
+{
+	u8 severity = counter->common.severity;
+	u8 component = counter->common.component;
+
+	if (!in_range(severity, XE_RAS_SEV_NOT_SUPPORTED + 1, XE_RAS_SEV_MAX - 1)) {
+		xe_err(xe, "sysctrl: unexpected severity %u\n", severity);
+		return false;
+	}
+
+	if (!in_range(component, XE_RAS_COMP_NOT_SUPPORTED + 1, XE_RAS_COMP_MAX - 1)) {
+		xe_err(xe, "sysctrl: unexpected component %u\n", component);
+		return false;
+	}
+
+	return true;
 }
 
 static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
@@ -632,6 +651,92 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
 	return 0;
 }
 
+int xe_ras_get_threshold(struct xe_device *xe, u8 severity, u8 component, u32 *threshold)
+{
+	struct xe_ras_get_threshold_response response = {};
+	struct xe_ras_get_threshold_request request = {};
+	struct xe_sysctrl_mailbox_command command = {};
+	struct xe_ras_error_class *counter;
+	size_t len;
+	int ret;
+
+	counter = &request.counter;
+	counter->common.severity = drm_to_xe_ras_severity(severity);
+	counter->common.component = drm_to_xe_ras_component(component);
+
+	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_GET_THRESHOLD,
+				  &request, sizeof(request), &response, sizeof(response));
+
+	guard(xe_pm_runtime)(xe);
+	ret = xe_sysctrl_send_command(&xe->sc, &command, &len);
+	if (ret) {
+		xe_err(xe, "sysctrl: failed to get threshold %d\n", ret);
+		return ret;
+	}
+
+	if (len != sizeof(response)) {
+		xe_err(xe, "sysctrl: unexpected get threshold response length %zu (expected %zu)\n",
+		       len, sizeof(response));
+		return -EIO;
+	}
+
+	if (!ras_counter_is_valid(xe, &response.counter))
+		return -EBADMSG;
+
+	counter = &response.counter;
+	*threshold = response.threshold;
+
+	xe_dbg(xe, "[RAS]: get threshold %u for %s %s\n", *threshold,
+	       comp_to_str(counter->common.component), sev_to_str(counter->common.severity));
+	return 0;
+}
+
+int xe_ras_set_threshold(struct xe_device *xe, u8 severity, u8 component, u32 threshold)
+{
+	struct xe_ras_set_threshold_response response = {};
+	struct xe_ras_set_threshold_request request = {};
+	struct xe_sysctrl_mailbox_command command = {};
+	struct xe_ras_error_class *counter;
+	size_t len;
+	int ret;
+
+	counter = &request.counter;
+	counter->common.severity = drm_to_xe_ras_severity(severity);
+	counter->common.component = drm_to_xe_ras_component(component);
+	request.threshold = threshold;
+
+	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_SET_THRESHOLD,
+				  &request, sizeof(request), &response, sizeof(response));
+
+	guard(xe_pm_runtime)(xe);
+	ret = xe_sysctrl_send_command(&xe->sc, &command, &len);
+	if (ret) {
+		xe_err(xe, "sysctrl: failed to set threshold %d\n", ret);
+		return ret;
+	}
+
+	if (len != sizeof(response)) {
+		xe_err(xe, "sysctrl: unexpected set threshold response length %zu (expected %zu)\n",
+		       len, sizeof(response));
+		return -EIO;
+	}
+
+	ret = ras_status_to_errno(response.status);
+	if (ret) {
+		xe_err(xe, "sysctrl: set threshold command failed with status %#x\n",
+		       response.status);
+		return ret;
+	}
+
+	counter = &response.counter;
+	if (!ras_counter_is_valid(xe, counter))
+		return -EBADMSG;
+
+	xe_dbg(xe, "[RAS]: set threshold %u for %s %s\n", response.threshold,
+	       comp_to_str(counter->common.component), sev_to_str(counter->common.severity));
+	return 0;
+}
+
 static ssize_t gpu_health_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct xe_ras_get_health_response response = {0};
@@ -775,8 +880,9 @@ void xe_ras_init(struct xe_device *xe)
 {
 	int ret;
 
-	if (!xe->info.has_drm_ras)
-		return;
+	if (xe->info.platform == XE_CRESCENTISLAND)
+		xe->ras.bad_page_reservation =
+			xe_configfs_get_bad_page_reservation(to_pci_dev(xe->drm.dev));
 
 	xe_drm_ras_init(xe);
 
@@ -786,12 +892,6 @@ void xe_ras_init(struct xe_device *xe)
 	if (IS_ENABLED(CONFIG_PCIEAER))
 		ras_usp_aer_init(xe);
 
-	/*
-	 * During probe, process and log any errors detected by firmware while the driver was not
-	 * loaded. Critical errors such as Punit and CSC are reported through Pcode init failure,
-	 * causing the driver to enter survivability mode.
-	 */
-	xe_ras_process_errors(xe);
 	ret = devm_device_add_group(xe->drm.dev, &gpu_health_group);
 	if (ret)
 		xe_err(xe, "Failed to create GPU health sysfs, err=%d\n", ret);

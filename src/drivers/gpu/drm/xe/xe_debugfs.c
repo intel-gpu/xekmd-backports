@@ -19,6 +19,7 @@
 #include "xe_gt_debugfs.h"
 #include "xe_gt_printk.h"
 #include "xe_guc_ads.h"
+#include "xe_mmio.h"
 #include "xe_pcode.h"
 #include "xe_pm.h"
 #include "xe_psmi.h"
@@ -28,6 +29,7 @@
 #include "xe_sriov_vf.h"
 #include "xe_step.h"
 #include "xe_tile_debugfs.h"
+#include "xe_ttm_vram_mgr.h"
 #include "xe_vsec.h"
 #include "xe_wa.h"
 
@@ -40,10 +42,16 @@
 DECLARE_FAULT_ATTR(gt_reset_failure);
 DECLARE_FAULT_ATTR(inject_csc_hw_error);
 DECLARE_FAULT_ATTR(wedge_cold_reset);
+DECLARE_FAULT_ATTR(inject_mempage_offline);
 
 static bool csc_hw_error_available(struct xe_device *xe)
 {
 	return !IS_SRIOV_VF(xe) && xe->info.platform == XE_BATTLEMAGE;
+}
+
+static bool is_crescent_island_pf(struct xe_device *xe)
+{
+	return !IS_SRIOV_VF(xe) && xe->info.platform == XE_CRESCENTISLAND;
 }
 
 /*
@@ -62,6 +70,9 @@ static struct {
 	  .is_visible = csc_hw_error_available },
 	{ .name = "wedge_cold_reset",
 	  .attr = &wedge_cold_reset },
+	{ .name = "inject_mempage_offline",
+	  .attr = &inject_mempage_offline,
+	  .is_visible = is_crescent_island_pf },
 };
 
 /*
@@ -77,6 +88,39 @@ bool xe_fault_##name(void)				\
 FAULT_ACTION(gt_reset, gt_reset_failure)
 FAULT_ACTION(csc_hw_error, inject_csc_hw_error)
 FAULT_ACTION(wedge_cold_reset, wedge_cold_reset)
+FAULT_ACTION(mempage_offline, inject_mempage_offline)
+
+static ssize_t inject_mempage_offline_trigger(struct file *f,
+					      const char __user *ubuf,
+					      size_t size, loff_t *pos)
+{
+	struct xe_device *xe = file_inode(f)->i_private;
+	struct xe_tile *tile = xe_device_get_root_tile(xe);
+	struct xe_vram_region *vr = tile->mem.vram;
+	u64 pfn;
+	int ret;
+
+	if (!vr)
+		return -ENODEV;
+
+	ret = kstrtou64_from_user(ubuf, size, 0, &pfn);
+	if (ret)
+		return ret;
+
+	if (!xe_fault_mempage_offline())
+		return size;
+
+	if (pfn == 0)
+		return xe_ttm_vram_inject_fault(xe) ?: size;
+
+	/* User provided PFN - convert to DPA and inject */
+	return xe_ttm_vram_handle_addr_fault(xe, pfn << PAGE_SHIFT) ?: size;
+}
+
+static const struct file_operations inject_mempage_offline_fops = {
+	.owner = THIS_MODULE,
+	.write = inject_mempage_offline_trigger,
+};
 
 static void xe_fault_inject_debugfs_register(struct xe_device *xe,
 					     struct dentry *root)
@@ -91,22 +135,22 @@ static void xe_fault_inject_debugfs_register(struct xe_device *xe,
 		fault_create_debugfs_attr(xe_fault_inject_entry[i].name, root,
 					  xe_fault_inject_entry[i].attr);
 	}
+
+	if (is_crescent_island_pf(xe)) {
+		debugfs_create_file("inject_mempage_offline_trigger", 0200,
+				    root, xe, &inject_mempage_offline_fops);
+	}
 }
 
-static void read_residency_counter(struct xe_device *xe, u32 offset, const char *name,
-				   struct drm_printer *p)
+static void read_residency_counter(struct xe_device *xe, struct xe_mmio *mmio,
+				   u32 offset, const char *name, struct drm_printer *p)
 {
 	u64 residency = 0;
-	u32 guid;
 	int ret;
 
-	guid = xe_vsec_get_guid(xe);
-	if (!guid) {
-		drm_warn(&xe->drm, "PMT device is not powered\n");
-		return;
-	}
-
-	ret = xe_pmt_telem_read(xe->drm.dev, guid, &residency, offset, sizeof(residency));
+	ret = xe_pmt_telem_read(xe->drm.dev,
+				xe_mmio_read32(mmio, PUNIT_TELEMETRY_GUID),
+				&residency, offset, sizeof(residency));
 	if (ret != sizeof(residency)) {
 		drm_warn(&xe->drm, "%s counter failed to read, ret %d\n", name, ret);
 		return;
@@ -249,12 +293,13 @@ static int pcode_info(struct seq_file *m, void *data)
 static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
 {
 	struct xe_device *xe;
+	struct xe_mmio *mmio;
 	struct drm_printer p;
 
 	xe = node_to_xe(m->private);
 	p = drm_seq_file_printer(m);
 	guard(xe_pm_runtime)(xe);
-
+	mmio = xe_root_tile_mmio(xe);
 	static const struct {
 		u32 offset;
 		const char *name;
@@ -268,7 +313,7 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
 	};
 
 	for (int i = 0; i < ARRAY_SIZE(residencies); i++)
-		read_residency_counter(xe, residencies[i].offset, residencies[i].name, &p);
+		read_residency_counter(xe, mmio, residencies[i].offset, residencies[i].name, &p);
 
 	return 0;
 }
@@ -276,11 +321,13 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
 static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
 {
 	struct xe_device *xe;
+	struct xe_mmio *mmio;
 	struct drm_printer p;
 
 	xe = node_to_xe(m->private);
 	p = drm_seq_file_printer(m);
 	guard(xe_pm_runtime)(xe);
+	mmio = xe_root_tile_mmio(xe);
 
 	static const struct {
 		u32 offset;
@@ -292,7 +339,7 @@ static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
 	};
 
 	for (int i = 0; i < ARRAY_SIZE(residencies); i++)
-		read_residency_counter(xe, residencies[i].offset, residencies[i].name, &p);
+		read_residency_counter(xe, mmio, residencies[i].offset, residencies[i].name, &p);
 
 	return 0;
 }
@@ -711,22 +758,23 @@ void xe_debugfs_register(struct xe_device *xe)
 				 ARRAY_SIZE(debugfs_list),
 				 root, minor);
 
-	/*
-	 * Residencies and Pcode version read from PMT is currently only supported on CRI and BMG
-	 * platforms in PF mode.  Both platforms support the necessary telemetry read mechanism
-	 * and have a fixed offsets for the required data.
-	 * Attempting this access on other platforms must be verified before enabling support.
-	 */
-	if (!IS_SRIOV_VF(xe) &&
-	    (xe->info.platform == XE_CRESCENTISLAND || xe->info.platform == XE_BATTLEMAGE)) {
+	if (xe->info.platform == XE_BATTLEMAGE && !IS_SRIOV_VF(xe)) {
 		drm_debugfs_create_files(debugfs_residencies,
 					 ARRAY_SIZE(debugfs_residencies),
 					 root, minor);
+	}
 
+	/*
+	 * Pcode version read from PMT is currently only supported on CRI and BMG platforms in PF
+	 * mode, as both platforms support the necessary telemetry read mechanism and have a fixed
+	 * PUNIT_VERSION_OFFSET.
+	 * Attempting this access on other platforms must be verified before enabling support.
+	 */
+	if (!IS_SRIOV_VF(xe) &&
+	    (xe->info.platform == XE_CRESCENTISLAND || xe->info.platform == XE_BATTLEMAGE))
 		drm_debugfs_create_files(pcode_info_debugfs,
 					 ARRAY_SIZE(pcode_info_debugfs),
 					 root, minor);
-	}
 
 	debugfs_create_file("forcewake_all", 0400, root, xe,
 			    &forcewake_all_fops);
@@ -772,6 +820,9 @@ void xe_debugfs_register(struct xe_device *xe)
 	man = ttm_manager_type(bdev, XE_PL_STOLEN);
 	if (man)
 		ttm_resource_manager_create_debugfs(man, root, "stolen_mm");
+
+	if (xe->info.platform == XE_CRESCENTISLAND)
+		xe_ttm_vram_debugfs_init(xe, root);
 
 	for_each_tile(tile, xe, tile_id)
 		xe_tile_debugfs_register(tile);

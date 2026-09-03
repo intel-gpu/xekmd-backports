@@ -364,17 +364,11 @@ ALLOW_ERROR_INJECTION(xe_pcode_probe_early, ERRNO); /* See xe_pci_probe */
 int xe_get_pcode_version(struct xe_device *xe, struct xe_pcode_version *version)
 {
 	int ret = 0;
-	u32 guid;
 
 	guard(xe_pm_runtime)(xe);
 
-	guid = xe_vsec_get_guid(xe);
-	if (!guid) {
-		xe_warn(xe, "PMT device is not powered\n");
-		return -ENODATA;
-	}
-
-	ret = xe_pmt_telem_read(xe->drm.dev, guid,
+	ret = xe_pmt_telem_read(xe->drm.dev,
+				xe_mmio_read32(xe_root_tile_mmio(xe), PUNIT_TELEMETRY_GUID),
 				(u64 *)version, PUNIT_VERSION_OFFSET, sizeof(*version));
 	if (ret != sizeof(*version)) {
 		xe_warn(xe, "pcode version read from PMT failed, ret %pe\n", ERR_PTR(ret));

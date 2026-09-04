@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stefan Roese <sr@denx.de>
+Date: Tue, 25 Jan 2022 08:18:20 +0100
+Subject: PCI/AER: Enable AER on all PCIe devices supporting it
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+With this change, AER is now enabled on all PCIe devices, also when the
+PCIe device is hot-plugged.
+
+Please note that this change is quite invasive, as with this patch
+applied, AER now will be enabled in the Device Control registers of all
+available PCIe Endpoints, which currently is not the case.
+
+When "pci=noaer" is selected, AER stays disabled of course.
+
+Signed-off-by: Stefan Roese <sr@denx.de>
+Cc: Bjorn Helgaas <helgaas@kernel.org>
+Cc: Pali Rohár <pali@kernel.org>
+Cc: Bharat Kumar Gogada <bharat.kumar.gogada@xilinx.com>
+Cc: Michal Simek <michal.simek@xilinx.com>
+Cc: Yao Hongbo <yaohongbo@linux.alibaba.com>
+Cc: Naveen Naidu <naveennaidu479@gmail.com>
+(backported from commit f26e58bf6f547031f91a1b0e39b9308d48a4ba8c linux-next)
+---
+ drivers/pci/pcie/aer.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/pci/pcie/aer.c b/drivers/pci/pcie/aer.c
+index 81ea196ce843..9939ddbd87a0 100644
+--- a/drivers/pci/pcie/aer.c
++++ b/drivers/pci/pcie/aer.c
+@@ -392,6 +392,10 @@ void pci_aer_init(struct pci_dev *dev)
+ 	pci_add_ext_cap_save_buffer(dev, PCI_EXT_CAP_ID_ERR, sizeof(u32) * n);
+ 
+ 	pci_aer_clear_status(dev);
++
++	/* Enable AER if requested */
++	if (pci_aer_available())
++		pci_enable_pcie_error_reporting(dev);
+ }
+ 
+ void pci_aer_exit(struct pci_dev *dev)
+-- 
+2.34.1

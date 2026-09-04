@@ -79,7 +79,7 @@ config DRM_XE
 	select DRM_GPUVM if BUILD_XE_DRM_GPUVM
 	depends on DRM_SCHED
 	depends on MMU_NOTIFIER
-	depends on WANT_DEV_COREDUMP
+	#select WANT_DEV_COREDUMP
 	depends on AUXILIARY_BUS
 	select REGMAP if I2C
 	help

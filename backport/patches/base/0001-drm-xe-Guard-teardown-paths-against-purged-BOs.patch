@@ -1,0 +1,85 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Date: Thu, 3 Sep 2026 21:45:59 +0530
+Subject: drm/xe: Guard teardown paths against purged BOs
+
+VRAM page offlining can purge BOs that are still referenced by page
+tables, exec queues, and DMA-buf exports. Add xe_bo_is_purged()
+guards in the teardown paths to prevent unpinning or mapping an
+already-purged BO:
+
+- xe_bo_unpin_map_no_vm(): skip unpin if purged
+- xe_dma_buf_map(): return -ENOENT early if purged
+- xe_exec_queue_update_run_ticks(): skip LRC timestamp read if purged
+- xe_pt_destroy(): skip unpin if purged
+
+v4(Sashiko):
+- Move bo purge check in xe_bo_unpin() to handle all instances
+v3(Sashiko):
+- Remove dma_resv is already held
+v2(Himal):
+- take dma_resv lock before calling xe_bo_is_purged()
+
+Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260903161553.528932-23-tejas.upadhyay@intel.com
+(cherry-picked from f34e06068b0fa6708dcb958a99e651f60c770f99 drm-tip)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_bo.c         | 3 +++
+ drivers/gpu/drm/xe/xe_dma_buf.c    | 3 +++
+ drivers/gpu/drm/xe/xe_exec_queue.c | 8 ++++++--
+ 3 files changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
+index c255327669da..b162753cebb7 100644
+--- a/drivers/gpu/drm/xe/xe_bo.c
++++ b/drivers/gpu/drm/xe/xe_bo.c
+@@ -3267,6 +3267,9 @@ void xe_bo_unpin(struct xe_bo *bo)
+ 	struct ttm_place *place = &bo->placements[0];
+ 	struct xe_device *xe = xe_bo_device(bo);
+ 
++	if (xe_bo_is_purged(bo))
++		return;
++
+ 	xe_assert(xe, !bo->ttm.base.import_attach);
+ 	xe_assert(xe, xe_bo_is_pinned(bo));
+ 
+diff --git a/drivers/gpu/drm/xe/xe_dma_buf.c b/drivers/gpu/drm/xe/xe_dma_buf.c
+index bf0728838ead..5d9f1cd24b7f 100644
+--- a/drivers/gpu/drm/xe/xe_dma_buf.c
++++ b/drivers/gpu/drm/xe/xe_dma_buf.c
+@@ -104,6 +104,9 @@ static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
+ 	struct sg_table *sgt;
+ 	int r = 0;
+ 
++	if (xe_bo_is_purged(bo))
++		return ERR_PTR(-ENOENT);
++
+ 	if (!attach->peer2peer && !xe_bo_can_migrate(bo, XE_PL_TT))
+ 		return ERR_PTR(-EOPNOTSUPP);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index f3ea4807ac33..e63559a2f582 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -1630,8 +1630,12 @@ void xe_exec_queue_update_run_ticks(struct xe_exec_queue *q)
+ 	 * errors.
+ 	 */
+ 	lrc = q->lrc[0];
+-	new_ts = xe_lrc_update_timestamp(lrc, &old_ts);
+-	q->xef->run_ticks[q->class] += (new_ts - old_ts) * q->width;
++	xe_bo_lock(lrc->bo, false);
++	if (!xe_bo_is_purged(lrc->bo)) {
++		new_ts = xe_lrc_update_timestamp(lrc, &old_ts);
++		q->xef->run_ticks[q->class] += (new_ts - old_ts) * q->width;
++	}
++	xe_bo_unlock(lrc->bo);
+ 
+ 	drm_dev_exit(idx);
+ }
+-- 
+2.43.0
+

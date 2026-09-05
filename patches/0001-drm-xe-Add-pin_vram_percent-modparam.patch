@@ -1,5 +1,5 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Pravalika Gurram  <pravalika.gurram@intel.com>
+From: Pravalika Gurram <pravalika.gurram@intel.com>
 Date: Mon, 3 Aug 2026 10:37:57 +0530
 Subject: drm/xe: Add pin_vram_percent modparam
 
@@ -32,7 +32,7 @@ diff --git a/drivers/gpu/drm/xe/xe_module.c b/drivers/gpu/drm/xe/xe_module.c
 index 919ef9e7b..cc58ddddd 100644
 --- a/drivers/gpu/drm/xe/xe_module.c
 +++ b/drivers/gpu/drm/xe/xe_module.c
-@@ -31,6 +31,9 @@ struct xe_modparam xe_modparam = {
+@@ -30,6 +30,9 @@ struct xe_modparam xe_modparam = {
  #endif
  	.wedged_mode =		XE_DEFAULT_WEDGED_MODE,
  	.svm_notifier_size =	XE_DEFAULT_SVM_NOTIFIER_SIZE,
@@ -42,7 +42,7 @@ index 919ef9e7b..cc58ddddd 100644
  	/* the rest are 0 by default */
  };
  
-@@ -38,6 +41,10 @@ module_param_named(svm_notifier_size, xe_modparam.svm_notifier_size, uint, 0600)
+@@ -36,6 +39,10 @@ module_param_named(svm_notifier_size, xe_modparam.svm_notifier_size, uint, 0600)
  MODULE_PARM_DESC(svm_notifier_size, "Set the svm notifier size in MiB, must be power of 2 "
  		 "[default=" __stringify(XE_DEFAULT_SVM_NOTIFIER_SIZE) "]");
  
@@ -71,26 +71,35 @@ diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vr
 index 5d22dafec..6e42d289a 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-@@ -7,12 +7,18 @@
+@@ -9,21 +9,27 @@
  #include <drm/drm_managed.h>
  #include <drm/drm_drv.h>
  #include <drm/drm_buddy.h>
 +#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
 +#include <linux/math64.h>
 +#endif
+ #include <uapi/drm/xe_drm.h>
  
  #include <drm/ttm/ttm_placement.h>
  #include <drm/ttm/ttm_range_manager.h>
  
+ #include "regs/xe_regs.h"
  #include "xe_bo.h"
+ #include "xe_configfs.h"
  #include "xe_device.h"
 +#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
 +#include "xe_module.h"
 +#endif
+ #include "xe_exec_queue.h"
+ #include "xe_lrc.h"
+ #include "xe_mmio.h"
+ #include "xe_pm.h"
+ #include "xe_printk.h"
  #include "xe_res_cursor.h"
+ #include "xe_ttm_stolen_mgr.h"
  #include "xe_ttm_vram_mgr.h"
  #include "xe_vram_types.h"
-@@ -303,17 +309,24 @@ int __xe_ttm_vram_mgr_init(struct xe_device *xe, struct xe_ttm_vram_mgr *mgr,
+@@ -397,17 +403,24 @@ int __xe_ttm_vram_mgr_init(struct xe_device *xe, struct xe_ttm_vram_mgr *mgr,
  	struct ttm_resource_manager *man = &mgr->manager;
  	int err;
  
@@ -111,10 +120,10 @@ index 5d22dafec..6e42d289a 100644
 +			mul_u64_u32_div(size, xe_modparam.pin_vram_percent, 100);
 +#endif
  	mutex_init(&mgr->lock);
+ 	INIT_LIST_HEAD(&mgr->offlined_pages);
+ 	INIT_LIST_HEAD(&mgr->queued_pages);
  	mgr->default_page_size = default_page_size;
  	mgr->visible_size = io_size;
- 	mgr->visible_avail = io_size;
- 
 -- 
 2.43.0
 

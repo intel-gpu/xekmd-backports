@@ -120,4 +120,17 @@ static inline int backport_pci_resize_resource(struct pci_dev *dev,
 	backport_pci_resize_resource(dev, resno, size, exclude_bars)
 #endif /* BPM_PCI_RESIZE_RESOURCE_VF_BARS_NOT_PRESENT */
 
+#ifdef BPM_PCIM_IOMAP_REGION_NOT_PRESENT
+static inline void __iomem *pcim_iomap_region(struct pci_dev *pdev, int bar, const char *name)
+{
+        int err;
+
+        err = pcim_iomap_regions(pdev, BIT(bar), name);
+        if (err)
+                return IOMEM_ERR_PTR(err);
+
+        return pcim_iomap_table(pdev)[bar];
+}
+#endif
+
 #endif /* _BACKPORT_LINUX_PCI_H */

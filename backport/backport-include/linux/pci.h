@@ -6,6 +6,10 @@
 #include <asm/div64.h>
 #include_next <linux/pci.h>
 
+#ifndef PCI_IRQ_INTX
+#define PCI_IRQ_INTX PCI_IRQ_LEGACY
+#endif
+
 #ifdef BPM_PCI_IOV_VF_BAR_FUNCTIONS_NOT_PRESENT
 int pci_iov_vf_bar_set_size(struct pci_dev *dev, int resno, int size);
 u32 pci_iov_vf_bar_get_sizes(struct pci_dev *dev, int resno, int num_vfs);

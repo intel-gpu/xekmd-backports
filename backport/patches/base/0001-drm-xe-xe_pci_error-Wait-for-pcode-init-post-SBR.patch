@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Fri, 28 Aug 2026 17:01:06 +0530
+Subject: drm/xe/xe_pci_error: Wait for pcode init post SBR
+
+Pcode init complete indicates the device is ready, with device memory
+initialization complete. Wait for Pcode init before accessing the
+device post Secondary Bus Reset (SBR).
+
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+Reviewed-by: Anshuman Gupta <anshuman.gupta@intel.com>
+(backported from [rev1 drm/xe/xe_pci_error: Wait for pcode init post SBR])
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci_error.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci_error.c b/drivers/gpu/drm/xe/xe_pci_error.c
+index 79ce0c671..3e9c77f84 100644
+--- a/drivers/gpu/drm/xe/xe_pci_error.c
++++ b/drivers/gpu/drm/xe/xe_pci_error.c
+@@ -9,6 +9,7 @@
+ #include "xe_gt.h"
+ #include "xe_log.h"
+ #include "xe_pci.h"
++#include "xe_pcode.h"
+ #include "xe_pm.h"
+ #include "xe_printk.h"
+ #include "xe_ras.h"
+@@ -109,6 +110,10 @@ static pci_ers_result_t xe_pci_error_slot_reset(struct pci_dev *pdev)
+ 		return PCI_ERS_RESULT_DISCONNECT;
+ 	}
+ 
++	err = xe_pcode_probe_early(xe);
++	if (err)
++		return PCI_ERS_RESULT_DISCONNECT;
++
+ 	/*
+ 	 * Secondary Bus Reset causes all VRAM state to be lost along with
+ 	 * hardware state. As an initial step, re-probe the device to
+-- 
+2.43.0

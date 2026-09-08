@@ -1,0 +1,78 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Date: Wed, 10 Jun 2026 11:25:50 -0400
+Subject: drm/xe/lrc: fix spurious warning when reading context
+ timestamp
+
+Fixes the following warning that fires during timeout handling for a
+context running on the USM-reserved copy engine:
+
+  xe 0000:03:00.0: [drm] Tile0: GT0: Unexpected engine class:instance 3:8 for utilization
+  WARNING: at engine_id_to_hwe+0x88/0xc0 [xe]
+    xe_lrc_context_timestamp+0x61/0xb0 [xe]
+    guc_exec_queue_timedout_job+0x713/0x1020 [xe]
+
+class:instance 3:8 is XE_ENGINE_CLASS_COPY on the highest BCS instance,
+which xe_hw_engine.c reserves for USM (gt->usm.reserved_bcs_instance) and
+on which the migrate engine runs kernel contexts. When such a context's
+utilization is read - e.g. from the TDR path - engine_id_to_hwe()
+rejected it because xe_hw_engine_is_reserved() is true, firing WARN_ONCE
+and returning NULL, which made the timestamp read silently fall back to
+stale data.
+
+The reserved-engine guard was added defensively with the original WA BB
+utilization support and simply overlooked that the migrate engine is a
+valid, present engine whose CTX_TIMESTAMP can legitimately be read.
+
+Allow the USM-reserved copy engine specifically (xe_gt_is_usm_hwe()),
+while still rejecting the other reserved cases (GSCCS / XE_ENGINE_CLASS_
+OTHER and ccs_mode-disabled compute engines), which would indeed be
+unexpected on this path. The dynamic engine resolution via the ENGINE_ID
+stashed in the PPHWSP by the WA BB is kept intact, so utilization for
+load-balanced/virtual exec queues still resolves the engine the context
+is actually running on.
+
+Cc: Matthew Auld <matthew.auld@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Sanjay Yadav <sanjay.kumar.yadav@intel.com>
+Cc: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Assisted-by: GitHub-Copilot:claude-sonnet-4.6
+Assisted-by: GitHub-Copilot:claude-opus-4.8
+Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Link: https://patch.msgid.link/20260610152548.404575-4-rodrigo.vivi@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(backported from commit 0cfa716f19c046b2862eb758200965c5b77b4dce drm-tip)
+Signed-off-by:  Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_lrc.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index bb530d029..0f799ab62 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -2629,6 +2629,12 @@ void xe_lrc_snapshot_free(struct xe_lrc_snapshot *snapshot)
+ 	kfree(snapshot);
+ }
+ 
++static bool engine_valid_for_utilization(struct xe_gt *gt, struct xe_hw_engine *hwe)
++{
++	/* The USM-reserved copy engine runs kernel migrate contexts queried here */
++	return hwe && (!xe_hw_engine_is_reserved(hwe) || xe_gt_is_usm_hwe(gt, hwe));
++}
++
+ static int get_ctx_timestamp(struct xe_lrc *lrc, u32 engine_id, u64 *reg_ctx_ts)
+ {
+ 	u16 class = REG_FIELD_GET(ENGINE_CLASS_ID, engine_id);
+@@ -2637,7 +2643,7 @@ static int get_ctx_timestamp(struct xe_lrc *lrc, u32 engine_id, u64 *reg_ctx_ts)
+ 	u64 val;
+ 
+ 	hwe = xe_gt_hw_engine(lrc->gt, class, instance, false);
+-	if (xe_gt_WARN_ONCE(lrc->gt, !hwe || xe_hw_engine_is_reserved(hwe),
++	if (xe_gt_WARN_ONCE(lrc->gt, !engine_valid_for_utilization(lrc->gt, hwe),
+ 			    "Unexpected engine class:instance %d:%d for context utilization\n",
+ 			    class, instance))
+ 		return -1;
+-- 
+2.43.0
+

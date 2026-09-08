@@ -2629,6 +2629,12 @@ void xe_lrc_snapshot_free(struct xe_lrc_snapshot *snapshot)
 	kfree(snapshot);
 }
 
+static bool engine_valid_for_utilization(struct xe_gt *gt, struct xe_hw_engine *hwe)
+{
+	/* The USM-reserved copy engine runs kernel migrate contexts queried here */
+	return hwe && (!xe_hw_engine_is_reserved(hwe) || xe_gt_is_usm_hwe(gt, hwe));
+}
+
 static int get_ctx_timestamp(struct xe_lrc *lrc, u32 engine_id, u64 *reg_ctx_ts)
 {
 	u16 class = REG_FIELD_GET(ENGINE_CLASS_ID, engine_id);
@@ -2637,7 +2643,7 @@ static int get_ctx_timestamp(struct xe_lrc *lrc, u32 engine_id, u64 *reg_ctx_ts)
 	u64 val;
 
 	hwe = xe_gt_hw_engine(lrc->gt, class, instance, false);
-	if (xe_gt_WARN_ONCE(lrc->gt, !hwe || xe_hw_engine_is_reserved(hwe),
+	if (xe_gt_WARN_ONCE(lrc->gt, !engine_valid_for_utilization(lrc->gt, hwe),
 			    "Unexpected engine class:instance %d:%d for context utilization\n",
 			    class, instance))
 		return -1;

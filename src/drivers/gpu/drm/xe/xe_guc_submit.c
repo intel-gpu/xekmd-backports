@@ -1585,7 +1585,7 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
 	struct xe_device *xe = guc_to_xe(guc);
 	int err = -ETIME;
 	pid_t pid = -1;
-	bool wedged = false, skip_timeout_check;
+	bool wedged = false, wedge_device = false, skip_timeout_check;
 
 	xe_gt_assert(guc_to_gt(guc), !exec_queue_destroyed(q));
 
@@ -1640,8 +1640,14 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
 	if (!skip_timeout_check && !check_timeout(q, job))
 		goto rearm;
 
+	/*
+	 * Killed queues must not newly wedge the device, but preserve an
+	 * already-wedged state to avoid warning on teardown timeouts.
+	 */
 	if (!exec_queue_killed(q))
 		wedged = guc_submit_hint_wedged(exec_queue_to_guc(q));
+	else
+		wedged = xe_device_wedged(xe);
 
 	set_exec_queue_banned(q);
 
@@ -1731,7 +1737,7 @@ trigger_reset:
 			}
 			if (q->flags & EXEC_QUEUE_FLAG_KERNEL) {
 				xe_gt_WARN(q->gt, true, "Kernel-submitted job timed out\n");
-				xe_device_declare_wedged(gt_to_xe(q->gt));
+				wedge_device = true;
 			}
 		} else if (q->flags & EXEC_QUEUE_FLAG_VM && !exec_queue_killed(q)) {
 			xe_gt_WARN(q->gt, true, "VM job timed out on non-killed execqueue\n");
@@ -1750,6 +1756,9 @@ trigger_reset:
 		xe_sched_submission_start(sched);
 		xe_guc_exec_queue_trigger_cleanup(q);
 	}
+
+	if (wedge_device)
+		xe_device_declare_wedged(gt_to_xe(q->gt));
 
 	/*
 	 * We want the job added back to the pending list so it gets freed; this

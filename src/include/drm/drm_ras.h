@@ -104,7 +104,7 @@ struct drm_ras_node {
 
 struct drm_device;
 
-#if IS_ENABLED(CONFIG_DRM_RAS)
+#if IS_ENABLED(CPTCFG_DRM_RAS)
 int drm_ras_node_register(struct drm_ras_node *node);
 void drm_ras_node_unregister(struct drm_ras_node *node);
 int drm_ras_nl_error_event(struct drm_ras_node *node, u32 error_id, const char *error_name,

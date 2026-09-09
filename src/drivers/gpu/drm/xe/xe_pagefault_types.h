@@ -9,6 +9,7 @@
 #include <linux/workqueue.h>
 
 struct xe_gt;
+struct xe_device;
 struct xe_pagefault;
 
 /** enum xe_pagefault_access_type - Xe page fault access type */
@@ -118,6 +119,8 @@ struct xe_pagefault {
  * queue to absorb the device’s worst-case number of outstanding faults.
  */
 struct xe_pagefault_queue {
+	/** @xe: Xe device owning this page-fault queue */
+	struct xe_device *xe;
 	/**
 	 * @data: Data in queue containing struct xe_pagefault, protected by
 	 * @lock

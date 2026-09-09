@@ -6,6 +6,10 @@
 #include <asm/div64.h>
 #include_next <linux/pci.h>
 
+#ifndef PCI_IRQ_INTX
+#define PCI_IRQ_INTX PCI_IRQ_LEGACY
+#endif
+
 #ifdef BPM_PCI_IOV_VF_BAR_FUNCTIONS_NOT_PRESENT
 int pci_iov_vf_bar_set_size(struct pci_dev *dev, int resno, int size);
 u32 pci_iov_vf_bar_get_sizes(struct pci_dev *dev, int resno, int num_vfs);
@@ -115,5 +119,18 @@ static inline int backport_pci_resize_resource(struct pci_dev *dev,
 #define pci_resize_resource(dev, resno, size, exclude_bars) \
 	backport_pci_resize_resource(dev, resno, size, exclude_bars)
 #endif /* BPM_PCI_RESIZE_RESOURCE_VF_BARS_NOT_PRESENT */
+
+#ifdef BPM_PCIM_IOMAP_REGION_NOT_PRESENT
+static inline void __iomem *pcim_iomap_region(struct pci_dev *pdev, int bar, const char *name)
+{
+        int err;
+
+        err = pcim_iomap_regions(pdev, BIT(bar), name);
+        if (err)
+                return IOMEM_ERR_PTR(err);
+
+        return pcim_iomap_table(pdev)[bar];
+}
+#endif
 
 #endif /* _BACKPORT_LINUX_PCI_H */

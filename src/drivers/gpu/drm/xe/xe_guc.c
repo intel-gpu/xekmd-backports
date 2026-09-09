@@ -978,6 +978,11 @@ int xe_guc_reset(struct xe_guc *guc)
 	u32 guc_status, gdrst;
 	int ret;
 
+	if (xe_device_is_in_reset(gt_to_xe(gt))) {
+		xe_gt_dbg(gt, "Skipping GuC reset, device is in reset\n");
+		return 0;
+	}
+
 	xe_force_wake_assert_held(gt_to_fw(gt), XE_FW_GT);
 
 	if (IS_SRIOV_VF(gt_to_xe(gt)))

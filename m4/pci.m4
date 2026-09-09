@@ -56,3 +56,21 @@ AC_DEFUN([AC_DRIVER_MANAGED_DMA_NOT_PRESENT], [
 		])
 	])
 ])
+
+dnl # v6.12-d140f80f6035
+dnl # PCI: Deprecate pcim_iomap_regions() in favor of pcim_iomap_region()
+dnl #
+AC_DEFUN([AC_PCIM_IOMAP_REGION_NOT_PRESENT], [
+       AC_KERNEL_DO_BACKGROUND([
+               AC_KERNEL_TRY_COMPILE([
+                       #include <linux/pci.h>
+               ], [
+                       struct pci_dev *pdev = NULL;
+                       pcim_iomap_region(pdev, 0, "test");
+               ], [
+               ], [
+                       AC_DEFINE([BPM_PCIM_IOMAP_REGION_NOT_PRESENT], 1,
+                               [pcim_iomap_region() is not available])
+               ])
+       ])
+])

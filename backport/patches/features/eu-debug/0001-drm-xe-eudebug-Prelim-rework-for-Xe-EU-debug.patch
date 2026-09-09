@@ -2976,7 +2976,10 @@ index aba376c59..61989c421 100644
 +		prelim_xe_eudebug_pagefault_finalize(eudbg_pf, !!err);
  
  		if (time_after(jiffies, threshold)) {
- 			queue_work(gt_to_xe(pf.gt)->usm.pf_wq, w);
+ 			queue_work(xe->usm.pf_wq, w);
+ 			break;
+ 		}
+ 	}
 diff --git a/drivers/gpu/drm/xe/xe_sync.c b/drivers/gpu/drm/xe/xe_sync.c
 index e715ee0cc..cc7261ee4 100644
 --- a/drivers/gpu/drm/xe/xe_sync.c

@@ -1,0 +1,33 @@
+From c44349990f7c7ce7d9ab7c90234d1e22ae1202af Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Thu, 23 Jul 2026 14:07:04 +0530
+Subject: [PATCH] drm/xe/xe_late_bind_fw: Enable late binding support for
+ CRI
+
+Enable late binding support for CRI
+
+Assisted-by: GitHub-Copilot:GPT-5.3
+Cc: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+(backported from [v4] drm/xe/xe_late_bind_fw: Enable late binding support for CRI)
+Signed-off-by: Rachapalli Bandi Jagadeesh jagadeesh.rachapalli.bandi@intel.com
+---
+ drivers/gpu/drm/xe/xe_pci.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index bc4517e79..bbb743c6c 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -482,6 +482,8 @@ static const struct xe_device_desc cri_desc = {
+ 	.has_soc_remapper_telem = true,
+ 	.has_sriov = true,
+ 	.has_sysctrl = true,
++	.late_bind_mask = BIT(XE_LB_FW_FAN_CONTROL) |
++			  BIT(XE_LB_FW_OCODE),
+ 	.max_gt_per_tile = 2,
+ 	MULTI_LRC_MASK,
+ 	.require_force_probe = true,
+-- 
+2.43.0
+

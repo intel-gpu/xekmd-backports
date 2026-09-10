@@ -1,0 +1,58 @@
+From f91ed2fe7ef3ba584fb9e969a4f190792bf079f2 Mon Sep 17 00:00:00 2001
+From: "Michael J. Ruhl" <michael.j.ruhl@intel.com>
+Date: Fri, 4 Sep 2026 11:25:08 -0700
+Subject: [PATCH] drm/xe/vsec: Refactor platform check
+
+For debugfs, residencies and pcode_info are available on the BMG and
+CRI (!SRIOV_VF) platforms.
+
+Refactor to have one code path for adding the debugfs entries.
+
+Reviewed-by: Karthik Poosa <karthik.poosa@intel.com>
+Signed-off-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
+(backported from [v8] drm/xe/vsec: Refactor platform check)
+Signed-off-by: Rachapalli Bandi Jagadeesh jagadeesh.rachapalli.bandi@intel.com
+---
+ drivers/gpu/drm/xe/xe_debugfs.c | 19 +++++++++----------
+ 1 file changed, 9 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
+index 578f124d0..24e71e0c6 100644
+--- a/drivers/gpu/drm/xe/xe_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_debugfs.c
+@@ -667,23 +667,22 @@ void xe_debugfs_register(struct xe_device *xe)
+ 				 ARRAY_SIZE(debugfs_list),
+ 				 root, minor);
+ 
+-	if (xe->info.platform == XE_BATTLEMAGE && !IS_SRIOV_VF(xe)) {
+-		drm_debugfs_create_files(debugfs_residencies,
+-					 ARRAY_SIZE(debugfs_residencies),
+-					 root, minor);
+-	}
+-
+ 	/*
+-	 * Pcode version read from PMT is currently only supported on CRI and BMG platforms in PF
+-	 * mode, as both platforms support the necessary telemetry read mechanism and have a fixed
+-	 * PUNIT_VERSION_OFFSET.
++	 * Residencies and Pcode version read from PMT is currently only supported on CRI and BMG
++	 * platforms in PF mode.  Both platforms support the necessary telemetry read mechanism
++	 * and have a fixed offsets for the required data.
+ 	 * Attempting this access on other platforms must be verified before enabling support.
+ 	 */
+ 	if (!IS_SRIOV_VF(xe) &&
+-	    (xe->info.platform == XE_CRESCENTISLAND || xe->info.platform == XE_BATTLEMAGE))
++	    (xe->info.platform == XE_CRESCENTISLAND || xe->info.platform == XE_BATTLEMAGE)) {
++		drm_debugfs_create_files(debugfs_residencies,
++					 ARRAY_SIZE(debugfs_residencies),
++					 root, minor);
++
+ 		drm_debugfs_create_files(pcode_info_debugfs,
+ 					 ARRAY_SIZE(pcode_info_debugfs),
+ 					 root, minor);
++	}
+ 
+ 	debugfs_create_file("forcewake_all", 0400, root, xe,
+ 			    &forcewake_all_fops);
+-- 
+2.43.0
+

@@ -45,7 +45,6 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_pagefault.c | 42 +++++++++++++++++++++++++++----
  1 file changed, 37 insertions(+), 5 deletions(-)
-
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
 index dd3c068e1..f12636fb7 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
@@ -59,7 +58,7 @@ index dd3c068e1..f12636fb7 100644
  /**
   * DOC: Xe page faults
   *
-@@ -167,12 +167,15 @@ static struct xe_vm *xe_pagefault_asid_to_vm(struct xe_device *xe, u32 asid)
+@@ -172,12 +172,15 @@ static struct xe_vm *xe_pagefault_asid_to_vm(struct xe_device *xe, u32 asid)
  	return vm;
  }
  
@@ -132,7 +131,7 @@ index dd3c068e1..f12636fb7 100644
  	xe_vm_put(vm);
  
  	return err;
-@@ -299,12 +328,13 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -293,12 +318,13 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  	threshold = jiffies + msecs_to_jiffies(USM_QUEUE_MAX_RUNTIME_MS);
  
  	while (xe_pagefault_queue_pop(pf_queue, &pf)) {
@@ -154,8 +153,10 @@ index dd3c068e1..f12636fb7 100644
 +		xe_eudebug_pagefault_finalize(eudbg_pf, !!err);
 +
  		if (time_after(jiffies, threshold)) {
- 			queue_work(gt_to_xe(pf.gt)->usm.pf_wq, w);
+ 			queue_work(xe->usm.pf_wq, w);
  			break;
+ 		}
+ 	}
 -- 
 2.43.0
 

@@ -156,10 +156,8 @@ xe-y += xe_bb.o \
 	xe_wait_user_fence.o \
 	xe_wopcm.o
 
-ifneq ($(wildcard $(KLIB_BUILD)/include/linux/designware_i2c.h),)
 xe-$(CONFIG_I2C)	+= xe_i2c.o \
 			   xe_amc.o
-endif
 xe-$(CPTCFG_PRELIM_DRM_XE_EUDEBUG) += prelim/xe_eudebug.o \
 	prelim/xe_debug_metadata.o
 xe-$(CPTCFG_DRM_GPUSVM) += xe_svm.o

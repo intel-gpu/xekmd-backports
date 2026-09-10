@@ -30,4 +30,9 @@
 #undef WQ_PERCPU
 #define WQ_PERCPU 0
 
+#ifndef from_work
+#define from_work(var, callback_work, work_fieldname)   \
+        container_of(callback_work, typeof(*var), work_fieldname)
+#endif
+
 #endif /* __BACKPORT_LINUX_WORKQUEUE_H */

@@ -1,0 +1,73 @@
+From cb92bff6ab8b1d639950b5b5fa97668d379ed9cd Mon Sep 17 00:00:00 2001
+From: "Michael J. Ruhl" <michael.j.ruhl@intel.com>
+Date: Fri, 4 Sep 2026 11:24:55 -0700
+Subject: [PATCH] platform/x86/intel/pmt: Do not remap when using callbacks
+
+A callback indicates that the parent driver is responsible for accessing
+the data area.  Creating a PMT memory remap is redundant.
+
+If a read_telem callback has been provided, do not create a remap.
+
+Signed-off-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
+(backported from [v8] platform/x86/intel/pmt: Do not remap when using callbacks)
+Signed-off-by: Rachapalli Bandi Jagadeesh jagadeesh.rachapalli.bandi@intel.com
+---
+ drivers/platform/x86/intel/pmt/class.c | 20 ++++++++++++--------
+ drivers/platform/x86/intel/pmt/class.h |  2 +-
+ 2 files changed, 13 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/platform/x86/intel/pmt/class.c b/drivers/platform/x86/intel/pmt/class.c
+index 3b2a8e693..282bed624 100644
+--- a/drivers/platform/x86/intel/pmt/class.c
++++ b/drivers/platform/x86/intel/pmt/class.c
+@@ -296,7 +296,6 @@ static int intel_pmt_dev_register(struct intel_pmt_entry *entry,
+ 				  struct device *parent)
+ {
+ 	struct intel_vsec_device *ivdev = dev_to_ivdev(parent);
+-	struct resource res = {0};
+ 	struct device *dev;
+ 	int ret;
+ 
+@@ -326,14 +325,19 @@ static int intel_pmt_dev_register(struct intel_pmt_entry *entry,
+ 	if (!entry->size)
+ 		return 0;
+ 
+-	res.start = entry->base_addr;
+-	res.end = res.start + entry->size - 1;
+-	res.flags = IORESOURCE_MEM;
++	/*
++	 * The read_telem callback is responsible for this mapping, and may have
++	 * different requirements for use. If the callback is present do not
++	 * create the map.
++	 */
++	if (!(entry->cb && entry->cb->read_telem)) {
++		struct resource res = DEFINE_RES_MEM(entry->base_addr, entry->size);
+ 
+-	entry->base = devm_ioremap_resource(dev, &res);
+-	if (IS_ERR(entry->base)) {
+-		ret = PTR_ERR(entry->base);
+-		goto fail_ioremap;
++		entry->base = devm_ioremap_resource(dev, &res);
++		if (IS_ERR(entry->base)) {
++			ret = PTR_ERR(entry->base);
++			goto fail_ioremap;
++		}
+ 	}
+ 
+ 	sysfs_bin_attr_init(&entry->pmt_bin_attr);
+diff --git a/drivers/platform/x86/intel/pmt/class.h b/drivers/platform/x86/intel/pmt/class.h
+index 1d66681d1..e2111e876 100644
+--- a/drivers/platform/x86/intel/pmt/class.h
++++ b/drivers/platform/x86/intel/pmt/class.h
+@@ -46,7 +46,7 @@ struct intel_pmt_entry {
+ 	const struct attribute_group *attr_grp;
+ 	struct kobject		*kobj;
+ 	void __iomem		*disc_table;
+-	void __iomem		*base;
++	void __iomem		*base;  /* unused if cb->read_telem is in use */
+ 	struct pmt_callbacks	*cb;
+ 	unsigned long		base_addr;
+ 	size_t			size;
+-- 
+2.43.0
+

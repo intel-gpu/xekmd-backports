@@ -1,0 +1,90 @@
+From 33a9ed635716a9774bad76a592ef2339a070bc57 Mon Sep 17 00:00:00 2001
+From: "Michael J. Ruhl" <michael.j.ruhl@intel.com>
+Date: Fri, 4 Sep 2026 11:24:59 -0700
+Subject: [PATCH] drm/xe/vsec: Add DOC text for VSEC
+
+Add the necessary files and text to use the DOC system.
+
+Signed-off-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
+(backported from [v8] drm/xe/vsec: Add DOC text for VSEC)
+Signed-off-by: Rachapalli Bandi Jagadeesh jagadeesh.rachapalli.bandi@intel.com
+---
+ Documentation/gpu/xe/index.rst   |  1 +
+ Documentation/gpu/xe/xe_vsec.rst | 14 ++++++++++++++
+ drivers/gpu/drm/xe/xe_vsec.c     | 23 +++++++++++++++++++++++
+ 3 files changed, 38 insertions(+)
+ create mode 100644 Documentation/gpu/xe/xe_vsec.rst
+
+diff --git a/Documentation/gpu/xe/index.rst b/Documentation/gpu/xe/index.rst
+index fde796d1f..a05f65142 100644
+--- a/Documentation/gpu/xe/index.rst
++++ b/Documentation/gpu/xe/index.rst
+@@ -30,3 +30,4 @@ DG2, etc is provided to prototype the driver.
+    xe-drm-usage-stats.rst
+    xe_configfs
+    xe_sigid
++   xe_vsec
+diff --git a/Documentation/gpu/xe/xe_vsec.rst b/Documentation/gpu/xe/xe_vsec.rst
+new file mode 100644
+index 000000000..1a8754848
+--- /dev/null
++++ b/Documentation/gpu/xe/xe_vsec.rst
+@@ -0,0 +1,14 @@
++.. SPDX-License-Identifier: (GPL-2.0+ OR MIT)
++
++=====
++VSEC
++=====
++
++.. kernel-doc:: drivers/gpu/drm/xe/xe_vsec.c
++   :doc: VSEC
++
++Internal API
++============
++
++.. kernel-doc:: drivers/gpu/drm/xe/xe_vsec.c
++   :internal:
+diff --git a/drivers/gpu/drm/xe/xe_vsec.c b/drivers/gpu/drm/xe/xe_vsec.c
+index 468a22137..c0252f5b5 100644
+--- a/drivers/gpu/drm/xe/xe_vsec.c
++++ b/drivers/gpu/drm/xe/xe_vsec.c
+@@ -19,6 +19,17 @@
+ 
+ #include "regs/xe_pmt.h"
+ 
++/**
++ * DOC: VSEC
++ *
++ * Some GPUs support the PMT feature.  For those that do, this API provides
++ * probe, discovery and usage (control and access) for GPUs that have PMT.
++ *
++ * PMT is usually accessed through a PCI function.  However, that is not always
++ * available, so the PMT intel_vsec_register() function can be used to setup up
++ * PMT usage.
++ */
++
+ /* PMT GUID value for BMG devices.  NOTE: this is NOT a PCI id */
+ #define BMG_DEVICE_ID 0xE2F8
+ 
+@@ -140,6 +151,18 @@ static int xe_guid_decode(u32 guid, int *index, u32 *offset)
+ 	return 0;
+ }
+ 
++/**
++ * xe_pmt_telem_read - Given a device and a PMT GUID, read data into a buffer
++ * @dev: valid Xe device
++ * @guid: PMT GUID (from the PMT discovery struct)
++ * @data: buffer to place data in
++ * @user_offset: a user offset relative to the beginning of the data to read
++ * @count: bytes to read
++ *
++ * Return:
++ * * -EINVAL for VF and PMT WATCHER requests
++ * * count   number of bytes read on success
++ */
+ int xe_pmt_telem_read(struct device *dev, u32 guid, u64 *data, loff_t user_offset,
+ 		      u32 count)
+ {
+-- 
+2.43.0
+

@@ -42,6 +42,39 @@ $ sudo dnf install automake dkms make rpm-build rpmdevtools bison flex
 
 Each project is tagged consistently, so when pulling these repos, pull the same tag.
 
+## Module Parameters
+
+### DMA-VRAM-PINNING
+The dmem cgroup controller used to bound pinned device memory was introducted in KV6.14 and may not be available on few older OSV kernels. Without it there is no way to stop a single unprivileged client from pinning VRAM (e.g. via dma-buf) until the region is exhausted, starving every other client — a denial-of-serv
+
+With the current model, a simple overall per-region limit is put which will cap the amount of VRAM that may be pinned through dma-buf as a percentage of each region's size
+
+#### xe module parameter: `pin_vram_percent`
+Caps how much of each VRAM region may be **pinned via dma-buf**, so that a
+single importer cannot pin an entire region and starve other users. A pin that
+would exceed the limit is rejected with `-ENOSPC`.
+
+#### Values
+- Percentage (`0`-`100`) of each VRAM region that may be dma-buf pinned.
+- `0` means unlimited (limit disabled).
+- **Driver default: `50`** (at most half of each region).
+
+#### How to set it
+Set it at module load time:
+
+```sh
+modprobe xe pin_vram_percent=25   # allow up to 25% of each region
+modprobe xe pin_vram_percent=0    # unlimited
+```
+
+Read the current value:
+
+```sh
+cat /sys/module/xe/parameters/pin_vram_percent
+```
+
+The limit is applied once when the driver initializes; reload the module to change it.
+
 ## Package creation
 
 ### Dynamic Kernel Module Support(DKMS)
@@ -135,3 +168,4 @@ By default, "<headers-path>" is set as standard headers path of currently booted
 
 
 Note: For adding new M4 Files, please follow [Rules](src/docs/README_rules.md) Document.
+

@@ -1,0 +1,60 @@
+From da0a3c22aacce423dd1f4464d3f025664b5b2e3b Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Thu, 23 Jul 2026 14:07:01 +0530
+Subject: [PATCH] drm/xe/xe_late_bind_fw: Fix firmware leak on missing
+ manifest entry
+
+Release firmware when the "LTES" manifest entry is not found in the
+firmware header.
+
+Fixes: efa29317a553 ("drm/xe/xe_late_bind_fw: Extract and print version info")
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+(backported from [v4] drm/xe/xe_late_bind_fw: Fix firmware leak on missing manifest entry)
+Signed-off-by: Rachapalli Bandi Jagadeesh jagadeesh.rachapalli.bandi@intel.com
+---
+ drivers/gpu/drm/xe/xe_late_bind_fw.c | 14 ++++++++------
+ 1 file changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+index 768442ca7..1529a1de4 100644
+--- a/drivers/gpu/drm/xe/xe_late_bind_fw.c
++++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+@@ -335,19 +335,19 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
+ 	if (fw->size > XE_LB_MAX_PAYLOAD_SIZE) {
+ 		drm_err(&xe->drm, "Firmware %s size %zu is larger than max pay load size %u\n",
+ 			lb_fw->blob_path, fw->size, XE_LB_MAX_PAYLOAD_SIZE);
+-		release_firmware(fw);
+-		return -ENODATA;
++		ret = -ENODATA;
++		goto release_fw;
+ 	}
+ 
+ 	ret = parse_lb_layout(lb_fw, fw->data, fw->size, "LTES");
+ 	if (ret)
+-		return ret;
++		goto release_fw;
+ 
+ 	lb_fw->payload_size = fw->size;
+ 	lb_fw->payload = drmm_kzalloc(&xe->drm, lb_fw->payload_size, GFP_KERNEL);
+ 	if (!lb_fw->payload) {
+-		release_firmware(fw);
+-		return -ENOMEM;
++		ret = -ENOMEM;
++		goto release_fw;
+ 	}
+ 
+ 	drm_info(&xe->drm, "Using %s firmware from %s version %u.%u.%u.%u\n",
+@@ -359,7 +359,9 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
+ 	release_firmware(fw);
+ 	INIT_WORK(&lb_fw->work, xe_late_bind_work);
+ 
+-	return 0;
++release_fw:
++	release_firmware(fw);
++	return ret;
+ }
+ 
+ static int xe_late_bind_fw_init(struct xe_late_bind *late_bind)
+-- 
+2.43.0
+

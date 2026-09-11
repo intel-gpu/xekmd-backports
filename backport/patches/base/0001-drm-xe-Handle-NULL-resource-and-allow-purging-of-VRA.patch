@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Date: Thu, 3 Sep 2026 21:45:57 +0530
+Subject: drm/xe: Handle NULL resource and allow purging of VRAM pages
+
+Add NULL checks for the buffer object's resource pointer in
+xe_bo_is_vram() and xe_bo_is_stolen() to prevent potential NULL
+pointer dereferences when checking memory location during page
+offlining.
+
+Additionally, remove the `!ttm_bo->ttm` check from
+xe_ttm_bo_purge(). This restriction is stripped away to
+explicitly allow the driver to purge VRAM pages during the
+memory page offline sequence.
+
+v2(Sashiko):
+- Split export and this patch also Check NULL res in
+  xe_bo_is_vram() and xe_bo_is_stolen()
+
+Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Cc: Andi Shyti <andi.shyti@linux.intel.com>
+Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: httips://patch.msgid.link/20260903161553.528932-21-tejas.upadhyay@intel.com
+(cherry-picked from 529f45af3e65e17448c6b402a4dce2245fb2df08 drm-tip)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_bo.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
+index 8f93e09e51bb..d30a8411d2a3 100644
+--- a/drivers/gpu/drm/xe/xe_bo.c
++++ b/drivers/gpu/drm/xe/xe_bo.c
+@@ -104,13 +104,16 @@ static bool resource_is_vram(struct ttm_resource *res)
+ 
+ bool xe_bo_is_vram(struct xe_bo *bo)
+ {
+-	return resource_is_vram(bo->ttm.resource) ||
+-		resource_is_stolen_vram(xe_bo_device(bo), bo->ttm.resource);
++	struct ttm_resource *res = bo->ttm.resource;
++
++	return  res && (resource_is_vram(res) || resource_is_stolen_vram(xe_bo_device(bo), res));
+ }
+ 
+ bool xe_bo_is_stolen(struct xe_bo *bo)
+ {
+-	return bo->ttm.resource->mem_type == XE_PL_STOLEN;
++	struct ttm_resource *res = bo->ttm.resource;
++
++	return res && res->mem_type == XE_PL_STOLEN;
+ }
+ 
+ /**
+@@ -929,9 +932,6 @@ int xe_ttm_bo_purge(struct ttm_buffer_object *ttm_bo, struct ttm_operation_ctx *
+ 
+ 	xe_bo_assert_held(bo);
+ 
+-	if (!ttm_bo->ttm)
+-		return 0;
+-
+ 	if (!xe_bo_madv_is_dontneed(bo))
+ 		return 0;
+ 
+-- 
+2.43.0
+

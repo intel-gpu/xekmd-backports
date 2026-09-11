@@ -1,0 +1,242 @@
+From a2a2a86fb82f027df4d8d33c51299347e6941b41 Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Sun, 6 Sep 2026 22:56:09 +0530
+Subject: drm/xe/cper: Prepare CPER record
+
+Initialize Intel-specific CPER metadata and construct
+CPER record for Intel GPU hardware errors.
+
+v2:
+ - Encode cper_record_header timestamp in BCD format (sashiko)
+ - Guard against NULL THIS_MODULE->srcversion (sashiko)
+
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+backported from https://patchwork.freedesktop.org/series/169692/#rev3
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_regs.h |   2 +
+ drivers/gpu/drm/xe/xe_cper.c      | 171 ++++++++++++++++++++++++++++++
+ 2 files changed, 173 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_regs.h b/drivers/gpu/drm/xe/regs/xe_regs.h
+index ef4746b7b..580c3dad8 100644
+--- a/drivers/gpu/drm/xe/regs/xe_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_regs.h
+@@ -30,6 +30,8 @@
+ #define XEHP_MTCFG_ADDR				XE_REG(0x101800)
+ #define   TILE_COUNT				REG_GENMASK(15, 8)
+ 
++#define CRI_FRU_ID				XE_REG(0x102008)
++
+ #define GGC					XE_REG(0x108040)
+ #define   GMS_MASK				REG_GENMASK(15, 8)
+ #define   GGMS_MASK				REG_GENMASK(7, 6)
+diff --git a/drivers/gpu/drm/xe/xe_cper.c b/drivers/gpu/drm/xe/xe_cper.c
+index f04a91223..31ca53ce1 100644
+--- a/drivers/gpu/drm/xe/xe_cper.c
++++ b/drivers/gpu/drm/xe/xe_cper.c
+@@ -3,16 +3,176 @@
+  * Copyright © 2026 Intel Corporation
+  */
+ 
++#include <linux/bcd.h>
+ #include <linux/pci.h>
+ 
+ #include <drm/drm_print.h>
+ 
++#include "regs/xe_regs.h"
+ #include "xe_cper.h"
++#include "xe_cper_types.h"
+ #include "xe_device.h"
++#include "xe_mmio.h"
+ #include "xe_printk.h"
+ #include "xe_ras.h"
+ #include "xe_ras_types.h"
+ 
++static const struct xe_platform_id_entry xe_platform_ids[] = {
++	/* 0x674C  platform/8086:674c */
++	{ 0x674C, GUID_INIT(0x9046afe5, 0x9041, 0x5124,
++			    0x86, 0x14, 0x92, 0x55, 0x0d, 0x9e, 0x9d, 0xa6) },
++};
++
++static const guid_t *lookup_platform_id(const struct pci_dev *pdev)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(xe_platform_ids); i++)
++		if (xe_platform_ids[i].device_id == pdev->device)
++			return &xe_platform_ids[i].platform_id;
++	return NULL;
++}
++
++static u64 cper_timestamp_now(void)
++{
++	struct tm tm;
++	u64 ts = 0;
++	u8 *p = (u8 *)&ts;
++	int year;
++
++	time64_to_tm(ktime_get_real_seconds(), 0, &tm);
++
++	year = tm.tm_year + 1900;
++
++	p[0] = bin2bcd(tm.tm_sec);
++	p[1] = bin2bcd(tm.tm_min);
++	p[2] = bin2bcd(tm.tm_hour);
++	p[3] = 0x1; /* precise time */
++	p[4] = bin2bcd(tm.tm_mday);
++	p[5] = bin2bcd(tm.tm_mon + 1);
++	p[6] = bin2bcd(year % 100);
++	p[7] = bin2bcd(year / 100);
++
++	return ts;
++}
++
++static guid_t read_fru_id(struct xe_device *xe)
++{
++	struct xe_mmio *mmio = xe_root_tile_mmio(xe);
++	guid_t guid = GUID_INIT(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
++	u64 val;
++
++	val = xe_mmio_read64_2x32(mmio, CRI_FRU_ID);
++
++	memcpy(&guid, &val, sizeof(val));
++
++	return guid;
++}
++
++static void fill_fw_id(struct xe_device *xe, struct xe_cper_sec_intel_err_hdr *ihdr)
++{
++	/* TODO: populate ihdr->fw_id from firmware version queries */
++}
++
++static void xe_cper_init_intel_err_hdr(struct xe_device *xe, const u8 location[12],
++				       u64 first_timestamp, u32 sig_id, u32 error_count,
++				       struct xe_cper_sec_intel_err_hdr *ihdr)
++{
++	if (location) {
++		memcpy(&ihdr->error_class, location, sizeof(ihdr->error_class));
++		ihdr->validation_bits |= XE_CPER_VALID_LOCATION;
++	}
++
++	if (first_timestamp) {
++		ihdr->first_timestamp = first_timestamp;
++		ihdr->validation_bits |= XE_CPER_VALID_FIRST_TIMESTAMP;
++	}
++
++	if (sig_id != U32_MAX) {
++		ihdr->sig_id = sig_id;
++		ihdr->validation_bits |= XE_CPER_VALID_SIG_ID;
++	}
++
++	ihdr->error_count = error_count;
++
++	strscpy(ihdr->pci_bdf, pci_name(to_pci_dev(xe->drm.dev)), sizeof(ihdr->pci_bdf));
++	ihdr->validation_bits |= XE_CPER_VALID_PCI_BDF;
++
++#ifdef MODULE
++	if (THIS_MODULE->srcversion) {
++		strscpy(ihdr->drv_version, THIS_MODULE->srcversion, sizeof(ihdr->drv_version));
++		ihdr->validation_bits |= XE_CPER_VALID_DRV_VERSION;
++	}
++#endif
++
++	fill_fw_id(xe, ihdr);
++}
++
++static void xe_cper_record_emit(struct xe_device *xe, u8 severity,
++				guid_t *notification_type,
++				struct xe_cper_sec_intel_err_hdr *ihdr,
++				const void *einfo, u32 einfo_len)
++{
++	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
++	const guid_t *platform_id = lookup_platform_id(pdev);
++	u32 total_len = sizeof(struct xe_cper_nonstd_record) + einfo_len;
++	struct cper_section_descriptor *sdesc;
++	struct cper_record_header *rhdr;
++	struct xe_cper_nonstd_record *rec;
++
++	rec = kzalloc(total_len, GFP_KERNEL);
++	if (!rec)
++		return;
++
++	rhdr  = &rec->record_hdr;
++	sdesc = &rec->section_desc;
++
++	/* Assemble the CPER record header (UEFI Appendix N.2.1) */
++	memcpy(rhdr->signature, CPER_SIG_RECORD, CPER_SIG_SIZE);
++	rhdr->revision          = CPER_RECORD_REV;
++	rhdr->signature_end     = CPER_SIG_END;
++	rhdr->section_count     = 1;
++	rhdr->error_severity    = severity;
++	rhdr->validation_bits   = CPER_VALID_TIMESTAMP;
++	rhdr->record_length     = total_len;
++	rhdr->timestamp         = cper_timestamp_now();
++	if (platform_id) {
++		rhdr->platform_id      = *platform_id;
++		rhdr->validation_bits |= CPER_VALID_PLATFORM_ID;
++	}
++	rhdr->creator_id        = INTEL_CPER_CREATOR_XEKMD;
++	rhdr->notification_type = *notification_type;
++	rhdr->record_id         = cper_next_record_id();
++	rhdr->flags             = 0;
++
++	/* Assemble the section descriptor (UEFI Appendix N.2.2) */
++	sdesc->section_offset   = sizeof(struct cper_record_header) +
++				  sizeof(struct cper_section_descriptor);
++	sdesc->section_length   = sizeof(struct xe_cper_sec_intel_err_hdr) + einfo_len;
++	sdesc->revision         = CPER_RECORD_REV;
++	/*
++	 * Set validation_bits using CPER_SEC_VALID_FRU_ID / CPER_SEC_VALID_FRU_TEXT
++	 * when the corresponding fields are populated.
++	 */
++	sdesc->validation_bits  = 0;
++	sdesc->reserved         = 0;
++	sdesc->flags            = 0;
++	sdesc->section_type     = INTEL_CPER_SECTION_ACCEL_GENERIC;
++	sdesc->fru_id = read_fru_id(xe);
++	sdesc->validation_bits |= CPER_SEC_VALID_FRU_ID;
++	sdesc->section_severity = severity;
++
++	/* Copy the Intel-specific section header (updated with BDF/version) */
++	rec->intel_hdr = *ihdr;
++
++	/* Append optional variable-length error info */
++	if (einfo && einfo_len)
++		memcpy((u8 *)rec + sizeof(*rec), einfo, einfo_len);
++
++	/* TODO: Emit trace event */
++
++	kfree(rec);
++}
+ /**
+  * xe_emit_hardware_error_cper() - Emit a hardware error CPER record
+  * @pdev: PCI device associated with the Xe device
+@@ -30,6 +190,7 @@ void xe_emit_hardware_error_cper(struct pci_dev *pdev, int cper_sev, enum xe_sig
+ 	struct xe_device *xe = pdev_to_xe_device(pdev);
+ 	struct xe_ras_get_counter_response local_resp = {};
+ 	struct xe_ras_get_counter_response *counter_response = response;
++	struct xe_cper_sec_intel_err_hdr ihdr = {};
+ 
+ 	if (!xe)
+ 		return;
+@@ -48,5 +209,15 @@ void xe_emit_hardware_error_cper(struct pci_dev *pdev, int cper_sev, enum xe_sig
+ 		}
+ 	}
+ 
++	xe_cper_init_intel_err_hdr(xe,
++				   (const u8 *)counter,
++				   counter_response->timestamp,
++				   sigid,
++				   counter_response->value,
++				   &ihdr);
++
++	xe_cper_record_emit(xe, cper_sev, &INTEL_CPER_NOTIFY_GPU_ERROR,
++			    &ihdr, NULL, 0);
++
+ 	/* TODO */
+ }
+---
+-- 
+2.43.0
+

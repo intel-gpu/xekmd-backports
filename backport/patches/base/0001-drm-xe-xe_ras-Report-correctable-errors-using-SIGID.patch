@@ -1,0 +1,37 @@
+From 6b82b21b32a68e27bdb83f1d6095c4f99714676c Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Sun, 6 Sep 2026 22:56:16 +0530
+Subject: drm/xe/xe_ras: Report correctable errors using SIGID
+
+Use xe_log_* helper to report correctable errors.
+
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+Cc: Raag Jadav <raag.jadav@intel.com>
+backported from https://patchwork.freedesktop.org/series/169692/#rev3
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 4d4a66649..08913ded6 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -463,8 +463,11 @@ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
+ 		if (!xe_ras_counter_is_valid(xe, &errors[id]))
+ 			continue;
+ 
+-		xe_warn(xe, "[RAS]: %s %s detected\n",
+-			comp_to_str(component), sev_to_str(severity));
++		xe_log_from(xe, ras_sev_to_cper_sev(severity),
++			    ras_comp_to_hw_sigid(component),
++			    component,
++			    &errors[id], sizeof(errors[id]),
++			    "error detected\n");
+ 
+ 		/* Send event once per component */
+ 		if (sent & BIT(component))
+---
+-- 
+2.43.0
+

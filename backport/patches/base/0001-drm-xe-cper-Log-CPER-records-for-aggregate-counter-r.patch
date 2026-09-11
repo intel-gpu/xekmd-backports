@@ -1,0 +1,171 @@
+From b83fddbc8da233aa2afa0bacd76d311e9a21d86f Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Sun, 6 Sep 2026 22:56:12 +0530
+Subject: drm/xe/cper: Log CPER records for aggregate counter
+ retrival
+
+Log CPER records for aggregate counter retrieval from userspace
+when cper_on_query sysfs is enabled.
+
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+backported from https://patchwork.freedesktop.org/series/169692/#rev3
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_drm_ras_types.h |  3 +
+ drivers/gpu/drm/xe/xe_ras.c           | 91 ++++++++++++++++++++++++++-
+ 2 files changed, 93 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_drm_ras_types.h b/drivers/gpu/drm/xe/xe_drm_ras_types.h
+index 8d729ad6a..419e42ef8 100644
+--- a/drivers/gpu/drm/xe/xe_drm_ras_types.h
++++ b/drivers/gpu/drm/xe/xe_drm_ras_types.h
+@@ -43,6 +43,9 @@ struct xe_drm_ras {
+ 
+ 	/** @info: info array for all types of errors */
+ 	struct xe_drm_ras_counter *info[DRM_XE_RAS_ERR_SEV_MAX];
++
++	/** @cper_on_query: emit a CPER record on each counter query */
++	bool cper_on_query;
+ };
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index a4237d9ee..5e0e078e4 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -3,6 +3,7 @@
+  * Copyright © 2026 Intel Corporation
+  */
+ 
++#include "xe_cper.h"
+ #include "xe_debugfs.h"
+ #include "xe_device.h"
+ #include "xe_drm_ras.h"
+@@ -198,6 +199,34 @@ static inline const char *comp_to_str(u8 component)
+ 	return xe_ras_components[component];
+ }
+ 
++static u32 ras_comp_to_hw_sigid(u8 component)
++{
++	switch (component) {
++	case XE_RAS_COMP_DEVICE_MEMORY:
++		return XE_SIGID_DEVICE_MEMORY;
++	case XE_RAS_COMP_CORE_COMPUTE:
++		return XE_SIGID_CORE_COMPUTE;
++	case XE_RAS_COMP_PCIE:
++		return XE_SIGID_PCIE;
++	case XE_RAS_COMP_FABRIC:
++		return XE_SIGID_FABRIC;
++	case XE_RAS_COMP_SOC_INTERNAL:
++		return XE_SIGID_SOC_INTERNAL;
++	default:
++		return U32_MAX;
++	}
++}
++
++static u8 ras_sev_to_cper_sev(u8 ras_sev)
++{
++	switch (ras_sev) {
++	case XE_RAS_SEV_CORRECTABLE:   return CPER_SEV_CORRECTED;
++	case XE_RAS_SEV_UNCORRECTABLE: return CPER_SEV_RECOVERABLE;
++	case XE_RAS_SEV_INFORMATIONAL: return CPER_SEV_INFORMATIONAL;
++	default:                       return CPER_SEV_RECOVERABLE;
++	}
++}
++
+ static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
+ {
+ 	struct pci_dev *vsp;
+@@ -612,6 +641,7 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+  */
+ int xe_ras_get_counter(struct xe_device *xe, u8 severity, u8 component, u32 *value)
+ {
++	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+ 	struct xe_ras_error_class counter = {0};
+ 	struct xe_ras_get_counter_response response = {0};
+ 	int ret;
+@@ -623,8 +653,13 @@ int xe_ras_get_counter(struct xe_device *xe, u8 severity, u8 component, u32 *val
+ 	ret = xe_ras_get_counter_response(xe, &counter, &response);
+ 	if (ret)
+ 		return ret;
+-
+ 	*value = response.value;
++
++	if (xe->ras.cper_on_query)
++		xe_emit_hardware_error_cper(pdev, ras_sev_to_cper_sev(counter.common.severity),
++					    ras_comp_to_hw_sigid(counter.common.component),
++					    (struct xe_ras_error_class *)&counter,
++					    (struct xe_ras_get_counter_response *)&response);
+ 	return 0;
+ }
+ 
+@@ -1044,6 +1079,56 @@ static const struct attribute_group gpu_health_group = {
+ 	.attrs = gpu_health_attrs,
+ };
+ 
++static ssize_t cper_on_query_show(struct device *dev, struct device_attribute *attr, char *buf)
++{
++	struct xe_device *xe = kdev_to_xe_device(dev);
++
++	return sysfs_emit(buf, "%u\n", xe->ras.cper_on_query);
++}
++
++static ssize_t cper_on_query_store(struct device *dev, struct device_attribute *attr,
++				   const char *buf, size_t count)
++{
++	struct xe_device *xe = kdev_to_xe_device(dev);
++	bool enable;
++	int ret;
++
++	ret = kstrtobool(buf, &enable);
++	if (ret)
++		return ret;
++
++	xe->ras.cper_on_query = enable;
++
++	return count;
++}
++static DEVICE_ATTR_ADMIN_RW(cper_on_query);
++
++static struct attribute *cper_on_query_attrs[] = {
++	&dev_attr_cper_on_query.attr,
++	NULL
++};
++
++/**
++ * DOC: CPER on query
++ *
++ * On Intel Xe platforms that support the RAS error reporting interface,
++ * the driver can emit a CPER (Common Platform Error Record) each time an
++ * error counter is queried. This behaviour is controlled through the
++ * following sysfs attribute::
++ *
++ *     /sys/bus/pci/devices/<device>/cper_on_query
++ *
++ * The attribute is a boolean (``0`` or ``1``). When set to ``1``, every
++ * counter query emits a CPER record built from the associated info queue
++ * data; when set to ``0`` (default) no record is emitted on query.
++ *
++ * Reading the attribute is available to all users and returns the current
++ * setting, whereas writing is restricted to administrative users.
++ */
++static const struct attribute_group cper_on_query_group = {
++	.attrs = cper_on_query_attrs,
++};
++
+ /**
+  * xe_ras_init - Initialize Xe RAS
+  * @xe: xe device instance
+@@ -1065,4 +1150,8 @@ void xe_ras_init(struct xe_device *xe)
+ 	ret = devm_device_add_group(xe->drm.dev, &gpu_health_group);
+ 	if (ret)
+ 		xe_err(xe, "Failed to create GPU health sysfs, err=%d\n", ret);
++
++	ret = devm_device_add_group(xe->drm.dev, &cper_on_query_group);
++	if (ret)
++		xe_err(xe, "Failed to create cper_on_query sysfs, err=%d\n", ret);
+ }
+---
+-- 
+2.43.0
+

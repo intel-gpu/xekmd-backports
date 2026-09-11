@@ -1,0 +1,160 @@
+From ec9021d7bab2acec3481a5bce52fc9a990a06884 Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Sun, 6 Sep 2026 22:56:06 +0530
+Subject: drm/xe/cper: Hardware error CPER reporting from xe_log
+
+Introduce xe_emit_hardware_error_cper() as public entry point
+for CPER reporting.
+
+Wire xe_log to route hardware SIGIDs through the new helper.
+No functional change is intended yet, as the CPER emission logic
+is added in follow-up patches.
+
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+backported from https://patchwork.freedesktop.org/series/169692/#rev3
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/Makefile  |  2 ++
+ drivers/gpu/drm/xe/xe_cper.c | 37 ++++++++++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_cper.h | 25 ++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_log.c  | 17 +++++++++++------
+ 4 files changed, 75 insertions(+), 6 deletions(-)
+ create mode 100644 drivers/gpu/drm/xe/xe_cper.c
+ create mode 100644 drivers/gpu/drm/xe/xe_cper.h
+
+diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
+index e762c59e3..de237ce25 100644
+--- a/drivers/gpu/drm/xe/Makefile
++++ b/drivers/gpu/drm/xe/Makefile
+@@ -168,6 +168,8 @@ xe-$(CONFIG_HWMON) += xe_hwmon.o
+ xe-$(CONFIG_PERF_EVENTS) += xe_pmu.o
+ xe-$(CONFIG_CONFIGFS_FS) += xe_configfs.o
+ 
++xe-$(CONFIG_UEFI_CPER_X86) += xe_cper.o
++
+ # graphics virtualization (SR-IOV) support
+ xe-y += \
+ 	xe_gt_sriov_vf.o \
+diff --git a/drivers/gpu/drm/xe/xe_cper.c b/drivers/gpu/drm/xe/xe_cper.c
+new file mode 100644
+index 000000000..e8017e3ee
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_cper.c
+@@ -0,0 +1,37 @@
++// SPDX-License-Identifier: MIT
++/*
++ * Copyright © 2026 Intel Corporation
++ */
++
++#include <linux/pci.h>
++
++#include <drm/drm_print.h>
++
++#include "xe_cper.h"
++#include "xe_device.h"
++#include "xe_ras_types.h"
++
++/**
++ * xe_emit_hardware_error_cper() - Emit a hardware error CPER record
++ * @pdev: PCI device associated with the Xe device
++ * @cper_sev: CPER severity
++ * @sigid: Error signature identifier
++ * @error_class: Hardware error classification details
++ * @response: Response of get counter
++ *
++ * Emit a CPER record for a hardware error
++ */
++void xe_emit_hardware_error_cper(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigid,
++				 struct xe_ras_error_class *counter,
++				 struct xe_ras_get_counter_response *response)
++{
++	struct xe_device *xe = pdev_to_xe_device(pdev);
++
++	if (!xe)
++		return;
++
++	if ((int)sigid >= INTEL_SIGID_GPU_XE_HARDWARE_START)
++		return;
++
++	/* TODO */
++}
+diff --git a/drivers/gpu/drm/xe/xe_cper.h b/drivers/gpu/drm/xe/xe_cper.h
+new file mode 100644
+index 000000000..c4be7f25a
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_cper.h
+@@ -0,0 +1,25 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2026 Intel Corporation
++ */
++
++#ifndef _XE_CPER_H_
++#define _XE_CPER_H_
++
++#include "abi/xe_sigid_abi.h"
++
++struct pci_dev;
++struct xe_ras_error_class;
++struct xe_ras_get_counter_response;
++
++#if IS_REACHABLE(CONFIG_UEFI_CPER_X86)
++void xe_emit_hardware_error_cper(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigid,
++				 struct xe_ras_error_class *counter,
++				 struct xe_ras_get_counter_response *response);
++#else
++static inline void xe_emit_hardware_error_cper(struct pci_dev *pdev, int cper_sev,
++					       enum xe_sigid sigid,
++					       struct xe_ras_error_class *counter,
++					       struct xe_ras_get_counter_response *response) {}
++#endif
++#endif /* _XE_CPER_H_ */
+diff --git a/drivers/gpu/drm/xe/xe_log.c b/drivers/gpu/drm/xe/xe_log.c
+index 5549ef696..2957adec4 100644
+--- a/drivers/gpu/drm/xe/xe_log.c
++++ b/drivers/gpu/drm/xe/xe_log.c
+@@ -8,17 +8,27 @@
+ 
+ #include "abi/xe_log_abi.h"
+ 
++#include "xe_cper.h"
+ #include "xe_device.h"
+ #include "xe_log.h"
+ #include "xe_printk.h"
+ 
++static bool is_hw_sigid(enum xe_sigid sigid)
++{
++	return (int)sigid >= INTEL_SIGID_GPU_XE_HARDWARE_START;
++}
++
+ static void log_emit_cper(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigid,
+ 			  u32 component, u32 location, const void *data, size_t len,
+ 			  struct va_format *vaf)
+ {
+ 	KUNIT_STATIC_STUB_REDIRECT(log_emit_cper, pdev, cper_sev, sigid,
+ 				   component, location, data, len, vaf);
+-	/* TODO */
++
++	if (is_hw_sigid(sigid) && !IS_ERR(data))
++		xe_emit_hardware_error_cper(pdev, cper_sev, sigid,
++					    (struct xe_ras_error_class *)data, NULL);
++	/* TODO software CPER */
+ }
+ 
+ static const char *log_unknown_component_prefix(u32 component)
+@@ -100,11 +110,6 @@ static const char *log_location_prefix(struct pci_dev *pdev, u32 location, char
+ 	return buf;
+ }
+ 
+-static bool is_hw_sigid(enum xe_sigid sigid)
+-{
+-	return (int)sigid >= INTEL_SIGID_GPU_XE_HARDWARE_START;
+-}
+-
+ static bool is_sev_error(int cper_sev)
+ {
+ 	return cper_sev != CPER_SEV_INFORMATIONAL;
+---
+-- 
+2.43.0
+

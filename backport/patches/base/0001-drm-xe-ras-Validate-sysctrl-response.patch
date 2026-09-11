@@ -1,0 +1,66 @@
+From 04a02a18a633e675d1361914396642ee5fc57063 Mon Sep 17 00:00:00 2001
+From: Raag Jadav <raag.jadav@intel.com>
+Date: Wed, 22 Jul 2026 20:01:42 +0530
+Subject: drm/xe/ras: Validate sysctrl response
+
+Validate errors raised by sysctrl firmware instead of blindly trusting
+them.
+
+Signed-off-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Riana Tauro <riana.tauro@intel.com>
+Link: https://patch.msgid.link/20260722143142.675658-1-raag.jadav@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+backported from commit 948eee331bef0c5245bd3c44a6ed99401b8bcca7 linux-next
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index bd5a20630..bc2877d12 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -417,6 +417,9 @@ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
+ 		severity = errors[id].common.severity;
+ 		component = errors[id].common.component;
+ 
++		if (!ras_counter_is_valid(xe, &errors[id]))
++			continue;
++
+ 		xe_warn(xe, "[RAS]: %s %s detected\n",
+ 			comp_to_str(component), sev_to_str(severity));
+ 
+@@ -455,6 +458,9 @@ static int get_counter(struct xe_device *xe, struct xe_ras_error_class *counter,
+ 		return -EIO;
+ 	}
+ 
++	if (!ras_counter_is_valid(xe, &response.counter))
++		return -EBADMSG;
++
+ 	common = &response.counter.common;
+ 	*value = response.value;
+ 
+@@ -528,6 +534,9 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+ 			component = arr->counter.common.component;
+ 			severity = arr->counter.common.severity;
+ 
++			if (!ras_counter_is_valid(xe, &arr->counter))
++				continue;
++
+ 			xe_info(xe, "[RAS]: %s %s detected\n", comp_to_str(component),
+ 				sev_to_str(severity));
+ 
+@@ -644,6 +653,9 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
+ 
+ 	counter = &response.counter;
+ 
++	if (!ras_counter_is_valid(xe, counter))
++		return -EBADMSG;
++
+ 	xe_dbg(xe, "[RAS]: clear counter for %s %s\n", comp_to_str(counter->common.component),
+ 	       sev_to_str(counter->common.severity));
+ 
+---
+-- 
+2.43.0
+

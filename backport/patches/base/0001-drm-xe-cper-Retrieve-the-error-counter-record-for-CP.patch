@@ -1,0 +1,296 @@
+From 7e556b08932375c0432f985231a39cf8a1fbcd09 Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Sun, 6 Sep 2026 22:56:07 +0530
+Subject: drm/xe/cper: Retrieve the error counter record for CPER
+ reporting
+
+Retrieve error counter record required to build a CPER record when
+one not provided by the caller.
+
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+backported from https://patchwork.freedesktop.org/series/169692/#rev3
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_cper.c |  15 ++++++
+ drivers/gpu/drm/xe/xe_ras.c  | 100 ++++++++++++++++++++++-------------
+ drivers/gpu/drm/xe/xe_ras.h  |   3 ++
+ 3 files changed, 80 insertions(+), 38 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_cper.c b/drivers/gpu/drm/xe/xe_cper.c
+index e8017e3ee..f04a91223 100644
+--- a/drivers/gpu/drm/xe/xe_cper.c
++++ b/drivers/gpu/drm/xe/xe_cper.c
+@@ -9,6 +9,8 @@
+ 
+ #include "xe_cper.h"
+ #include "xe_device.h"
++#include "xe_printk.h"
++#include "xe_ras.h"
+ #include "xe_ras_types.h"
+ 
+ /**
+@@ -26,6 +28,8 @@ void xe_emit_hardware_error_cper(struct pci_dev *pdev, int cper_sev, enum xe_sig
+ 				 struct xe_ras_get_counter_response *response)
+ {
+ 	struct xe_device *xe = pdev_to_xe_device(pdev);
++	struct xe_ras_get_counter_response local_resp = {};
++	struct xe_ras_get_counter_response *counter_response = response;
+ 
+ 	if (!xe)
+ 		return;
+@@ -33,5 +37,16 @@ void xe_emit_hardware_error_cper(struct pci_dev *pdev, int cper_sev, enum xe_sig
+ 	if ((int)sigid >= INTEL_SIGID_GPU_XE_HARDWARE_START)
+ 		return;
+ 
++	if (!counter || !xe_ras_counter_is_valid(xe, counter))
++		return;
++
++	if (!counter_response) {
++		counter_response = &local_resp;
++		if (xe_ras_get_counter_response(xe, counter, counter_response)) {
++			xe_err(xe, "[RAS]: CPER: failed to get counter, skipping record\n");
++			return;
++		}
++	}
++
+ 	/* TODO */
+ }
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index bc2877d12..da1729243 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -102,8 +102,6 @@ static const char * const gpu_health_states[] = {
+ };
+ static_assert(ARRAY_SIZE(gpu_health_states) == XE_RAS_HEALTH_MAX);
+ 
+-static int get_counter(struct xe_device *xe, struct xe_ras_error_class *counter, u32 *value);
+-
+ static u8 drm_to_xe_ras_severity(u8 severity)
+ {
+ 	switch (severity) {
+@@ -200,24 +198,6 @@ static inline const char *comp_to_str(u8 component)
+ 	return xe_ras_components[component];
+ }
+ 
+-static bool ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter)
+-{
+-	u8 severity = counter->common.severity;
+-	u8 component = counter->common.component;
+-
+-	if (!in_range(severity, XE_RAS_SEV_NOT_SUPPORTED + 1, XE_RAS_SEV_MAX - 1)) {
+-		xe_err(xe, "sysctrl: unexpected severity %u\n", severity);
+-		return false;
+-	}
+-
+-	if (!in_range(component, XE_RAS_COMP_NOT_SUPPORTED + 1, XE_RAS_COMP_MAX - 1)) {
+-		xe_err(xe, "sysctrl: unexpected component %u\n", component);
+-		return false;
+-	}
+-
+-	return true;
+-}
+-
+ static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
+ {
+ 	struct pci_dev *vsp;
+@@ -283,21 +263,21 @@ static void ras_usp_aer_init(struct xe_device *xe)
+ static void ras_send_error_event(struct xe_device *xe, u8 severity, u8 component)
+ {
+ 	struct xe_ras_error_class counter = {0};
++	struct xe_ras_get_counter_response response = {0};
+ 	u8 drm_severity, drm_component;
+-	u32 value;
+ 	int ret;
+ 
+ 	counter.common.severity = severity;
+ 	counter.common.component = component;
+ 
+-	ret = get_counter(xe, &counter, &value);
++	ret = xe_ras_get_counter_response(xe, &counter, &response);
+ 	if (ret)
+ 		return;
+ 
+ 	drm_severity = xe_to_drm_ras_severity(severity);
+ 	drm_component = xe_to_drm_ras_component(component);
+ 
+-	xe_drm_ras_event(xe, drm_component, drm_severity, value);
++	xe_drm_ras_event(xe, drm_component, drm_severity, response.value);
+ }
+ 
+ static u8 handle_core_compute_errors(struct xe_ras_error_array *arr)
+@@ -394,6 +374,33 @@ static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_
+ 	return XE_RAS_RECOVERY_ACTION_RECOVERED;
+ }
+ 
++/**
++ * xe_ras_counter_is_valid() - Validate a RAS error counter
++ * @xe: Xe device instance
++ * @counter: RAS error class to validate
++ *
++ * Validate that counter represents a supported RAS error class
++ *
++ * Return: true if counter is valid, false otherwise.
++ */
++bool xe_ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter)
++{
++	u8 severity = counter->common.severity;
++	u8 component = counter->common.component;
++
++	if (!in_range(severity, XE_RAS_SEV_NOT_SUPPORTED + 1, XE_RAS_SEV_MAX - 1)) {
++		xe_err(xe, "sysctrl: unexpected severity %u\n", severity);
++		return false;
++	}
++
++	if (!in_range(component, XE_RAS_COMP_NOT_SUPPORTED + 1, XE_RAS_COMP_MAX - 1)) {
++		xe_err(xe, "sysctrl: unexpected component %u\n", component);
++		return false;
++	}
++
++	return true;
++}
++
+ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
+ 				      struct xe_sysctrl_event_response *response)
+ {
+@@ -417,7 +424,7 @@ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
+ 		severity = errors[id].common.severity;
+ 		component = errors[id].common.component;
+ 
+-		if (!ras_counter_is_valid(xe, &errors[id]))
++		if (!xe_ras_counter_is_valid(xe, &errors[id]))
+ 			continue;
+ 
+ 		xe_warn(xe, "[RAS]: %s %s detected\n",
+@@ -432,19 +439,30 @@ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
+ 	}
+ }
+ 
+-static int get_counter(struct xe_device *xe, struct xe_ras_error_class *counter, u32 *value)
++/**
++ * xe_ras_get_counter_response() - Get error counter record
++ * @xe: Xe device instance
++ * @counter: ras error class
++ * @out: Counter record retrieved
++ *
++ * This function retrieves the counter record of specific error counter
++ *
++ * Return: 0 on success, negative error code on failure.
++ */
++int xe_ras_get_counter_response(struct xe_device *xe, struct xe_ras_error_class *counter,
++				struct xe_ras_get_counter_response *out)
+ {
+-	struct xe_ras_get_counter_response response = {0};
+ 	struct xe_ras_get_counter_request request = {0};
+ 	struct xe_sysctrl_mailbox_command command = {0};
+ 	struct xe_ras_error_common *common;
+ 	size_t rlen;
+ 	int ret;
+ 
++	memset(out, 0, sizeof(*out));
+ 	request.counter = *counter;
+ 
+ 	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_GET_COUNTER,
+-				  &request, sizeof(request), &response, sizeof(response));
++				  &request, sizeof(request), out, sizeof(*out));
+ 
+ 	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
+ 	if (ret) {
+@@ -452,19 +470,18 @@ static int get_counter(struct xe_device *xe, struct xe_ras_error_class *counter,
+ 		return ret;
+ 	}
+ 
+-	if (rlen != sizeof(response)) {
++	if (rlen != sizeof(*out)) {
+ 		xe_err(xe, "sysctrl: unexpected get counter response length %zu (expected %zu)\n",
+-		       rlen, sizeof(response));
++		       rlen, sizeof(*out));
+ 		return -EIO;
+ 	}
+ 
+-	if (!ras_counter_is_valid(xe, &response.counter))
++	if (!xe_ras_counter_is_valid(xe, &out->counter))
+ 		return -EBADMSG;
+ 
+-	common = &response.counter.common;
+-	*value = response.value;
++	common = &out->counter.common;
+ 
+-	xe_dbg(xe, "[RAS]: get counter %u for %s %s\n", *value, comp_to_str(common->component),
++	xe_dbg(xe, "[RAS]: get counter %u for %s %s\n", out->value, comp_to_str(common->component),
+ 	       sev_to_str(common->severity));
+ 
+ 	return 0;
+@@ -534,7 +551,7 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+ 			component = arr->counter.common.component;
+ 			severity = arr->counter.common.severity;
+ 
+-			if (!ras_counter_is_valid(xe, &arr->counter))
++			if (!xe_ras_counter_is_valid(xe, &arr->counter))
+ 				continue;
+ 
+ 			xe_info(xe, "[RAS]: %s %s detected\n", comp_to_str(component),
+@@ -596,12 +613,19 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+ int xe_ras_get_counter(struct xe_device *xe, u8 severity, u8 component, u32 *value)
+ {
+ 	struct xe_ras_error_class counter = {0};
++	struct xe_ras_get_counter_response response = {0};
++	int ret;
+ 
+ 	counter.common.severity = drm_to_xe_ras_severity(severity);
+ 	counter.common.component = drm_to_xe_ras_component(component);
+ 
+ 	guard(xe_pm_runtime)(xe);
+-	return get_counter(xe, &counter, value);
++	ret = xe_ras_get_counter_response(xe, &counter, &response);
++	if (ret)
++		return ret;
++
++	*value = response.value;
++	return 0;
+ }
+ 
+ /**
+@@ -653,7 +677,7 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
+ 
+ 	counter = &response.counter;
+ 
+-	if (!ras_counter_is_valid(xe, counter))
++	if (!xe_ras_counter_is_valid(xe, counter))
+ 		return -EBADMSG;
+ 
+ 	xe_dbg(xe, "[RAS]: clear counter for %s %s\n", comp_to_str(counter->common.component),
+@@ -691,7 +715,7 @@ int xe_ras_get_threshold(struct xe_device *xe, u8 severity, u8 component, u32 *t
+ 		return -EIO;
+ 	}
+ 
+-	if (!ras_counter_is_valid(xe, &response.counter))
++	if (!xe_ras_counter_is_valid(xe, &response.counter))
+ 		return -EBADMSG;
+ 
+ 	counter = &response.counter;
+@@ -740,7 +764,7 @@ int xe_ras_set_threshold(struct xe_device *xe, u8 severity, u8 component, u32 th
+ 	}
+ 
+ 	counter = &response.counter;
+-	if (!ras_counter_is_valid(xe, counter))
++	if (!xe_ras_counter_is_valid(xe, counter))
+ 		return -EBADMSG;
+ 
+ 	xe_dbg(xe, "[RAS]: set threshold %u for %s %s\n", response.threshold,
+diff --git a/drivers/gpu/drm/xe/xe_ras.h b/drivers/gpu/drm/xe/xe_ras.h
+index 0b8669f28..e83e022cd 100644
+--- a/drivers/gpu/drm/xe/xe_ras.h
++++ b/drivers/gpu/drm/xe/xe_ras.h
+@@ -20,5 +20,8 @@ int xe_ras_get_threshold(struct xe_device *xe, u8 severity, u8 component, u32 *t
+ int xe_ras_set_threshold(struct xe_device *xe, u8 severity, u8 component, u32 threshold);
+ void xe_ras_init(struct xe_device *xe);
+ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe);
++int xe_ras_get_counter_response(struct xe_device *xe, struct xe_ras_error_class *counter,
++				struct xe_ras_get_counter_response *out);
++bool xe_ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter);
+ 
+ #endif
+---
+-- 
+2.43.0
+

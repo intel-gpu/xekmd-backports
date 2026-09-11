@@ -1,0 +1,358 @@
+From 505ebb9f290b75522c5d0c4fef1ae6a88ca73eea Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Sun, 6 Sep 2026 22:56:10 +0530
+Subject: drm/xe/xe_ras: Add support to retrieve info queue data
+ for CRI
+
+Retrieve the RAS info queue data, in multiple chunks, and assemble
+it into flat raw buffer. Follow up patch will use this data to
+prepare cper error info.
+
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+Assisted-by: Copilot:claude-opus-4.8
+backported from https://patchwork.freedesktop.org/series/169692/#rev3
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c                   | 139 ++++++++++++++++++
+ drivers/gpu/drm/xe/xe_ras.h                   |   3 +
+ drivers/gpu/drm/xe/xe_ras_types.h             | 118 ++++++++++++++-
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h |   2 +
+ 4 files changed, 259 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index da1729243..a4237d9ee 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -772,6 +772,145 @@ int xe_ras_set_threshold(struct xe_device *xe, u8 severity, u8 component, u32 th
+ 	return 0;
+ }
+ 
++static int get_info_queue_data(struct xe_device *xe,
++			       const struct xe_ras_get_info_queue_data_request *req,
++			       struct xe_ras_get_info_queue_data_response *out)
++{
++	struct xe_ras_get_info_queue_data_response response = {0};
++	struct xe_sysctrl_mailbox_command command = {0};
++	size_t rlen;
++	int ret;
++
++	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP,
++				  XE_SYSCTRL_CMD_GET_INFO_QUEUE_DATA,
++				  (void *)req, sizeof(*req), &response, sizeof(response));
++
++	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
++	if (ret) {
++		xe_err(xe, "sysctrl: failed to get info queue data %d\n", ret);
++		return ret;
++	}
++
++	if (rlen != sizeof(response)) {
++		xe_err(xe, "sysctrl: unexpected get info queue data response length %zu (expected %zu)\n",
++		       rlen, sizeof(response));
++		return -EIO;
++	}
++
++	xe_dbg(xe, "[RAS]: info queue data: status=%u chunk_size=%u flags=0x%x\n",
++	       response.operation_status,
++	       response.queue_response.queue_header.chunk_size,
++	       response.queue_response.queue_header.flags);
++
++	*out = response;
++	return 0;
++}
++
++/**
++ * xe_ras_drain_info_queue_raw - Drain the full RAS info queue into a flat buffer.
++ * @xe: xe device
++ * @counter_resp: counter response carrying the first embedded chunk and the
++ *                counter identifier used as the source context for subsequent
++ *                GET_INFO_QUEUE_DATA fetches
++ * @raw_buf: destination buffer supplied by the caller
++ * @raw_buf_size: size of @raw_buf in bytes; also caps the total amount of data
++ *                assembled from the info queue
++ *
++ * Copies the first chunk already embedded in @counter_resp, then loops
++ * issuing GET_INFO_QUEUE_DATA to fetch any remaining chunks until the queue
++ * signals no more data or a transport/bounds error is encountered.  On
++ * transport or bounds errors the function stops and returns whatever has
++ * been assembled so far.
++ *
++ * Returns: number of valid bytes written into @raw_buf.  Zero if @raw_buf is
++ *          NULL or @raw_buf_size is 0.
++ */
++u32 xe_ras_drain_info_queue_raw(struct xe_device *xe,
++				const struct xe_ras_get_counter_response *counter_resp,
++				u8 *raw_buf, u32 raw_buf_size)
++{
++	const struct xe_ras_info_queue_header *first_qhdr =
++		&counter_resp->info_queue.queue_header;
++	struct xe_ras_get_info_queue_data_request iq_req = {0};
++	struct xe_ras_get_info_queue_data_response iq_response = {0};
++	u32 iq_offset = 0;
++	u32 end;
++	bool complete = true;
++
++	if (!raw_buf || !raw_buf_size)
++		return 0;
++
++	/* Copy first chunk already embedded in the counter response */
++	if (first_qhdr->chunk_size &&
++	    first_qhdr->chunk_size <= XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE &&
++	    !check_add_overflow(first_qhdr->chunk_offset, first_qhdr->chunk_size, &end) &&
++	    end <= XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE && end <= raw_buf_size) {
++		memcpy(raw_buf + first_qhdr->chunk_offset,
++		       counter_resp->info_queue.queue_data, first_qhdr->chunk_size);
++		iq_offset = first_qhdr->chunk_size;
++	}
++
++	/* Fetch any remaining chunks */
++	if (first_qhdr->flags & XE_RAS_INFO_QUEUE_FLAG_MORE_DATA) {
++		iq_req.source_command			= XE_SYSCTRL_CMD_GET_COUNTER;
++		iq_req.source_context			= counter_resp->counter;
++		iq_req.queue_request.requested_size	= XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE;
++		iq_req.queue_request.session_id		= counter_resp->counter;
++
++		do {
++			struct xe_ras_info_queue_header *qhdr;
++			u32 end;
++
++			iq_req.queue_request.requested_offset = iq_offset;
++
++			if (get_info_queue_data(xe, &iq_req, &iq_response)) {
++				complete = false;
++				xe_err(xe,
++				       "[RAS]: info queue drain aborted: fetch at offset=%u failed\n",
++				       iq_offset);
++				break;
++			}
++
++			qhdr = &iq_response.queue_response.queue_header;
++
++			if (!qhdr->chunk_size) {
++				complete = false;
++				break;
++			}
++
++			if (qhdr->chunk_size > XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE) {
++				complete = false;
++				xe_warn(xe,
++					"[RAS]: CPER: invalid chunk size %u\n", qhdr->chunk_size);
++				break;
++			}
++
++			if (check_add_overflow(qhdr->chunk_offset, qhdr->chunk_size, &end) ||
++			    end > XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE || end > raw_buf_size) {
++				complete = false;
++				xe_warn(xe,
++					"[RAS]: info queue chunk out of bounds (offset=%u size=%u)\n",
++					qhdr->chunk_offset, qhdr->chunk_size);
++				break;
++			}
++
++			memcpy(raw_buf + qhdr->chunk_offset,
++			       iq_response.queue_response.queue_data,
++			       qhdr->chunk_size);
++
++			iq_offset += qhdr->chunk_size;
++		} while (iq_response.queue_response.queue_header.flags &
++			 XE_RAS_INFO_QUEUE_FLAG_MORE_DATA);
++	}
++
++	if (!complete)
++		return iq_offset;
++
++	return first_qhdr->total_size
++	       ? min3(first_qhdr->total_size, XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE, raw_buf_size)
++	       : iq_offset;
++}
++
+ static ssize_t gpu_health_show(struct device *dev, struct device_attribute *attr, char *buf)
+ {
+ 	struct xe_ras_get_health_response response = {0};
+diff --git a/drivers/gpu/drm/xe/xe_ras.h b/drivers/gpu/drm/xe/xe_ras.h
+index e83e022cd..d31e093c0 100644
+--- a/drivers/gpu/drm/xe/xe_ras.h
++++ b/drivers/gpu/drm/xe/xe_ras.h
+@@ -23,5 +23,8 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe);
+ int xe_ras_get_counter_response(struct xe_device *xe, struct xe_ras_error_class *counter,
+ 				struct xe_ras_get_counter_response *out);
+ bool xe_ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter);
++u32 xe_ras_drain_info_queue_raw(struct xe_device *xe,
++				const struct xe_ras_get_counter_response *counter_resp,
++				u8 *raw_buf, u32 raw_buf_size);
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
+index 99b4ae3ac..2364dbc2c 100644
+--- a/drivers/gpu/drm/xe/xe_ras_types.h
++++ b/drivers/gpu/drm/xe/xe_ras_types.h
+@@ -16,6 +16,10 @@
+ #define XE_RAS_MEMORY_DB_ECC			BIT(1)
+ #define XE_RAS_MEMORY_POISON			BIT(2)
+ #define XE_RAS_MEMORY_DATA_PARITY		BIT(5)
++#define XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE	200
++#define XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE	5120
++#define XE_RAS_INFO_QUEUE_FLAG_AVAILABLE	0x01
++#define XE_RAS_INFO_QUEUE_FLAG_MORE_DATA	0x02
+ 
+ /**
+  * enum xe_ras_recovery_action - RAS recovery actions
+@@ -95,6 +99,109 @@ struct xe_ras_threshold_crossed {
+ 	struct xe_ras_error_class counters[XE_RAS_NUM_COUNTERS];
+ } __packed;
+ 
++/**
++ * struct xe_ras_info_queue_header - Metadata for large info queue data transfers
++ *
++ * Provides chunk metadata for commands that support extended info queue
++ * functionality. Used when the total data exceeds a single mailbox response.
++ */
++struct xe_ras_info_queue_header {
++	/** @total_size: Total size of the complete info queue data in bytes */
++	u32 total_size;
++	/** @chunk_offset: Offset of this chunk within the total data in bytes */
++	u32 chunk_offset;
++	/** @chunk_size: Size of the data in this chunk in bytes */
++	u32 chunk_size;
++	/** @sequence_number: Sequence number for this chunk, starts at 0 */
++	u32 sequence_number;
++	/** @flags: Info queue control flags (RAS_INFO_QUEUE_FLAG_*) */
++	u32 flags:8;
++	/** @compression_type: Compression algorithm used; 0 = none */
++	u32 compression_type:4;
++	/** @num_headers: Number of detailed counter headers at start of queue_data */
++	u32 num_headers:5;
++	/** @reserved: Reserved for future use */
++	u32 reserved:15;
++	/** @checksum: CRC32 checksum of this chunk data */
++	u32 checksum;
++} __packed;
++
++/**
++ * struct xe_ras_info_queue_request - Request for a specific chunk of info queue data
++ *
++ * Allows the driver to request continuation of large info queue transfers
++ * by specifying an offset and size within the full data set.
++ */
++struct xe_ras_info_queue_request {
++	/** @requested_offset: Byte offset of the requested data chunk */
++	u32 requested_offset;
++	/** @requested_size: Maximum size of the requested chunk in bytes */
++	u32 requested_size;
++	/** @session_id: Session ID to correlate multi-chunk transfers */
++	struct xe_ras_error_class session_id;
++	/** @reserved: Reserved for future use */
++	u32 reserved;
++} __packed;
++
++/**
++ * struct xe_ras_info_queue_response - Generic response for commands with info queues
++ *
++ * Standard response format for any command that returns an info queue
++ * payload. May be embedded in a command-specific response structure.
++ */
++struct xe_ras_info_queue_response {
++	/** @queue_header: Info queue metadata for this chunk */
++	struct xe_ras_info_queue_header queue_header;
++	/** @queue_data: Info queue data for this chunk */
++	u8 queue_data[XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE];
++} __packed;
++
++/**
++ * struct xe_ras_info_queue_dynamic_counter_hdr - Aggregate counter header entry
++ *
++ * When a session requests aggregate counter data, one header per matching
++ * dynamic counter class is prepended to the queue data. The @counter field
++ * indicates how many subsequent error log entries belong to this class.
++ */
++struct xe_ras_info_queue_dynamic_counter_hdr {
++	/** @error_class: Error class associated with this counter group */
++	struct xe_ras_error_class error_class;
++	/** @counter: Number of error log entries that follow for this class */
++	u32 counter;
++} __packed;
++
++/**
++ * struct xe_ras_error_log - Single error log entry following dynamic counter headers
++ */
++struct xe_ras_error_log {
++	/** @timestamp: Timestamp when the error was recorded */
++	u64 timestamp;
++	/** @error_details: Error-specific details */
++	u32 error_details[16];
++} __packed;
++
++/**
++ * struct xe_ras_get_info_queue_data_request - Request for RAS_CMD_GET_INFO_QUEUE_DATA
++ */
++struct xe_ras_get_info_queue_data_request {
++	/** @queue_request: Info queue request parameters */
++	struct xe_ras_info_queue_request queue_request;
++	/** @source_command: Original command that generated the info queue */
++	u32 source_command;
++	/** @source_context: Context from original command, if applicable */
++	struct xe_ras_error_class source_context;
++} __packed;
++
++/**
++ * struct xe_ras_get_info_queue_data_response - Response for RAS_CMD_GET_INFO_QUEUE_DATA
++ */
++struct xe_ras_get_info_queue_data_response {
++	/** @operation_status: Status of the retrieval operation */
++	u32 operation_status;
++	/** @queue_response: Info queue data chunk */
++	struct xe_ras_info_queue_response queue_response;
++} __packed;
++
+ /**
+  * struct xe_ras_get_counter_request - Request structure for get counter
+  */
+@@ -117,8 +224,14 @@ struct xe_ras_get_counter_response {
+ 	u64 timestamp;
+ 	/** @threshold: Threshold value for the counter */
+ 	u32 threshold;
+-	/** @reserved: Reserved  */
+-	u32 reserved[57];
++	/** @reserved: Reserved for future use */
++	u32 reserved:9;
++	/** @has_info_queue: Set if info queue is available */
++	u32 has_info_queue:1;
++	/** @reserved1: Reserved for future use */
++	u32 reserved1:22;
++	/** @info_queue: Initial info queue data (first chunk) if available */
++	struct xe_ras_info_queue_response info_queue;
+ } __packed;
+ 
+ /**
+@@ -274,7 +387,6 @@ struct xe_ras_set_health_response {
+ 	/** @reserved1: Reserved for future use */
+ 	u32 reserved1[2];
+ } __packed;
+-
+ /**
+  * struct xe_ras_soc_error_source - Source of SoC error
+  */
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
+index 66e7cbcc3..c00fe0e69 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
+@@ -30,6 +30,7 @@ enum xe_sysctrl_group {
+  * @XE_SYSCTRL_CMD_GET_PENDING_EVENT: Retrieve pending event
+  * @XE_SYSCTRL_CMD_GET_HEALTH: Retrieve gpu health
+  * @XE_SYSCTRL_CMD_SET_HEALTH: Set gpu health
++ * @XE_SYSCTRL_CMD_GET_INFO_QUEUE_DATA: Retrieve a chunk of info queue data
+  */
+ enum xe_sysctrl_gfsp_cmd {
+ 	XE_SYSCTRL_CMD_GET_SOC_ERROR		= 0x01,
+@@ -40,6 +41,7 @@ enum xe_sysctrl_gfsp_cmd {
+ 	XE_SYSCTRL_CMD_GET_PENDING_EVENT	= 0x07,
+ 	XE_SYSCTRL_CMD_GET_HEALTH		= 0x0B,
+ 	XE_SYSCTRL_CMD_SET_HEALTH		= 0x0C,
++	XE_SYSCTRL_CMD_GET_INFO_QUEUE_DATA	= 0x0D,
+ };
+ 
+ /**
+---
+-- 
+2.43.0
+

@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Fan Wu <fanwu01@zju.edu.cn>
+Date: Fri, 11 Sep 2026 19:20:39 +0530
+Subject: [PATCH] drm/xe/i2c: cancel the client work on remove
+
+xe_i2c_notifier() stores the DesignWare adapter in i2c->adapter and
+schedules i2c->work when the adapter is registered under the xe I2C
+platform device, and xe_i2c_client_work() then instantiates the AMC
+client device on that adapter.
+
+xe_i2c_remove() unregisters the client devices, the bus notifier and
+the adapter platform device, but it never drains i2c->work. A work
+item that is still queued or running when the adapter is unregistered
+dereferences i2c->adapter in i2c_new_client_device() after
+platform_device_unregister() has released the adapter. The work item
+is also embedded in the devm-allocated struct xe_i2c, so a work item
+still queued after the drm device devm unwind frees that allocation
+runs its callback on freed memory.
+
+Cancel the work in xe_i2c_remove(), after bus_unregister_notifier()
+so that no new instance can be scheduled, and before the adapter is
+unregistered so that a running instance still finds a live adapter.
+
+This issue was found by an in-house static analysis tool.
+
+v2: Rebase to latest drm-tip (by Nitin)
+
+Fixes: f0e53aadd702 ("drm/xe: Support for I2C attached MCUs")
+Link:https://patchew.org/linux/20260909052328.654682-1-fanwu01@zju.edu.cn/
+Cc: stable@vger.kernel.org
+Assisted-by: Codex:gpt-5.6
+Co-developed-by: Song Li <songl@zju.edu.cn>
+Signed-off-by: Song Li <songl@zju.edu.cn>
+Signed-off-by: Fan Wu <fanwu01@zju.edu.cn>
+(Backport of "drm/xe/i2c: cancel the client work on remove" from ML)
+Signed-off-by: Nitin Gote <nitin.r.gote@intel.com>
+---
+ drivers/gpu/drm/xe/xe_i2c.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_i2c.c b/drivers/gpu/drm/xe/xe_i2c.c
+index c183ea352..14bf07b78 100644
+--- a/drivers/gpu/drm/xe/xe_i2c.c
++++ b/drivers/gpu/drm/xe/xe_i2c.c
+@@ -334,6 +334,7 @@ static void xe_i2c_remove(void *data)
+ 	}
+ 
+ 	bus_unregister_notifier(&i2c_bus_type, &i2c->bus_notifier);
++	cancel_work_sync(&i2c->work);
+ 	xe_i2c_unregister_adapter(i2c);
+ }
+ 
+-- 
+2.50.1
+

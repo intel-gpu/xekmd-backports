@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Date: Tue, 15 Sep 2026 13:07:44 +0530
+Subject: Backport-only: drm/xe/pm: Temporarily disable D3cold
+
+During runtime PM resume from D3cold, forcewake acknowledge fails and
+MMIO reads return 0xFFFFFFFF, leading to kernel warnings and device
+wedging on Crescent Island.
+
+Disallow D3cold via the pci core and mark it as unsupported to unblock
+RAS feature while the D3cold power transition issue is being root-caused.
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pm.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
+index 99562f691..b6cc3ebe1 100644
+--- a/drivers/gpu/drm/xe/xe_pm.c
++++ b/drivers/gpu/drm/xe/xe_pm.c
+@@ -394,7 +394,15 @@ ALLOW_ERROR_INJECTION(xe_pm_init_early, ERRNO); /* See xe_pci_probe() */
+  */
+ int xe_pm_probe(struct xe_device *xe)
+ {
+-	xe->d3cold.capable = xe_pm_pci_d3cold_capable(xe);
++	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
++
++	if (xe->info.platform == XE_CRESCENTISLAND) {
++		xe->d3cold.capable = false;
++		pci_d3cold_disable(pdev);
++	} else {
++		xe->d3cold.capable = xe_pm_pci_d3cold_capable(xe);
++	}
++
+ 	xe_dbg(xe, "d3cold: capable=%s\n", str_yes_no(xe->d3cold.capable));
+ 
+ 	return 0;
+-- 
+2.43.0

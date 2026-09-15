@@ -394,7 +394,15 @@ ALLOW_ERROR_INJECTION(xe_pm_init_early, ERRNO); /* See xe_pci_probe() */
  */
 int xe_pm_probe(struct xe_device *xe)
 {
-	xe->d3cold.capable = xe_pm_pci_d3cold_capable(xe);
+	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+
+	if (xe->info.platform == XE_CRESCENTISLAND) {
+		xe->d3cold.capable = false;
+		pci_d3cold_disable(pdev);
+	} else {
+		xe->d3cold.capable = xe_pm_pci_d3cold_capable(xe);
+	}
+
 	xe_dbg(xe, "d3cold: capable=%s\n", str_yes_no(xe->d3cold.capable));
 
 	return 0;

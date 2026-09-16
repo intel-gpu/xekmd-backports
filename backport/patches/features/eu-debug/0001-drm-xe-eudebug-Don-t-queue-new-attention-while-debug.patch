@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Sanjay Yadav <sanjay.kumar.yadav@intel.com>
+Date: Fri, 4 Sep 2026 22:23:18 +0530
+Subject: drm/xe/eudebug: Don't queue new attention while debugger has unread events
+
+attention_scan_fn() re-queues an EU_ATTENTION event every 100ms for as
+long as threads need attention, regardless of whether the debugger has
+drained what is already pending. If the debugger's per-event handling
+takes longer than that, the event fifo backlog grows unbounded and
+CREATE/DESTROY events queued during workload teardown land behind it,
+missing the read window(disconnect + GT reset).
+
+Skip queueing a new attention event while the fifo still has unread
+events xe_eudebug_handle_gt_attention() already treats the resulting
+-EBUSY as a retry-next-scan, so no reset is triggered.
+
+Cc: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Cc: Andrzej Hajda <andrzej.hajda@intel.com>
+Reviewed-by: Jan Sokolowski <jan.sokolowski@intel.com>
+Signed-off-by: Sanjay Yadav <sanjay.kumar.yadav@intel.com>
+(backported from commit 8aa56c9b878b306357f193a455df31fe06a1acc5 drm-tip-eudebug)
+---
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+index 92aba086ef02..0c52aba0d20d 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+@@ -1742,6 +1742,15 @@ static int xe_send_gt_attention(struct xe_gt *gt)
+ 		goto err_eudebug_put;
+ 	}
+ 
++	/*
++	 * Skip queuing another EU_ATTENTION event while the debugger still
++	 * has unread events in the FIFO. Retry on next scan.
++	 */
++	if (event_fifo_num_events_peek(d)) {
++		ret = -EBUSY;
++		goto err_eudebug_put;
++	}
++
+ 	ret = send_attention_event(d, q, lrc_idx);
+ 	if (ret)
+ 		xe_eudebug_disconnect(d, ret);
+-- 
+2.52.0
+

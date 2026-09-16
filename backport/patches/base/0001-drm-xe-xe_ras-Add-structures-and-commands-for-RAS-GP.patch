@@ -1,0 +1,84 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Soham Purkait <soham.purkait@intel.com>
+Date: Mon, 9 Mar 2026 10:47:04 +0530
+Subject: drm/xe/xe_ras: Add structures and commands for RAS GPU health
+ indicator
+
+Add the sysctrl commands and response structures for GPU health
+indicator supported by RAS.
+
+Signed-off-by: Soham Purkait <soham.purkait@intel.com>
+(backported from https://patchwork.freedesktop.org/series/162833/)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras_types.h | 54 +++++++++++++++++++++++++++++++
+ 1 file changed, 54 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
+index 99b4ae3ac604..a949ef9b0b9e 100644
+--- a/drivers/gpu/drm/xe/xe_ras_types.h
++++ b/drivers/gpu/drm/xe/xe_ras_types.h
+@@ -17,6 +17,60 @@
+ #define XE_RAS_MEMORY_POISON			BIT(2)
+ #define XE_RAS_MEMORY_DATA_PARITY		BIT(5)
+ 
++/**
++ * typedef xe_ras_health_status_t - Device health status values (8-bit)
++ *
++ * Three-state health indicator value reported by system controller commands.
++ *
++ * The expected values are:
++ * - 0: ok  - The device is healthy and operating within normal parameters.
++ * - 1: warning  - The device is experiencing minor issues but is still operational.
++ * - 2: critical  - The device is in a critical state and may not be operational.
++ */
++typedef u8 xe_ras_health_status_t;
++
++/**
++ * struct xe_ras_health_get_input - Input for XE_SYSCTRL_CMD_GET_HEALTH
++ */
++struct xe_ras_health_get_input {
++	/** @reserved: Reserved for future use, must be 0 */
++	u32 reserved[2];
++} __packed;
++
++/**
++ * struct xe_ras_health_get_response - Response for XE_SYSCTRL_CMD_GET_HEALTH
++ */
++struct xe_ras_health_get_response {
++	/** @current_health: Current health status (OK/WARNING/CRITICAL) */
++	xe_ras_health_status_t current_health;
++	/** @reserved: Reserved for alignment */
++	u8 reserved[3];
++} __packed;
++
++/**
++ * struct xe_ras_health_set_input - Input for XE_SYSCTRL_CMD_SET_HEALTH
++ */
++struct xe_ras_health_set_input {
++	/** @new_health: New health status to set */
++	xe_ras_health_status_t new_health;
++	/** @reserved: Reserved for alignment */
++	u8 reserved[3];
++} __packed;
++
++/**
++ * struct xe_ras_health_set_response - Response for XE_SYSCTRL_CMD_SET_HEALTH
++ */
++struct xe_ras_health_set_response {
++	/** @operation_status: Status of set operation (RAS_STATUS_*) */
++	u32 operation_status;
++	/** @current_health: Health status after this change */
++	xe_ras_health_status_t current_health;
++	/** @reserved: Reserved for alignment */
++	u8 reserved[3];
++	/** @reserved_2: Reserved for future expansion */
++	u32 reserved_2[2];
++} __packed;
++
+ /**
+  * enum xe_ras_recovery_action - RAS recovery actions
+  *
+-- 
+2.43.0
+

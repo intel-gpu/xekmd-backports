@@ -1740,6 +1740,15 @@ static int xe_send_gt_attention(struct xe_gt *gt)
 		goto err_eudebug_put;
 	}
 
+	/*
+	 * Skip queuing another EU_ATTENTION event while the debugger still
+	 * has unread events in the FIFO. Retry on next scan.
+	 */
+	if (event_fifo_num_events_peek(d)) {
+		ret = -EBUSY;
+		goto err_eudebug_put;
+	}
+
 	ret = send_attention_event(d, q, lrc_idx);
 	if (ret)
 		xe_eudebug_disconnect(d, ret);

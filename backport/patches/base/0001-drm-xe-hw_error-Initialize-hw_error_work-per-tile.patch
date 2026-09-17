@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Raag Jadav <raag.jadav@intel.com>
+Date: Fri, 27 Mar 2026 06:18:40 -0700
+Subject: drm/xe/hw_error: Initialize hw_error_work per tile
+
+Since hw_error_work is now being reused generically, initialize it per tile
+so that we don't hit uninitialized work for non-root tile. While at it,
+disable hw_error_work on fini to prevent UAF during unwind.
+
+Signed-off-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Riana Tauro <riana.tauro@intel.com>
+(backported from [rev1] drm/xe/hw_error: Initialize hw_error_work per tile)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_hw_error.c | 17 +++++++++++++++--
+ 1 file changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
+index df6275c3d316..5a57b7eaebc3 100644
+--- a/drivers/gpu/drm/xe/xe_hw_error.c
++++ b/drivers/gpu/drm/xe/xe_hw_error.c
+@@ -535,6 +535,16 @@ static void process_hw_errors(struct xe_device *xe)
+ 	}
+ }
+ 
++static void hw_error_fini(void *arg)
++{
++	struct xe_device *xe = arg;
++	struct xe_tile *tile;
++	u8 id;
++
++	for_each_tile(tile, xe, id)
++		disable_work_sync(&tile->hw_error_work);
++}
++
+ /**
+  * xe_hw_error_init - Initialize hw errors
+  * @xe: xe device instance
+@@ -544,12 +554,15 @@ static void process_hw_errors(struct xe_device *xe)
+  */
+ void xe_hw_error_init(struct xe_device *xe)
+ {
+-	struct xe_tile *tile = xe_device_get_root_tile(xe);
++	struct xe_tile *tile;
++	u8 id;
+ 
+ 	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe))
+ 		return;
+ 
+-	INIT_WORK(&tile->hw_error_work, hw_error_work);
++	for_each_tile(tile, xe, id)
++		INIT_WORK(&tile->hw_error_work, hw_error_work);
+ 
+ 	process_hw_errors(xe);
++	devm_add_action_or_reset(xe->drm.dev, hw_error_fini, xe);
+ }

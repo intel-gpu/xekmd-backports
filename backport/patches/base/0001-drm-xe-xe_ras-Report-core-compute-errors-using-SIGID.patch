@@ -1,0 +1,65 @@
+From 53df3834ad38e8f99648d168d1b6088656214c47 Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Sun, 6 Sep 2026 22:56:14 +0530
+Subject: drm/xe/xe_ras: Report core compute errors using SIGID
+
+Use xe_log_* helpers to report core compute errors.
+
+v2:
+  - Pass RAS firmware reported severity to xe_log
+
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+Cc: Riana Tauro <riana.tauro@intel.com>
+backported from https://patchwork.freedesktop.org/series/169692/#rev3
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index acc26d868..b048d96da 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -309,21 +309,27 @@ static void ras_send_error_event(struct xe_device *xe, u8 severity, u8 component
+ 	xe_drm_ras_event(xe, drm_component, drm_severity, response.value);
+ }
+ 
+-static u8 handle_core_compute_errors(struct xe_ras_error_array *arr)
++static u8 handle_core_compute_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
+ {
+ 	struct xe_ras_compute_error *error_info = (void *)arr->details;
++	u8 cper_sev = ras_sev_to_cper_sev(arr->counter.common.severity);
+ 	u8 uncorr_type;
+ 
+ 	uncorr_type = FIELD_GET(CORE_COMPUTE_UNCORR_TYPE, error_info->log_header);
+ 
+ 	/* Request a reset if error is global */
+-	if (uncorr_type == GLOBAL_UNCORR_ERROR)
++	if (uncorr_type == GLOBAL_UNCORR_ERROR) {
++		xe_log_comp(xe, cper_sev, CORE_COMPUTE, &arr->counter, sizeof(arr->counter),
++			    "Global uncorrectable error detected\n");
+ 		return XE_RAS_RECOVERY_ACTION_RESET;
++	}
+ 
+ 	/*
+ 	 * No action needed for other errors.
+ 	 * Local errors are recovered using an engine reset by GuC.
+ 	 */
++	xe_log_comp(xe, cper_sev, CORE_COMPUTE, &arr->counter, sizeof(arr->counter),
++		    "Other compute errors\n");
+ 	return XE_RAS_RECOVERY_ACTION_RECOVERED;
+ }
+ 
+@@ -597,7 +603,7 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+ 
+ 			switch (component) {
+ 			case XE_RAS_COMP_CORE_COMPUTE:
+-				action = handle_core_compute_errors(arr);
++				action = handle_core_compute_errors(xe, arr);
+ 				break;
+ 			case XE_RAS_COMP_SOC_INTERNAL:
+ 				action = handle_soc_internal_errors(xe, arr);
+---
+-- 
+2.43.0
+

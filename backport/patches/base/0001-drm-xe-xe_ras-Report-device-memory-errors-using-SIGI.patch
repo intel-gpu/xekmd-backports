@@ -1,0 +1,45 @@
+From ceacc306eda6667491c6724b7e567d22a698e2d8 Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Sun, 6 Sep 2026 22:56:13 +0530
+Subject: drm/xe/xe_ras: Report device memory errors using SIGID
+
+Use xe_log_comp_info helper to report device memory errors.
+
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+Cc: Riana Tauro <riana.tauro@intel.com>
+backported from https://patchwork.freedesktop.org/series/169692/#rev3
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c | 11 +++++++----
+ 1 file changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 5e0e078e4..acc26d868 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -386,14 +386,17 @@ static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_
+ 	 */
+ 	switch (info->category) {
+ 	case XE_RAS_MEMORY_POISON:
+-		xe_info(xe, "[RAS]: Poison error detected\n");
++		xe_log_comp_info(xe, DEVICE_MEMORY, &arr->counter, sizeof(arr->counter),
++				 "Poison error detected\n");
+ 		break;
+ 	case XE_RAS_MEMORY_DATA_PARITY:
+-		xe_info(xe, "[RAS]: Data parity error detected\n");
++		xe_log_comp_info(xe, DEVICE_MEMORY, &arr->counter, sizeof(arr->counter),
++				 "Data parity error detected\n");
+ 		break;
+ 	case XE_RAS_MEMORY_DB_ECC:
+-		xe_info(xe, "[RAS]: Double-bit ECC error detected at sw address 0x%llx\n",
+-			info->sw_address);
++		xe_log_comp_info(xe, DEVICE_MEMORY, &arr->counter, sizeof(arr->counter),
++				 "Double-bit ECC error detected at sw address 0x%llx\n",
++				 info->sw_address);
+ 		/* TODO: Add page offlining for Double-bit ECC error */
+ 		fallthrough;
+ 	default:
+---
+-- 
+2.43.0
+

@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Raag Jadav <raag.jadav@intel.com>
+Date: Fri, 27 Mar 2026 06:18:40 -0700
+Subject: [TEMP] drm/xe/xe_hw_error: Handle non-fatal errors routed via direct
+ IRQ
+
+Process, log and recover non-fatal errors routed via direct IRQ. For errors
+that cannot be recovered locally, wedge the device with bus-reset as the
+recovery action.
+
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(backported from https://patchwork.freedesktop.org/patch/749204/?series=173001&rev=1)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hw_error.c | 35 ++++++++++++++++++++++++++++----
+ 1 file changed, 31 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
+index b3c01c058..c7ce301fb 100644
+--- a/drivers/gpu/drm/xe/xe_hw_error.c
++++ b/drivers/gpu/drm/xe/xe_hw_error.c
+@@ -14,6 +14,7 @@
+ #include "xe_drm_ras.h"
+ #include "xe_hw_error.h"
+ #include "xe_mmio.h"
++#include "xe_ras.h"
+ #include "xe_survivability_mode.h"
+ 
+ #define GT_HW_ERROR_MAX_ERR_BITS		16
+@@ -165,12 +166,37 @@ static_assert(ARRAY_SIZE(pvc_master_local_nonfatal_err_reg) == XE_RAS_REG_SIZE);
+ 						 pvc_master_local_fatal_err_reg : \
+ 						 pvc_master_local_nonfatal_err_reg)
+ 
++static const char *hw_err_to_str(const enum hardware_error hw_err)
++{
++	switch (hw_err) {
++	case HARDWARE_ERROR_CORRECTABLE:
++		return "Correctable";
++	case HARDWARE_ERROR_NONFATAL:
++		return "Non-Fatal";
++	case HARDWARE_ERROR_FATAL:
++		return "Fatal";
++	default:
++		return "Unknown";
++	}
++}
++
+ static void hw_error_work(struct work_struct *work)
+ {
+ 	struct xe_tile *tile = container_of(work, typeof(*tile), hw_error_work);
+ 	struct xe_device *xe = tile_to_xe(tile);
+ 	int ret;
+ 
++	if (xe->info.has_sysctrl) {
++		ret = xe_ras_process_errors(xe);
++		/* For any non-fatal errors that do not return recovered, declare wedged */
++		if (ret) {
++			xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_BUS_RESET);
++			xe_device_declare_wedged(xe);
++		}
++
++		return;
++	}
++
+ 	ret = xe_survivability_mode_runtime_enable(xe);
+ 	if (ret)
+ 		drm_err(&xe->drm, "Failed to enable runtime survivability mode\n");
+@@ -434,12 +460,13 @@ static void hw_error_source_handler(struct xe_tile *tile, const enum hardware_er
+ 		return;
+ 
+ 	/*
+-	 * Hardware errors are reported through System Controller on the platforms that
+-	 * support it, and never routed as direct IRQ to SGUnit. So we should never be
+-	 * here for those platforms.
++	 * Non fatal errors are routed as a direct IRQ on platforms that support
++	 * system controller.
+ 	 */
+ 	if (xe->info.has_sysctrl) {
+-		drm_err_ratelimited(&xe->drm, HW_ERR "Invalid error routing\n");
++		drm_err_ratelimited(&xe->drm, HW_ERR "%s %s reported\n", hw_err_to_str(hw_err),
++				    severity_str);
++		schedule_work(&tile->hw_error_work);
+ 		return;
+ 	}
+ 
+-- 
+2.43.0
+

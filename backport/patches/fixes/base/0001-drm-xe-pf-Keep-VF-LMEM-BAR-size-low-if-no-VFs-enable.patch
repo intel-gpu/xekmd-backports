@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Marcin Bernatowicz <marcin.bernatowicz@linux.intel.com>
+Date: Wed, 2 Sep 2026 14:47:51 +0200
+Subject: [TEMP] : drm/xe/pf: Keep VF LMEM BAR size low if no VFs enabled
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When VFs are enabled on dGFX the driver resizes the PF VF_LMEM_BAR to
+fit the requested layout. After VFs are disabled the PF VF BAR
+size is left as-is. On platforms with tight MMIO apertures a
+subsequent unplug/rescan followed by another enable may fail with:
+
+  "VF BAR …: can't assign; no space"
+
+because the PCI core reserves address space based on the (now large) VF
+template, often multiplied by totalvfs.
+
+Closes: https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/5937
+Fixes: 94eae6ee4c2d ("drm/xe/pf: Set VF LMEM BAR size")
+Signed-off-by: Marcin Bernatowicz <marcin.bernatowicz@linux.intel.com>
+Cc: Michał Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Michał Winiarski <michal.winiarski@intel.com>
+Reviewed-by: Michał Winiarski <michal.winiarski@intel.com>
+(backported from https://patchwork.freedesktop.org/series/154724/#rev3)
+Signed-off-by:  Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci_sriov.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov.c
+index 35e6b53e1..3f9b635ee 100644
+--- a/drivers/gpu/drm/xe/xe_pci_sriov.c
++++ b/drivers/gpu/drm/xe/xe_pci_sriov.c
+@@ -101,6 +101,19 @@ static int pf_prepare_vfs_enabling(struct xe_device *xe)
+ 	return xe_sriov_pf_arm_guard(xe, &xe->sriov.pf.guard_vfs_enabling, false, NULL);
+ }
+ 
++static void restore_vf_vram_bar_size(struct xe_device *xe)
++{
++	int err;
++
++	if (!IS_DGFX(xe))
++		return;
++
++	err = resize_vf_vram_bar(xe, xe->sriov.pf.device_total_vfs);
++	if (err)
++		xe_sriov_info(xe, "Failed to restore VF LMEM BAR size: %pe\n",
++				ERR_PTR(err));
++}
++
+ static void pf_finish_vfs_enabling(struct xe_device *xe)
+ {
+ 	xe_assert(xe, IS_SRIOV_PF(xe));
+@@ -164,6 +177,7 @@ static int pf_enable_vfs(struct xe_device *xe, int num_vfs)
+ 	return num_vfs;
+ 
+ failed:
++	restore_vf_vram_bar_size(xe);
+ 	xe_sriov_pf_unprovision_vfs(xe, num_vfs);
+ 	xe_pm_runtime_put(xe);
+ 	pf_finish_vfs_enabling(xe);
+@@ -191,6 +205,8 @@ static int pf_disable_vfs(struct xe_device *xe)
+ 
+ 	pci_disable_sriov(pdev);
+ 
++	restore_vf_vram_bar_size(xe);
++
+ 	xe_sriov_pf_reprovision_default(xe);
+ 
+ 	pf_reset_vfs(xe, num_vfs);
+-- 
+2.43.0
+

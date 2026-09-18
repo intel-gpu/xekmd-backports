@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jan Sokolowski <jan.sokolowski@intel.com>
+Date: Tue, 7 Jul 2026 12:25:27 +0200
+Subject: drm/xe/prelim/xe_eudebug: fix IDLE_MSG_DISABLE not being
+ cleared
+
+IDLE_MSG_DISABLE bit is being enabled during engine rcu_flush, but
+due to a misspelling it's not disabled after but enabled again.
+
+Change REG_MASKED_FIELD_ENABLE to REG_MASKED_FIELD_DISABLE.
+
+Signed-off-by: Jan Sokolowski <jan.sokolowski@intel.com>
+Fixes: 082762ac9482 ("drm/xe/eudebug: vm open/pread/pwrite")
+(cherry-picked from commit 55402e7b7d225bf8af7de29c8effaf648a7c7f92 xe internal)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+index a05d402ff..44f9a2fe6 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+@@ -4198,7 +4198,7 @@ static int engine_rcu_flush(struct xe_eudebug *d,
+ 			     timeout_us, NULL, false);
+ out:
+ 	if (!(psmi_ctrl & IDLE_MSG_DISABLE))
+-		xe_mmio_write32(&gt->mmio, psmi_addr, REG_MASKED_FIELD_ENABLE(IDLE_MSG_DISABLE));
++		xe_mmio_write32(&gt->mmio, psmi_addr, REG_MASKED_FIELD_DISABLE(IDLE_MSG_DISABLE));
+ 
+ 	mutex_unlock(&d->eu_lock);
+ 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
+-- 
+2.43.0
+

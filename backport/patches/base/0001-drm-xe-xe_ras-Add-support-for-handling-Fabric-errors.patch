@@ -1,0 +1,97 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Wed, 16 Sep 2026 10:58:38 +0530
+Subject: [TEMP] drm/xe/xe_ras: Add support for handling Fabric errors
+
+Add support for handling fabric errors. For System Agent Fabric errors
+caused by data payload parity, log the error and return. For all other
+errors or causes, request a Seconday Bus Reset(SBR).
+
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/172733/#rev2)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c       | 35 +++++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_ras_types.h |  6 ++++++
+ 2 files changed, 41 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 7a85735c57d5..c1939fd71f2d 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -185,6 +185,20 @@ static int ras_status_to_errno(u32 status)
+ 	}
+ }
+ 
++static u8 ras_sev_to_cper_sev(u8 sev)
++{
++	switch (sev) {
++	case XE_RAS_SEV_CORRECTABLE:
++		return CPER_SEV_CORRECTED;
++	case XE_RAS_SEV_UNCORRECTABLE:
++		return CPER_SEV_RECOVERABLE;
++	case XE_RAS_SEV_INFORMATIONAL:
++		return CPER_SEV_INFORMATIONAL;
++	default:
++		return CPER_SEV_RECOVERABLE;
++	}
++}
++
+ static inline const char *sev_to_str(u8 severity)
+ {
+ 	if (severity >= XE_RAS_SEV_MAX)
+@@ -395,6 +409,24 @@ static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_
+ 	return XE_RAS_RECOVERY_ACTION_RECOVERED;
+ }
+ 
++static u8 handle_fabric_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
++{
++	struct xe_ras_error_product *product = &arr->counter.product;
++	struct xe_ras_ieh_error *info = (void *)arr->details;
++	u8 severity = arr->counter.common.severity;
++
++	if ((info->global_error_status & XE_RAS_FAB_IEH_SAF_MHB) &&
++	    product->cause.cause == XE_RAS_FAB_CAUSE_PAYLOAD) {
++		xe_log_comp(xe, ras_sev_to_cper_sev(severity), FABRIC, &arr->counter,
++			    sizeof(arr->counter), "SAF MHB error detected\n");
++		return XE_RAS_RECOVERY_ACTION_RECOVERED;
++	}
++
++	xe_log_comp(xe, ras_sev_to_cper_sev(severity), FABRIC, &arr->counter,
++		    sizeof(arr->counter), "Errors detected\n");
++	return XE_RAS_RECOVERY_ACTION_RESET;
++}
++
+ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
+ 				      struct xe_sysctrl_event_response *response)
+ {
+@@ -556,6 +588,9 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+ 			case XE_RAS_COMP_DEVICE_MEMORY:
+ 				action = handle_device_memory_errors(xe, arr);
+ 				break;
++			case XE_RAS_COMP_FABRIC:
++				action = handle_fabric_errors(xe, arr);
++				break;
+ 			default:
+ 				/* For any other component, reset */
+ 				action = XE_RAS_RECOVERY_ACTION_RESET;
+diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
+index fe6f3658a2a4..4a8cd6fc5ba2 100644
+--- a/drivers/gpu/drm/xe/xe_ras_types.h
++++ b/drivers/gpu/drm/xe/xe_ras_types.h
+@@ -12,6 +12,12 @@
+ #define XE_RAS_NUM_ERROR_ARR			3
+ /* Error bits in IEH global error status register */
+ #define XE_RAS_SOC_IEH_PUNIT			BIT(1)
++/* Bits 16-31 represent individual SAF MHB unit */
++#define XE_RAS_FAB_IEH_SAF_MHB			GENMASK(31, 16)
++
++/* Fabric Data payload parity errors */
++#define XE_RAS_FAB_CAUSE_PAYLOAD		BIT(2)
++
+ /* Device memory error categories */
+ #define XE_RAS_MEMORY_DB_ECC			BIT(1)
+ #define XE_RAS_MEMORY_POISON			BIT(2)
+-- 
+2.43.0
+

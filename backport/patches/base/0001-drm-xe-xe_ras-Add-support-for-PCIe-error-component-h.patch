@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Wed, 16 Sep 2026 10:58:39 +0530
+Subject: [TEMP] drm/xe/xe_ras: Add support for PCIe error component
+ handling
+
+Add support for handling PCIe subsystem errors. PCIe subsystem power
+management errors require a Seconday bus reset(SBR) for recovery. Treat all
+others as recovered and take no further action.
+
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/172733/#rev2)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c       | 19 +++++++++++++++++++
+ drivers/gpu/drm/xe/xe_ras_types.h |  1 +
+ 2 files changed, 20 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index c1939fd71f2d..83adcd211864 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -409,6 +409,22 @@ static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_
+ 	return XE_RAS_RECOVERY_ACTION_RECOVERED;
+ }
+ 
++static u8 handle_pcie_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
++{
++	struct xe_ras_ieh_error *info = (void *)arr->details;
++	u8 severity = arr->counter.common.severity;
++
++	if (info->global_error_status & XE_RAS_PCIE_IEH_GPMA) {
++		xe_log_comp(xe, ras_sev_to_cper_sev(severity), PCIE, &arr->counter,
++			    sizeof(arr->counter), "GPMA error detected\n");
++		return XE_RAS_RECOVERY_ACTION_RESET;
++	}
++
++	xe_log_comp(xe, ras_sev_to_cper_sev(arr->counter.common.severity), PCIE, &arr->counter,
++		    sizeof(arr->counter), "Errors detected\n");
++	return XE_RAS_RECOVERY_ACTION_RECOVERED;
++}
++
+ static u8 handle_fabric_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
+ {
+ 	struct xe_ras_error_product *product = &arr->counter.product;
+@@ -588,6 +604,9 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+ 			case XE_RAS_COMP_DEVICE_MEMORY:
+ 				action = handle_device_memory_errors(xe, arr);
+ 				break;
++			case XE_RAS_COMP_PCIE:
++				action = handle_pcie_errors(xe, arr);
++				break;
+ 			case XE_RAS_COMP_FABRIC:
+ 				action = handle_fabric_errors(xe, arr);
+ 				break;
+diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
+index 4a8cd6fc5ba2..324e9754742b 100644
+--- a/drivers/gpu/drm/xe/xe_ras_types.h
++++ b/drivers/gpu/drm/xe/xe_ras_types.h
+@@ -12,6 +12,7 @@
+ #define XE_RAS_NUM_ERROR_ARR			3
+ /* Error bits in IEH global error status register */
+ #define XE_RAS_SOC_IEH_PUNIT			BIT(1)
++#define XE_RAS_PCIE_IEH_GPMA			BIT(5)
+ /* Bits 16-31 represent individual SAF MHB unit */
+ #define XE_RAS_FAB_IEH_SAF_MHB			GENMASK(31, 16)
+ 
+-- 
+2.43.0
+

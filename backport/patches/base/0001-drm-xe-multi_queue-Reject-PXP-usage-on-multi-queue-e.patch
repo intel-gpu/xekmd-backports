@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jagmeet Randhawa <jagmeet.randhawa@intel.com>
+Date: Fri, 17 Jul 2026 05:47:45 +0800
+Subject: drm/xe/multi_queue: Reject PXP usage on multi-queue exec
+ queues
+
+HWDRM is currently the only supported PXP type, and it is display
+related, so it cannot be combined with multi-queue exec queue groups.
+Reject exec queue creation that requests both multi-queue and PXP,
+returning -EINVAL.
+
+The secondary queue path already rejects any PXP property, so this
+adds the missing check for the multi-queue primary,
+which would otherwise allow the combination.
+
+Validated with igt@xe_exec_multi_queue@sanity, which exercises both
+the PXP-unsupported (-ENODEV) and PXP-supported (-EINVAL) paths.
+
+v3:
+ - Change commit title prefix to drm/xe/multi_queue:.
+ - Add Niranjana's Reviewed-by.
+v2:
+ - Move the multi-queue + PXP check to exec_queue_user_ext_check() to
+   bail out early, keyed off the properties bitmask (Niranjana).
+
+Signed-off-by: Jagmeet Randhawa <jagmeet.randhawa@intel.com>
+Reviewed-by: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Signed-off-by: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Link: https://patch.msgid.link/4d369249d52384bc93663055a3757a50614ebbfd.1784238312.git.jagmeet.randhawa@intel.com
+(cherry-picked from commit 015face96548063e16dfe4dd35ca78355a0f3479 drm-xe-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index f4b297a19218..38972b6e6d37 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -1054,6 +1054,7 @@ int xe_exec_queue_set_property_ioctl(struct drm_device *dev, void *data,
+ 
+ static int exec_queue_user_ext_check(struct xe_exec_queue *q, u64 properties)
+ {
++	struct xe_device *xe = gt_to_xe(q->gt);
+ 	u64 secondary_queue_valid_props = BIT_ULL(DRM_XE_EXEC_QUEUE_SET_PROPERTY_MULTI_GROUP) |
+ 				  BIT_ULL(DRM_XE_EXEC_QUEUE_SET_PROPERTY_MULTI_QUEUE_PRIORITY);
+ 
+@@ -1065,6 +1066,16 @@ static int exec_queue_user_ext_check(struct xe_exec_queue *q, u64 properties)
+ 	    properties & ~secondary_queue_valid_props)
+ 		return -EINVAL;
+ 
++	/*
++	 * HWDRM is the only supported PXP type today. It is display related and
++	 * hence can't work with multi-queue. Reject the combination. The secondary
++	 * queue path above already rejects any PXP property, so this also covers
++	 * the multi-queue primary which would otherwise allow it.
++	 */
++	if (XE_IOCTL_DBG(xe, (properties & BIT_ULL(DRM_XE_EXEC_QUEUE_SET_PROPERTY_MULTI_GROUP)) &&
++			 (properties & BIT_ULL(DRM_XE_EXEC_QUEUE_SET_PROPERTY_PXP_TYPE))))
++		return -EINVAL;
++
+ 	return 0;
+ }
+ 
+-- 
+2.43.0
+

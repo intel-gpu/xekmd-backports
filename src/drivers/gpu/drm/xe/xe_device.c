@@ -736,6 +736,7 @@ static void vf_update_device_info(struct xe_device *xe)
 	xe->info.skip_guc_pc = 1;
 	xe->info.skip_pcode = 1;
 	xe->info.has_drm_ras = false;
+	xe->info.has_device_uid = false;
 }
 
 static int xe_device_vram_alloc(struct xe_device *xe)
@@ -939,6 +940,9 @@ int xe_device_probe(struct xe_device *xe)
 	struct xe_gt *gt;
 	int err;
 	u8 id;
+
+	if (xe->info.has_device_uid)
+		xe->device_uid = xe_mmio_read64_2x32(xe_root_tile_mmio(xe), CRI_DEVICE_UID);
 
 	xe_pat_init_early(xe);
 

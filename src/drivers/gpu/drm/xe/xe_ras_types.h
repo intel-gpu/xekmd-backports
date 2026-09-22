@@ -12,6 +12,13 @@
 #define XE_RAS_NUM_ERROR_ARR			3
 /* Error bits in IEH global error status register */
 #define XE_RAS_SOC_IEH_PUNIT			BIT(1)
+#define XE_RAS_PCIE_IEH_GPMA			BIT(5)
+/* Bits 16-31 represent individual SAF MHB unit */
+#define XE_RAS_FAB_IEH_SAF_MHB			GENMASK(31, 16)
+
+/* Fabric Data payload parity errors */
+#define XE_RAS_FAB_CAUSE_PAYLOAD		BIT(2)
+
 /* Device memory error categories */
 #define XE_RAS_MEMORY_DB_ECC			BIT(1)
 #define XE_RAS_MEMORY_POISON			BIT(2)

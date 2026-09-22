@@ -5174,7 +5174,6 @@ void xe_vm_add_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
 
 	/* User VMs and queues only */
 	xe_assert(xe, !(q->flags & EXEC_QUEUE_FLAG_KERNEL));
-	xe_assert(xe, !(q->flags & EXEC_QUEUE_FLAG_PERMANENT));
 	xe_assert(xe, !(q->flags & EXEC_QUEUE_FLAG_VM));
 	xe_assert(xe, !(q->flags & EXEC_QUEUE_FLAG_MIGRATE));
 	xe_assert(xe, vm->xef);

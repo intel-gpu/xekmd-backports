@@ -3,6 +3,7 @@
  * Copyright © 2026 Intel Corporation
  */
 
+#include "xe_configfs.h"
 #include "xe_debugfs.h"
 #include "xe_device.h"
 #include "xe_drm_ras.h"
@@ -181,6 +182,20 @@ static int ras_status_to_errno(u32 status)
 		return -ENOSPC;
 	default:
 		return -EPROTO;
+	}
+}
+
+static u8 ras_sev_to_cper_sev(u8 sev)
+{
+	switch (sev) {
+	case XE_RAS_SEV_CORRECTABLE:
+		return CPER_SEV_CORRECTED;
+	case XE_RAS_SEV_UNCORRECTABLE:
+		return CPER_SEV_RECOVERABLE;
+	case XE_RAS_SEV_INFORMATIONAL:
+		return CPER_SEV_INFORMATIONAL;
+	default:
+		return CPER_SEV_RECOVERABLE;
 	}
 }
 
@@ -394,6 +409,40 @@ static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_
 	return XE_RAS_RECOVERY_ACTION_RECOVERED;
 }
 
+static u8 handle_pcie_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
+{
+	struct xe_ras_ieh_error *info = (void *)arr->details;
+	u8 severity = arr->counter.common.severity;
+
+	if (info->global_error_status & XE_RAS_PCIE_IEH_GPMA) {
+		xe_log_comp(xe, ras_sev_to_cper_sev(severity), PCIE, &arr->counter,
+			    sizeof(arr->counter), "GPMA error detected\n");
+		return XE_RAS_RECOVERY_ACTION_RESET;
+	}
+
+	xe_log_comp(xe, ras_sev_to_cper_sev(arr->counter.common.severity), PCIE, &arr->counter,
+		    sizeof(arr->counter), "Errors detected\n");
+	return XE_RAS_RECOVERY_ACTION_RECOVERED;
+}
+
+static u8 handle_fabric_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
+{
+	struct xe_ras_error_product *product = &arr->counter.product;
+	struct xe_ras_ieh_error *info = (void *)arr->details;
+	u8 severity = arr->counter.common.severity;
+
+	if ((info->global_error_status & XE_RAS_FAB_IEH_SAF_MHB) &&
+	    product->cause.cause == XE_RAS_FAB_CAUSE_PAYLOAD) {
+		xe_log_comp(xe, ras_sev_to_cper_sev(severity), FABRIC, &arr->counter,
+			    sizeof(arr->counter), "SAF MHB error detected\n");
+		return XE_RAS_RECOVERY_ACTION_RECOVERED;
+	}
+
+	xe_log_comp(xe, ras_sev_to_cper_sev(severity), FABRIC, &arr->counter,
+		    sizeof(arr->counter), "Errors detected\n");
+	return XE_RAS_RECOVERY_ACTION_RESET;
+}
+
 void xe_ras_counter_threshold_crossed(struct xe_device *xe,
 				      struct xe_sysctrl_event_response *response)
 {
@@ -546,6 +595,12 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
 				break;
 			case XE_RAS_COMP_DEVICE_MEMORY:
 				action = handle_device_memory_errors(xe, arr);
+				break;
+			case XE_RAS_COMP_PCIE:
+				action = handle_pcie_errors(xe, arr);
+				break;
+			case XE_RAS_COMP_FABRIC:
+				action = handle_fabric_errors(xe, arr);
 				break;
 			default:
 				/* For any other component, reset */
@@ -878,6 +933,14 @@ static const struct attribute_group gpu_health_group = {
 void xe_ras_init(struct xe_device *xe)
 {
 	int ret;
+
+	/*
+	 * TODO: Replace platform check with xe->info.has_disable_vram_page_offline
+	 * once the feature flag is plumbed through device info.
+	 */
+	if (xe->info.platform == XE_CRESCENTISLAND)
+		xe->ras.disable_vram_page_offline =
+			xe_configfs_get_disable_vram_page_offline(to_pci_dev(xe->drm.dev));
 
 	xe_drm_ras_init(xe);
 

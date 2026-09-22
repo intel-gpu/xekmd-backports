@@ -18,6 +18,7 @@
 #include "xe_device.h"
 #include "xe_i2c.h"
 #include "xe_mmio.h"
+#include "xe_printk.h"
 
 /**
  * DOC: Add-In Management Controller (AMC)
@@ -43,19 +44,23 @@ enum xe_amc_alert {
 	AMC_ALERT_OOB_REQUEST,
 	AMC_ALERT_OOB_RESET,
 	AMC_ALERT_CATERR,
+	AMC_ALERT_NONE = U8_MAX,
 };
 
 static const char * const amc_alert[] = {
-	[AMC_ALERT_FW_DOWNLOAD]		= "Firmware Download",
-	[AMC_ALERT_THERMAL_TRIP]	= "Thermal Trip",
-	[AMC_ALERT_OOB_REQUEST]		= "OOB Request",
-	[AMC_ALERT_OOB_RESET]		= "OOB Reset",
-	[AMC_ALERT_CATERR]		= "Catastrophic",
+	[AMC_ALERT_UNKNOWN]		= "unknown",
+	[AMC_ALERT_FW_DOWNLOAD]		= "firmware_download",
+	[AMC_ALERT_THERMAL_TRIP]	= "thermal_trip",
+	[AMC_ALERT_OOB_REQUEST]		= "oob_request",
+	[AMC_ALERT_OOB_RESET]		= "oob_reset",
+	[AMC_ALERT_CATERR]		= "catastrophic",
+	[AMC_ALERT_NONE]		= "none",
 };
 
 struct xe_amc {
 	struct xe_i2c *i2c;
 	struct work_struct work;
+	u8 alert_reason;
 };
 
 struct amc_header {
@@ -103,6 +108,42 @@ static const struct amc_request amc_get_alert_reason = {
 		.command	= AMC_GET_ALERT_REASON,
 	},
 };
+
+/**
+ * DOC: AMC Alert Reason
+ *
+ * On Intel Xe platforms, AMC sends an alert notification via an SMBUS interrupt
+ * to notify events such as firmware download, thermal trip or a
+ * catastrophic error. See enum xe_amc_alert for the full list of reasons.
+ * Upon an AMC alert the device is wedged and requires vendor-specific recovery.
+ *
+ * See Documentation/ABI/testing/sysfs-driver-intel-xe-amc for the ABI
+ * specification.
+ */
+
+static ssize_t xe_amc_alert_reason_show(struct device *dev,
+					struct device_attribute *attr, char *buf)
+{
+	struct xe_device *xe = pdev_to_xe_device(to_pci_dev(dev));
+	struct xe_amc *amc = xe->i2c->amc;
+
+	return sysfs_emit(buf, "%s\n", amc_alert[amc->alert_reason]);
+}
+static DEVICE_ATTR_RO(xe_amc_alert_reason);
+
+static void xe_amc_remove_alert_sysfs(struct xe_i2c *i2c)
+{
+	struct device *dev = i2c->drm_dev;
+
+	device_remove_file(dev, &dev_attr_xe_amc_alert_reason);
+}
+
+static int xe_amc_create_alert_sysfs(struct xe_i2c *i2c)
+{
+	struct device *dev = i2c->drm_dev;
+
+	return device_create_file(dev, &dev_attr_xe_amc_alert_reason);
+}
 
 static void xe_amc_work(struct work_struct *work)
 {
@@ -158,12 +199,19 @@ out_reassert_interrupt:
 	case AMC_ALERT_THERMAL_TRIP:
 	case AMC_ALERT_OOB_REQUEST:
 	case AMC_ALERT_OOB_RESET:
-	case AMC_ALERT_CATERR:
-		dev_warn(amc->i2c->drm_dev, "AMC Alert: %s\n", amc_alert[alert_reason]);
-		xe_device_declare_wedged(i2c_client_to_xe_device(client));
+	case AMC_ALERT_CATERR: {
+		struct xe_device *xe = i2c_client_to_xe_device(client);
+
+		dev_warn(amc->i2c->drm_dev,
+			 "AMC Alert: %s (%u)\n", amc_alert[alert_reason], alert_reason);
+		amc->alert_reason = alert_reason;
+		xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_VENDOR);
+		xe_device_declare_wedged(xe);
 		break;
+	}
 	default:
-		dev_warn(amc->i2c->drm_dev, "unknown AMC alert: %d\n", alert_reason);
+		amc->alert_reason = AMC_ALERT_UNKNOWN;
+		dev_warn(amc->i2c->drm_dev, "AMC Alert: unknown (%u)\n", alert_reason);
 		break;
 	}
 }
@@ -176,6 +224,7 @@ void xe_amc_handle_alert(struct xe_i2c *i2c)
 int xe_amc_init(struct xe_i2c *i2c)
 {
 	struct xe_amc *amc;
+	int ret;
 
 	amc = kzalloc(sizeof(*amc), GFP_KERNEL);
 	if (!amc)
@@ -185,13 +234,22 @@ int xe_amc_init(struct xe_i2c *i2c)
 	i2c->amc = amc;
 	amc->i2c = i2c;
 
-	return 0;
+	amc->alert_reason = AMC_ALERT_NONE;
+	ret = xe_amc_create_alert_sysfs(i2c);
+	if (ret) {
+		kfree(i2c->amc);
+		i2c->amc = NULL;
+	}
+
+	return ret;
 }
 
 void xe_amc_exit(struct xe_i2c *i2c)
 {
 	if (i2c->amc) {
+		xe_amc_remove_alert_sysfs(i2c);
 		cancel_work_sync(&i2c->amc->work);
 		kfree(i2c->amc);
+		i2c->amc = NULL;
 	}
 }

@@ -156,8 +156,8 @@ index 8ce78e0b1..3cde42045 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
 @@ -143,6 +143,13 @@ struct xe_exec_queue {
- 	 */
- 	unsigned long flags;
+ 	/** @ban_reason: Bitmask of ban reasons (DRM_XE_EXEC_QUEUE_BAN_REASON_*) */
+ 	atomic_t ban_reason;
  
 +	/**
 +	 * @eudebug_flags: immutable eudebug flags for this exec queue.

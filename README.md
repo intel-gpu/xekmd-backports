@@ -135,3 +135,7 @@ By default, "<headers-path>" is set as standard headers path of currently booted
 
 
 Note: For adding new M4 Files, please follow [Rules](src/docs/README_rules.md) Document.
+
+## Limitation
+
+- On kernels that do not report AER ownership, add `pcie_ports=native` to the kernel command line so the OS handles AER errors correctly.

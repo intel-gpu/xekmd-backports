@@ -3,6 +3,8 @@
  * Copyright © 2026 Intel Corporation
  */
 
+#include <linux/aer.h>
+
 #include "xe_configfs.h"
 #include "xe_debugfs.h"
 #include "xe_device.h"
@@ -249,6 +251,9 @@ static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
 	return pci_upstream_bridge(vsp);
 }
 
+#define PCI_EXP_AER_FLAGS	(PCI_EXP_DEVCTL_CERE | PCI_EXP_DEVCTL_NFERE | \
+				 PCI_EXP_DEVCTL_FERE | PCI_EXP_DEVCTL_URRE)
+
 static void ras_usp_aer_init(struct xe_device *xe)
 {
 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
@@ -265,6 +270,14 @@ static void ras_usp_aer_init(struct xe_device *xe)
 		dev_warn(&usp->dev, "AER capability unavailable\n");
 		return;
 	}
+
+	if (!pcie_aer_is_native(usp)) {
+		dev_warn(&usp->dev, "No native AER support\n");
+		return;
+	}
+
+	pcie_capability_set_word(pdev, PCI_EXP_DEVCTL, PCI_EXP_AER_FLAGS);
+	pci_save_state(pdev);
 
 	/*
 	 * Clear any stale Uncorrectable Internal Error Status event in Uncorrectable Error
@@ -294,6 +307,7 @@ static void ras_usp_aer_init(struct xe_device *xe)
 	pci_save_state(usp);
 	dev_dbg(&usp->dev, "Uncorrectable Internal Errors downgraded and unmasked\n");
 }
+MODULE_IMPORT_NS("CXL");
 
 static void ras_send_error_event(struct xe_device *xe, u8 severity, u8 component)
 {

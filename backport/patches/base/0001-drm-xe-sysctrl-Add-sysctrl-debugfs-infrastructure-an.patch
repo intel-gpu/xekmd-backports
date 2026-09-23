@@ -1,0 +1,349 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Anoop Vijay <anoop.c.vijay@intel.com>
+Date: Thu, 17 Sep 2026 12:30:27 -0700
+Subject: [Temp] drm/xe/sysctrl: Add sysctrl debugfs infrastructure and
+ loopback test interface
+
+Add debugfs support for exercising System Controller mailbox
+interface from userspace. This adds the "sc/" debugfs root
+directory and a "loopback" entry that sends an arbitrary byte
+payload to the Core group's inverted-loopback command (group=0xFF,
+cmd=0x03) and reports the response:
+
+  echo "0x11 0x22 0x33 0x44" > /sys/kernel/debug/dri/0/sc/loopback
+  cat /sys/kernel/debug/dri/0/sc/loopback
+
+Signed-off-by: Anoop Vijay <anoop.c.vijay@intel.com>
+(backported from https://patchwork.freedesktop.org/series/161655/#rev6)
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+
+---
+ drivers/gpu/drm/xe/Makefile                   |   1 +
+ drivers/gpu/drm/xe/xe_debugfs.c               |   4 +
+ drivers/gpu/drm/xe/xe_sysctrl_debugfs.c       | 172 ++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sysctrl_debugfs.h       |  14 ++
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h |   5 +
+ drivers/gpu/drm/xe/xe_sysctrl_types.h         |  38 ++++
+ 6 files changed, 234 insertions(+)
+ create mode 100644 drivers/gpu/drm/xe/xe_sysctrl_debugfs.c
+ create mode 100644 drivers/gpu/drm/xe/xe_sysctrl_debugfs.h
+
+diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
+index e762c59e3..b5bf031fa 100644
+--- a/drivers/gpu/drm/xe/Makefile
++++ b/drivers/gpu/drm/xe/Makefile
+@@ -129,6 +129,7 @@ xe-y += xe_bb.o \
+ 	xe_survivability_mode.o \
+ 	xe_sync.o \
+ 	xe_sysctrl.o \
++	xe_sysctrl_debugfs.o \
+ 	xe_sysctrl_event.o \
+ 	xe_sysctrl_mailbox.o \
+ 	xe_tile.o \
+diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
+index 24e71e0c6..1d4d15f12 100644
+--- a/drivers/gpu/drm/xe/xe_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_debugfs.c
+@@ -28,7 +28,8 @@
+ #include "xe_sriov_pf_debugfs.h"
+ #include "xe_sriov_vf.h"
+ #include "xe_step.h"
++#include "xe_sysctrl_debugfs.h"
+ #include "xe_tile_debugfs.h"
+ #include "xe_ttm_vram_mgr.h"
+ #include "xe_vsec.h"
+ #include "xe_wa.h"
+@@ -741,6 +742,9 @@ void xe_debugfs_register(struct xe_device *xe)
+ 
+ 	xe_fault_inject_debugfs_register(xe, root);
+ 
++	if (xe->info.has_sysctrl)
++		xe_sysctrl_debugfs_register(&xe->sc, root);
++
+ 	if (IS_SRIOV_PF(xe))
+ 		xe_sriov_pf_debugfs_register(xe, root);
+ 	else if (IS_SRIOV_VF(xe))
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_debugfs.c b/drivers/gpu/drm/xe/xe_sysctrl_debugfs.c
+new file mode 100644
+index 000000000..6e96b1190
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_sysctrl_debugfs.c
+@@ -0,0 +1,172 @@
++// SPDX-License-Identifier: MIT
++/*
++ * Copyright © 2026 Intel Corporation
++ */
++
++#include <linux/cleanup.h>
++#include <linux/debugfs.h>
++#include <linux/err.h>
++#include <linux/kstrtox.h>
++#include <linux/seq_file.h>
++#include <linux/slab.h>
++#include <linux/string.h>
++#include <linux/uaccess.h>
++
++#include "xe_pm.h"
++#include "xe_printk.h"
++#include "xe_sysctrl.h"
++#include "xe_sysctrl_debugfs.h"
++#include "xe_sysctrl_mailbox.h"
++#include "xe_sysctrl_mailbox_types.h"
++#include "xe_sysctrl_types.h"
++
++static ssize_t xe_sysctrl_loopback_write(struct file *file, const char __user *ubuf,
++					 size_t len, loff_t *offp)
++{
++	char *kbuf __free(kfree) = NULL;
++	u8 *input __free(kfree) = NULL;
++	struct seq_file *m = file->private_data;
++	struct xe_sysctrl_debugfs_entry *entry = m->private;
++	struct xe_device *xe = sc_to_xe(entry->sc);
++	struct xe_sysctrl_mailbox_command cmd = {};
++	char *token, *tmp;
++	unsigned long val;
++	size_t input_len = 0;
++	size_t max_input;
++	size_t out_len = 0;
++	int status;
++
++	if (*offp)
++		return -ESPIPE;
++
++	if (len == 0 || len >= PAGE_SIZE)
++		return -EINVAL;
++
++	kbuf = kmalloc(len + 1, GFP_KERNEL);
++	if (!kbuf)
++		return -ENOMEM;
++
++	max_input = min_t(size_t, len, XE_SYSCTRL_MB_MAX_DATA_SIZE);
++	input = kmalloc(max_input, GFP_KERNEL);
++	if (!input)
++		return -ENOMEM;
++
++	if (copy_from_user(kbuf, ubuf, len))
++		return -EFAULT;
++	kbuf[len] = '\0';
++
++	tmp = kbuf;
++	while ((token = strsep(&tmp, " \t\n")) != NULL) {
++		if (*token == '\0')
++			continue;
++
++		if (input_len >= max_input) {
++			xe_err(xe, "sysctrl: loopback payload too large (max %zu bytes)\n",
++			       max_input);
++			return -EINVAL;
++		}
++
++		if (kstrtoul(token, 0, &val) || val > 0xFF) {
++			xe_err(xe, "sysctrl: invalid loopback token '%s'\n", token);
++			return -EINVAL;
++		}
++
++		input[input_len++] = (u8)val;
++	}
++
++	if (input_len == 0) {
++		xe_err(xe, "sysctrl: no loopback payload given\n");
++		return -EINVAL;
++	}
++
++	xe_sysctrl_create_command(&cmd, entry->group, entry->command,
++				  input, input_len, entry->response_buf, input_len);
++
++	scoped_guard(mutex, &entry->lock) {
++		guard(xe_pm_runtime)(xe);
++		entry->status = xe_sysctrl_send_command(entry->sc, &cmd, &out_len);
++		entry->response_len = entry->status ? 0 : out_len;
++		status = entry->status;
++	}
++
++	return status ? status : len;
++}
++
++static int xe_sysctrl_loopback_show(struct seq_file *m, void *data)
++{
++	struct xe_sysctrl_debugfs_entry *entry = m->private;
++	size_t i;
++
++	guard(mutex)(&entry->lock);
++
++	seq_printf(m, "Command: group=0x%02x cmd=0x%02x\n", entry->group, entry->command);
++	seq_printf(m, "Status: %d (%s)\n", entry->status, entry->status ? "FAILED" : "SUCCESS");
++	seq_printf(m, "Response: %zu bytes\n", entry->response_len);
++
++	if (entry->response_len) {
++		seq_puts(m, "Response data:\n");
++		for (i = 0; i < entry->response_len; i++) {
++			if (i && (i % 16) == 0)
++				seq_putc(m, '\n');
++			seq_printf(m, "%02x ", entry->response_buf[i]);
++		}
++		seq_putc(m, '\n');
++	}
++
++	return 0;
++}
++
++static int xe_sysctrl_loopback_open(struct inode *inode, struct file *file)
++{
++	return single_open(file, xe_sysctrl_loopback_show, inode->i_private);
++}
++
++static const struct file_operations xe_sysctrl_loopback_fops = {
++	.owner = THIS_MODULE,
++	.open = xe_sysctrl_loopback_open,
++	.read = seq_read,
++	.write = xe_sysctrl_loopback_write,
++	.llseek = seq_lseek,
++	.release = single_release,
++};
++
++static void xe_sysctrl_register_entry(struct dentry *root, struct xe_sysctrl_debugfs_entry *entry,
++				      struct xe_sysctrl *sc, const char *name,
++				      u8 group, u8 command,
++				      const struct file_operations *fops)
++{
++	struct xe_device *xe = sc_to_xe(sc);
++
++	if (devm_mutex_init(xe->drm.dev, &entry->lock)) {
++		xe_err(xe, "sysctrl: failed to init %s debugfs entry lock\n", name);
++		return;
++	}
++
++	entry->sc = sc;
++	entry->group = group;
++	entry->command = command;
++	entry->response_len = 0;
++	entry->status = 0;
++
++	debugfs_create_file(name, 0644, root, entry, fops);
++}
++
++/**
++ * xe_sysctrl_debugfs_register - Register debugfs entries for System Controller
++ * @sc: xe_sysctrl instance
++ * @parent: parent debugfs directory
++ */
++void xe_sysctrl_debugfs_register(struct xe_sysctrl *sc, struct dentry *parent)
++{
++	struct dentry *root;
++
++	root = debugfs_create_dir("sc", parent);
++	if (IS_ERR(root))
++		return;
++
++	sc->debugfs.root = root;
++
++	xe_sysctrl_register_entry(root, &sc->debugfs.loopback, sc, "loopback",
++				  XE_SYSCTRL_GROUP_CORE, XE_SYSCTRL_CMD_LOOPBACK,
++				  &xe_sysctrl_loopback_fops);
++}
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_debugfs.h b/drivers/gpu/drm/xe/xe_sysctrl_debugfs.h
+new file mode 100644
+index 000000000..d1414ac35
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_sysctrl_debugfs.h
+@@ -0,0 +1,14 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2026 Intel Corporation
++ */
++
++#ifndef _XE_SYSCTRL_DEBUGFS_H_
++#define _XE_SYSCTRL_DEBUGFS_H_
++
++struct dentry;
++struct xe_sysctrl;
++
++void xe_sysctrl_debugfs_register(struct xe_sysctrl *sc, struct dentry *parent);
++
++#endif
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
+index c236e5377..691a69966 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
+@@ -47,9 +47,11 @@ enum xe_sysctrl_gfsp_cmd {
+ /**
+  * enum xe_sysctrl_core_cmd - Commands supported by Core group
+  *
++ * @XE_SYSCTRL_CMD_LOOPBACK: Loopback test command
+  * @XE_SYSCTRL_CMD_GET_APP_STATUS_BY_ID: Retrieve application status by ID
+  */
+ enum xe_sysctrl_core_cmd {
++	XE_SYSCTRL_CMD_LOOPBACK				= 0x03,
+ 	XE_SYSCTRL_CMD_GET_APP_STATUS_BY_ID		= 0x05,
+ };
+ 
+@@ -115,6 +117,9 @@ struct xe_sysctrl_mailbox_command {
+ #define XE_SYSCTRL_MB_MAX_MESSAGE_SIZE	\
+ 	(XE_SYSCTRL_MB_FRAME_SIZE * XE_SYSCTRL_MB_MAX_FRAMES)
+ 
++#define XE_SYSCTRL_MB_MAX_DATA_SIZE	\
++	(XE_SYSCTRL_MB_MAX_MESSAGE_SIZE - sizeof(u32))
++
+ #define XE_SYSCTRL_MB_DEFAULT_TIMEOUT_MS	500
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_types.h b/drivers/gpu/drm/xe/xe_sysctrl_types.h
+index 98c2f473f..9ad3c40de 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_types.h
++++ b/drivers/gpu/drm/xe/xe_sysctrl_types.h
+@@ -10,7 +10,36 @@
+ #include <linux/types.h>
+ #include <linux/workqueue_types.h>
+ 
++#include "xe_sysctrl_mailbox_types.h"
++
+ struct xe_mmio;
++struct dentry;
++
++/**
++ * struct xe_sysctrl_debugfs_entry - Debugfs entry for a raw mailbox test command
++ */
++struct xe_sysctrl_debugfs_entry {
++	/** @sc: Back pointer to parent sysctrl instance */
++	struct xe_sysctrl *sc;
++
++	/** @group: Command group ID */
++	u8 group;
++
++	/** @command: Command ID within group */
++	u8 command;
++
++	/** @lock: Protects @status, @response_len and @response_buf below */
++	struct mutex lock;
++
++	/** @response_buf: Response data buffer, sized to the maximum mailbox message */
++	u8 response_buf[XE_SYSCTRL_MB_MAX_MESSAGE_SIZE];
++
++	/** @response_len: Actual response length from firmware */
++	size_t response_len;
++
++	/** @status: Last command result */
++	int status;
++};
+ 
+ /**
+  * struct xe_sysctrl - System Controller driver context
+@@ -31,6 +60,15 @@ struct xe_sysctrl {
+ 
+ 	/** @event_lock: Mutex protecting pending events */
+ 	struct mutex event_lock;
++
++	/** @debugfs: Debugfs entries */
++	struct {
++		/** @debugfs.root: Root debugfs directory */
++		struct dentry *root;
++
++		/** @debugfs.loopback: Loopback test entry */
++		struct xe_sysctrl_debugfs_entry loopback;
++	} debugfs;
+ };
+ 
+ #endif
+-- 
+2.43.0
+

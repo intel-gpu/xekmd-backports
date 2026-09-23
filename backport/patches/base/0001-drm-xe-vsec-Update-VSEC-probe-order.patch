@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Michael J. Ruhl" <michael.j.ruhl@intel.com>
+Date: Fri, 18 Sep 2026 06:18:03 -0700
+Subject: [Temp] drm/xe/vsec: Update VSEC probe order
+
+Both debugfs and hwmon access the PMT data area before PMT is
+initialized.
+
+Hardwired offset usage allows this to work by accident.
+Upcoming changes will break this usage.
+
+Re-order the probe steps to initialize VSEC before the other
+features are initialized.
+
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Signed-off-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
+(backported from https://patchwork.freedesktop.org/series/160717/#rev12)
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_device.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 238aa0772..845a6b711 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -1086,6 +1086,8 @@ int xe_device_probe(struct xe_device *xe)
+ 	if (err)
+ 		goto err_unregister_display;
+ 
++	xe_vsec_init(xe);
++
+ 	xe_debugfs_register(xe);
+ 
+ 	err = xe_hwmon_register(xe);
+@@ -1099,8 +1101,6 @@ int xe_device_probe(struct xe_device *xe)
+ 	for_each_gt(gt, xe, id)
+ 		xe_gt_sanitize_freq(gt);
+ 
+-	xe_vsec_init(xe);
+-
+ 	err = xe_sriov_init_late(xe);
+ 	if (err)
+ 		goto err_unregister_display;
+-- 
+2.43.0
+

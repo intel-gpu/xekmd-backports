@@ -14,6 +14,7 @@
 #include "xe_drm_ras.h"
 #include "xe_hw_error.h"
 #include "xe_mmio.h"
+#include "xe_ras.h"
 #include "xe_survivability_mode.h"
 
 #define GT_HW_ERROR_MAX_ERR_BITS		16
@@ -165,11 +166,36 @@ static_assert(ARRAY_SIZE(pvc_master_local_nonfatal_err_reg) == XE_RAS_REG_SIZE);
 						 pvc_master_local_fatal_err_reg : \
 						 pvc_master_local_nonfatal_err_reg)
 
-static void csc_hw_error_work(struct work_struct *work)
+static const char *hw_err_to_str(const enum hardware_error hw_err)
 {
-	struct xe_tile *tile = container_of(work, typeof(*tile), csc_hw_error_work);
+	switch (hw_err) {
+	case HARDWARE_ERROR_CORRECTABLE:
+		return "Correctable";
+	case HARDWARE_ERROR_NONFATAL:
+		return "Non-Fatal";
+	case HARDWARE_ERROR_FATAL:
+		return "Fatal";
+	default:
+		return "Unknown";
+	}
+}
+
+static void hw_error_work(struct work_struct *work)
+{
+	struct xe_tile *tile = container_of(work, typeof(*tile), hw_error_work);
 	struct xe_device *xe = tile_to_xe(tile);
 	int ret;
+
+	if (xe->info.has_sysctrl) {
+		ret = xe_ras_process_errors(xe);
+		/* For any non-fatal errors that do not return recovered, declare wedged */
+		if (ret) {
+			xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_BUS_RESET);
+			xe_device_declare_wedged(xe);
+		}
+
+		return;
+	}
 
 	ret = xe_survivability_mode_runtime_enable(xe);
 	if (ret)
@@ -205,7 +231,7 @@ static void csc_hw_error_handler(struct xe_tile *tile, const enum hardware_error
 					     hec_uncorrected_fw_errors[err_bit], severity_str,
 					     err_bit);
 
-			schedule_work(&tile->csc_hw_error_work);
+			schedule_work(&tile->hw_error_work);
 		}
 	}
 
@@ -434,12 +460,13 @@ static void hw_error_source_handler(struct xe_tile *tile, const enum hardware_er
 		return;
 
 	/*
-	 * Hardware errors are reported through System Controller on the platforms that
-	 * support it, and never routed as direct IRQ to SGUnit. So we should never be
-	 * here for those platforms.
+	 * Non fatal errors are routed as a direct IRQ on platforms that support
+	 * system controller.
 	 */
 	if (xe->info.has_sysctrl) {
-		drm_err_ratelimited(&xe->drm, HW_ERR "Invalid error routing\n");
+		drm_err_ratelimited(&xe->drm, HW_ERR "%s %s reported\n", hw_err_to_str(hw_err),
+				    severity_str);
+		schedule_work(&tile->hw_error_work);
 		return;
 	}
 
@@ -514,7 +541,7 @@ void xe_hw_error_irq_handler(struct xe_tile *tile, const u32 master_ctl)
 	enum hardware_error hw_err;
 
 	if (xe_fault_csc_hw_error())
-		schedule_work(&tile->csc_hw_error_work);
+		schedule_work(&tile->hw_error_work);
 
 	for (hw_err = 0; hw_err < HARDWARE_ERROR_MAX; hw_err++) {
 		if (master_ctl & ERROR_IRQ(hw_err))
@@ -538,6 +565,16 @@ static void process_hw_errors(struct xe_device *xe)
 	}
 }
 
+static void hw_error_fini(void *arg)
+{
+	struct xe_device *xe = arg;
+	struct xe_tile *tile;
+	u8 id;
+
+	for_each_tile(tile, xe, id)
+		disable_work_sync(&tile->hw_error_work);
+}
+
 /**
  * xe_hw_error_init - Initialize hw errors
  * @xe: xe device instance
@@ -547,12 +584,15 @@ static void process_hw_errors(struct xe_device *xe)
  */
 void xe_hw_error_init(struct xe_device *xe)
 {
-	struct xe_tile *tile = xe_device_get_root_tile(xe);
+	struct xe_tile *tile;
+	u8 id;
 
 	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe))
 		return;
 
-	INIT_WORK(&tile->csc_hw_error_work, csc_hw_error_work);
+	for_each_tile(tile, xe, id)
+		INIT_WORK(&tile->hw_error_work, hw_error_work);
 
 	process_hw_errors(xe);
+	devm_add_action_or_reset(xe->drm.dev, hw_error_fini, xe);
 }

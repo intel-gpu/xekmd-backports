@@ -138,4 +138,12 @@ void pci_clear_and_set_config_dword(const struct pci_dev *dev, int pos,
                                     u32 clear, u32 set);
 #endif
 
+#ifdef BPM_PCIE_AER_IS_NATIVE_EXP_SYM_NOT_PRESENT
+/* Requires pcie_ports=native on the kernel cmdline; native_aer is then always set */
+static inline int pcie_aer_is_native(struct pci_dev *pdev)
+{
+	return !pdev->aer_cap ? 0 : 1;
+}
+#endif
+
 #endif /* _BACKPORT_LINUX_PCI_H */

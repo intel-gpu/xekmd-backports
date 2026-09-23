@@ -1,0 +1,192 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Anoop Vijay <anoop.c.vijay@intel.com>
+Date: Thu, 17 Sep 2026 12:30:29 -0700
+Subject: [Temp] drm/xe/sysctrl: Add generic mailbox passthrough debugfs entry
+
+Add a "mailbox" debugfs entry that allows any System Controller
+mailbox command to be issued for bring-up and debug. group and
+command are supplied by the caller as the first two tokens of every
+write:
+
+- Usage: echo "<group> <command> [byte0 byte1 ...]" \
+             > /sys/kernel/debug/dri/0/sc/mailbox
+         cat /sys/kernel/debug/dri/0/sc/mailbox
+
+Signed-off-by: Anoop Vijay <anoop.c.vijay@intel.com>
+(backported from https://patchwork.freedesktop.org/series/161655/#rev6)
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+
+---
+ drivers/gpu/drm/xe/xe_sysctrl_debugfs.c | 136 ++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_sysctrl_types.h   |   3 +
+ 2 files changed, 139 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_debugfs.c b/drivers/gpu/drm/xe/xe_sysctrl_debugfs.c
+index 272e51f24..f0d94840b 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_debugfs.c
++++ b/drivers/gpu/drm/xe/xe_sysctrl_debugfs.c
+@@ -299,6 +299,139 @@ static void xe_sysctrl_register_entry(struct dentry *root, struct xe_sysctrl_deb
+ 	debugfs_create_file(name, 0644, root, entry, fops);
+ }
+ 
++static ssize_t xe_sysctrl_mailbox_write(struct file *file, const char __user *ubuf,
++					size_t len, loff_t *offp)
++{
++	char *kbuf __free(kfree) = NULL;
++	u8 *input __free(kfree) = NULL;
++	struct seq_file *m = file->private_data;
++	struct xe_sysctrl_debugfs_entry *entry = m->private;
++	struct xe_device *xe = sc_to_xe(entry->sc);
++	struct xe_sysctrl_mailbox_command cmd = {};
++	char *token, *tmp;
++	unsigned long val;
++	size_t input_len = 0;
++	size_t max_input;
++	size_t out_len = 0;
++	u8 group, command;
++	int status;
++
++	if (*offp)
++		return -ESPIPE;
++
++	if (len == 0 || len >= PAGE_SIZE)
++		return -EINVAL;
++
++	kbuf = kmalloc(len + 1, GFP_KERNEL);
++	if (!kbuf)
++		return -ENOMEM;
++
++	max_input = min_t(size_t, len, XE_SYSCTRL_MB_MAX_DATA_SIZE);
++	input = kmalloc(max_input, GFP_KERNEL);
++	if (!input)
++		return -ENOMEM;
++
++	if (copy_from_user(kbuf, ubuf, len))
++		return -EFAULT;
++	kbuf[len] = '\0';
++
++	tmp = kbuf;
++
++	do {
++		token = strsep(&tmp, " \t\n");
++	} while (token && *token == '\0');
++	if (!token || kstrtoul(token, 0, &val) || val > 0xFF) {
++		xe_err(xe, "sysctrl: invalid mailbox group id\n");
++		return -EINVAL;
++	}
++	group = (u8)val;
++
++	do {
++		token = strsep(&tmp, " \t\n");
++	} while (token && *token == '\0');
++	if (!token || kstrtoul(token, 0, &val) || val > SYSCTRL_HDR_COMMAND_MAX) {
++		xe_err(xe, "sysctrl: invalid mailbox command id (max 0x%x)\n",
++		       SYSCTRL_HDR_COMMAND_MAX);
++		return -EINVAL;
++	}
++	command = (u8)val;
++
++	while ((token = strsep(&tmp, " \t\n")) != NULL) {
++		if (*token == '\0')
++			continue;
++
++		if (input_len >= max_input) {
++			xe_err(xe, "sysctrl: mailbox payload too large (max %zu bytes)\n",
++			       max_input);
++			return -EINVAL;
++		}
++
++		if (kstrtoul(token, 0, &val) || val > 0xFF) {
++			xe_err(xe, "sysctrl: invalid mailbox payload byte '%s'\n", token);
++			return -EINVAL;
++		}
++
++		input[input_len++] = (u8)val;
++	}
++
++	scoped_guard(mutex, &entry->lock) {
++		entry->group = group;
++		entry->command = command;
++
++		xe_sysctrl_create_command(&cmd, group, command, input_len ? input : NULL, input_len,
++					  entry->response_buf, XE_SYSCTRL_MB_MAX_MESSAGE_SIZE);
++
++		guard(xe_pm_runtime)(xe);
++		status = xe_sysctrl_send_command(entry->sc, &cmd, &out_len);
++		entry->status = status;
++		entry->response_len = status ? 0 : out_len;
++	}
++
++	return status ? status : len;
++}
++
++static int xe_sysctrl_mailbox_show(struct seq_file *m, void *data)
++{
++	struct xe_sysctrl_debugfs_entry *entry = m->private;
++	size_t i;
++
++	guard(mutex)(&entry->lock);
++
++	seq_printf(m, "Command: group=0x%02x cmd=0x%02x\n", entry->group, entry->command);
++	seq_printf(m, "Status: %d (%s)\n", entry->status, entry->status ? "FAILED" : "SUCCESS");
++	seq_printf(m, "Response: %zu bytes\n", entry->response_len);
++
++	if (entry->response_len) {
++		seq_puts(m, "Response data:\n");
++		for (i = 0; i < entry->response_len; i++) {
++			if (i && (i % 16) == 0)
++				seq_putc(m, '\n');
++			seq_printf(m, "%02x ", entry->response_buf[i]);
++		}
++		seq_putc(m, '\n');
++	}
++
++	seq_puts(m, "\nUsage:\n");
++	seq_puts(m, "  echo \"<group> <command> [byte0 byte1 ...]\" > mailbox\n");
++	seq_puts(m, "  cat mailbox\n");
++
++	return 0;
++}
++
++static int xe_sysctrl_mailbox_open(struct inode *inode, struct file *file)
++{
++	return single_open(file, xe_sysctrl_mailbox_show, inode->i_private);
++}
++
++static const struct file_operations xe_sysctrl_mailbox_fops = {
++	.owner = THIS_MODULE,
++	.open = xe_sysctrl_mailbox_open,
++	.read = seq_read,
++	.write = xe_sysctrl_mailbox_write,
++	.llseek = seq_lseek,
++	.release = single_release,
++};
++
+ /**
+  * xe_sysctrl_debugfs_register - Register debugfs entries for System Controller
+  * @sc: xe_sysctrl instance
+@@ -321,4 +454,7 @@ void xe_sysctrl_debugfs_register(struct xe_sysctrl *sc, struct dentry *parent)
+ 	xe_sysctrl_register_entry(root, &sc->debugfs.ras_error_inject, sc, "ras_error_inject",
+ 				  XE_SYSCTRL_GROUP_DIAG, XE_SYSCTRL_CMD_DIAG_RAS_ERR_INJECT,
+ 				  &xe_sysctrl_ras_error_inject_fops);
++
++	xe_sysctrl_register_entry(root, &sc->debugfs.mailbox, sc, "mailbox", 0, 0,
++				  &xe_sysctrl_mailbox_fops);
+ }
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_types.h b/drivers/gpu/drm/xe/xe_sysctrl_types.h
+index 8ea6e1f29..77cbd7403 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_types.h
++++ b/drivers/gpu/drm/xe/xe_sysctrl_types.h
+@@ -71,6 +71,9 @@ struct xe_sysctrl {
+ 
+ 		/** @debugfs.ras_error_inject: RAS error injection test entry */
+ 		struct xe_sysctrl_debugfs_entry ras_error_inject;
++
++		/** @debugfs.mailbox: Generic, user-parameterized mailbox entry */
++		struct xe_sysctrl_debugfs_entry mailbox;
+ 	} debugfs;
+ };
+ 
+-- 
+2.43.0
+

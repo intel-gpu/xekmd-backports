@@ -103,6 +103,15 @@ For verification, Please grep **backport** from dmesg after reboot. You should s
 $ sudo dmesg |grep -i backport
 [.....] COMPAT: Backport init, Module is backported from xe-586
 ```
+
+You can also check the runtime Xe module version directly:
+```
+$ cat /sys/module/xe/version
+backported from (365b81808) using backports xeb_v7.1.4.31_260728.26 for 7.0.0-14-generic Kernel
+```
+
+This confirms the currently running Xe module version at runtime.
+
 ## Uninstallation
 
 ### Ubuntu/Debian

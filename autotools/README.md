@@ -82,7 +82,7 @@ Generated package name:
 ```
 $ make show-version
 ```
-## Installation and verification
+## Installation
 
 ### Ubuntu/Debian
 ```
@@ -98,11 +98,26 @@ Reboot the device after installation of all packages.
 ```
 $ sudo reboot
 ```
+
+## Verification
 For verification, Please grep **backport** from dmesg after reboot. You should see something like below
 ```
 $ sudo dmesg |grep -i backport
 [.....] COMPAT: Backport init, Module is backported from xe-586
 ```
+
+You can also check the Xe module version with below method:
+```
+$ cat /sys/module/xe/version
+```
+
+Example:
+```
+$ cat /sys/module/xe/version
+backported from (365b81808) using backports xeb_v7.1.4.31_260728.26 for 7.0.0-14-generic Kernel
+```
+From the above example, we can extract version from which dkms was created(xeb_v7.1.4.31_260728.26).
+
 ## Uninstallation
 
 ### Ubuntu/Debian

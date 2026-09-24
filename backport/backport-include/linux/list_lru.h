@@ -28,8 +28,6 @@ backport_list_lru_add(struct list_lru *lru, struct list_head *item, int nid,
 }
 #define list_lru_add(lru, item, nid, memcg) \
 	backport_list_lru_add(lru, item, nid, memcg)
-#elif defined(BPM_LIST_LRU_ADD_OBJ_NOT_PRESENT)
-#define list_lru_add(lru, item, nid, memcg) list_lru_add_obj(lru, item)
 #endif
 
 #endif /* __BACKPORT_LIST_LRU_H__ */

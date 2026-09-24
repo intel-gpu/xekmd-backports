@@ -12,14 +12,14 @@
 #include <linux/workqueue.h>
 #include "xe_uc_fw_abi.h"
 
-#define XE_LB_MAX_PAYLOAD_SIZE SZ_4K
-
 /**
  * enum xe_late_bind_fw_id - enum to determine late binding fw index
  */
 enum xe_late_bind_fw_id {
 	/** @XE_LB_FW_FAN_CONTROL: Fan control */
 	XE_LB_FW_FAN_CONTROL = 0,
+	/** @XE_LB_FW_OCODE: Ocode firmware */
+	XE_LB_FW_OCODE,
 	/** @XE_LB_FW_MAX_ID: Number of IDs */
 	XE_LB_FW_MAX_ID
 };

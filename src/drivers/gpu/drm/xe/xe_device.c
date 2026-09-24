@@ -732,7 +732,7 @@ static void vf_update_device_info(struct xe_device *xe)
 	xe->info.probe_display = 0;
 	xe->info.has_heci_cscfi = 0;
 	xe->info.has_heci_gscfi = 0;
-	xe->info.has_late_bind = 0;
+	xe->info.late_bind_mask = 0;
 	xe->info.skip_guc_pc = 1;
 	xe->info.skip_pcode = 1;
 	xe->info.has_drm_ras = false;
@@ -1102,6 +1102,10 @@ int xe_device_probe(struct xe_device *xe)
 	if (err)
 		goto err_unregister_display;
 
+	err = xe_vsec_init(xe);
+	if (err)
+		goto err_unregister_display;
+
 	xe_debugfs_register(xe);
 
 	err = xe_hwmon_register(xe);
@@ -1114,8 +1118,6 @@ int xe_device_probe(struct xe_device *xe)
 
 	for_each_gt(gt, xe, id)
 		xe_gt_sanitize_freq(gt);
-
-	xe_vsec_init(xe);
 
 	err = xe_sriov_init_late(xe);
 	if (err)

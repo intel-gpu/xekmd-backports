@@ -28,8 +28,30 @@ backport_list_lru_add(struct list_lru *lru, struct list_head *item, int nid,
 }
 #define list_lru_add(lru, item, nid, memcg) \
 	backport_list_lru_add(lru, item, nid, memcg)
-#elif defined(BPM_LIST_LRU_ADD_OBJ_NOT_PRESENT)
-#define list_lru_add(lru, item, nid, memcg) list_lru_add_obj(lru, item)
+#endif
+
+#ifdef BPM_LIST_LRU_ADD_EXP_SYM_NOT_PRESENT
+static inline bool
+backport_list_lru_add(struct list_lru *lru, struct list_head *item, int nid,
+		      struct mem_cgroup *memcg)
+{
+	struct list_lru_node *nlru = &lru->node[nid];
+	struct list_lru_one *l = &nlru->lru;
+	bool ret = false;
+
+	spin_lock(&l->lock);
+	if (list_empty(item)) {
+		list_add_tail(item, &l->list);
+		l->nr_items++;
+		atomic_long_inc(&nlru->nr_items);
+		ret = true;
+	}
+	spin_unlock(&l->lock);
+
+	return ret;
+}
+#define list_lru_add(lru, item, nid, memcg) \
+	backport_list_lru_add(lru, item, nid, memcg)
 #endif
 
 #endif /* __BACKPORT_LIST_LRU_H__ */

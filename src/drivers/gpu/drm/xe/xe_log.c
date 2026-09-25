@@ -8,9 +8,15 @@
 
 #include "abi/xe_log_abi.h"
 
+#include "xe_cper.h"
 #include "xe_device.h"
 #include "xe_log.h"
 #include "xe_printk.h"
+
+static bool is_hw_sigid(enum xe_sigid sigid)
+{
+	return (int)sigid >= INTEL_SIGID_GPU_XE_HARDWARE_START;
+}
 
 static void log_emit_cper(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigid,
 			  u32 component, u32 location, const void *data, size_t len,
@@ -18,7 +24,11 @@ static void log_emit_cper(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigi
 {
 	KUNIT_STATIC_STUB_REDIRECT(log_emit_cper, pdev, cper_sev, sigid,
 				   component, location, data, len, vaf);
-	/* TODO */
+
+	if (is_hw_sigid(sigid) && !IS_ERR(data))
+		xe_emit_hardware_error_cper(pdev, cper_sev, sigid,
+					    (struct xe_ras_error_class *)data, NULL);
+	/* TODO software CPER */
 }
 
 static const char *log_unknown_component_prefix(u32 component)
@@ -98,11 +108,6 @@ unrecognized:
 		 "LOG: unrecognized location %u.%u\n", type, id);
 	snprintf(buf, size, "LOC%u.%u? ", type, id);
 	return buf;
-}
-
-static bool is_hw_sigid(enum xe_sigid sigid)
-{
-	return (int)sigid >= INTEL_SIGID_GPU_XE_HARDWARE_START;
 }
 
 static bool is_sev_error(int cper_sev)

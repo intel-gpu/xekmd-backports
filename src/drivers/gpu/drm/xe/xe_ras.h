@@ -20,5 +20,11 @@ int xe_ras_get_threshold(struct xe_device *xe, u8 severity, u8 component, u32 *t
 int xe_ras_set_threshold(struct xe_device *xe, u8 severity, u8 component, u32 threshold);
 void xe_ras_init(struct xe_device *xe);
 enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe);
+int xe_ras_get_counter_response(struct xe_device *xe, struct xe_ras_error_class *counter,
+				struct xe_ras_get_counter_response *out);
+bool xe_ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter);
+u32 xe_ras_drain_info_queue_raw(struct xe_device *xe,
+				const struct xe_ras_get_counter_response *counter_resp,
+				u8 *raw_buf, u32 raw_buf_size);
 
 #endif

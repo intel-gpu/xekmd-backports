@@ -53,8 +53,7 @@
 #include <drm/drm_print.h>
 #include <drm/drm_privacy_screen_machine.h>
 
-
-#ifdef BPM_DRM_DEV_WEDGED_EVENT_NOT_PRESENT
+#ifdef BPM_DRM_WEDGE_RECOVERY_COLD_RESET_NOT_PRESENT
 
 #define WEDGE_STR_LEN	32
 #define PID_STR_LEN	15
@@ -99,7 +98,7 @@ static const char *drm_get_wedge_recovery(unsigned int opt)
  *
  * Returns: 0 on success, negative error code otherwise.
  */
-int drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
+int backport_drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
 			 struct drm_wedge_task_info *info)
 {
 	char event_string[WEDGE_STR_LEN], pid_string[PID_STR_LEN], comm_string[COMM_STR_LEN];
@@ -136,5 +135,6 @@ int drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
 
 	return kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
 }
+#define drm_dev_wedged_event backport_drm_dev_wedged_event
 EXPORT_SYMBOL(drm_dev_wedged_event);
 #endif

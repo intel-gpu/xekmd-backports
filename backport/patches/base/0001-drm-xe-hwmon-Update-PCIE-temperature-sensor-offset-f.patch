@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Karthik Poosa <karthik.poosa@intel.com>
+Date: Fri, 25 Sep 2026 02:24:29 +0530
+Subject: [TEMP] drm/xe/hwmon: Update PCIE temperature sensor offset for
+ CRI
+
+On Crescent Island, the PCIe temperature sensor is reported in
+READ_THERMAL_DATA group 5, byte 0. Add support for reading the sensor
+from this mailbox location.
+
+Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
+(backported from https://patchwork.freedesktop.org/series/174898/#rev3)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hwmon.c | 14 +++++++++++---
+ 1 file changed, 11 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
+index d8f5a4f25..8ce82ebfd 100644
+--- a/drivers/gpu/drm/xe/xe_hwmon.c
++++ b/drivers/gpu/drm/xe/xe_hwmon.c
+@@ -118,6 +118,9 @@ enum sensor_attr_power {
+ #define CRI_TEMP_INDEX_MCTRL	16
+ #define CRI_TEMP_MCTRL_COUNT	4
+ 
++/* On CRI the PCIe temperature is READ_THERMAL_DATA byte 20 (group 5, low byte). */
++#define CRI_PCIE_SENSOR_GROUP_ID	5
++
+ /* Mailbox sentinel reported for an unavailable temperature sensor */
+ #define TEMP_MBX_INVALID	0xFF
+ 
+@@ -1022,16 +1025,21 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ static int get_pcie_temp(struct xe_hwmon *hwmon, long *val)
+ {
+ 	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
++	u32 group = PCIE_SENSOR_GROUP_ID;
+ 	u32 data = 0;
+ 	int ret;
+ 
++	/* CRI relocated the PCIe temperature to a different data group. */
++	if (hwmon->xe->info.platform == XE_CRESCENTISLAND)
++		group = CRI_PCIE_SENSOR_GROUP_ID;
++
+ 	ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_DATA,
+-						  PCIE_SENSOR_GROUP_ID), &data, NULL);
++						  group), &data, NULL);
+ 	if (ret)
+ 		return ret;
+ 
+-	/* Sensor offset is different for G21 */
+-	if (hwmon->xe->info.subplatform != XE_SUBPLATFORM_BATTLEMAGE_G21)
++	if (hwmon->xe->info.subplatform != XE_SUBPLATFORM_BATTLEMAGE_G21 &&
++	    hwmon->xe->info.platform != XE_CRESCENTISLAND)
+ 		data = REG_FIELD_GET(PCIE_SENSOR_MASK, data);
+ 
+ 	data = REG_FIELD_GET(TEMP_MASK, data);
+-- 
+2.43.0
+

@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Karthik Poosa <karthik.poosa@intel.com>
+Date: Fri, 25 Sep 2026 02:24:21 +0530
+Subject: [TEMP] drm/xe/hwmon: Handle unavailable memory controller
+ sensors
+
+Skip memory controller sensors that report invalid readings when
+computing the average temperature in get_mc_temp(). Return -ENXIO when
+no valid sensor data is available, and allow the helper to be used as
+an availability probe by making the output parameter optional.
+
+Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
+Fixes: 3a0cb885e111 ("drm/xe/hwmon: Expose memory controller temperature")
+(backported from https://patchwork.freedesktop.org/series/174898/#rev3)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hwmon.c | 20 ++++++++++++++++----
+ 1 file changed, 16 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
+index 55c93b17c..00179cce6 100644
+--- a/drivers/gpu/drm/xe/xe_hwmon.c
++++ b/drivers/gpu/drm/xe/xe_hwmon.c
+@@ -860,8 +860,8 @@ static int mbx_temp_decode(u8 value)
+ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ {
+ 	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
++	int ret, i, count = 0;
+ 	s32 average = 0;
+-	int ret, i;
+ 
+ 	for (i = 0; i < DIV_ROUND_UP(hwmon->temp.count, sizeof(u32)); i++) {
+ 		ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_DATA, i),
+@@ -872,11 +872,23 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ 			hwmon->temp.dword[i]);
+ 	}
+ 
+-	for (i = TEMP_INDEX_MCTRL; i < hwmon->temp.count - 1; i++)
++	for (i = TEMP_INDEX_MCTRL; i < hwmon->temp.count - 1; i++) {
++		if (!mbx_temp_valid(hwmon, hwmon->temp.value[i]))
++			continue;
+ 		average += mbx_temp_decode(hwmon->temp.value[i]);
++		count++;
++	}
++
++	if (!count) {
++		drm_dbg(&hwmon->xe->drm, "Memory controller temperature unavailable!\n");
++		return -ENXIO;
++	}
++
++	average /= count;
++
++	if (val)
++		*val = average * MILLIDEGREE_PER_DEGREE;
+ 
+-	average /= (hwmon->temp.count - TEMP_INDEX_MCTRL - 1);
+-	*val = average * MILLIDEGREE_PER_DEGREE;
+ 	return 0;
+ }
+ 
+-- 
+2.43.0
+

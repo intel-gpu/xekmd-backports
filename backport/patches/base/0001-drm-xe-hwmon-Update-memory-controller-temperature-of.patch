@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Karthik Poosa <karthik.poosa@intel.com>
+Date: Fri, 25 Sep 2026 02:24:28 +0530
+Subject: [TEMP] drm/xe/hwmon: Update memory controller temperature
+ offset for CRI
+
+On CRI the memory controller temperatures moved in the READ_THERMAL_DATA
+output: they now occupy bytes 16..19 instead of starting at byte 2.
+
+Read and average the CRI memory controller sensors from bytes 16..19,
+keeping the existing byte 2..count-1 range for earlier platforms. Only
+the group(s) covering the used bytes are fetched.
+
+Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
+(backported from https://patchwork.freedesktop.org/series/174898/#rev3)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hwmon.c | 19 ++++++++++++++++---
+ 1 file changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
+index 48ff9750d..d8f5a4f25 100644
+--- a/drivers/gpu/drm/xe/xe_hwmon.c
++++ b/drivers/gpu/drm/xe/xe_hwmon.c
+@@ -114,6 +114,10 @@ enum sensor_attr_power {
+ /* Index of memory controller in READ_THERMAL_DATA output */
+ #define TEMP_INDEX_MCTRL	2
+ 
++/* On CRI the memory controller temperatures are READ_THERMAL_DATA bytes 16..19. */
++#define CRI_TEMP_INDEX_MCTRL	16
++#define CRI_TEMP_MCTRL_COUNT	4
++
+ /* Mailbox sentinel reported for an unavailable temperature sensor */
+ #define TEMP_MBX_INVALID	0xFF
+ 
+@@ -974,10 +978,19 @@ static int mbx_temp_decode(u8 value)
+ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ {
+ 	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
+-	int ret, i, count = 0;
++	int ret, i, start, end, count = 0;
+ 	s32 average = 0;
+ 
+-	for (i = 0; i < DIV_ROUND_UP(hwmon->temp.count, sizeof(u32)); i++) {
++	/* CRI relocated the memory controller temperatures to READ_THERMAL_DATA bytes 16..19. */
++	if (hwmon->xe->info.platform >= XE_CRESCENTISLAND) {
++		start = CRI_TEMP_INDEX_MCTRL;
++		end = CRI_TEMP_INDEX_MCTRL + CRI_TEMP_MCTRL_COUNT;
++	} else {
++		start = TEMP_INDEX_MCTRL;
++		end = hwmon->temp.count - 1;
++	}
++
++	for (i = start / sizeof(u32); i < DIV_ROUND_UP(end, sizeof(u32)); i++) {
+ 		ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_DATA, i),
+ 				    &hwmon->temp.dword[i], NULL);
+ 		if (ret)
+@@ -986,7 +999,7 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ 			hwmon->temp.dword[i]);
+ 	}
+ 
+-	for (i = TEMP_INDEX_MCTRL; i < hwmon->temp.count - 1; i++) {
++	for (i = start; i < end; i++) {
+ 		if (!mbx_temp_valid(hwmon, hwmon->temp.value[i]))
+ 			continue;
+ 		average += mbx_temp_decode(hwmon->temp.value[i]);
+-- 
+2.43.0
+

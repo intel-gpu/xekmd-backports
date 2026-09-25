@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Karthik Poosa <karthik.poosa@intel.com>
+Date: Fri, 25 Sep 2026 02:24:17 +0530
+Subject: [TEMP] drm/xe/hwmon: Handle pcode read failures of
+ xe_hwmon_pcode_rmw_power_limit
+
+Return early when the pcode read operation fails in
+xe_hwmon_pcode_rmw_power_limit() and check the returned error in
+callers to avoid updating power limit settings with invalid data.
+
+Fixes: 8aa7306631f0 ("drm/xe/hwmon: Fix xe_hwmon_power_max_write")
+Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
+(backported from https://patchwork.freedesktop.org/series/174898/#rev3)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hwmon.c | 18 ++++++++++++------
+ 1 file changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
+index 4d6509238..0701a965e 100644
+--- a/drivers/gpu/drm/xe/xe_hwmon.c
++++ b/drivers/gpu/drm/xe/xe_hwmon.c
+@@ -237,9 +237,11 @@ static int xe_hwmon_pcode_rmw_power_limit(const struct xe_hwmon *hwmon, u32 attr
+ 						  READ_PSYSGPU_POWER_LIMIT :
+ 						  READ_PACKAGE_POWER_LIMIT,
+ 						  prepare_power_limit_param2(hwmon)), &val0, &val1);
+-	if (ret)
+-		drm_dbg(&hwmon->xe->drm, "read failed ch %d val0 0x%08x, val1 0x%08x, ret %d\n",
++	if (ret) {
++		drm_err(&hwmon->xe->drm, "read failed ch %d val0 0x%08x, val1 0x%08x, ret %d\n",
+ 			channel, val0, val1, ret);
++		return ret;
++	}
+ 
+ 	if (attr == PL1_HWMON_ATTR)
+ 		val0 = (val0 & ~clr) | set;
+@@ -399,7 +401,9 @@ static int xe_hwmon_power_max_write(struct xe_hwmon *hwmon, u32 attr, int channe
+ 		if (hwmon->xe->info.has_mbx_power_limits) {
+ 			drm_dbg(&hwmon->xe->drm, "disabling %s on channel %d\n",
+ 				PWR_ATTR_TO_STR(attr), channel);
+-			xe_hwmon_pcode_rmw_power_limit(hwmon, attr, channel, PWR_LIM_EN, 0);
++			ret = xe_hwmon_pcode_rmw_power_limit(hwmon, attr, channel, PWR_LIM_EN, 0);
++			if (ret)
++				goto unlock;
+ 			xe_hwmon_pcode_read_power_limit(hwmon, attr, channel, &reg_val);
+ 		} else {
+ 			reg_val = xe_mmio_rmw32(mmio, rapl_limit, PWR_LIM_EN, 0);
+@@ -690,11 +694,13 @@ xe_hwmon_power_max_interval_store(struct device *dev, struct device_attribute *a
+ 
+ 	mutex_lock(&hwmon->hwmon_lock);
+ 
+-	if (hwmon->xe->info.has_mbx_power_limits)
+-		xe_hwmon_pcode_rmw_power_limit(hwmon, power_attr, channel, PWR_LIM_TIME, rxy);
+-	else
++	if (hwmon->xe->info.has_mbx_power_limits) {
++		if (xe_hwmon_pcode_rmw_power_limit(hwmon, power_attr, channel, PWR_LIM_TIME, rxy))
++			count = -EIO;
++	} else {
+ 		r = xe_mmio_rmw32(mmio, xe_hwmon_get_reg(hwmon, REG_PKG_RAPL_LIMIT, channel),
+ 				  PWR_LIM_TIME, rxy);
++	}
+ 
+ 	mutex_unlock(&hwmon->hwmon_lock);
+ 
+-- 
+2.43.0
+

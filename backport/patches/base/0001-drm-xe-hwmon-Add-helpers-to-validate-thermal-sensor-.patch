@@ -1,0 +1,104 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Karthik Poosa <karthik.poosa@intel.com>
+Date: Fri, 25 Sep 2026 02:24:20 +0530
+Subject: [TEMP] drm/xe/hwmon: Add helpers to validate thermal sensor
+ readings
+
+Add mmio_temp_valid() and mbx_temp_valid() to check whether a temperature
+sensor reading is valid. An MMIO value of 0xFFFFFFFF or a mailbox value of
+0xFF indicates the sensor is unavailable.
+
+Gate these checks behind has_mbx_temp_sentinel, enabled on CRI currently.
+
+Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
+(backported from https://patchwork.freedesktop.org/series/174898/#rev3)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device_types.h |  2 ++
+ drivers/gpu/drm/xe/xe_hwmon.c        | 16 ++++++++++++++++
+ drivers/gpu/drm/xe/xe_pci.c          |  2 ++
+ drivers/gpu/drm/xe/xe_pci_types.h    |  1 +
+ 4 files changed, 21 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index 2c05b31a0..ee8fb4191 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -198,6 +198,8 @@ struct xe_device {
+ 		 * pcode mailbox commands.
+ 		 */
+ 		u8 has_mbx_power_limits:1;
++		/** @info.has_mbx_temp_sentinel: Device has temperature-unavailable sentinels */
++		u8 has_mbx_temp_sentinel:1;
+ 		/** @info.has_mbx_thermal_info: Device supports thermal mailbox commands */
+ 		u8 has_mbx_thermal_info:1;
+ 		/** @info.has_mem_copy_instr: Device supports MEM_COPY instruction */
+diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
+index 6d512b915..55c93b17c 100644
+--- a/drivers/gpu/drm/xe/xe_hwmon.c
++++ b/drivers/gpu/drm/xe/xe_hwmon.c
+@@ -109,6 +109,9 @@ enum sensor_attr_power {
+ /* Index of memory controller in READ_THERMAL_DATA output */
+ #define TEMP_INDEX_MCTRL	2
+ 
++/* Mailbox sentinel reported for an unavailable temperature sensor */
++#define TEMP_MBX_INVALID	0xFF
++
+ /* Mailbox temperature is sign-magnitude: bit 7 sign, bits 6:0 magnitude. */
+ #define TEMP_MBX_SIGN		BIT(7)
+ #define TEMP_MBX_MAG		GENMASK(6, 0)
+@@ -833,6 +836,19 @@ static int xe_hwmon_pcode_read_thermal_info(struct xe_hwmon *hwmon)
+ 	return ret;
+ }
+ 
++static inline bool mmio_temp_valid(const struct xe_hwmon *hwmon, u32 value)
++{
++	return hwmon->xe->info.has_mbx_temp_sentinel ? value != U32_MAX
++						     : value != 0;
++}
++
++/* Mailbox temperature is sign-magnitude (bit 7 sign, bits 6:0 magnitude). */
++static inline bool mbx_temp_valid(const struct xe_hwmon *hwmon, u8 value)
++{
++	return hwmon->xe->info.has_mbx_temp_sentinel ? value != TEMP_MBX_INVALID
++						     : value != 0;
++}
++
+ /* Decode an 8-bit sign-magnitude mailbox temperature to degrees Celsius. */
+ static int mbx_temp_decode(u8 value)
+ {
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 9a747e9bf..a4a355798 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -476,6 +476,7 @@ static const struct xe_device_desc cri_desc = {
+ 	.has_gsc_nvm = 1,
+ 	.has_i2c = true,
+ 	.has_mbx_power_limits = true,
++	.has_mbx_temp_sentinel = true,
+ 	.has_mbx_thermal_info = true,
+ 	.has_mert = true,
+ 	.has_pre_prod_wa = 1,
+@@ -781,6 +782,7 @@ static int xe_info_init_early(struct xe_device *xe,
+ 	/* runtime fusing may force flat_ccs to disabled later */
+ 	xe->info.has_flat_ccs = desc->has_flat_ccs;
+ 	xe->info.has_mbx_power_limits = desc->has_mbx_power_limits;
++	xe->info.has_mbx_temp_sentinel = desc->has_mbx_temp_sentinel;
+ 	xe->info.has_mbx_thermal_info = desc->has_mbx_thermal_info;
+ 	xe->info.has_gsc_nvm = desc->has_gsc_nvm;
+ 	xe->info.has_heci_gscfi = desc->has_heci_gscfi;
+diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
+index 1be996854..3b8d70119 100644
+--- a/drivers/gpu/drm/xe/xe_pci_types.h
++++ b/drivers/gpu/drm/xe/xe_pci_types.h
+@@ -51,6 +51,7 @@ struct xe_device_desc {
+ 	u8 has_i2c:1;
+ 	u8 has_llc:1;
+ 	u8 has_mbx_power_limits:1;
++	u8 has_mbx_temp_sentinel:1;
+ 	u8 has_mbx_thermal_info:1;
+ 	u8 has_mert:1;
+ 	u8 has_pre_prod_wa:1;
+-- 
+2.43.0
+

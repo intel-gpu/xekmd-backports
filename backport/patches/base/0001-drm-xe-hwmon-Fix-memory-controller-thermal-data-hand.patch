@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Karthik Poosa <karthik.poosa@intel.com>
+Date: Fri, 25 Sep 2026 02:24:19 +0530
+Subject: [TEMP] drm/xe/hwmon: Fix memory controller thermal data
+ handling
+
+Read all required thermal groups in get_mc_temp() and use an aligned
+u32 buffer for PCODE accesses to avoid unaligned memory accesses and
+ensure correct MC temperature reporting.
+
+Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
+Fixes: 3a0cb885e111 ("drm/xe/hwmon: Expose memory controller temperature")
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(backported from https://patchwork.freedesktop.org/series/174898/#rev3)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hwmon.c | 16 ++++++++++------
+ 1 file changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
+index 365f33339..6d512b915 100644
+--- a/drivers/gpu/drm/xe/xe_hwmon.c
++++ b/drivers/gpu/drm/xe/xe_hwmon.c
+@@ -148,8 +148,12 @@ struct xe_hwmon_thermal_info {
+ 	};
+ 	/** @count: no of temperature sensors available for the platform */
+ 	u8 count;
+-	/** @value: per-sensor raw mailbox temperature; bit7=sign, bits6:0=magnitude */
+-	u8 value[U8_MAX];
++	union {
++		/** @value: per-sensor raw mailbox temperature; bit7=sign, bits6:0=magnitude */
++		u8 value[U8_MAX + 1];
++		/** @dword: sensor values as dwords, u32-aligned for pcode reads */
++		u32 dword[DIV_ROUND_UP(U8_MAX + 1, sizeof(u32))];
++	};
+ 	/** @vram_label: vram label names */
+ 	char vram_label[MAX_VRAM_CHANNELS][MAX_LABEL_SIZE];
+ };
+@@ -840,16 +844,16 @@ static int mbx_temp_decode(u8 value)
+ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ {
+ 	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
+-	u32 *dword = (u32 *)hwmon->temp.value;
+ 	s32 average = 0;
+ 	int ret, i;
+ 
+-	for (i = 0; i < DIV_ROUND_UP(TEMP_LIMIT_MAX, sizeof(u32)); i++) {
++	for (i = 0; i < DIV_ROUND_UP(hwmon->temp.count, sizeof(u32)); i++) {
+ 		ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_DATA, i),
+-				    (dword + i), NULL);
++				    &hwmon->temp.dword[i], NULL);
+ 		if (ret)
+ 			return ret;
+-		drm_dbg(&hwmon->xe->drm, "thermal data for group %d val 0x%x\n", i, dword[i]);
++		drm_dbg(&hwmon->xe->drm, "thermal data for group %d val 0x%x\n", i,
++			hwmon->temp.dword[i]);
+ 	}
+ 
+ 	for (i = TEMP_INDEX_MCTRL; i < hwmon->temp.count - 1; i++)
+-- 
+2.43.0
+

@@ -46,6 +46,9 @@ struct xe_drm_ras {
 
 	/** @disable_vram_page_offline: cached configfs policy, immutable after init */
 	bool disable_vram_page_offline;
+
+	/** @cper_on_query: emit a CPER record on each counter query */
+	bool cper_on_query;
 };
 
 #endif

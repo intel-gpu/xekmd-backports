@@ -1,0 +1,277 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Mon, 28 Sep 2026 11:48:31 +0530
+Subject: [TEMP]: drm/xe/xe_ras: Handle page offline requests for
+ device memory ecc errors
+
+Add basic support for sending page offline/remove requests to system
+controller and use it for device memory ECC error handling.
+Pages that belong to critical BOs cannot be handled by offlining and
+require a SBR (Secondary Bus Reset).
+Pages that are configured for log-only handling are not marked as bad by
+firmware.
+
+For all other valid page addresses, the first occurrence of error
+indicates a poison error and the page is offlined only by software.
+Firmware avoids permanently marking the page as bad. The second occurrence
+of an error indicates a Double-bit ECC error and the firmware
+permanently marks the page as bad.
+
+Cc: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Cc: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(backported from https://patchwork.freedesktop.org/series/172710/#rev3)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c                   | 129 +++++++++++++++++-
+ drivers/gpu/drm/xe/xe_ras_types.h             |  36 +++++
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h |   2 +
+ 3 files changed, 161 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 2fc2322b2..c716f883f 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -5,6 +5,8 @@
+ 
+ #include <linux/aer.h>
+ 
++#include "xe_assert.h"
++#include "xe_bo.h"
+ #include "xe_cper.h"
+ #include "xe_configfs.h"
+ #include "xe_debugfs.h"
+@@ -19,6 +21,7 @@
+ #include "xe_sysctrl_event_types.h"
+ #include "xe_sysctrl_mailbox.h"
+ #include "xe_sysctrl_mailbox_types.h"
++#include "xe_ttm_vram_mgr.h"
+ 
+ #define CORE_COMPUTE_UNCORR_TYPE	GENMASK(26, 25)
+ /*
+@@ -216,6 +219,120 @@ static inline const char *comp_to_str(u8 component)
+ 	return xe_ras_components[component];
+ }
+ 
++static int send_page_offline_cmd(struct xe_device *xe, u64 page_address,
++				 enum xe_ras_page_action action)
++{
++	struct xe_sysctrl_mailbox_command command = {0};
++	struct xe_ras_page_offline_request request = {0};
++	struct xe_ras_page_offline_response response = {0};
++	size_t rlen;
++	int ret;
++
++	if (!xe->info.has_sysctrl)
++		return 0;
++
++	xe_assert(xe, action < XE_RAS_PAGE_ACTION_MAX);
++
++	request.page_address = page_address;
++	request.action = action;
++
++	if (action == XE_RAS_PAGE_ACTION_OFFLINE)
++		xe_log_err(xe, DEVICE_MEMORY, 0, "Requesting firmware to offline page 0x%llx\n",
++			   page_address);
++	else
++		xe_log_err(xe, DEVICE_MEMORY, 0, "Requesting firmware to remove page 0x%llx from queue\n",
++			   page_address);
++
++	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_PAGE_OFFLINE,
++				  &request, sizeof(request), &response, sizeof(response));
++
++	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
++	if (ret) {
++		xe_log_err(xe, SYSCTRL, ret, "failed to send page offline command\n");
++		return ret;
++	}
++
++	if (rlen != sizeof(response)) {
++		xe_log_err(xe, SYSCTRL, -EINVAL,
++			   "unexpected page offline response length %zu (expected %zu)\n",
++			   rlen, sizeof(response));
++		return -EINVAL;
++	}
++
++	ret = ras_status_to_errno(response.status);
++	if (ret)
++		xe_log_err(xe, SYSCTRL, ret, "page offline command failed with status %u\n",
++			   response.status);
++
++	return ret;
++}
++
++static int handle_page_offline(struct xe_device *xe, u64 page_address, bool send_cmd)
++{
++	enum xe_ras_page_action action;
++	u64 addr;
++	int ret = 0;
++
++	if (!IS_ALIGNED(page_address, XE_PAGE_SIZE)) {
++		xe_log_err(xe, SYSCTRL, -EINVAL, "Unaligned physical page address: 0x%llx\n",
++			   page_address);
++		return -EINVAL;
++	}
++
++	addr = ALIGN_DOWN(page_address, PAGE_SIZE);
++
++	ret = xe_ttm_vram_handle_addr_fault(xe, addr);
++
++	/*
++	 * Handle return code from address fault handling function:
++	 *  0: Page softofflined, remove from firmware queue
++	 * -EIO: Address belongs to a critical BO/stolen area that cannot be offlined
++	 * -EOPNOTSUPP: Address is valid and can be offlined but user policy is not to offline
++	 * -EEXIST: Address is soft offlined but yet to be offlined by firmware for second
++	 * occurrence
++	 */
++
++	switch (ret) {
++	case 0:
++		action = XE_RAS_PAGE_ACTION_REMOVE;
++		xe_log_err(xe, DEVICE_MEMORY, ret,
++			   "Poison detected at physical address 0x%llx, page soft-offlined\n",
++			   page_address);
++		break;
++	/* User policy set to decline page offlining */
++	case -EOPNOTSUPP:
++		action = XE_RAS_PAGE_ACTION_REMOVE;
++		xe_log_err(xe, DEVICE_MEMORY, ret,
++			   "Poison detected at physical address 0x%llx, user policy set to decline soft-offlining\n",
++			   page_address);
++		break;
++	case -EIO:
++		xe_log_err(xe, DEVICE_MEMORY, ret,
++			   "Poison detected at physical address 0x%llx, page belongs to critical BO and cannot be soft-offlined\n",
++			   page_address);
++		return ret;
++	case -EEXIST:
++		action = XE_RAS_PAGE_ACTION_OFFLINE;
++		xe_log_err(xe, DEVICE_MEMORY, ret,
++			   "Double-bit ECC error detected at physical address 0x%llx, page soft-offlined\n",
++			   page_address);
++		break;
++	default:
++		xe_log_err(xe, DEVICE_MEMORY, ret,
++			   "Failed to handle address fault at physical address 0x%llx\n",
++			   page_address);
++		return 0;
++	}
++
++	if (send_cmd) {
++		ret = send_page_offline_cmd(xe, page_address, action);
++		if (ret)
++			return ret;
++	}
++
++	return 0;
++}
++
+ static u32 ras_comp_to_hw_sigid(u8 component)
+ {
+ 	switch (component) {
+@@ -399,11 +516,12 @@ static u8 handle_soc_internal_errors(struct xe_device *xe, struct xe_ras_error_a
+ static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
+ {
+ 	struct xe_ras_memory_error *info = (void *)arr->details;
++	int ret;
+ 
+ 	/*
+ 	 * For memory errors, the recovery action depends on the error category
+ 	 *
+-	 * TODO: Double-bit ECC errors: Page offlining
++	 * Double-bit ECC errors: Page offlining
+ 	 * Poison and data parity errors: Log only
+ 	 * For any other memory errors, request a reset as recovery mechanism
+ 	 */
+@@ -417,11 +535,10 @@ static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_
+ 				 "Data parity error detected\n");
+ 		break;
+ 	case XE_RAS_MEMORY_DB_ECC:
+-		xe_log_comp_info(xe, DEVICE_MEMORY, &arr->counter, sizeof(arr->counter),
+-				 "Double-bit ECC error detected at sw address 0x%llx\n",
+-				 info->sw_address);
+-		/* TODO: Add page offlining for Double-bit ECC error */
+-		fallthrough;
++		ret = handle_page_offline(xe, info->sw_address, true);
++		if (ret)
++			return XE_RAS_RECOVERY_ACTION_RESET;
++		break;
+ 	default:
+ 		return XE_RAS_RECOVERY_ACTION_RESET;
+ 	}
+diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
+index a7d030238..147992a92 100644
+--- a/drivers/gpu/drm/xe/xe_ras_types.h
++++ b/drivers/gpu/drm/xe/xe_ras_types.h
+@@ -23,6 +23,20 @@
+ #define XE_RAS_MEMORY_DB_ECC			BIT(1)
+ #define XE_RAS_MEMORY_POISON			BIT(2)
+ #define XE_RAS_MEMORY_DATA_PARITY		BIT(5)
++
++/**
++ * enum xe_ras_page_action - Page offline actions for page offline request
++ *
++ * @XE_RAS_PAGE_ACTION_OFFLINE: Instruct firmware to offline the page
++ * @XE_RAS_PAGE_ACTION_REMOVE: Instruct firmware to remove the page from queue
++ * @XE_RAS_PAGE_ACTION_MAX: Max value
++ */
++enum xe_ras_page_action {
++	XE_RAS_PAGE_ACTION_OFFLINE,
++	XE_RAS_PAGE_ACTION_REMOVE,
++	XE_RAS_PAGE_ACTION_MAX
++};
++
+ #define XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE	200
+ #define XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE	5120
+ #define XE_RAS_INFO_QUEUE_FLAG_AVAILABLE	0x01
+@@ -456,4 +470,26 @@ struct xe_ras_memory_error {
+ 	u32 reserved2[10];
+ } __packed;
+ 
++/**
++ * struct xe_ras_page_offline_request - Request for page offline command
++ */
++struct xe_ras_page_offline_request {
++	/** @page_address: Page address (4KB aligned) */
++	u64 page_address;
++	/** @action: Action to be performed, see &enum xe_ras_page_action */
++	u32 action;
++	/** @reserved: Reserved for future use */
++	u32 reserved;
++} __packed;
++
++/**
++ * struct xe_ras_page_offline_response - Response from page offline command
++ */
++struct xe_ras_page_offline_response {
++	/** @status: Status of the page offline request */
++	u32 status;
++	/** @reserved: Reserved for future use */
++	u32 reserved;
++} __packed;
++
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
+index eb0e7b84f..9403baaf4 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
+@@ -32,6 +32,7 @@ enum xe_sysctrl_group {
+  * @XE_SYSCTRL_CMD_GET_THRESHOLD: Retrieve error threshold
+  * @XE_SYSCTRL_CMD_SET_THRESHOLD: Set error threshold
+  * @XE_SYSCTRL_CMD_GET_PENDING_EVENT: Retrieve pending event
++ * @XE_SYSCTRL_CMD_PAGE_OFFLINE: Instruct firmware to offline/remove a page
+  * @XE_SYSCTRL_CMD_GET_HEALTH: Retrieve gpu health
+  * @XE_SYSCTRL_CMD_SET_HEALTH: Set gpu health
+  * @XE_SYSCTRL_CMD_GET_INFO_QUEUE_DATA: Retrieve a chunk of info queue data
+@@ -43,6 +44,7 @@ enum xe_sysctrl_gfsp_cmd {
+ 	XE_SYSCTRL_CMD_GET_THRESHOLD		= 0x05,
+ 	XE_SYSCTRL_CMD_SET_THRESHOLD		= 0x06,
+ 	XE_SYSCTRL_CMD_GET_PENDING_EVENT	= 0x07,
++	XE_SYSCTRL_CMD_PAGE_OFFLINE		= 0x08,
+ 	XE_SYSCTRL_CMD_GET_HEALTH		= 0x0B,
+ 	XE_SYSCTRL_CMD_SET_HEALTH		= 0x0C,
+ 	XE_SYSCTRL_CMD_GET_INFO_QUEUE_DATA	= 0x0D,
+-- 
+2.43.0
+

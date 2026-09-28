@@ -1,0 +1,203 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Mon, 28 Sep 2026 11:48:36 +0530
+Subject: [TEMP]: drm/xe/xe_ras: Track offlined pages by firmware to
+ avoid duplicates
+
+A memory scrubber can report multiple errors at the same address. Track
+pages already successfully offlined by the firmware so that subsequent
+reports for the same address are removed from the firmware queue instead
+of issuing redundant page offline requests.
+
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+(backported from https://patchwork.freedesktop.org/series/172710/#rev3)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c    |  4 ++-
+ drivers/gpu/drm/xe/xe_ras.c       | 44 ++++++++++++++++++++++++++++---
+ drivers/gpu/drm/xe/xe_ras.h       |  2 +-
+ drivers/gpu/drm/xe/xe_ras_types.h |  3 +++
+ 4 files changed, 47 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 411dcd54c..38c348480 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -974,7 +974,9 @@ int xe_device_probe(struct xe_device *xe)
+ 	if (err)
+ 		return err;
+ 
+-	xe_ras_init(xe);
++	err = xe_ras_init(xe);
++	if (err)
++		return err;
+ 
+ 	/*
+ 	 * Now that GT is initialized (TTM in particular),
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 09e561613..d4a8a4da3 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -23,6 +23,9 @@
+ #include "xe_sysctrl_mailbox_types.h"
+ #include "xe_ttm_vram_mgr.h"
+ 
++/* Any non-null entry marks the page as offlined by firmware */
++#define XE_RAS_PAGE_OFFLINED		xa_mk_value(1)
++
+ #define CORE_COMPUTE_UNCORR_TYPE	GENMASK(26, 25)
+ /*
+  * Uncorrectable error type for core compute errors.
+@@ -225,6 +228,7 @@ static int send_page_offline_cmd(struct xe_device *xe, u64 page_address,
+ 	struct xe_sysctrl_mailbox_command command = {0};
+ 	struct xe_ras_page_offline_request request = {0};
+ 	struct xe_ras_page_offline_response response = {0};
++	struct xe_ras_state *state = &xe->ras.state;
+ 	size_t rlen;
+ 	int ret;
+ 
+@@ -264,11 +268,16 @@ static int send_page_offline_cmd(struct xe_device *xe, u64 page_address,
+ 		xe_log_err(xe, SYSCTRL, ret, "page offline command failed with status %u\n",
+ 			   response.status);
+ 
++	if (action == XE_RAS_PAGE_ACTION_OFFLINE)
++		xa_store(&state->offlined_pages, page_address >> XE_PTE_SHIFT,
++			 XE_RAS_PAGE_OFFLINED, GFP_KERNEL);
++
+ 	return ret;
+ }
+ 
+ static int handle_page_offline(struct xe_device *xe, u64 page_address, bool send_cmd)
+ {
++	struct xe_ras_state *state = &xe->ras.state;
+ 	enum xe_ras_page_action action;
+ 	u64 addr;
+ 	int ret = 0;
+@@ -312,7 +321,11 @@ static int handle_page_offline(struct xe_device *xe, u64 page_address, bool send
+ 			   page_address);
+ 		return ret;
+ 	case -EEXIST:
+-		action = XE_RAS_PAGE_ACTION_OFFLINE;
++		if (xa_load(&state->offlined_pages, page_address >> XE_PTE_SHIFT))
++			action = XE_RAS_PAGE_ACTION_REMOVE;
++		else
++			action = XE_RAS_PAGE_ACTION_OFFLINE;
++
+ 		xe_log_err(xe, DEVICE_MEMORY, ret,
+ 			   "Double-bit ECC error detected at physical address 0x%llx, page soft-offlined\n",
+ 			   page_address);
+@@ -357,6 +370,8 @@ static void get_offline_pages(struct xe_device *xe, u32 cmd, void *req, size_t r
+ {
+ 	struct xe_sysctrl_mailbox_command command = {0};
+ 	struct xe_ras_offline_list_request *list_req;
++	struct xe_ras_state *state = &xe->ras.state;
++	unsigned long index;
+ 	u32 total_pages = 0, count = 0;
+ 	ssize_t rlen;
+ 	int ret, i;
+@@ -386,8 +401,15 @@ static void get_offline_pages(struct xe_device *xe, u32 cmd, void *req, size_t r
+ 			return;
+ 		}
+ 
+-		for (i = 0; i < common->pages_returned && i < XE_RAS_NUM_PAGES; i++)
++		for (i = 0; i < common->pages_returned && i < XE_RAS_NUM_PAGES; i++) {
+ 			handle_page_offline(xe, common->page_addresses[i], offline);
++			/* The pages are already offlined by firmware */
++			if (!offline) {
++				index = common->page_addresses[i] >> XE_PTE_SHIFT;
++				xa_store(&state->offlined_pages, index,
++					 XE_RAS_PAGE_OFFLINED, GFP_KERNEL);
++			}
++		}
+ 
+ 		count += common->pages_returned;
+ 		if (!common->pages_returned)
+@@ -1390,6 +1412,13 @@ static const struct attribute_group cper_on_query_group = {
+ 	.attrs = cper_on_query_attrs,
+ };
+ 
++static void ras_fini(void *arg)
++{
++	struct xe_device *xe = arg;
++
++	xa_destroy(&xe->ras.state.offlined_pages);
++}
++
+ /**
+  * xe_ras_get_disable_page_offline - Get the page offline user policy
+  * @xe: xe device instance
+@@ -1417,15 +1446,18 @@ u32 xe_ras_get_max_pages(struct xe_device *xe)
+  * @xe: xe device instance
+  *
+  * Initialize Xe RAS
++ *
++ * Return: 0 on success, negative error code otherwise
+  */
+-void xe_ras_init(struct xe_device *xe)
++int xe_ras_init(struct xe_device *xe)
+ {
++	struct xe_ras_state *state = &xe->ras.state;
+ 	int ret;
+ 
+ 	xe_drm_ras_init(xe);
+ 
+ 	if (!xe->info.has_sysctrl)
+-		return;
++		return 0;
+ 
+ 	/*
+ 	 * TODO: Replace platform check with xe->info.has_disable_vram_page_offline
+@@ -1437,6 +1469,8 @@ void xe_ras_init(struct xe_device *xe)
+ 	if (IS_ENABLED(CONFIG_PCIEAER))
+ 		ras_usp_aer_init(xe);
+ 
++	xa_init(&state->offlined_pages);
++
+ 	get_queued_pages(xe);
+ 	get_offlined_list(xe);
+ 
+@@ -1447,4 +1481,6 @@ void xe_ras_init(struct xe_device *xe)
+ 	ret = devm_device_add_group(xe->drm.dev, &cper_on_query_group);
+ 	if (ret)
+ 		xe_err(xe, "Failed to create cper_on_query sysfs, err=%d\n", ret);
++
++	return devm_add_action_or_reset(xe->drm.dev, ras_fini, xe);
+ }
+diff --git a/drivers/gpu/drm/xe/xe_ras.h b/drivers/gpu/drm/xe/xe_ras.h
+index f30c83504..87cb7e842 100644
+--- a/drivers/gpu/drm/xe/xe_ras.h
++++ b/drivers/gpu/drm/xe/xe_ras.h
+@@ -19,7 +19,7 @@ int xe_ras_get_counter(struct xe_device *xe, u8 severity, u8 component, u32 *val
+ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component);
+ int xe_ras_get_threshold(struct xe_device *xe, u8 severity, u8 component, u32 *threshold);
+ int xe_ras_set_threshold(struct xe_device *xe, u8 severity, u8 component, u32 threshold);
+-void xe_ras_init(struct xe_device *xe);
++int xe_ras_init(struct xe_device *xe);
+ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe);
+ bool xe_ras_get_disable_page_offline(struct xe_device *xe);
+ u32 xe_ras_get_max_pages(struct xe_device *xe);
+diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
+index 1b41053cf..d596f0969 100644
+--- a/drivers/gpu/drm/xe/xe_ras_types.h
++++ b/drivers/gpu/drm/xe/xe_ras_types.h
+@@ -7,6 +7,7 @@
+ #define _XE_RAS_TYPES_H_
+ 
+ #include <linux/types.h>
++#include <linux/xarray.h>
+ 
+ #define XE_RAS_NUM_COUNTERS			16
+ #define XE_RAS_NUM_ERROR_ARR			3
+@@ -537,6 +538,8 @@ struct xe_ras_state {
+ 	bool disable_page_offline;
+ 	/** @max_pages: Total number of pages that can be stored by firmware */
+ 	u32 max_pages;
++	/** @offlined_pages: XArray of pages offlined by firmware */
++	struct xarray offlined_pages;
+ };
+ 
+ #endif
+-- 
+2.43.0
+

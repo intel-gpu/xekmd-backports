@@ -18,9 +18,10 @@ Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
  drivers/gpu/drm/scheduler/gpu_scheduler_trace.h   | 10 ++++++-
  drivers/gpu/drm/xe/xe_trace.h             | 28 +++++++++++++++++++
  drivers/gpu/drm/xe/xe_trace_bo.h          | 21 ++++++++++++++
+ drivers/gpu/drm/xe/xe_trace_cper.h        |  4 +++
  drivers/gpu/drm/xe/xe_trace_guc.h         | 13 +++++++++
  drivers/gpu/drm/xe/xe_trace_lrc.h         |  5 ++++
- 5 files changed, 76 insertions(+), 1 deletion(-)
+ 6 files changed, 80 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/scheduler/gpu_scheduler_trace.h b/drivers/gpu/drm/scheduler/gpu_scheduler_trace.h
 index 261713d..b93d3e4 100644
@@ -54,10 +55,10 @@ index 261713d..b93d3e4 100644
 +#define TRACE_INCLUDE_PATH ../drivers/gpu/drm/scheduler
  #include <trace/define_trace.h>
 diff --git a/drivers/gpu/drm/xe/xe_trace.h b/drivers/gpu/drm/xe/xe_trace.h
-index b4a3577..3e2603b 100644
+index 9c0e6a2..b1d5d74 100644
 --- a/drivers/gpu/drm/xe/xe_trace.h
 +++ b/drivers/gpu/drm/xe/xe_trace.h
-@@ -36,7 +36,11 @@ DECLARE_EVENT_CLASS(xe_gt_tlb_invalidation_fence,
+@@ -37,7 +37,11 @@ DECLARE_EVENT_CLASS(xe_tlb_inval_fence,
  			     ),
  
  		    TP_fast_assign(
@@ -69,7 +70,7 @@ index b4a3577..3e2603b 100644
  			   __entry->fence = fence;
  			   __entry->seqno = fence->seqno;
  			   ),
-@@ -97,7 +101,11 @@ DECLARE_EVENT_CLASS(xe_exec_queue,
+@@ -82,7 +86,11 @@ DECLARE_EVENT_CLASS(xe_exec_queue,
  			     ),
  
  		    TP_fast_assign(
@@ -81,7 +82,7 @@ index b4a3577..3e2603b 100644
  			   __entry->class = q->class;
  			   __entry->logical_mask = q->logical_mask;
  			   __entry->gt_id = q->gt->info.id;
-@@ -221,7 +229,11 @@ DECLARE_EVENT_CLASS(xe_sched_job,
+@@ -255,7 +263,11 @@ DECLARE_EVENT_CLASS(xe_sched_job,
  			     ),
  
  		    TP_fast_assign(
@@ -93,7 +94,7 @@ index b4a3577..3e2603b 100644
  			   __entry->seqno = xe_sched_job_seqno(job);
  			   __entry->lrc_seqno = xe_sched_job_lrc_seqno(job);
  			   __entry->gt_id = job->q->gt->info.id;
-@@ -288,7 +300,11 @@ DECLARE_EVENT_CLASS(xe_sched_msg,
+@@ -322,7 +334,11 @@ DECLARE_EVENT_CLASS(xe_sched_msg,
  			     ),
  
  		    TP_fast_assign(
@@ -105,7 +106,7 @@ index b4a3577..3e2603b 100644
  			   __entry->opcode = msg->opcode;
  			   __entry->guc_id =
  			   ((struct xe_exec_queue *)msg->private_data)->guc->id;
-@@ -322,7 +338,11 @@ DECLARE_EVENT_CLASS(xe_hw_fence,
+@@ -356,7 +372,11 @@ DECLARE_EVENT_CLASS(xe_hw_fence,
  			     ),
  
  		    TP_fast_assign(
@@ -117,7 +118,7 @@ index b4a3577..3e2603b 100644
  			   __entry->ctx = fence->dma.context;
  			   __entry->seqno = fence->dma.seqno;
  			   __entry->fence = fence;
-@@ -361,7 +381,11 @@ TRACE_EVENT(xe_reg_rw,
+@@ -395,7 +415,11 @@ TRACE_EVENT(xe_reg_rw,
  		),
  
  	TP_fast_assign(
@@ -129,7 +130,7 @@ index b4a3577..3e2603b 100644
  		__entry->val = val;
  		__entry->reg = reg;
  		__entry->write = write;
-@@ -385,7 +409,11 @@ DECLARE_EVENT_CLASS(xe_pm_runtime,
+@@ -419,7 +443,11 @@ DECLARE_EVENT_CLASS(xe_pm_runtime,
  			     ),
  
  		    TP_fast_assign(
@@ -200,6 +201,22 @@ index 86323cf..634f5da 100644
  			   __entry->vm = vm;
  			   __entry->asid = vm->usm.asid;
  			   __entry->flags = vm->flags;
+diff --git a/drivers/gpu/drm/xe/xe_trace_cper.h b/drivers/gpu/drm/xe/xe_trace_cper.h
+index 6d2dbf5..a831661 100644
+--- a/drivers/gpu/drm/xe/xe_trace_cper.h
++++ b/drivers/gpu/drm/xe/xe_trace_cper.h
+@@ -36,7 +36,11 @@ TRACE_EVENT(xe_error_cper,
+ 	    ),
+ 
+ 	TP_fast_assign(
++#ifdef BPM_ASSIGN_STR_SECOND_ARG_PRESENT
++	    __assign_str(dev, __dev_name_xe(xe));
++#else
+ 	    __assign_str(dev);
++#endif
+ 	    __entry->sev = severity;
+ 	    memcpy(__entry->platform_id, platform_id, UUID_SIZE);
+ 	    memcpy(__entry->fru_id, fru_id, UUID_SIZE);
 diff --git a/drivers/gpu/drm/xe/xe_trace_guc.h b/drivers/gpu/drm/xe/xe_trace_guc.h
 index 78949db..2a97c31 100644
 --- a/drivers/gpu/drm/xe/xe_trace_guc.h

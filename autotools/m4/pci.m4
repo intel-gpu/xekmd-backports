@@ -92,3 +92,18 @@ AC_DEFUN([AC_PCI_CLEAR_AND_SET_CONFIG_DWORD_NOT_PRESENT], [
                 ])
         ])
 ])
+
+dnl #
+dnl # v6.6-49f776724e64
+dnl # PCI/AER: Export pcie_aer_is_native()
+dnl #
+AC_DEFUN([AC_PCIE_AER_IS_NATIVE_EXP_SYM_NOT_PRESENT], [
+        AC_KERNEL_DO_BACKGROUND([
+                AC_KERNEL_CHECK_SYMBOL_EXPORT([pcie_aer_is_native],
+                        [drivers/pci/pcie/aer.c], [],
+		[
+                        AC_DEFINE([BPM_PCIE_AER_IS_NATIVE_EXP_SYM_NOT_PRESENT], 1,
+                                [pcie_aer_is_native() exported symbol is not available])
+                ])
+        ])
+])

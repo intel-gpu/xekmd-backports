@@ -9,9 +9,10 @@
 #define DRIVER_DATE             "20201103"
 #endif
 
-#ifdef BPM_DRM_DEV_WEDGED_EVENT_NOT_PRESENT
-int drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
+#ifdef BPM_DRM_WEDGE_RECOVERY_COLD_RESET_NOT_PRESENT
+int backport_drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
 			struct drm_wedge_task_info *info);
+#define drm_dev_wedged_event backport_drm_dev_wedged_event
 #elif defined(BPM_DRM_DEV_WEDGED_EVENT_ARG3_NOT_PRESENT)
 static inline int backport_drm_dev_wedged_event_arg3(struct drm_device *dev,
                         unsigned long method,

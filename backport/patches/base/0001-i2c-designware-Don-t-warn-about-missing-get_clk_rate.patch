@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Date: Tue, 15 Sep 2026 16:54:40 +0530
+Subject: i2c: designware: Don't warn about missing
+ get_clk_rate_khz
+
+The Intel Xe I2C controller has no functional input clock, so
+dev->get_clk_rate_khz is never set. i2c_dw_set_timings_master() still calls
+i2c_dw_clk_rate() to compute the SCL HCNT/LCNT values, which triggered a
+WARN_ON_ONCE() splat on every xe module load once the controller started
+probing in polling mode:
+
+  WARNING: CPU: 14 PID: 1830 at drivers/i2c/busses/i2c-designware-common.c:474 i2c_dw_clk_rate+0x10/0x20
+   i2c_dw_probe_master+0xfd/0x5c0
+   dw_i2c_plat_probe+0x32f/0x3d0
+   xe_i2c_probe+0x1b9/0x350 [xe]
+
+Running without an input clock is a legitimate configuration (the bus speed
+comes from the "clock-frequency" property). Downgrade the WARN to a
+dev_dbg_once() and return 0, matching upstream.
+
+Signed-off-by: Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Acked-by: Jarkko Nikula <jarkko.nikula@linux.intel.com>
+Link: https://lore.kernel.org/r/20250513124015.2568924-1-heikki.krogerus@linux.intel.com
+(cherry-pick from bdf4442f4c7e8feb0733ee4de4d4ff7aa8b1c11d)
+Signed-off-by: Nitin Gote <nitin.r.gote@intel.com>
+---
+ drivers/i2c/busses/i2c-designware-common.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/i2c/busses/i2c-designware-common.c b/drivers/i2c/busses/i2c-designware-common.c
+index 5e7665e293bd..efd1b997bce8 100644
+--- a/drivers/i2c/busses/i2c-designware-common.c
++++ b/drivers/i2c/busses/i2c-designware-common.c
+@@ -504,8 +504,10 @@ u32 i2c_dw_clk_rate(struct dw_i2c_dev *dev)
+ 	 * Clock is not necessary if we got LCNT/HCNT values directly from
+ 	 * the platform code.
+ 	 */
+-	if (WARN_ON_ONCE(!dev->get_clk_rate_khz))
++	if (!dev->get_clk_rate_khz) {
++		dev_dbg_once(dev->dev, "Callback get_clk_rate_khz() is not defined\n");
+ 		return 0;
++	}
+ 	return dev->get_clk_rate_khz(dev);
+ }
+ 
+-- 
+2.50.1
+

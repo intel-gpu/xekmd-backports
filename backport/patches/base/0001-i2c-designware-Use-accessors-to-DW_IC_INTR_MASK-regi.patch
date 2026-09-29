@@ -1,0 +1,173 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jarkko Nikula <jarkko.nikula@linux.intel.com>
+Date: Wed, 30 Sep 2026 18:52:54 +0530
+Subject: i2c: designware: Use accessors to DW_IC_INTR_MASK register
+
+Introduce __i2c_dw_write_intr_mask() and __i2c_dw_read_intr_mask()
+helpers and convert every direct access to the DW_IC_INTR_MASK register
+over to them. This is a pure refactor with no functional change; it
+prepares the driver for a subsequent change that maintains a software
+shadow of the interrupt mask so the controller can be driven in polling
+mode.
+
+Signed-off-by: Jarkko Nikula <jarkko.nikula@linux.intel.com>
+Tested-by: Jiawen Wu <jiawenwu@trustnetic.com>
+Signed-off-by: Andi Shyti <andi.shyti@kernel.org>
+Link: https://patchwork.ozlabs.org/project/linux-i2c/patch/20240131141653.2689260-4-jarkko.nikula@linux.intel.com/
+(backported from 04c71da4a9f4eef94bec153ed667d105dacffda3 linux-stable)
+Signed-off-by: Nitin Gote <nitin.r.gote@intel.com>
+---
+ drivers/i2c/busses/i2c-designware-common.c |  2 +-
+ drivers/i2c/busses/i2c-designware-core.h   | 15 +++++++++++++
+ drivers/i2c/busses/i2c-designware-master.c | 26 +++++++++++-----------
+ 3 files changed, 29 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/i2c/busses/i2c-designware-common.c b/drivers/i2c/busses/i2c-designware-common.c
+index 79e083aab..5e7665e29 100644
+--- a/drivers/i2c/busses/i2c-designware-common.c
++++ b/drivers/i2c/busses/i2c-designware-common.c
+@@ -664,7 +664,7 @@ void i2c_dw_disable(struct dw_i2c_dev *dev)
+ 	__i2c_dw_disable(dev);
+ 
+ 	/* Disable all interrupts */
+-	regmap_write(dev->map, DW_IC_INTR_MASK, 0);
++	__i2c_dw_write_intr_mask(dev, 0);
+ 	regmap_read(dev->map, DW_IC_CLR_INTR, &dummy);
+ 
+ 	i2c_dw_release_lock(dev);
+diff --git a/drivers/i2c/busses/i2c-designware-core.h b/drivers/i2c/busses/i2c-designware-core.h
+index f8feae20a..73f56296e 100644
+--- a/drivers/i2c/busses/i2c-designware-core.h
++++ b/drivers/i2c/busses/i2c-designware-core.h
+@@ -352,6 +352,21 @@ static inline void __i2c_dw_disable_nowait(struct dw_i2c_dev *dev)
+ 	dev->status &= ~STATUS_ACTIVE;
+ }
+ 
++static inline void __i2c_dw_write_intr_mask(struct dw_i2c_dev *dev,
++					    unsigned int intr_mask)
++{
++	unsigned int val = dev->flags & ACCESS_POLLING ? 0 : intr_mask;
++
++	regmap_write(dev->map, DW_IC_INTR_MASK, val);
++}
++
++static inline void __i2c_dw_read_intr_mask(struct dw_i2c_dev *dev,
++					   unsigned int *intr_mask)
++{
++	if (!(dev->flags & ACCESS_POLLING))
++		regmap_read(dev->map, DW_IC_INTR_MASK, intr_mask);
++}
++
+ void __i2c_dw_disable(struct dw_i2c_dev *dev);
+ void i2c_dw_disable(struct dw_i2c_dev *dev);
+ 
+diff --git a/drivers/i2c/busses/i2c-designware-master.c b/drivers/i2c/busses/i2c-designware-master.c
+index 56f124f32..55ebb4a11 100644
+--- a/drivers/i2c/busses/i2c-designware-master.c
++++ b/drivers/i2c/busses/i2c-designware-master.c
+@@ -247,7 +247,7 @@ static void i2c_dw_xfer_init(struct dw_i2c_dev *dev)
+ 		     msgs[dev->msg_write_idx].addr | ic_tar);
+ 
+ 	/* Enforce disabled interrupts (due to HW issues) */
+-	regmap_write(dev->map, DW_IC_INTR_MASK, 0);
++	__i2c_dw_write_intr_mask(dev, 0);
+ 
+ 	/* Enable the adapter */
+ 	__i2c_dw_enable(dev);
+@@ -257,7 +257,7 @@ static void i2c_dw_xfer_init(struct dw_i2c_dev *dev)
+ 
+ 	/* Clear and enable interrupts */
+ 	regmap_read(dev->map, DW_IC_CLR_INTR, &dummy);
+-	regmap_write(dev->map, DW_IC_INTR_MASK, DW_IC_INTR_MASTER_MASK);
++	__i2c_dw_write_intr_mask(dev, DW_IC_INTR_MASTER_MASK);
+ }
+ 
+ /*
+@@ -336,7 +336,6 @@ static int amd_i2c_dw_xfer_quirk(struct i2c_adapter *adap, struct i2c_msg *msgs,
+ 	dev->msgs_num = num_msgs;
+ 	dev->msg_write_idx = 0;
+ 	i2c_dw_xfer_init(dev);
+-	regmap_write(dev->map, DW_IC_INTR_MASK, 0);
+ 
+ 	/* Initiate messages read/write transaction */
+ 	for (msg_wrt_idx = 0; msg_wrt_idx < num_msgs; msg_wrt_idx++) {
+@@ -420,7 +419,6 @@ static int txgbe_i2c_dw_xfer_quirk(struct i2c_adapter *adap, struct i2c_msg *msg
+ 	dev->msgs = msgs;
+ 	dev->msgs_num = num_msgs;
+ 	i2c_dw_xfer_init(dev);
+-	regmap_write(dev->map, DW_IC_INTR_MASK, 0);
+ 
+ 	for (msg_idx = 0; msg_idx < num_msgs; msg_idx++) {
+ 		buf = msgs[msg_idx].buf;
+@@ -582,7 +580,7 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
+ 	if (dev->msg_err)
+ 		intr_mask = 0;
+ 
+-	regmap_write(dev->map,  DW_IC_INTR_MASK, intr_mask);
++	__i2c_dw_write_intr_mask(dev, intr_mask);
+ }
+ 
+ static u8
+@@ -590,6 +588,7 @@ i2c_dw_recv_len(struct dw_i2c_dev *dev, u8 len)
+ {
+ 	struct i2c_msg *msgs = dev->msgs;
+ 	u32 flags = msgs[dev->msg_read_idx].flags;
++	unsigned int intr_mask;
+ 
+ 	/*
+ 	 * Adjust the buffer length and mask the flag
+@@ -604,8 +603,9 @@ i2c_dw_recv_len(struct dw_i2c_dev *dev, u8 len)
+ 	 * Received buffer length, re-enable TX_EMPTY interrupt
+ 	 * to resume the SMBUS transaction.
+ 	 */
+-	regmap_update_bits(dev->map, DW_IC_INTR_MASK, DW_IC_INTR_TX_EMPTY,
+-			   DW_IC_INTR_TX_EMPTY);
++	__i2c_dw_read_intr_mask(dev, &intr_mask);
++	intr_mask |= DW_IC_INTR_TX_EMPTY;
++	__i2c_dw_write_intr_mask(dev, intr_mask);
+ 
+ 	return len;
+ }
+@@ -875,7 +875,7 @@ static irqreturn_t i2c_dw_isr(int this_irq, void *dev_id)
+ 		 * interrupt really came from this HW (E.g. firmware has left
+ 		 * the HW active).
+ 		 */
+-		regmap_write(dev->map, DW_IC_INTR_MASK, 0);
++		__i2c_dw_write_intr_mask(dev, 0);
+ 		return IRQ_HANDLED;
+ 	}
+ 
+@@ -888,7 +888,7 @@ static irqreturn_t i2c_dw_isr(int this_irq, void *dev_id)
+ 		 * Anytime TX_ABRT is set, the contents of the tx/rx
+ 		 * buffers are flushed. Make sure to skip them.
+ 		 */
+-		regmap_write(dev->map, DW_IC_INTR_MASK, 0);
++		__i2c_dw_write_intr_mask(dev, 0);
+ 		goto tx_aborted;
+ 	}
+ 
+@@ -910,9 +910,9 @@ static irqreturn_t i2c_dw_isr(int this_irq, void *dev_id)
+ 		complete(&dev->cmd_complete);
+ 	else if (unlikely(dev->flags & ACCESS_INTR_MASK)) {
+ 		/* Workaround to trigger pending interrupt */
+-		regmap_read(dev->map, DW_IC_INTR_MASK, &stat);
+-		regmap_write(dev->map, DW_IC_INTR_MASK, 0);
+-		regmap_write(dev->map, DW_IC_INTR_MASK, stat);
++		__i2c_dw_read_intr_mask(dev, &stat);
++		__i2c_dw_write_intr_mask(dev, 0);
++		__i2c_dw_write_intr_mask(dev, stat);
+ 	}
+ 
+ 	return IRQ_HANDLED;
+@@ -1063,7 +1063,7 @@ int i2c_dw_probe_master(struct dw_i2c_dev *dev)
+ 	if (ret)
+ 		return ret;
+ 
+-	regmap_write(dev->map, DW_IC_INTR_MASK, 0);
++	__i2c_dw_write_intr_mask(dev, 0);
+ 	i2c_dw_release_lock(dev);
+ 
+ 	if (!(dev->flags & ACCESS_POLLING)) {
+-- 
+2.50.1
+

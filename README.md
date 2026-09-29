@@ -7,6 +7,7 @@ This repo contains patches that are already merged in [drm-tip](https://gitlab.f
 
 Since it is just for showcasing the capabilities of the next-gen GPUs so quality is not guaranteed and any issue needs to be reproduced and reported on [drm-tip](https://drm.pages.freedesktop.org/intel-docs/how-to-file-i915-bugs.html).
 
+This change does not introduce anything.
 
 # Contains
 |   |   | |

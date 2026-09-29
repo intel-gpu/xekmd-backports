@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Gajendra Uttamchand <gajendra.uttamchand@intel.com>
+Date: Mon, 10 Aug 2026 07:18:14 +0000
+Subject: drm/xe/lrc: document sentinel and make CTX_TIMESTAMP read
+ TOCTOU-safe
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Problem: CTX_TIMESTAMP MMIO reads could be stale if a context
+switched out between check and read; LRC stores a sentinel while
+a context starts that must not be treated as a real timestamp.
+
+Fix: Check the LRC-stored sentinel before and after the MMIO read;
+return the LRC value if the context switched out to avoid TOCTOU.
+
+Note: Keep XE_LRC_CTX_TIMESTAMP_ACTIVE in xe_lrc.h as the
+canonical sentinel.
+
+Fixes: d243ef6a39c6 ("drm/xe/lrc: Refactor xe_lrc_timestamp to simplify logic")
+Closes: https://gitlab.freedesktop.org/drm/xe/kernel/-/work_items/7956
+Assisted-by: GitHub-Copilot:claude-sonnet-5
+Signed-off-by: Gajendra Uttamchand <gajendra.uttamchand@intel.com>
+Reviewed-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Acked-by: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Link: https://patch.msgid.link/20260810071812.213358-4-gajendra.uttamchand@intel.com
+(cherry picked from commit a806534474df071a730d930df479976a812b699d)
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+(backported from commit cb4afddf9e018a83fec8614d8e337d313871569f linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_lrc.c | 2 +-
+ drivers/gpu/drm/xe/xe_lrc.h | 7 +++++++
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index c20863381..e6f805710 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1079,7 +1079,7 @@ static void xe_lrc_finish(struct xe_lrc *lrc)
+  * on until it is scheduled, we also read the ENGINE_ID MMIO in the WA BB and
+  * store it in the PPHSWP.
+  */
+-#define CONTEXT_ACTIVE 1ULL
++#define CONTEXT_ACTIVE XE_LRC_CTX_TIMESTAMP_ACTIVE
+ static ssize_t setup_utilization_wa(struct xe_lrc *lrc,
+ 				    struct xe_hw_engine *hwe,
+ 				    u32 *batch,
+diff --git a/drivers/gpu/drm/xe/xe_lrc.h b/drivers/gpu/drm/xe/xe_lrc.h
+index 544066318..3b16f13ef 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.h
++++ b/drivers/gpu/drm/xe/xe_lrc.h
+@@ -9,6 +9,13 @@
+ 
+ #include "xe_lrc_types.h"
+ 
++/*
++ * Sentinel value stored in lrc->ctx_timestamp while a context is starting.
++ * The hardware hasn't yet written the real CTX_TIMESTAMP, so this is not a
++ * valid elapsed-time sample and must not be used as one.
++ */
++#define XE_LRC_CTX_TIMESTAMP_ACTIVE 1ULL
++
+ struct drm_printer;
+ struct xe_bb;
+ struct xe_device;
+-- 
+2.43.0
+

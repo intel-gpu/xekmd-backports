@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Date: Tue, 15 Sep 2026 16:54:12 +0530
+Subject: i2c: designware: Use polling by default when there is no
+ irq resource
+
+The Intel Xe I2C host controller is registered as a platform device by the
+xe driver without an interrupt resource, because its interrupt line is not
+wired up on that platform. On velinux 5.15 dw_i2c_plat_probe() calls
+platform_get_irq(), which fails with -ENXIO and aborts the probe with:
+
+  i2c_designware i2c_designware.768: IRQ index 0 not found
+
+Switch to platform_get_irq_optional() and, when no interrupt resource is
+present, fall back to the generic polling transfer mode by setting
+ACCESS_POLLING instead of failing. i2c_dw_probe_master() then skips
+devm_request_irq() for polling-mode controllers.
+
+Signed-off-by: Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Reviewed-by: Andi Shyti <andi.shyti@kernel.org>
+Link: https://lore.kernel.org/r/20250701122252.2590230-2-heikki.krogerus@linux.intel.com
+(backported from 22290cc904d9f5b882748573a16ccf8c6d632d92 linux-stable)
+Signed-off-by: Nitin Gote <nitin.r.gote@intel.com>
+---
+ drivers/i2c/busses/i2c-designware-platdrv.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/i2c/busses/i2c-designware-platdrv.c b/drivers/i2c/busses/i2c-designware-platdrv.c
+index e6fa6cb1011a..5159e3c19caa 100644
+--- a/drivers/i2c/busses/i2c-designware-platdrv.c
++++ b/drivers/i2c/busses/i2c-designware-platdrv.c
+@@ -284,8 +284,8 @@ static int dw_i2c_plat_probe(struct platform_device *pdev)
+ 	struct i2c_timings *t;
+ 	int irq, ret;
+ 
+-	irq = platform_get_irq(pdev, 0);
+-	if (irq < 0)
++	irq = platform_get_irq_optional(pdev, 0);
++	if (irq < 0 && irq != -ENXIO)
+ 		return irq;
+ 
+ 	dev = devm_kzalloc(device, sizeof(*dev), GFP_KERNEL);
+@@ -293,6 +293,8 @@ static int dw_i2c_plat_probe(struct platform_device *pdev)
+ 		return -ENOMEM;
+ 
+ 	dev->flags = (uintptr_t)device_get_match_data(device);
++	if (irq == -ENXIO)
++		dev->flags |= ACCESS_POLLING;
+ 	if (device_property_present(device, "wx,i2c-snps-model"))
+ 		dev->flags = MODEL_WANGXUN_SP | ACCESS_POLLING;
+ 
+-- 
+2.50.1
+

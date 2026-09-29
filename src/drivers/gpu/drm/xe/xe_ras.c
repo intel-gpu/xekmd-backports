@@ -5,6 +5,8 @@
 
 #include <linux/aer.h>
 
+#include "xe_assert.h"
+#include "xe_bo.h"
 #include "xe_cper.h"
 #include "xe_configfs.h"
 #include "xe_debugfs.h"
@@ -19,6 +21,10 @@
 #include "xe_sysctrl_event_types.h"
 #include "xe_sysctrl_mailbox.h"
 #include "xe_sysctrl_mailbox_types.h"
+#include "xe_ttm_vram_mgr.h"
+
+/* Any non-null entry marks the page as offlined by firmware */
+#define XE_RAS_PAGE_OFFLINED		xa_mk_value(1)
 
 #define CORE_COMPUTE_UNCORR_TYPE	GENMASK(26, 25)
 /*
@@ -216,6 +222,130 @@ static inline const char *comp_to_str(u8 component)
 	return xe_ras_components[component];
 }
 
+static int send_page_offline_cmd(struct xe_device *xe, u64 page_address,
+				 enum xe_ras_page_action action)
+{
+	struct xe_sysctrl_mailbox_command command = {0};
+	struct xe_ras_page_offline_request request = {0};
+	struct xe_ras_page_offline_response response = {0};
+	struct xe_ras_state *state = &xe->ras.state;
+	size_t rlen;
+	int ret;
+
+	if (!xe->info.has_sysctrl)
+		return 0;
+
+	xe_assert(xe, action < XE_RAS_PAGE_ACTION_MAX);
+
+	request.page_address = page_address;
+	request.action = action;
+
+	if (action == XE_RAS_PAGE_ACTION_OFFLINE)
+		xe_log_err(xe, DEVICE_MEMORY, 0, "Requesting firmware to offline page 0x%llx\n",
+			   page_address);
+	else
+		xe_log_err(xe, DEVICE_MEMORY, 0, "Requesting firmware to remove page 0x%llx from queue\n",
+			   page_address);
+
+	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_PAGE_OFFLINE,
+				  &request, sizeof(request), &response, sizeof(response));
+
+	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
+	if (ret) {
+		xe_log_err(xe, SYSCTRL, ret, "failed to send page offline command\n");
+		return ret;
+	}
+
+	if (rlen != sizeof(response)) {
+		xe_log_err(xe, SYSCTRL, -EINVAL,
+			   "unexpected page offline response length %zu (expected %zu)\n",
+			   rlen, sizeof(response));
+		return -EINVAL;
+	}
+
+	ret = ras_status_to_errno(response.status);
+	if (ret)
+		xe_log_err(xe, SYSCTRL, ret, "page offline command failed with status %u\n",
+			   response.status);
+
+	if (action == XE_RAS_PAGE_ACTION_OFFLINE)
+		xa_store(&state->offlined_pages, page_address >> XE_PTE_SHIFT,
+			 XE_RAS_PAGE_OFFLINED, GFP_KERNEL);
+
+	return ret;
+}
+
+static int handle_page_offline(struct xe_device *xe, u64 page_address, bool send_cmd)
+{
+	struct xe_ras_state *state = &xe->ras.state;
+	enum xe_ras_page_action action;
+	u64 addr;
+	int ret = 0;
+
+	if (!IS_ALIGNED(page_address, XE_PAGE_SIZE)) {
+		xe_log_err(xe, SYSCTRL, -EINVAL, "Unaligned physical page address: 0x%llx\n",
+			   page_address);
+		return -EINVAL;
+	}
+
+	addr = ALIGN_DOWN(page_address, PAGE_SIZE);
+
+	ret = xe_ttm_vram_handle_addr_fault(xe, addr);
+
+	/*
+	 * Handle return code from address fault handling function:
+	 *  0: Page softofflined, remove from firmware queue
+	 * -EIO: Address belongs to a critical BO/stolen area that cannot be offlined
+	 * -EOPNOTSUPP: Address is valid and can be offlined but user policy is not to offline
+	 * -EEXIST: Address is soft offlined but yet to be offlined by firmware for second
+	 * occurrence
+	 */
+
+	switch (ret) {
+	case 0:
+		action = XE_RAS_PAGE_ACTION_REMOVE;
+		xe_log_err(xe, DEVICE_MEMORY, ret,
+			   "Poison detected at physical address 0x%llx, page soft-offlined\n",
+			   page_address);
+		break;
+	/* User policy set to decline page offlining */
+	case -EOPNOTSUPP:
+		action = XE_RAS_PAGE_ACTION_REMOVE;
+		xe_log_err(xe, DEVICE_MEMORY, ret,
+			   "Poison detected at physical address 0x%llx, user policy set to decline soft-offlining\n",
+			   page_address);
+		break;
+	case -EIO:
+		xe_log_err(xe, DEVICE_MEMORY, ret,
+			   "Poison detected at physical address 0x%llx, page belongs to critical BO and cannot be soft-offlined\n",
+			   page_address);
+		return ret;
+	case -EEXIST:
+		if (xa_load(&state->offlined_pages, page_address >> XE_PTE_SHIFT))
+			action = XE_RAS_PAGE_ACTION_REMOVE;
+		else
+			action = XE_RAS_PAGE_ACTION_OFFLINE;
+
+		xe_log_err(xe, DEVICE_MEMORY, ret,
+			   "Double-bit ECC error detected at physical address 0x%llx, page soft-offlined\n",
+			   page_address);
+		break;
+	default:
+		xe_log_err(xe, DEVICE_MEMORY, ret,
+			   "Failed to handle address fault at physical address 0x%llx\n",
+			   page_address);
+		return 0;
+	}
+
+	if (send_cmd) {
+		ret = send_page_offline_cmd(xe, page_address, action);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static u32 ras_comp_to_hw_sigid(u8 component)
 {
 	switch (component) {
@@ -232,6 +362,90 @@ static u32 ras_comp_to_hw_sigid(u8 component)
 	default:
 		return U32_MAX;
 	}
+}
+
+static void get_offline_pages(struct xe_device *xe, u32 cmd, void *req, size_t req_size,
+			      void *resp, size_t resp_size,
+			      struct xe_ras_offline_common *common, bool offline)
+{
+	struct xe_sysctrl_mailbox_command command = {0};
+	struct xe_ras_offline_list_request *list_req;
+	struct xe_ras_state *state = &xe->ras.state;
+	unsigned long index;
+	u32 total_pages = 0, count = 0;
+	ssize_t rlen;
+	int ret, i;
+
+	list_req = req ? req : NULL;
+
+	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, cmd, req, req_size, resp,
+				  resp_size);
+
+	do {
+		memset(resp, 0, resp_size);
+
+		if (list_req)
+			list_req->index = count;
+
+		ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
+		if (ret) {
+			xe_log_err(xe, SYSCTRL, ret, "failed to get page offline data, cmd=%#x\n",
+				   cmd);
+			return;
+		}
+
+		if (rlen != resp_size) {
+			xe_log_err(xe, SYSCTRL, -EINVAL,
+				   "unexpected page offline response length %zu (expected %zu), cmd=%#x\n",
+				   rlen, resp_size, cmd);
+			return;
+		}
+
+		for (i = 0; i < common->pages_returned && i < XE_RAS_NUM_PAGES; i++) {
+			handle_page_offline(xe, common->page_addresses[i], offline);
+			/* The pages are already offlined by firmware */
+			if (!offline) {
+				index = common->page_addresses[i] >> XE_PTE_SHIFT;
+				xa_store(&state->offlined_pages, index,
+					 XE_RAS_PAGE_OFFLINED, GFP_KERNEL);
+			}
+		}
+
+		count += common->pages_returned;
+		if (!common->pages_returned)
+			break;
+
+		if (!total_pages)
+			total_pages = common->total_pages;
+
+		if (count > total_pages) {
+			xe_log_err(xe, SYSCTRL, -EINVAL,
+				   "Pages returned exceed total pages %u, returned %u, cmd=%#x\n",
+				   total_pages, count, cmd);
+			return;
+		}
+	} while (common->additional_data);
+}
+
+static void get_queued_pages(struct xe_device *xe)
+{
+	struct xe_ras_offline_common response = {0};
+
+	get_offline_pages(xe, XE_SYSCTRL_CMD_GET_OFFLINE_QUEUE, NULL, 0, &response,
+			  sizeof(response), &response, true);
+}
+
+static void get_offlined_list(struct xe_device *xe)
+{
+	struct xe_ras_offline_list_response response = {0};
+	struct xe_ras_offline_list_request request = {0};
+	struct xe_ras_state *state = &xe->ras.state;
+
+	get_offline_pages(xe, XE_SYSCTRL_CMD_GET_OFFLINE_LIST, &request, sizeof(request),
+			  &response, sizeof(response), &response.common, false);
+
+	if (response.max_entries)
+		state->max_pages = response.max_entries;
 }
 
 static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
@@ -399,11 +613,12 @@ static u8 handle_soc_internal_errors(struct xe_device *xe, struct xe_ras_error_a
 static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
 {
 	struct xe_ras_memory_error *info = (void *)arr->details;
+	int ret;
 
 	/*
 	 * For memory errors, the recovery action depends on the error category
 	 *
-	 * TODO: Double-bit ECC errors: Page offlining
+	 * Double-bit ECC errors: Page offlining
 	 * Poison and data parity errors: Log only
 	 * For any other memory errors, request a reset as recovery mechanism
 	 */
@@ -417,11 +632,10 @@ static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_
 				 "Data parity error detected\n");
 		break;
 	case XE_RAS_MEMORY_DB_ECC:
-		xe_log_comp_info(xe, DEVICE_MEMORY, &arr->counter, sizeof(arr->counter),
-				 "Double-bit ECC error detected at sw address 0x%llx\n",
-				 info->sw_address);
-		/* TODO: Add page offlining for Double-bit ECC error */
-		fallthrough;
+		ret = handle_page_offline(xe, info->sw_address, true);
+		if (ret)
+			return XE_RAS_RECOVERY_ACTION_RESET;
+		break;
 	default:
 		return XE_RAS_RECOVERY_ACTION_RESET;
 	}
@@ -724,7 +938,7 @@ int xe_ras_get_counter(struct xe_device *xe, u8 severity, u8 component, u32 *val
 		return ret;
 	*value = response.value;
 
-	if (xe->ras.cper_on_query)
+	if (xe->ras.nl_data.cper_on_query)
 		xe_emit_hardware_error_cper(pdev, ras_sev_to_cper_sev(counter.common.severity),
 					    ras_comp_to_hw_sigid(counter.common.component),
 					    (struct xe_ras_error_class *)&counter,
@@ -1152,7 +1366,7 @@ static ssize_t cper_on_query_show(struct device *dev, struct device_attribute *a
 {
 	struct xe_device *xe = kdev_to_xe_device(dev);
 
-	return sysfs_emit(buf, "%u\n", xe->ras.cper_on_query);
+	return sysfs_emit(buf, "%u\n", xe->ras.nl_data.cper_on_query);
 }
 
 static ssize_t cper_on_query_store(struct device *dev, struct device_attribute *attr,
@@ -1166,7 +1380,7 @@ static ssize_t cper_on_query_store(struct device *dev, struct device_attribute *
 	if (ret)
 		return ret;
 
-	xe->ras.cper_on_query = enable;
+	xe->ras.nl_data.cper_on_query = enable;
 
 	return count;
 }
@@ -1198,31 +1412,67 @@ static const struct attribute_group cper_on_query_group = {
 	.attrs = cper_on_query_attrs,
 };
 
+static void ras_fini(void *arg)
+{
+	struct xe_device *xe = arg;
+
+	xa_destroy(&xe->ras.state.offlined_pages);
+}
+
+/**
+ * xe_ras_get_disable_page_offline - Get the page offline user policy
+ * @xe: xe device instance
+ *
+ * Return: true if the page offline policy is disabled, false otherwise.
+ */
+bool xe_ras_get_disable_page_offline(struct xe_device *xe)
+{
+	return xe->ras.state.disable_page_offline;
+}
+
+/**
+ * xe_ras_get_max_pages - Get the maximum number of pages
+ * @xe: xe device instance
+ *
+ * Return: Maximum number of pages that can be stored in flash
+ */
+u32 xe_ras_get_max_pages(struct xe_device *xe)
+{
+	return xe->ras.state.max_pages;
+}
+
 /**
  * xe_ras_init - Initialize Xe RAS
  * @xe: xe device instance
  *
  * Initialize Xe RAS
+ *
+ * Return: 0 on success, negative error code otherwise
  */
-void xe_ras_init(struct xe_device *xe)
+int xe_ras_init(struct xe_device *xe)
 {
+	struct xe_ras_state *state = &xe->ras.state;
 	int ret;
+
+	xe_drm_ras_init(xe);
+
+	if (!xe->info.has_sysctrl)
+		return 0;
 
 	/*
 	 * TODO: Replace platform check with xe->info.has_disable_vram_page_offline
 	 * once the feature flag is plumbed through device info.
 	 */
-	if (xe->info.platform == XE_CRESCENTISLAND)
-		xe->ras.disable_vram_page_offline =
-			xe_configfs_get_disable_vram_page_offline(to_pci_dev(xe->drm.dev));
-
-	xe_drm_ras_init(xe);
-
-	if (!xe->info.has_sysctrl)
-		return;
+	xe->ras.state.disable_page_offline =
+		xe_configfs_get_disable_vram_page_offline(to_pci_dev(xe->drm.dev));
 
 	if (IS_ENABLED(CONFIG_PCIEAER))
 		ras_usp_aer_init(xe);
+
+	xa_init(&state->offlined_pages);
+
+	get_queued_pages(xe);
+	get_offlined_list(xe);
 
 	ret = devm_device_add_group(xe->drm.dev, &gpu_health_group);
 	if (ret)
@@ -1231,4 +1481,6 @@ void xe_ras_init(struct xe_device *xe)
 	ret = devm_device_add_group(xe->drm.dev, &cper_on_query_group);
 	if (ret)
 		xe_err(xe, "Failed to create cper_on_query sysfs, err=%d\n", ret);
+
+	return devm_add_action_or_reset(xe->drm.dev, ras_fini, xe);
 }

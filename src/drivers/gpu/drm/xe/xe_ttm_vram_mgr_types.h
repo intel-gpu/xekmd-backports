@@ -48,8 +48,6 @@ struct xe_ttm_vram_mgr {
 		u64 total_used;
 	} pin;
 #endif
-	/** @max_pages: max pages that can be in offline queue retrieved from FW */
-	u16 max_pages;
 };
 
 /**

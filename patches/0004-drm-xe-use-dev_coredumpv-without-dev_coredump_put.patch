@@ -14,18 +14,19 @@ older kernels while removing xe callback lifetime from the old-kernel path.
 Also compile out the legacy read/free helpers when they are not used.
 
 V1: Rebase to v7.0-rc6 [Varun]
+v2: update the captured state for legacy coredump path [Pravalika]
 
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/gpu/drm/xe/xe_devcoredump.c | 27 +++++++++++++++++++++++++
- 1 file changed, 27 insertions(+)
+ drivers/gpu/drm/xe/xe_devcoredump.c | 33 ++++++++++++++++++++++++-
+ 1 file changed, 32 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_devcoredump.c b/drivers/gpu/drm/xe/xe_devcoredump.c
-index 43877ac2f..2477300cc 100644
+index c624901..b8e50bc 100644
 --- a/drivers/gpu/drm/xe/xe_devcoredump.c
 +++ b/drivers/gpu/drm/xe/xe_devcoredump.c
-@@ -187,6 +187,7 @@ static void xe_devcoredump_snapshot_free(struct xe_devcoredump_snapshot *ss)
+@@ -186,6 +186,7 @@ static void xe_devcoredump_snapshot_free(struct xe_devcoredump_snapshot *ss)
   *
   * Return: Number of bytes copied on success, or a negative error code on failure.
   */
@@ -33,7 +34,7 @@ index 43877ac2f..2477300cc 100644
  static ssize_t xe_devcoredump_read(char *buffer, loff_t offset,
  				   size_t count, void *data, size_t datalen)
  {
-@@ -270,6 +271,7 @@ static void xe_devcoredump_free(void *data)
+@@ -269,6 +270,7 @@ static void xe_devcoredump_free(void *data)
  
  	mutex_unlock(&coredump->lock);
  }
@@ -41,7 +42,7 @@ index 43877ac2f..2477300cc 100644
  
  static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
  {
-@@ -283,9 +285,11 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
+@@ -281,10 +283,11 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
  	 * internally using GFP_KERNEL explicitly. Hence this call must be in the worker
  	 * thread and not in the initial capture call.
  	 */
@@ -49,11 +50,12 @@ index 43877ac2f..2477300cc 100644
  	dev_coredumpm_timeout(gt_to_xe(ss->gt)->drm.dev, THIS_MODULE, coredump, 0, GFP_KERNEL,
  			      xe_devcoredump_read, xe_devcoredump_free,
  			      XE_COREDUMP_TIMEOUT_JIFFIES);
+-
 +#endif
+ 	guard(xe_pm_runtime)(xe);
  
- 	xe_pm_runtime_get(xe);
- 
-@@ -303,21 +307,42 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
+ 	/* keep going if fw fails as we still want to save the memory and SW data */
+@@ -301,6 +304,14 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
  	ss->read.size = __xe_devcoredump_read(NULL, LONG_MAX, 0, coredump);
  
  	if (ss->read.size > XE_DEVCOREDUMP_CHUNK_MAX) {
@@ -68,8 +70,7 @@ index 43877ac2f..2477300cc 100644
  		ss->read.buffer = kvmalloc(XE_DEVCOREDUMP_CHUNK_MAX,
  					   GFP_USER);
  		if (!ss->read.buffer)
- 			return;
- 
+@@ -309,8 +320,13 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
  		__xe_devcoredump_read(ss->read.buffer,
  				      XE_DEVCOREDUMP_CHUNK_MAX,
  				      0, coredump);
@@ -83,7 +84,7 @@ index 43877ac2f..2477300cc 100644
  		if (!ss->read.buffer)
  			return;
  
- 		__xe_devcoredump_read(ss->read.buffer, ss->read.size, 0,
+@@ -318,6 +334,19 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
  				      coredump);
  		xe_devcoredump_snapshot_free(ss);
  	}
@@ -94,9 +95,16 @@ index 43877ac2f..2477300cc 100644
 +	ss->read.buffer = NULL;
 +	ss->read.size = 0;
 +	ss->read.chunk_position = 0;
++
++	mutex_lock(&coredump->lock);
++	coredump->captured = false;
++	mutex_unlock(&coredump->lock);
++
 +#endif
  }
-@@ -413,9 +438,11 @@ void xe_devcoredump(struct xe_exec_queue *q, struct xe_sched_job *job, const cha
+ 
+ static void devcoredump_snapshot(struct xe_devcoredump *coredump,
+@@ -406,9 +435,11 @@ void xe_devcoredump(struct xe_exec_queue *q, struct xe_sched_job *job, const cha
  
  static void xe_driver_devcoredump_fini(void *arg)
  {
@@ -110,3 +118,4 @@ index 43877ac2f..2477300cc 100644
  int xe_devcoredump_init(struct xe_device *xe)
 -- 
 2.43.0
+

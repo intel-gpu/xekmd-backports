@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jarkko Nikula <jarkko.nikula@linux.intel.com>
-Date: Tue, 15 Sep 2026 16:53:00 +0530
+Date: Wed, 30 Sep 2026 19:52:04 +0530
 Subject: i2c: designware: Implement generic polling mode code
 
 Add a generic polling transfer mode to the DesignWare master driver.
@@ -21,12 +21,12 @@ Link: https://patchwork.ozlabs.org/project/linux-i2c/patch/20240131141653.268926
 (backported from 197ecadad842855437a36ffc161648418ae02a97 linux-stable)
 Signed-off-by: Nitin Gote <nitin.r.gote@intel.com>
 ---
- drivers/i2c/busses/i2c-designware-core.h   |   5 +
- drivers/i2c/busses/i2c-designware-master.c | 174 +++++++++------------
- 2 files changed, 77 insertions(+), 102 deletions(-)
+ drivers/i2c/busses/i2c-designware-core.h   |   3 +
+ drivers/i2c/busses/i2c-designware-master.c | 179 +++++++++------------
+ 2 files changed, 79 insertions(+), 103 deletions(-)
 
 diff --git a/drivers/i2c/busses/i2c-designware-core.h b/drivers/i2c/busses/i2c-designware-core.h
-index 73f56296e057..715bd2a5b704 100644
+index a9e9c08d2..3d75160bb 100644
 --- a/drivers/i2c/busses/i2c-designware-core.h
 +++ b/drivers/i2c/busses/i2c-designware-core.h
 @@ -215,6 +215,7 @@ struct reset_control;
@@ -52,21 +52,24 @@ index 73f56296e057..715bd2a5b704 100644
 +	dev->sw_mask = intr_mask;
  }
  
- static inline void __i2c_dw_read_intr_mask(struct dw_i2c_dev *dev,
-@@ -365,6 +368,8 @@ static inline void __i2c_dw_read_intr_mask(struct dw_i2c_dev *dev,
- {
- 	if (!(dev->flags & ACCESS_POLLING))
- 		regmap_read(dev->map, DW_IC_INTR_MASK, intr_mask);
-+	else
-+		*intr_mask = dev->sw_mask;
- }
- 
- void __i2c_dw_disable(struct dw_i2c_dev *dev);
+ void __i2c_dw_read_intr_mask(struct dw_i2c_dev *dev,
 diff --git a/drivers/i2c/busses/i2c-designware-master.c b/drivers/i2c/busses/i2c-designware-master.c
-index 55ebb4a11eff..b76b54619a32 100644
+index d88917a2f..bff93b4e6 100644
 --- a/drivers/i2c/busses/i2c-designware-master.c
 +++ b/drivers/i2c/busses/i2c-designware-master.c
-@@ -390,67 +390,6 @@ static int amd_i2c_dw_xfer_quirk(struct i2c_adapter *adap, struct i2c_msg *msgs,
+@@ -31,7 +31,10 @@
+ void __i2c_dw_read_intr_mask(struct dw_i2c_dev *dev,
+ 			     unsigned int *intr_mask)
+ {
+-	regmap_read(dev->map, DW_IC_INTR_MASK, intr_mask);
++	if (dev->flags & ACCESS_POLLING)
++		*intr_mask = dev->sw_mask;
++	else
++		regmap_read(dev->map, DW_IC_INTR_MASK, intr_mask);
+ }
+ EXPORT_SYMBOL_GPL(__i2c_dw_read_intr_mask);
+ 
+@@ -397,67 +400,6 @@ static int amd_i2c_dw_xfer_quirk(struct i2c_adapter *adap, struct i2c_msg *msgs,
  	return 0;
  }
  
@@ -134,7 +137,7 @@ index 55ebb4a11eff..b76b54619a32 100644
  /*
   * Initiate (and continue) low level master read/write transaction.
   * This function is only called from i2c_dw_isr, and pumping i2c_msg
-@@ -669,6 +608,8 @@ i2c_dw_read(struct dw_i2c_dev *dev)
+@@ -676,6 +618,8 @@ i2c_dw_read(struct dw_i2c_dev *dev)
  	}
  }
  
@@ -143,7 +146,7 @@ index 55ebb4a11eff..b76b54619a32 100644
  /*
   * Prepare controller for a transaction and call i2c_dw_xfer_msg.
   */
-@@ -682,18 +623,10 @@ i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
+@@ -689,18 +633,10 @@ i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
  
  	pm_runtime_get_sync(dev->dev);
  
@@ -162,7 +165,7 @@ index 55ebb4a11eff..b76b54619a32 100644
  	default:
  		break;
  	}
-@@ -721,12 +654,12 @@ i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
+@@ -728,12 +664,12 @@ i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
  	i2c_dw_xfer_init(dev);
  
  	/* Wait for tx to complete */
@@ -177,7 +180,7 @@ index 55ebb4a11eff..b76b54619a32 100644
  		goto done;
  	}
  
-@@ -808,7 +741,12 @@ static u32 i2c_dw_read_clear_intrbits(struct dw_i2c_dev *dev)
+@@ -815,7 +751,12 @@ static u32 i2c_dw_read_clear_intrbits(struct dw_i2c_dev *dev)
  	 *
  	 * The raw version might be useful for debugging purposes.
  	 */
@@ -191,7 +194,7 @@ index 55ebb4a11eff..b76b54619a32 100644
  
  	/*
  	 * Do not use the IC_CLR_INTR register to clear interrupts, or
-@@ -848,37 +786,8 @@ static u32 i2c_dw_read_clear_intrbits(struct dw_i2c_dev *dev)
+@@ -855,37 +796,8 @@ static u32 i2c_dw_read_clear_intrbits(struct dw_i2c_dev *dev)
  	return stat;
  }
  
@@ -230,7 +233,7 @@ index 55ebb4a11eff..b76b54619a32 100644
  	if (stat & DW_IC_INTR_TX_ABRT) {
  		dev->cmd_err |= DW_IC_ERR_TX_ABRT;
  		dev->status &= ~STATUS_MASK;
-@@ -914,10 +823,71 @@ static irqreturn_t i2c_dw_isr(int this_irq, void *dev_id)
+@@ -921,10 +833,71 @@ static irqreturn_t i2c_dw_isr(int this_irq, void *dev_id)
  		__i2c_dw_write_intr_mask(dev, 0);
  		__i2c_dw_write_intr_mask(dev, stat);
  	}

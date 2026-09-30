@@ -10,6 +10,28 @@ prepares the driver for a subsequent change that maintains a software
 shadow of the interrupt mask so the controller can be driven in polling
 mode.
 
+Also, export __i2c_dw_read_intr_mask() from the built-in i2c-designware
+driver for Xe backport detection.
+
+Its presence in the kernel's Module.symvers advertises that this
+(pre-v6.17) kernel carries the i2c-designware Intel Xe enablement
+backport, including:
+  - generic polling mode support
+  - polling by default when no IRQ resource is available
+  - Intel Xe parent-regmap quirk ("intel,xe-i2c")
+
+The out-of-tree Intel Xe DKMS build consumes this symbol via
+AC_KERNEL_CHECK_SYMBOL_EXPORT() to determine whether xe_i2c / AMC
+support can be enabled. Without the backport, the symbol is absent and
+the DKMS build compiles xe_i2c out, avoiding probe failures such as
+"IRQ index 0 not found" or "invalid resource".
+
+Upstream kernels v6.17 and newer already contain the required
+i2c-designware changes and do not require this backport detection
+mechanism.
+
+v2: export __i2c_dw_read_intr_mask() api.
+
 Signed-off-by: Jarkko Nikula <jarkko.nikula@linux.intel.com>
 Tested-by: Jiawen Wu <jiawenwu@trustnetic.com>
 Signed-off-by: Andi Shyti <andi.shyti@kernel.org>
@@ -18,9 +40,9 @@ Link: https://patchwork.ozlabs.org/project/linux-i2c/patch/20240131141653.268926
 Signed-off-by: Nitin Gote <nitin.r.gote@intel.com>
 ---
  drivers/i2c/busses/i2c-designware-common.c |  2 +-
- drivers/i2c/busses/i2c-designware-core.h   | 15 +++++++++++++
- drivers/i2c/busses/i2c-designware-master.c | 26 +++++++++++-----------
- 3 files changed, 29 insertions(+), 14 deletions(-)
+ drivers/i2c/busses/i2c-designware-core.h   | 11 ++++++++
+ drivers/i2c/busses/i2c-designware-master.c | 33 +++++++++++++---------
+ 3 files changed, 32 insertions(+), 14 deletions(-)
 
 diff --git a/drivers/i2c/busses/i2c-designware-common.c b/drivers/i2c/busses/i2c-designware-common.c
 index 79e083aab..5e7665e29 100644
@@ -36,10 +58,10 @@ index 79e083aab..5e7665e29 100644
  
  	i2c_dw_release_lock(dev);
 diff --git a/drivers/i2c/busses/i2c-designware-core.h b/drivers/i2c/busses/i2c-designware-core.h
-index f8feae20a..73f56296e 100644
+index f8feae20a..a9e9c08d2 100644
 --- a/drivers/i2c/busses/i2c-designware-core.h
 +++ b/drivers/i2c/busses/i2c-designware-core.h
-@@ -352,6 +352,21 @@ static inline void __i2c_dw_disable_nowait(struct dw_i2c_dev *dev)
+@@ -352,6 +352,17 @@ static inline void __i2c_dw_disable_nowait(struct dw_i2c_dev *dev)
  	dev->status &= ~STATUS_ACTIVE;
  }
  
@@ -51,21 +73,31 @@ index f8feae20a..73f56296e 100644
 +	regmap_write(dev->map, DW_IC_INTR_MASK, val);
 +}
 +
-+static inline void __i2c_dw_read_intr_mask(struct dw_i2c_dev *dev,
-+					   unsigned int *intr_mask)
-+{
-+	if (!(dev->flags & ACCESS_POLLING))
-+		regmap_read(dev->map, DW_IC_INTR_MASK, intr_mask);
-+}
++void __i2c_dw_read_intr_mask(struct dw_i2c_dev *dev,
++			     unsigned int *intr_mask);
 +
  void __i2c_dw_disable(struct dw_i2c_dev *dev);
  void i2c_dw_disable(struct dw_i2c_dev *dev);
  
 diff --git a/drivers/i2c/busses/i2c-designware-master.c b/drivers/i2c/busses/i2c-designware-master.c
-index 56f124f32..55ebb4a11 100644
+index 56f124f32..d88917a2f 100644
 --- a/drivers/i2c/busses/i2c-designware-master.c
 +++ b/drivers/i2c/busses/i2c-designware-master.c
-@@ -247,7 +247,7 @@ static void i2c_dw_xfer_init(struct dw_i2c_dev *dev)
+@@ -28,6 +28,13 @@
+ #define AMD_TIMEOUT_MAX_US	250
+ #define AMD_MASTERCFG_MASK	GENMASK(15, 0)
+ 
++void __i2c_dw_read_intr_mask(struct dw_i2c_dev *dev,
++			     unsigned int *intr_mask)
++{
++	regmap_read(dev->map, DW_IC_INTR_MASK, intr_mask);
++}
++EXPORT_SYMBOL_GPL(__i2c_dw_read_intr_mask);
++
+ static void i2c_dw_configure_fifo_master(struct dw_i2c_dev *dev)
+ {
+ 	/* Configure Tx/Rx FIFO threshold levels */
+@@ -247,7 +254,7 @@ static void i2c_dw_xfer_init(struct dw_i2c_dev *dev)
  		     msgs[dev->msg_write_idx].addr | ic_tar);
  
  	/* Enforce disabled interrupts (due to HW issues) */
@@ -74,7 +106,7 @@ index 56f124f32..55ebb4a11 100644
  
  	/* Enable the adapter */
  	__i2c_dw_enable(dev);
-@@ -257,7 +257,7 @@ static void i2c_dw_xfer_init(struct dw_i2c_dev *dev)
+@@ -257,7 +264,7 @@ static void i2c_dw_xfer_init(struct dw_i2c_dev *dev)
  
  	/* Clear and enable interrupts */
  	regmap_read(dev->map, DW_IC_CLR_INTR, &dummy);
@@ -83,7 +115,7 @@ index 56f124f32..55ebb4a11 100644
  }
  
  /*
-@@ -336,7 +336,6 @@ static int amd_i2c_dw_xfer_quirk(struct i2c_adapter *adap, struct i2c_msg *msgs,
+@@ -336,7 +343,6 @@ static int amd_i2c_dw_xfer_quirk(struct i2c_adapter *adap, struct i2c_msg *msgs,
  	dev->msgs_num = num_msgs;
  	dev->msg_write_idx = 0;
  	i2c_dw_xfer_init(dev);
@@ -91,7 +123,7 @@ index 56f124f32..55ebb4a11 100644
  
  	/* Initiate messages read/write transaction */
  	for (msg_wrt_idx = 0; msg_wrt_idx < num_msgs; msg_wrt_idx++) {
-@@ -420,7 +419,6 @@ static int txgbe_i2c_dw_xfer_quirk(struct i2c_adapter *adap, struct i2c_msg *msg
+@@ -420,7 +426,6 @@ static int txgbe_i2c_dw_xfer_quirk(struct i2c_adapter *adap, struct i2c_msg *msg
  	dev->msgs = msgs;
  	dev->msgs_num = num_msgs;
  	i2c_dw_xfer_init(dev);
@@ -99,7 +131,7 @@ index 56f124f32..55ebb4a11 100644
  
  	for (msg_idx = 0; msg_idx < num_msgs; msg_idx++) {
  		buf = msgs[msg_idx].buf;
-@@ -582,7 +580,7 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
+@@ -582,7 +587,7 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
  	if (dev->msg_err)
  		intr_mask = 0;
  
@@ -108,7 +140,7 @@ index 56f124f32..55ebb4a11 100644
  }
  
  static u8
-@@ -590,6 +588,7 @@ i2c_dw_recv_len(struct dw_i2c_dev *dev, u8 len)
+@@ -590,6 +595,7 @@ i2c_dw_recv_len(struct dw_i2c_dev *dev, u8 len)
  {
  	struct i2c_msg *msgs = dev->msgs;
  	u32 flags = msgs[dev->msg_read_idx].flags;
@@ -116,7 +148,7 @@ index 56f124f32..55ebb4a11 100644
  
  	/*
  	 * Adjust the buffer length and mask the flag
-@@ -604,8 +603,9 @@ i2c_dw_recv_len(struct dw_i2c_dev *dev, u8 len)
+@@ -604,8 +610,9 @@ i2c_dw_recv_len(struct dw_i2c_dev *dev, u8 len)
  	 * Received buffer length, re-enable TX_EMPTY interrupt
  	 * to resume the SMBUS transaction.
  	 */
@@ -128,7 +160,7 @@ index 56f124f32..55ebb4a11 100644
  
  	return len;
  }
-@@ -875,7 +875,7 @@ static irqreturn_t i2c_dw_isr(int this_irq, void *dev_id)
+@@ -875,7 +882,7 @@ static irqreturn_t i2c_dw_isr(int this_irq, void *dev_id)
  		 * interrupt really came from this HW (E.g. firmware has left
  		 * the HW active).
  		 */
@@ -137,7 +169,7 @@ index 56f124f32..55ebb4a11 100644
  		return IRQ_HANDLED;
  	}
  
-@@ -888,7 +888,7 @@ static irqreturn_t i2c_dw_isr(int this_irq, void *dev_id)
+@@ -888,7 +895,7 @@ static irqreturn_t i2c_dw_isr(int this_irq, void *dev_id)
  		 * Anytime TX_ABRT is set, the contents of the tx/rx
  		 * buffers are flushed. Make sure to skip them.
  		 */
@@ -146,7 +178,7 @@ index 56f124f32..55ebb4a11 100644
  		goto tx_aborted;
  	}
  
-@@ -910,9 +910,9 @@ static irqreturn_t i2c_dw_isr(int this_irq, void *dev_id)
+@@ -910,9 +917,9 @@ static irqreturn_t i2c_dw_isr(int this_irq, void *dev_id)
  		complete(&dev->cmd_complete);
  	else if (unlikely(dev->flags & ACCESS_INTR_MASK)) {
  		/* Workaround to trigger pending interrupt */
@@ -159,7 +191,7 @@ index 56f124f32..55ebb4a11 100644
  	}
  
  	return IRQ_HANDLED;
-@@ -1063,7 +1063,7 @@ int i2c_dw_probe_master(struct dw_i2c_dev *dev)
+@@ -1063,7 +1070,7 @@ int i2c_dw_probe_master(struct dw_i2c_dev *dev)
  	if (ret)
  		return ret;
  

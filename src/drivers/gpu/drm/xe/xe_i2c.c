@@ -354,6 +354,12 @@ int xe_i2c_probe(struct xe_device *xe)
 	struct xe_i2c *i2c;
 	int ret;
 
+#ifdef BPM_XE_I2C_NOT_SUPPORTED
+	drm_info(&xe->drm,
+		 "Kernel i2c-designware lacks Intel Xe support; skipping Xe I2C/AMC\n");
+	return 0;
+#endif
+
 	if (!xe->info.has_i2c)
 		return 0;
 

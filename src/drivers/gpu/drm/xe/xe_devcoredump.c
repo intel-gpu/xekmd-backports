@@ -288,7 +288,6 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
 			      xe_devcoredump_read, xe_devcoredump_free,
 			      XE_COREDUMP_TIMEOUT_JIFFIES);
 #endif
-
 	guard(xe_pm_runtime)(xe);
 
 	/* keep going if fw fails as we still want to save the memory and SW data */
@@ -342,6 +341,11 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
 	ss->read.buffer = NULL;
 	ss->read.size = 0;
 	ss->read.chunk_position = 0;
+
+	mutex_lock(&coredump->lock);
+	coredump->captured = false;
+	mutex_unlock(&coredump->lock);
+
 #endif
 }
 

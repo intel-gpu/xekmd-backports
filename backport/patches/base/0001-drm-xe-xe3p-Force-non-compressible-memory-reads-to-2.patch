@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Daniel Charles <daniel.charles@intel.com>
+Date: Tue, 29 Sep 2026 13:08:39 -0700
+Subject: drm/xe/xe3p: Force non-compressible memory reads to 256B
+ overfetches
+
+Add a tuning entry to set bit 14 (NONCOMPMEMRD256BOVRFETCHEN) of
+L3SQCREG2 for Xe3p and later platforms.
+
+BSpec: 72161, 59927
+Signed-off-by: Daniel Charles <daniel.charles@intel.com>
+Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
+Link: https://patch.msgid.link/20260929200839.843116-1-daniel.charles@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit 3fc93d311249d5ad969a520dd3aae73bc007d431 drm-xe-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_gt_regs.h | 1 +
+ drivers/gpu/drm/xe/xe_tuning.c       | 4 ++++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+index 6277d752a..7ad084712 100644
+--- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+@@ -442,6 +442,7 @@
+ #define   L3_SQ_DISABLE_COAMA_2WAY_COH		REG_BIT(30)
+ #define   L3_SQ_DISABLE_COAMA			REG_BIT(22)
+ #define   COMPMEMRD256BOVRFETCHEN		REG_BIT(20)
++#define   NONCOMPMEMRD256BOVRFETCHEN		REG_BIT(14)
+ 
+ #define L3SQCREG3				XE_REG_MCR(0xb108)
+ #define   COMPPWOVERFETCHEN			REG_BIT(28)
+diff --git a/drivers/gpu/drm/xe/xe_tuning.c b/drivers/gpu/drm/xe/xe_tuning.c
+index bc67d63cb..7c30a12cf 100644
+--- a/drivers/gpu/drm/xe/xe_tuning.c
++++ b/drivers/gpu/drm/xe/xe_tuning.c
+@@ -100,6 +100,10 @@ static const struct xe_rtp_table_sr gt_tunings = XE_RTP_TABLE_SR(
+ 	  XE_RTP_ACTIONS(FIELD_SET(GAMSTLB_CTRL, BANK_HASH_MODE,
+ 				   BANK_HASH_4KB_MODE))
+ 	},
++	{ XE_RTP_NAME("Tuning: Force All Non-Compressible Memory Reads to be 256B Overfetches"),
++	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(3510, XE_RTP_END_VERSION_UNDEFINED)),
++	  XE_RTP_ACTIONS(SET(L3SQCREG2, NONCOMPMEMRD256BOVRFETCHEN))
++	},
+ );
+ 
+ static const struct xe_rtp_table_sr engine_tunings = XE_RTP_TABLE_SR(
+-- 
+2.43.0
+

@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alexander Usyskin <alexander.usyskin@intel.com>
+Date: Mon, 14 Sep 2026 16:18:02 +0300
+Subject: drm/xe/nvm: add system controller region
+
+Add region 5 (System Controller) to the list of regions
+available on device.
+
+Signed-off-by: Alexander Usyskin <alexander.usyskin@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20260914-nvm_add_sysctl_region-v1-1-75d710daf5d0@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit baafc300cd079a5210c1e70e5ea3d93518e40b38 linux-next)
+Signed-off-by:  Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_nvm.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_nvm.c b/drivers/gpu/drm/xe/xe_nvm.c
+index 1ea67eaea..51a1a431a 100644
+--- a/drivers/gpu/drm/xe/xe_nvm.c
++++ b/drivers/gpu/drm/xe/xe_nvm.c
+@@ -28,6 +28,7 @@
+ static const struct intel_dg_nvm_region regions[INTEL_DG_NVM_REGIONS] = {
+ 	[0] = { .name = "DESCRIPTOR", },
+ 	[2] = { .name = "GSC", },
++	[5] = { .name = "SYSCTL", },
+ 	[9] = { .name = "PADDING", },
+ 	[11] = { .name = "OptionROM", },
+ 	[12] = { .name = "DAM", },
+-- 
+2.43.0
+

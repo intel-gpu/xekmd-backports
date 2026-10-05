@@ -103,7 +103,7 @@ $ sudo reboot
 For verification, Please grep **backport** from dmesg after reboot. You should see something like below
 ```
 $ sudo dmesg |grep -i backport
-[.....] COMPAT: Backport init, Module is backported from xe-586
+[.....] COMPAT: Backport init, Module is backported from xeb_v7.1.4.31_260728.26
 ```
 
 You can also check the Xe module version with below method:

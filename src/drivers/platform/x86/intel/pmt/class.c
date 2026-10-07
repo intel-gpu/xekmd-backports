@@ -433,7 +433,7 @@ EXPORT_SYMBOL_NS_GPL(intel_pmt_dev_destroy, "INTEL_PMT");
 
 static int __init pmt_class_init(void)
 {
-	printk(KERN_INFO "VSEC CLASS Backport init, Module is backported from " CPTCFG_BASE_KERNEL_TAG "\n");
+	printk(KERN_INFO "VSEC CLASS Backport init, Module is backported from " CPTCFG_BACKPORTS_RELEASE_TAG "\n");
 	return class_register(&intel_pmt_class);
 }
 

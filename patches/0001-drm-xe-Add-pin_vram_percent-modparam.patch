@@ -9,10 +9,12 @@ Derive the per-region dma-buf pin limit from pin_vram_percent during
 VRAM manager initialization.
 
 V1: Rebase to v7.1.4.48 [Raju]
+V2: Change default param value to 0 (unlimited) [Varun]
 
 Reviewed-by: Tejas Upadhyay tejas.upadhyay@intel.com
 Signed-off-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
 ---
  drivers/gpu/drm/xe/xe_defaults.h     |  1 +
  drivers/gpu/drm/xe/xe_module.c       |  7 +++++++
@@ -28,7 +30,7 @@ index c8ae1d5..cb1b58e 100644
  #define XE_DEFAULT_WEDGED_MODE			XE_WEDGED_MODE_UPON_CRITICAL_ERROR
  #define XE_DEFAULT_WEDGED_MODE_STR		"upon-critical-error"
  #define XE_DEFAULT_SVM_NOTIFIER_SIZE		512
-+#define XE_DEFAULT_PIN_VRAM_PERCENT		50
++#define XE_DEFAULT_PIN_VRAM_PERCENT		0
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_module.c b/drivers/gpu/drm/xe/xe_module.c

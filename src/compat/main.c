@@ -56,7 +56,7 @@ EXPORT_SYMBOL_GPL(backport_dependency_symbol);
 
 static int __init backport_init(void)
 {
-	printk(KERN_INFO "COMPAT: Backport init, Module is backported from " CPTCFG_BASE_KERNEL_TAG " against Kernel " CPTCFG_TARGET_KERNEL_NAME " \n");
+	printk(KERN_INFO "COMPAT: Backport init, Module is backported from " CPTCFG_BACKPORTS_RELEASE_TAG " against Kernel " CPTCFG_TARGET_KERNEL_NAME " \n");
 
         return 0;
 }

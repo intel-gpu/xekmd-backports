@@ -428,7 +428,7 @@ static struct auxiliary_driver pmt_telem_aux_driver = {
 
 static int __init pmt_telem_init(void)
 {
-	printk(KERN_INFO "VSEC TELEMETRY Backport init, Module is backported from " CPTCFG_BASE_KERNEL_TAG "\n");
+	printk(KERN_INFO "VSEC TELEMETRY Backport init, Module is backported from " CPTCFG_BACKPORTS_RELEASE_TAG "\n");
 	return auxiliary_driver_register(&pmt_telem_aux_driver);
 }
 module_init(pmt_telem_init);

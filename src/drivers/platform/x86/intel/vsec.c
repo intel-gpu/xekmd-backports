@@ -614,7 +614,7 @@ static bool intel_vsec_walk_vsec(struct pci_dev *pdev,
 int intel_vsec_register(struct device *dev,
 			const struct intel_vsec_platform_info *info)
 {
-	printk(KERN_INFO "VSEC Backport init, Module is backported from " CPTCFG_BASE_KERNEL_TAG "\n");
+	printk(KERN_INFO "VSEC Backport init, Module is backported from " CPTCFG_BACKPORTS_RELEASE_TAG "\n");
 	if (!dev || !info || !info->headers)
 		return -EINVAL;
 

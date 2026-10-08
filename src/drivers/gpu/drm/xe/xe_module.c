@@ -206,7 +206,7 @@ static void xe_call_exit_func(const struct init_funcs *func)
 static int __init xe_init(void)
 {
 	int err, i;
-	printk(KERN_INFO "XE Backport init, Module is backported from " CPTCFG_BASE_KERNEL_TAG "\n");
+	printk(KERN_INFO "XE Backport init, Module is backported from " CPTCFG_BACKPORTS_RELEASE_TAG "\n");
 	for (i = 0; i < ARRAY_SIZE(init_funcs); i++) {
 		err = xe_call_init_func(init_funcs + i);
 		if (err) {

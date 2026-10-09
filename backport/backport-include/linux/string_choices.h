@@ -25,9 +25,24 @@
 
 #include <linux/types.h>
 
-#if defined(HAVE_LINUX_STRING_CHOICES_H) && \
-	!defined(BPM_STR_PLURAL_NOT_PRESENT)
+#if defined(HAVE_LINUX_STRING_CHOICES_H)
 #include_next <linux/string_choices.h>
+
+#ifdef BPM_STR_PLURAL_NOT_PRESENT
+static inline const char *str_plural(size_t num)
+{
+	return num == 1 ? "" : "s";
+}
+#endif
+
+#ifdef BPM_STR_UP_DOWN_NOT_PRESENT
+static inline const char *str_up_down(bool v)
+{
+	return v ? "up" : "down";
+}
+#define str_down_up(v)		str_up_down(!(v))
+#endif
+
 #else
 
 static inline const char *str_plural(size_t num)

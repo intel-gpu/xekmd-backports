@@ -42,29 +42,30 @@ $ sudo dnf install automake dkms make rpm-build rpmdevtools bison flex
 
 Each project is tagged consistently, so when pulling these repos, pull the same tag.
 
-## Module Parameters
+## Known Constraints
 
 ### DMA-VRAM-PINNING
-The dmem cgroup controller used to bound pinned device memory was introducted in KV6.14 and may not be available on few older OSV kernels. Without it there is no way to stop a single unprivileged client from pinning VRAM (e.g. via dma-buf) until the region is exhausted, starving every other client — a denial-of-serv
+The dmem cgroup controller used to bound pinned device memory was introduced in kernel v6.14 and may not be available on some older OSV kernels. Without it, there is no way to stop a single unprivileged client from pinning VRAM (e.g. via dma-buf) until the region is exhausted, starving every other client — a denial-of-service.
 
-With the current model, a simple overall per-region limit is put which will cap the amount of VRAM that may be pinned through dma-buf as a percentage of each region's size
+To mitigate this on older kernels, the driver can enforce a per-region limit that caps the amount of VRAM that may be pinned through `dma-buf` as a percentage of each region's size.
+
+#### Mitigation Behavior & Constraints
+Because this is a standalone driver-level mitigation, it operates with the following capabilities and boundaries:
+* **Global Enforcement:** It successfully protects the hardware by acting as a global, per-region cap. However, it *cannot* perform fine-grained memory accounting per container or per process.
+* **Hard Rejection:** It effectively prevents total VRAM starvation by drawing a strict line. If a client attempts to pin memory that breaches the configured threshold, the allocation is immediately rejected with an `-ENOSPC` error, which can be resolved by increasing the limit using the below parameter.
 
 #### xe module parameter: `pin_vram_percent`
-Caps how much of each VRAM region may be **pinned via dma-buf**, so that a
-single importer cannot pin an entire region and starve other users. A pin that
-would exceed the limit is rejected with `-ENOSPC`.
+Caps how much of each VRAM region may be **pinned via dma-buf**.
 
 #### Values
+- **Driver default: `0`** (unlimited or limit disabled).
 - Percentage (`0`-`100`) of each VRAM region that may be dma-buf pinned.
-- `0` means unlimited (limit disabled).
-- **Driver default: `50`** (at most half of each region).
 
-#### How to set it
+#### Usage
 Set it at module load time:
 
 ```sh
-modprobe xe pin_vram_percent=25   # allow up to 25% of each region
-modprobe xe pin_vram_percent=0    # unlimited
+modprobe xe pin_vram_percent=50   # allow up to 50% of each region
 ```
 
 Read the current value:
@@ -73,7 +74,7 @@ Read the current value:
 cat /sys/module/xe/parameters/pin_vram_percent
 ```
 
-The limit is applied once when the driver initializes; reload the module to change it.
+*(Note: The limit is applied once when the driver initializes; you must reload the xe module to apply changes.)*
 
 ## Package creation
 

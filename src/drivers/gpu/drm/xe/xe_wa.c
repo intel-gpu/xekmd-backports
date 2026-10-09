@@ -16,6 +16,7 @@
 #include "regs/xe_engine_regs.h"
 #include "regs/xe_gt_regs.h"
 #include "regs/xe_guc_regs.h"
+#include "regs/xe_mert_regs.h"
 #include "regs/xe_regs.h"
 #include "xe_device_types.h"
 #include "xe_force_wake.h"
@@ -305,6 +306,13 @@ static const struct xe_rtp_table_sr gt_was = XE_RTP_TABLE_SR(
 	{ XE_RTP_NAME("16028005424"),
 	  XE_RTP_RULES(GRAPHICS_VERSION(3510), GRAPHICS_STEP(A0, B0)),
 	  XE_RTP_ACTIONS(SET(GUC_INTR_CHICKEN, DISABLE_SIGNALING_ENGINES))
+	},
+
+	/* Xe3p_XPC */
+
+	{ XE_RTP_NAME("14028586678"),
+	  XE_RTP_RULES(GRAPHICS_VERSION(3511)),
+	  XE_RTP_ACTIONS(WR(DWNSTRM_ACCESS_MODE_GAMREQ_MERTSS, 0xcc))
 	},
 );
 

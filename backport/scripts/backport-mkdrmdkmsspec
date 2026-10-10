@@ -89,8 +89,35 @@ sed -e 's/^[[:space:]]*//' -e '/^DEL/d' <<EOF
 	$BIN \$(MAKE) modules_install INSTALL_MOD_PATH=%{buildroot}
 
 	%post
+	$DKMS update_initramfs() {
+	$DKMS   kver="\$1"
+	$DKMS   echo -e "Creating initramfs for :\$kver"
+	$DKMS   if [ ! -e /boot/vmlinuz-\$kver ]; then
+	$DKMS     echo -e "Unable to create initramfs for :\$kver (kernel image not found)"
+	$DKMS     return 0
+	$DKMS   fi
+	$DKMS   if command -v depmod >/dev/null 2>&1; then
+	$DKMS     depmod -a "\$kver"
+	$DKMS   fi
+	$DKMS   if command -v dracut >/dev/null 2>&1; then
+	$DKMS     echo -e "Using dracut"
+	$DKMS     dracut -f --kver "\$kver" || echo -e "dracut failed for :\$kver"
+	$DKMS   elif command -v update-initramfs >/dev/null 2>&1; then
+	$DKMS     echo -e "Using update-initramfs"
+	$DKMS     update-initramfs -u -k "\$kver" || echo -e "update-initramfs failed for :\$kver"
+	$DKMS   elif command -v mkinitrd >/dev/null 2>&1; then
+	$DKMS     if [ "\$MKINITRD_DONE" != "1" ]; then
+	$DKMS       echo -e "Using mkinitrd"
+	$DKMS       mkinitrd || echo -e "mkinitrd failed"
+	$DKMS       MKINITRD_DONE="1"
+	$DKMS     fi
+	$DKMS   else
+	$DKMS     echo -e "No initramfs tool (dracut/update-initramfs/mkinitrd) found, skipping initramfs for :\$kver"
+	$DKMS   fi
+	$DKMS }
 	$DKMS dkms add -m $PKG_NAME -v $PKG_VER --rpm_safe_upgrade || true
-	$DKMS CREATE_INITRD="0"
+	$DKMS MKINITRD_DONE="0"
+	$DKMS INITRD_KERNELS=""
 	$DKMS for i in /lib/modules/[5-7]*; do
 	$DKMS   H="\$i/build"
 	$DKMS   K=\$(echo \$i | cut -d '/' -f 4)
@@ -104,27 +131,44 @@ sed -e 's/^[[:space:]]*//' -e '/^DEL/d' <<EOF
 	$DKMS   if [ -n "\$KDIR" ]; then
 	$DKMS     dkms build -m $PKG_NAME -v $PKG_VER --kernelsourcedir "\$KDIR" --rpm_safe_upgrade || true
 	$DKMS     dkms install --force -m $PKG_NAME -v $PKG_VER --kernelsourcedir "\$KDIR" --rpm_safe_upgrade || true
-	$DKMS     echo -e "Creating initramfs for :\$K"
-	$DKMS     if [ -e /boot/vmlinuz-\$K ] && [ -e /sbin/depmod ] && [ -x %{_bindir}/dracut ]; then
-	$DKMS       /sbin/depmod -a "\$K"
-	$DKMS       if [ -e /etc/redhat-release ] || [ -e /etc/fedora-release ]; then
-	$DKMS         %{_bindir}/dracut -f --kver "\$K"
-	$DKMS       else
-	$DKMS         CREATE_INITRD="1"
-	$DKMS       fi
-	$DKMS     else
-	$DKMS       echo -e "Unable to create initramfs for :\$K"
-	$DKMS     fi
+	$DKMS     INITRD_KERNELS="\$INITRD_KERNELS \$K"
 	$DKMS   else
 	$DKMS     echo "SKIP DKMS Installation: kernel headers not available for \$K"
 	$DKMS   fi
 	$DKMS done
-	$DKMS if [ "\$CREATE_INITRD" == "1" ]; then
-	$DKMS   /sbin/mkinitrd
-	$DKMS fi
+	$DKMS for K in \$INITRD_KERNELS; do
+	$DKMS   update_initramfs "\$K"
+	$DKMS done
 
 	%preun
-	$DKMS CREATE_INITRD="0"
+	$DKMS update_initramfs() {
+	$DKMS   kver="\$1"
+	$DKMS   echo -e "Creating initramfs for :\$kver"
+	$DKMS   if [ ! -e /boot/vmlinuz-\$kver ]; then
+	$DKMS     echo -e "Unable to create initramfs for :\$kver (kernel image not found)"
+	$DKMS     return 0
+	$DKMS   fi
+	$DKMS   if command -v depmod >/dev/null 2>&1; then
+	$DKMS     depmod -a "\$kver"
+	$DKMS   fi
+	$DKMS   if command -v dracut >/dev/null 2>&1; then
+	$DKMS     echo -e "Using dracut"
+	$DKMS     dracut -f --kver "\$kver" || echo -e "dracut failed for :\$kver"
+	$DKMS   elif command -v update-initramfs >/dev/null 2>&1; then
+	$DKMS     echo -e "Using update-initramfs"
+	$DKMS     update-initramfs -u -k "\$kver" || echo -e "update-initramfs failed for :\$kver"
+	$DKMS   elif command -v mkinitrd >/dev/null 2>&1; then
+	$DKMS     if [ "\$MKINITRD_DONE" != "1" ]; then
+	$DKMS       echo -e "Using mkinitrd"
+	$DKMS       mkinitrd || echo -e "mkinitrd failed"
+	$DKMS       MKINITRD_DONE="1"
+	$DKMS     fi
+	$DKMS   else
+	$DKMS     echo -e "No initramfs tool (dracut/update-initramfs/mkinitrd) found, skipping initramfs for :\$kver"
+	$DKMS   fi
+	$DKMS }
+	$DKMS MKINITRD_DONE="0"
+	$DKMS INITRD_KERNELS=""
 	$DKMS for i in /var/lib/dkms/$PKG_NAME/$PKG_VER/[^a-zA-Z]*; do
 	$DKMS   if [[ \$i = *^* ]]; then continue; fi
 	$DKMS   K=\$(echo \$i | cut -d '/' -f 7)
@@ -140,21 +184,11 @@ sed -e 's/^[[:space:]]*//' -e '/^DEL/d' <<EOF
 	$DKMS   else
 	$DKMS     dkms uninstall -m $PKG_NAME -v $PKG_VER -k \$K --rpm_safe_upgrade || true
 	$DKMS   fi
-	$DKMS   echo -e "Creating initramfs for :\$K"
-	$DKMS   if [ -e /boot/vmlinuz-\$K ] && [ -e /sbin/depmod ] && [ -x %{_bindir}/dracut ]; then
-	$DKMS     /sbin/depmod -a "\$K"
-	$DKMS     if [ -e /etc/redhat-release ] || [ -e /etc/fedora-release ]; then
-	$DKMS       %{_bindir}/dracut -f --kver "\$K"
-	$DKMS     else
-	$DKMS       CREATE_INITRD="1"
-	$DKMS     fi
-	$DKMS   else
-	$DKMS     echo -e "Unable to create initramfs for :\$K"
-	$DKMS   fi
+	$DKMS   INITRD_KERNELS="\$INITRD_KERNELS \$K"
 	$DKMS done
-	$DKMS if [ "\$CREATE_INITRD" == "1" ]; then
-	$DKMS   /sbin/mkinitrd
-	$DKMS fi
+	$DKMS for K in \$INITRD_KERNELS; do
+	$DKMS   update_initramfs "\$K"
+	$DKMS done
 	$DKMS dkms remove -m $PKG_NAME -v $PKG_VER --all --rpm_safe_upgrade || true
 
 	%files

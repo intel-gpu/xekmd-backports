@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Date: Thu, 24 Sep 2026 11:39:09 +0530
+Subject: drm/xe/sysctrl: Improve firmware response error logging
+
+Use xe_log_err() helper and include additional details when a
+response header mismatch occurs.
+
+(cherry-picked from commit 3215ff2b71b7b8117657019ec3b6b64e585563c6 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+index 488c64d8b..798ed1961 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+@@ -233,13 +233,15 @@ static int sysctrl_receive_frames(struct xe_sysctrl *sc,
+ 	if (!XE_SYSCTRL_HDR_IS_RESPONSE(hdr) ||
+ 	    XE_SYSCTRL_HDR_GROUP_ID(hdr) != XE_SYSCTRL_HDR_GROUP_ID(req) ||
+ 	    XE_SYSCTRL_HDR_COMMAND(hdr) != XE_SYSCTRL_HDR_COMMAND(req)) {
+-		xe_err(xe, "sysctrl: Response header mismatch\n");
++		xe_log_err(xe, SYSCTRL, -EPROTO,
++			   "Response header mismatch: %#x != %#x\n",
++			   hdr->data, req->data);
+ 		return -EPROTO;
+ 	}
+ 
+ 	if (XE_SYSCTRL_HDR_RESULT(hdr) != 0) {
+-		xe_err(xe, "sysctrl: Firmware error: 0x%02lx\n",
+-		       XE_SYSCTRL_HDR_RESULT(hdr));
++		xe_log_err(xe, SYSCTRL, -EIO, "Firmware error: %#04x\n",
++			   XE_SYSCTRL_HDR_RESULT(hdr));
+ 		return -EIO;
+ 	}
+ 
+-- 
+2.43.0
+

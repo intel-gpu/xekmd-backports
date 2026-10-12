@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Date: Thu, 24 Sep 2026 11:39:10 +0530
+Subject: drm/xe/sysctrl: Log group and command ID on mailbox
+ failure
+
+Include the mailbox group ID and command code in error logs
+for command preparation and execution failures.
+
+(cherry-picked from commit 081b993689d3510dbdc2d83f6956441612e0d02f linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+index 798ed1961..1b938cb57 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+@@ -353,7 +353,8 @@ int xe_sysctrl_send_command(struct xe_sysctrl *sc,
+ 				      cmd->data_in, cmd->data_in_len,
+ 				      &mbox_cmd, &cmd_size);
+ 	if (ret) {
+-		xe_err(xe, "sysctrl: Failed to prepare command: %pe\n", ERR_PTR(ret));
++		xe_log_err(xe, SYSCTRL, ret, "Failed to prepare command %#x.%#x\n",
++			   group_id, command_code);
+ 		return ret;
+ 	}
+ 
+@@ -363,7 +364,8 @@ int xe_sysctrl_send_command(struct xe_sysctrl *sc,
+ 				   cmd->data_out, cmd->data_out_len, rdata_len,
+ 				   XE_SYSCTRL_MB_DEFAULT_TIMEOUT_MS);
+ 	if (ret)
+-		xe_err(xe, "sysctrl: Mailbox command failed: %pe\n", ERR_PTR(ret));
++		xe_log_err(xe, SYSCTRL, ret, "Mailbox command failed to send %#x.%#x\n",
++			   group_id, command_code);
+ 
+ 	kfree(mbox_cmd);
+ 
+-- 
+2.43.0
+

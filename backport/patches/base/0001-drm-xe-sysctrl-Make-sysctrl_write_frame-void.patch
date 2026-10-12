@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Date: Thu, 24 Sep 2026 11:39:04 +0530
+Subject: drm/xe/sysctrl: Make sysctrl_write_frame() void
+
+The function always returned 0, so the int return type is misleading.
+Convert to void and drop the error handling in the caller.
+
+(cherry-picked from commit 75e8c0bbf235ac1288421b82acc7064460bc7282 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox.c | 11 +++--------
+ 1 file changed, 3 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+index b3d1538c8..3ef60067e 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+@@ -49,8 +49,8 @@ static int sysctrl_wait_bit_set(struct xe_sysctrl *sc, u32 bit_mask,
+ 			      timeout_ms * 1000, NULL, false);
+ }
+ 
+-static int sysctrl_write_frame(struct xe_sysctrl *sc, const void *frame,
+-			       size_t len)
++static void sysctrl_write_frame(struct xe_sysctrl *sc, const void *frame,
++				size_t len)
+ {
+ 	static const struct xe_reg regs[] = {
+ 		SYSCTRL_MB_DATA0, SYSCTRL_MB_DATA1, SYSCTRL_MB_DATA2, SYSCTRL_MB_DATA3
+@@ -66,8 +66,6 @@ static int sysctrl_write_frame(struct xe_sysctrl *sc, const void *frame,
+ 
+ 	for (i = 0; i < dw; i++)
+ 		xe_mmio_write32(sc->mmio, regs[i], val[i]);
+-
+-	return 0;
+ }
+ 
+ static int sysctrl_read_frame(struct xe_sysctrl *sc, void *frame,
+@@ -156,10 +154,7 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
+ 	for (frame = 0; frame < total_frames; frame++) {
+ 		frame_size = min_t(size_t, cmd_size - bytes_sent, XE_SYSCTRL_MB_FRAME_SIZE);
+ 
+-		if (sysctrl_write_frame(sc, mbox_cmd + bytes_sent, frame_size)) {
+-			xe_err(xe, "sysctrl: Failed to write frame %u\n", frame);
+-			return -EIO;
+-		}
++		sysctrl_write_frame(sc, mbox_cmd + bytes_sent, frame_size);
+ 
+ 		ctrl_reg = SYSCTRL_MB_CTRL_RUN_BUSY |
+ 			   REG_FIELD_PREP(SYSCTRL_FRAME_CURRENT_MASK, frame) |
+-- 
+2.43.0
+

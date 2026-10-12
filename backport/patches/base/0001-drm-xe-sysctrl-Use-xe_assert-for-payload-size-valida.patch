@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Date: Thu, 24 Sep 2026 11:39:06 +0530
+Subject: drm/xe/sysctrl: Use xe_assert() for payload size
+ validation
+
+Replace the runtime payload length check with xe_assert(),
+as oversized messages should never reach code path.
+
+(cherry-picked from commit a9830855883da2372b21dbee95c27d4694b8e5d6 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox.c | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+index 4841dd7f2..50bbdab07 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+@@ -103,10 +103,7 @@ static int sysctrl_prepare_command(struct xe_device *xe,
+ 
+ 	xe_assert(xe, command <= SYSCTRL_HDR_COMMAND_MAX);
+ 
+-	if (data_in_len > XE_SYSCTRL_MB_MAX_MESSAGE_SIZE - sizeof(*hdr)) {
+-		xe_err(xe, "sysctrl: Input data too large: %zu bytes\n", data_in_len);
+-		return -EINVAL;
+-	}
++	xe_assert(xe, data_in_len <= XE_SYSCTRL_MB_MAX_MESSAGE_SIZE - sizeof(*hdr));
+ 
+ 	size = sizeof(*hdr) + data_in_len;
+ 
+-- 
+2.43.0
+

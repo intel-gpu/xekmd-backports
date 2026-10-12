@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Date: Thu, 24 Sep 2026 11:39:05 +0530
+Subject: drm/xe/sysctrl: Make sysctrl_read_frame() void
+
+Convert it to return void and remove the unnecessary error
+handling in sysctrl_process_frame().
+
+(cherry-picked from commit e192be8566a02cb3f8b7d4707cc6e719c2ed4536 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox.c | 11 +++--------
+ 1 file changed, 3 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+index 3ef60067e..4841dd7f2 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+@@ -68,8 +68,8 @@ static void sysctrl_write_frame(struct xe_sysctrl *sc, const void *frame,
+ 		xe_mmio_write32(sc->mmio, regs[i], val[i]);
+ }
+ 
+-static int sysctrl_read_frame(struct xe_sysctrl *sc, void *frame,
+-			      size_t len)
++static void sysctrl_read_frame(struct xe_sysctrl *sc, void *frame,
++			       size_t len)
+ {
+ 	static const struct xe_reg regs[] = {
+ 		SYSCTRL_MB_DATA0, SYSCTRL_MB_DATA1, SYSCTRL_MB_DATA2, SYSCTRL_MB_DATA3
+@@ -85,8 +85,6 @@ static int sysctrl_read_frame(struct xe_sysctrl *sc, void *frame,
+ 		val[i] = xe_mmio_read32(sc->mmio, regs[i]);
+ 
+ 	memcpy(frame, val, len);
+-
+-	return 0;
+ }
+ 
+ static void sysctrl_clear_response(struct xe_sysctrl *sc)
+@@ -194,10 +192,7 @@ static int sysctrl_process_frame(struct xe_sysctrl *sc, void *out,
+ 	total_frames = FIELD_GET(SYSCTRL_FRAME_TOTAL_MASK, ctrl_reg);
+ 	curr_frame = FIELD_GET(SYSCTRL_FRAME_CURRENT_MASK, ctrl_reg);
+ 
+-	ret = sysctrl_read_frame(sc, out, frame_size);
+-	if (ret)
+-		return ret;
+-
++	sysctrl_read_frame(sc, out, frame_size);
+ 	sysctrl_clear_response(sc);
+ 
+ 	if (curr_frame == total_frames)
+-- 
+2.43.0
+

@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Date: Thu, 24 Sep 2026 11:39:03 +0530
+Subject: drm/xe/sysctrl: Return error codes from
+ sysctrl_wait_bit_set()
+
+Make sysctrl_wait_bit_set() return an error code rather than a bool
+and update callers to use xe_log_err() with the propagated error code.
+
+(cherry-picked from commit 026bd0e216077ea04c72c2f90261fba7b305d409 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox.c | 19 ++++++++-----------
+ 1 file changed, 8 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+index c36cac8c6..b3d1538c8 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+@@ -42,15 +42,11 @@ static int sysctrl_wait_bit_clear(struct xe_sysctrl *sc, u32 bit_mask,
+ 				  timeout_ms * 1000, NULL, false);
+ }
+ 
+-static bool sysctrl_wait_bit_set(struct xe_sysctrl *sc, u32 bit_mask,
+-				 unsigned int timeout_ms)
++static int sysctrl_wait_bit_set(struct xe_sysctrl *sc, u32 bit_mask,
++				unsigned int timeout_ms)
+ {
+-	int ret;
+-
+-	ret = xe_mmio_wait32(sc->mmio, SYSCTRL_MB_CTRL, bit_mask, bit_mask,
+-			     timeout_ms * 1000, NULL, false);
+-
+-	return ret == 0;
++	return xe_mmio_wait32(sc->mmio, SYSCTRL_MB_CTRL, bit_mask, bit_mask,
++			      timeout_ms * 1000, NULL, false);
+ }
+ 
+ static int sysctrl_write_frame(struct xe_sysctrl *sc, const void *frame,
+@@ -193,9 +189,10 @@ static int sysctrl_process_frame(struct xe_sysctrl *sc, void *out,
+ 	struct xe_device *xe = sc_to_xe(sc);
+ 	int ret;
+ 
+-	if (!sysctrl_wait_bit_set(sc, SYSCTRL_MB_CTRL_RUN_BUSY_OUT, timeout_ms)) {
+-		xe_err(xe, "sysctrl: Response frame timeout\n");
+-		return -ETIMEDOUT;
++	ret = sysctrl_wait_bit_set(sc, SYSCTRL_MB_CTRL_RUN_BUSY_OUT, timeout_ms);
++	if (ret) {
++		xe_log_err(xe, SYSCTRL, ret, "Response frame timeout\n");
++		return ret;
+ 	}
+ 
+ 	ctrl_reg = xe_mmio_read32(sc->mmio, SYSCTRL_MB_CTRL);
+-- 
+2.43.0
+

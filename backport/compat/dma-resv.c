@@ -541,8 +541,7 @@ EXPORT_SYMBOL(dma_resv_fini);
 
 void drm_gem_object_release(struct drm_gem_object *obj)
 {
-	if (obj->resv)
-		dma_resv_recover_ptr(obj->resv);
+	dma_resv_recover_ptr(&obj->_resv);
 	/* Undef the redirect so this calls the kernel's real drm_gem_object_release(), not itself. */
 #undef drm_gem_object_release
 	drm_gem_object_release(obj);

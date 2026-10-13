@@ -541,8 +541,17 @@ EXPORT_SYMBOL(dma_resv_fini);
 
 void drm_gem_object_release(struct drm_gem_object *obj)
 {
-	if (obj->resv)
+	/* Clean up our locally owned inline reservation object */
+	dma_resv_recover_ptr(&obj->_resv);
+
+	/* For imported/shared BOs, lock the external resv before
+	 * recovering to prevent races
+	 */
+	if (obj->resv && obj->resv != &obj->_resv){
+		dma_resv_lock(obj->resv, NULL);
 		dma_resv_recover_ptr(obj->resv);
+		dma_resv_unlock(obj->resv);
+	}
 	/* Undef the redirect so this calls the kernel's real drm_gem_object_release(), not itself. */
 #undef drm_gem_object_release
 	drm_gem_object_release(obj);

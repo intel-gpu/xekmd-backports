@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Mon, 12 Oct 2026 16:30:36 -0700
+Subject: TEMP: drm/xe/cri: Implement workaround Wa_15020021844
+
+On Crescent Island platforms, the pcode is signaling "ready" to the
+driver prematurely since one last sysctrl firmware initialization step
+is still underway and not fully complete.  Since the driver's
+initialization is racing with the end of the firmware's init, this can
+lead to error messages like:
+
+   xe 0000:be:00.0: [drm] *ERROR* sysctrl: Firmware error: 0x06
+   xe 0000:be:00.0: [drm] *ERROR* sysctrl: Mailbox command failed: -EIO
+
+The current recommenedation to work around this is for the driver to
+wait an additional 0.5 seconds after getting the "ready" response,
+before moving on with other initialization tasks.
+
+Note that the official definition of this workaround is still being
+finalized, so "Wa_15020021844" is a bit of a placeholder/guess.  It's
+possible that the actual number could still change, although the request
+to wait the additional half second is pretty well set at this point.
+
+Cc: Balasubramani Vivekanandan <balasubramani.vivekanandan@intel.com>
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/patch/759600/?series=175989&rev=1)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device_wa_oob.rules | 1 +
+ drivers/gpu/drm/xe/xe_pcode.c             | 5 +++++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_device_wa_oob.rules b/drivers/gpu/drm/xe/xe_device_wa_oob.rules
+index d8dc41851..0488a2046 100644
+--- a/drivers/gpu/drm/xe/xe_device_wa_oob.rules
++++ b/drivers/gpu/drm/xe/xe_device_wa_oob.rules
+@@ -7,3 +7,4 @@
+ 14026633728	PLATFORM(CRESCENTISLAND)
+ 14026746987	PLATFORM(CRESCENTISLAND)
+ 14026779378	PLATFORM(CRESCENTISLAND)
++15020021844	PLATFORM(CRESCENTISLAND)
+diff --git a/drivers/gpu/drm/xe/xe_pcode.c b/drivers/gpu/drm/xe/xe_pcode.c
+index ad5a74c29..fc542eab3 100644
+--- a/drivers/gpu/drm/xe/xe_pcode.c
++++ b/drivers/gpu/drm/xe/xe_pcode.c
+@@ -11,6 +11,7 @@
+ 
+ #include <drm/drm_managed.h>
+ 
++#include "generated/xe_device_wa_oob.h"
+ #include "regs/xe_pmt.h"
+ #include "xe_assert.h"
+ #include "xe_device.h"
+@@ -20,6 +21,7 @@
+ #include "xe_pm.h"
+ #include "xe_printk.h"
+ #include "xe_vsec.h"
++#include "xe_wa.h"
+ 
+ /**
+  * DOC: PCODE
+@@ -321,6 +323,9 @@ int xe_pcode_ready(struct xe_device *xe, bool locked)
+ 		xe_log_err(tile, PCODE, ret, "initialization timedout after %ld seconds\n",
+ 			   timeout_us / USEC_PER_SEC);
+ 
++	if (!ret && XE_DEVICE_WA(xe, 15020021844))
++		msleep(500);
++
+ 	return ret;
+ }
+ 
+-- 
+2.43.0
+

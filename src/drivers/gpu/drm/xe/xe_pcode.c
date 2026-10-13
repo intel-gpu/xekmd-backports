@@ -11,6 +11,7 @@
 
 #include <drm/drm_managed.h>
 
+#include "generated/xe_device_wa_oob.h"
 #include "regs/xe_pmt.h"
 #include "xe_assert.h"
 #include "xe_device.h"
@@ -20,6 +21,7 @@
 #include "xe_pm.h"
 #include "xe_printk.h"
 #include "xe_vsec.h"
+#include "xe_wa.h"
 
 /**
  * DOC: PCODE
@@ -320,6 +322,9 @@ int xe_pcode_ready(struct xe_device *xe, bool locked)
 	if (ret)
 		xe_log_err(tile, PCODE, ret, "initialization timedout after %ld seconds\n",
 			   timeout_us / USEC_PER_SEC);
+
+	if (!ret && XE_DEVICE_WA(xe, 15020021844))
+		msleep(500);
 
 	return ret;
 }

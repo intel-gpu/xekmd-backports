@@ -26,7 +26,8 @@
 #include <linux/types.h>
 
 #if defined(HAVE_LINUX_STRING_CHOICES_H) && \
-	!defined(BPM_STR_PLURAL_NOT_PRESENT)
+	!defined(BPM_STR_PLURAL_NOT_PRESENT) && \
+	!defined(BPM_STR_DOWN_UP_NOT_PRESENT)
 #include_next <linux/string_choices.h>
 #else
 
@@ -39,6 +40,10 @@ static inline const char *str_up_down(bool v)
 {
 	return v ? "up" : "down";
 }
+
+#ifdef BPM_STR_DOWN_UP_NOT_PRESENT
+#define str_down_up(v)		str_up_down(!(v))
+#endif
 
 static inline const char *str_yes_no(bool v)
 {

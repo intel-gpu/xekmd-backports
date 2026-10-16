@@ -12,6 +12,7 @@ AC_DEFUN([AC_DRM_SHOW_FDINFO_NOT_PRESENT], [
                                 .show_fdinfo = NULL,
                         };
 
+                        (void)driver;
                         drm_show_fdinfo(NULL, NULL);
                 ],[
                 ],[

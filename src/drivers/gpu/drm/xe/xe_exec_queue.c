@@ -1772,6 +1772,19 @@ void xe_exec_queue_kill(struct xe_exec_queue *q)
 }
 
 /**
+ * xe_exec_queue_kill_sync() - Wait for queue scheduling to stop
+ * @q: The exec queue
+ *
+ * This function waits for the backend to finish stopping the queue after
+ * xe_exec_queue_kill(). It is safe to call multiple times.
+ */
+void xe_exec_queue_kill_sync(struct xe_exec_queue *q)
+{
+	if (q->ops->kill_sync)
+		q->ops->kill_sync(q);
+}
+
+/**
  * xe_exec_queue_destroy_ioctl() - Destroy an exec queue via IOCTL
  * @dev: DRM device
  * @data: IOCTL data

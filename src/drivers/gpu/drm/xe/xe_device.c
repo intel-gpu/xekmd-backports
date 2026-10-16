@@ -190,8 +190,13 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
 		if (q->vm && q->hwe->hw_engine_group)
 			xe_hw_engine_group_del_exec_queue(q->hwe->hw_engine_group, q);
 		xe_exec_queue_kill(q);
+	}
+
+	xa_for_each(&xef->exec_queue.xa, idx, q) {
+		xe_exec_queue_kill_sync(q);
 		xe_exec_queue_put(q);
 	}
+
 	xa_for_each(&xef->vm.xa, idx, vm)
 		xe_vm_close_and_put(vm);
 

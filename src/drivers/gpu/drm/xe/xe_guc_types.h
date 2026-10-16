@@ -95,13 +95,19 @@ struct xe_guc {
 		struct mutex lock;
 #ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
 #ifdef CONFIG_PROVE_LOCKING
-#define NUM_SUBMIT_WQ	256
+#define NUM_SUBMIT_WQ  256
 		/** @submission_state.submit_wq_pool: submission ordered workqueues pool */
 		struct workqueue_struct *submit_wq_pool[NUM_SUBMIT_WQ];
 		/** @submission_state.submit_wq_idx: submission ordered workqueue index */
 		int submit_wq_idx;
 #endif
 #endif
+		/**
+		 * @submission_state.kill_wq: wait queue for exec queue kill_sync
+		 * waiters, kept separate from &xe_guc_ct.wq so that waking them
+		 * from the G2H handler does not wake every CT waiter.
+		 */
+		wait_queue_head_t kill_wq;
 		/** @submission_state.enabled: submission is enabled */
 		bool enabled;
 		/**

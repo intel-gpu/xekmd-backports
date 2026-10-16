@@ -27,6 +27,7 @@ void xe_guc_submit_unpause(struct xe_guc *guc);
 void xe_guc_submit_unpause_vf(struct xe_guc *guc);
 void xe_guc_submit_unpause_prepare_vf(struct xe_guc *guc);
 void xe_guc_submit_wedge(struct xe_guc *guc);
+void xe_guc_submit_wake_kill_waiters(struct xe_guc *guc);
 
 int xe_guc_read_stopped(struct xe_guc *guc);
 int xe_guc_sched_done_handler(struct xe_guc *guc, u32 *msg, u32 len);

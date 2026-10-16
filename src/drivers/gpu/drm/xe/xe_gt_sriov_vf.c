@@ -863,6 +863,7 @@ static void vf_start_migration_recovery(struct xe_gt *gt)
 		smp_wmb();	/* Ensure above writes visible before wake */
 
 		xe_guc_ct_wake_waiters(&gt->uc.guc.ct);
+		xe_guc_submit_wake_kill_waiters(&gt->uc.guc);
 
 		started = queue_work(gt->ordered_wq, &gt->sriov.vf.migration.worker);
 		xe_gt_sriov_info(gt, "VF migration recovery %s\n", started ?

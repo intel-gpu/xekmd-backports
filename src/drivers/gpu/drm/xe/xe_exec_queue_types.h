@@ -285,6 +285,8 @@ struct xe_exec_queue_ops {
 	int (*init)(struct xe_exec_queue *q);
 	/** @kill: Kill inflight submissions for backend */
 	void (*kill)(struct xe_exec_queue *q);
+	/** @kill_sync: Wait for the backend to stop queue scheduling */
+	void (*kill_sync)(struct xe_exec_queue *q);
 	/** @fini: Undoes the init() for submission backend */
 	void (*fini)(struct xe_exec_queue *q);
 	/**

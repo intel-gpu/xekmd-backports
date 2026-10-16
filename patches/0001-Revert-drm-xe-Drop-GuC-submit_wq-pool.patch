@@ -10,19 +10,20 @@ V1: Rebase to v6.17.1-251107.1
 V2: Rebase to v6.17.13.36 [Akanksha]
 V3: Restore the missing alloc_submit_wq(guc) call [Raju]
 V4: Restore missing submit_wq assignment in guc_exec_queue_init [Varun]
+V5: Rebase to v7.1.4.57 [Raju]
 
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/gpu/drm/xe/xe_guc_submit.c | 67 +++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_guc_submit.c | 67 ++++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_guc_types.h  |  9 ++++
  2 files changed, 76 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index fb916dd..ef95cfe 100644
+index f3b3427..7418e2a 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -272,6 +272,60 @@ static bool exec_queue_killed_or_banned_or_wedged(struct xe_exec_queue *q)
+@@ -233,6 +233,60 @@ static bool exec_queue_killed_or_banned_or_wedged(struct xe_exec_queue *q)
  		 EXEC_QUEUE_STATE_BANNED));
  }
  
@@ -83,8 +84,8 @@ index fb916dd..ef95cfe 100644
  static void guc_submit_sw_fini(struct drm_device *drm, void *arg)
  {
  	struct xe_guc *guc = arg;
-@@ -288,6 +342,9 @@ static void guc_submit_sw_fini(struct drm_device *drm, void *arg)
- 	xe_gt_assert(gt, ret);
+@@ -241,6 +295,9 @@ static void guc_submit_sw_fini(struct drm_device *drm, void *arg)
+ 	xe_gt_assert(gt, xa_empty(&guc->submission_state.exec_queue_lookup));
  
  	xa_destroy(&guc->submission_state.exec_queue_lookup);
 +#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
@@ -93,7 +94,7 @@ index fb916dd..ef95cfe 100644
  }
  
  static void guc_submit_fini(void *arg)
-@@ -372,6 +429,12 @@ int xe_guc_submit_init(struct xe_guc *guc, unsigned int num_ids)
+@@ -320,6 +377,12 @@ int xe_guc_submit_init(struct xe_guc *guc, unsigned int num_ids)
  
  	guc->submission_state.initialized = true;
  
@@ -106,32 +107,7 @@ index fb916dd..ef95cfe 100644
  	err = drmm_add_action_or_reset(&xe->drm, guc_submit_sw_fini, guc);
  	if (err)
  		return err;
-
-diff --git a/drivers/gpu/drm/xe/xe_guc_types.h b/drivers/gpu/drm/xe/xe_guc_types.h
-index c7b9642..74e4c73 100644
---- a/drivers/gpu/drm/xe/xe_guc_types.h
-+++ b/drivers/gpu/drm/xe/xe_guc_types.h
-@@ -93,6 +93,15 @@ struct xe_guc {
- 		atomic_t reset_blocked;
- 		/** @submission_state.lock: protects submission state */
- 		struct mutex lock;
-+#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
-+#ifdef CONFIG_PROVE_LOCKING
-+#define NUM_SUBMIT_WQ	256
-+		/** @submission_state.submit_wq_pool: submission ordered workqueues pool */
-+		struct workqueue_struct *submit_wq_pool[NUM_SUBMIT_WQ];
-+		/** @submission_state.submit_wq_idx: submission ordered workqueue index */
-+		int submit_wq_idx;
-+#endif
-+#endif
- 		/** @submission_state.enabled: submission is enabled */
- 		bool enabled;
- 		/**
-diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index fb916dd..ef95cfe 100644
---- a/drivers/gpu/drm/xe/xe_guc_submit.c
-+++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -1943,6 +2006,10 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
+@@ -2062,6 +2125,10 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
  	timeout = (q->vm && xe_vm_in_lr_mode(q->vm)) ? MAX_SCHEDULE_TIMEOUT :
  		  msecs_to_jiffies(q->sched_props.job_timeout_ms);
  
@@ -142,7 +118,25 @@ index fb916dd..ef95cfe 100644
  	/*
  	 * Use primary queue's submit_wq for all secondary queues of a
  	 * multi queue group. This serialization avoids any locking around
-
+diff --git a/drivers/gpu/drm/xe/xe_guc_types.h b/drivers/gpu/drm/xe/xe_guc_types.h
+index 7e6a41d..f6f68d0 100644
+--- a/drivers/gpu/drm/xe/xe_guc_types.h
++++ b/drivers/gpu/drm/xe/xe_guc_types.h
+@@ -93,6 +93,15 @@ struct xe_guc {
+ 		atomic_t reset_blocked;
+ 		/** @submission_state.lock: protects submission state */
+ 		struct mutex lock;
++#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
++#ifdef CONFIG_PROVE_LOCKING
++#define NUM_SUBMIT_WQ  256
++		/** @submission_state.submit_wq_pool: submission ordered workqueues pool */
++		struct workqueue_struct *submit_wq_pool[NUM_SUBMIT_WQ];
++		/** @submission_state.submit_wq_idx: submission ordered workqueue index */
++		int submit_wq_idx;
++#endif
++#endif
+ 		/**
+ 		 * @submission_state.kill_wq: wait queue for exec queue kill_sync
+ 		 * waiters, kept separate from &xe_guc_ct.wq so that waking them
 -- 
 2.43.0
-

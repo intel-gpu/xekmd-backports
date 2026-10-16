@@ -1,0 +1,139 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 14 Oct 2026 22:01:35 -0700
+Subject: [TEMP]: drm/xe: Disable scheduling early on FD close to avoid
+ CAT error cascade
+
+When an FD is closed with many exec queues, teardown relies on the TDR
+path to clean up scheduling. However, the TDR handling is serialized
+(i.e., only one exec queue is processed at a time), which can make it
+too slow compared to GuC scheduling activity.
+
+In this window, GuC may continue to schedule contexts backed by
+invalid page tables, leading to a cascade of CAT errors and repeated
+engine resets. This significantly increases recovery time and can
+degrade system stability.
+
+To mitigate this, eagerly disable scheduling by sending a self-message
+outside of the TDR path. This prevents further scheduling of invalid
+contexts and avoids the CAT error/reset cascade.
+
+This change improves robustness and reduces recovery latency in
+multiple queue teardown scenarios.
+
+Cc: Wang Xin <x.wang@intel.com>
+Cc: Jia Yao <jia.yao@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Tested-by: Jia Yao <jia.yao@intel.com>
+Reviewed-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
+(backported from https://patchwork.freedesktop.org/series/175996/#rev3)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_exec_queue_types.h |  2 +-
+ drivers/gpu/drm/xe/xe_guc_submit.c           | 46 ++++++++++++++++++--
+ 2 files changed, 44 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_exec_queue_types.h b/drivers/gpu/drm/xe/xe_guc_exec_queue_types.h
+index cda14d954..6b813da58 100644
+--- a/drivers/gpu/drm/xe/xe_guc_exec_queue_types.h
++++ b/drivers/gpu/drm/xe/xe_guc_exec_queue_types.h
+@@ -36,7 +36,7 @@ struct xe_guc_exec_queue {
+ 	 * a message needs to sent through the GPU scheduler but memory
+ 	 * allocations are not allowed.
+ 	 */
+-#define MAX_STATIC_MSG_TYPE	3
++#define MAX_STATIC_MSG_TYPE	5
+ 	struct xe_sched_msg static_msgs[MAX_STATIC_MSG_TYPE];
+ 	/** @destroy_async: do final destroy async from this worker */
+ 	struct work_struct destroy_async;
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index 3d95ac22d..17a6b755c 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -1899,11 +1899,22 @@ static void __guc_exec_queue_process_msg_set_multi_queue_priority(struct xe_sche
+ 	kfree(msg);
+ }
+ 
++static void __guc_exec_queue_process_msg_kill(struct xe_sched_msg *msg,
++		bool bound)
++{
++	struct xe_exec_queue *q = msg->private_data;
++	struct xe_exec_queue *primary = xe_exec_queue_multi_queue_primary(q);
++
++	if (exec_queue_enabled(primary) && bound)
++	disable_scheduling(primary, true);
++}
++
+ #define CLEANUP				1	/* Non-zero values to catch uninitialized msg */
+ #define SET_SCHED_PROPS			2
+ #define SUSPEND				3
+ #define RESUME				4
+ #define SET_MULTI_QUEUE_PRIORITY	5
++#define KILL				6
+ #define OPCODE_MASK	0xf
+ #define MSG_LOCKED	BIT(8)
+ #define MSG_HEAD	BIT(9)
+@@ -1935,6 +1946,9 @@ static void guc_exec_queue_process_msg(struct xe_sched_msg *msg,
+ 	case SET_MULTI_QUEUE_PRIORITY:
+ 		__guc_exec_queue_process_msg_set_multi_queue_priority(msg, bound);
+ 		break;
++	case KILL:
++		__guc_exec_queue_process_msg_kill(msg, bound);
++		break;
+ 	default:
+ 		XE_WARN_ON("Unknown message type");
+ 	}
+@@ -2059,11 +2073,40 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
+ 	return err;
+ }
+ 
++static bool guc_exec_queue_try_add_msg(struct xe_exec_queue *q,
++		struct xe_sched_msg *msg,
++		u32 opcode);
++
++#define STATIC_MSG_CLEANUP	0
++#define STATIC_MSG_SUSPEND	1
++#define STATIC_MSG_RESUME	2
++#define STATIC_MSG_CGP_SYNC	3
++#define STATIC_MSG_KILL		4
++
+ static void guc_exec_queue_kill(struct xe_exec_queue *q)
+ {
++	struct xe_sched_msg *msg = q->guc->static_msgs + STATIC_MSG_KILL;
++
+ 	trace_xe_exec_queue_kill(q);
+ 	set_exec_queue_killed(q);
+ 	__suspend_fence_signal(q);
++
++	/*
++	* We eagerly send a message to ourselves to disable scheduling, as the
++	* TDR is serialized (i.e., only one exec queue is processed at a time).
++	* If an FD is closed with many exec queues, the TDR can be slower than
++	* the GuC scheduling contexts with invalid page tables, creating a
++	* cascade of CAT errors and engine resets, which is quite slow. Avoid
++	* this by immediately disabling scheduling outside of the TDR.
++	*/
++	if (kref_read(&q->refcount) && !exec_queue_wedged(q)) {
++		struct xe_gpu_scheduler *sched = &q->guc->sched;
++
++		xe_sched_msg_lock(sched);
++		guc_exec_queue_try_add_msg(q, msg, KILL);
++		xe_sched_msg_unlock(sched);
++	}
++
+ 	xe_guc_exec_queue_trigger_cleanup(q);
+ }
+ 
+@@ -2116,9 +2159,6 @@ static bool guc_exec_queue_try_add_msg(struct xe_exec_queue *q,
+ 	return true;
+ }
+ 
+-#define STATIC_MSG_CLEANUP	0
+-#define STATIC_MSG_SUSPEND	1
+-#define STATIC_MSG_RESUME	2
+ static void guc_exec_queue_destroy(struct xe_exec_queue *q)
+ {
+ 	struct xe_sched_msg *msg = q->guc->static_msgs + STATIC_MSG_CLEANUP;
+-- 
+2.43.0
+

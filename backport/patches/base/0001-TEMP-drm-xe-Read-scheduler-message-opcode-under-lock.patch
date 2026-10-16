@@ -1,0 +1,105 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Wed, 14 Oct 2026 22:01:34 -0700
+Subject: [TEMP]: drm/xe: Read scheduler message opcode under lock
+
+For static scheduler messages, the opcode is only guaranteed to remain
+stable while the message is on the pending message list. Read the opcode
+under the message lock before removing the message from the pending list,
+and pass it through the processing pipeline.
+
+Fixes: ff796870f5dd ("drm/xe/guc: rework exec queue teardown PM/unplug handling")
+Cc: stable <stable@kernel.org>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/175996/#rev3)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gpu_scheduler.c       | 13 +++++++++----
+ drivers/gpu/drm/xe/xe_gpu_scheduler_types.h |  2 +-
+ drivers/gpu/drm/xe/xe_guc_submit.c          |  7 ++++---
+ 3 files changed, 14 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gpu_scheduler.c b/drivers/gpu/drm/xe/xe_gpu_scheduler.c
+index 9c8004d5d..d656db758 100644
+--- a/drivers/gpu/drm/xe/xe_gpu_scheduler.c
++++ b/drivers/gpu/drm/xe/xe_gpu_scheduler.c
+@@ -23,15 +23,19 @@ static void xe_sched_process_msg_queue_if_ready(struct xe_gpu_scheduler *sched)
+ }
+ 
+ static struct xe_sched_msg *
+-xe_sched_get_msg(struct xe_gpu_scheduler *sched)
++xe_sched_get_msg(struct xe_gpu_scheduler *sched, unsigned int *opcode)
+ {
+ 	struct xe_sched_msg *msg;
+ 
+ 	xe_sched_msg_lock(sched);
+ 	msg = list_first_entry_or_null(&sched->msgs,
+ 				       struct xe_sched_msg, link);
+-	if (msg)
++	if (msg) {
++		/* The opcode is only stable under lock for static messages */
++		*opcode = msg->opcode;
++
+ 		list_del_init(&msg->link);
++	}
+ 	xe_sched_msg_unlock(sched);
+ 
+ 	return msg;
+@@ -42,13 +46,14 @@ static void xe_sched_process_msg_work(struct work_struct *w)
+ 	struct xe_gpu_scheduler *sched =
+ 		container_of(w, struct xe_gpu_scheduler, work_process_msg);
+ 	struct xe_sched_msg *msg;
++	unsigned int opcode;
+ 
+ 	if (drm_sched_is_stopped(&sched->base))
+ 		return;
+ 
+-	msg = xe_sched_get_msg(sched);
++	msg = xe_sched_get_msg(sched, &opcode);
+ 	if (msg) {
+-		sched->ops->process_msg(msg);
++		sched->ops->process_msg(msg, opcode);
+ 
+ 		xe_sched_process_msg_queue_if_ready(sched);
+ 	}
+diff --git a/drivers/gpu/drm/xe/xe_gpu_scheduler_types.h b/drivers/gpu/drm/xe/xe_gpu_scheduler_types.h
+index 63d9bf925..ea8b0d703 100644
+--- a/drivers/gpu/drm/xe/xe_gpu_scheduler_types.h
++++ b/drivers/gpu/drm/xe/xe_gpu_scheduler_types.h
+@@ -34,7 +34,7 @@ struct xe_sched_backend_ops {
+ 	 * @process_msg: Process a message. Allowed to block, it is this
+ 	 * function's responsibility to free message if dynamically allocated.
+ 	 */
+-	void (*process_msg)(struct xe_sched_msg *msg);
++	void (*process_msg)(struct xe_sched_msg *msg, unsigned int opcode);
+ };
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index 3d8859b22..3d95ac22d 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -1909,16 +1909,17 @@ static void __guc_exec_queue_process_msg_set_multi_queue_priority(struct xe_sche
+ #define MSG_HEAD	BIT(9)
+ #define MSG_PM_REF	BIT(10)
+ 
+-static void guc_exec_queue_process_msg(struct xe_sched_msg *msg)
++static void guc_exec_queue_process_msg(struct xe_sched_msg *msg,
++				       unsigned int opcode)
+ {
+ 	struct xe_device *xe = guc_to_xe(exec_queue_to_guc(msg->private_data));
+ 	int idx;
+-	bool pm_ref = !!(msg->opcode & MSG_PM_REF);
++	bool pm_ref = !!(opcode & MSG_PM_REF);
+ 	bool bound = drm_dev_enter(&xe->drm, &idx);
+ 
+ 	trace_xe_sched_msg_recv(msg);
+ 
+-	switch (msg->opcode & OPCODE_MASK) {
++	switch (opcode & OPCODE_MASK) {
+ 	case CLEANUP:
+ 		__guc_exec_queue_process_msg_cleanup(msg, bound);
+ 		break;
+-- 
+2.43.0
+

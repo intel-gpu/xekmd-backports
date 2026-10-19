@@ -343,7 +343,7 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
 	ss->read.chunk_position = 0;
 
 	mutex_lock(&coredump->lock);
-	coredump->captured = false;
+	ss->gt = NULL;
 	mutex_unlock(&coredump->lock);
 
 #endif
@@ -388,7 +388,11 @@ static void devcoredump_snapshot(struct xe_devcoredump *coredump,
 
 	xe_engine_snapshot_capture_for_queue(q);
 
+#ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
+	queue_work(coredump->wq, &ss->work);
+#else
 	queue_work(system_dfl_wq, &ss->work);
+#endif
 
 	dma_fence_end_signalling(cookie);
 }
@@ -412,7 +416,19 @@ void xe_devcoredump(struct xe_exec_queue *q, struct xe_sched_job *job, const cha
 
 	mutex_lock(&coredump->lock);
 
+#ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
+	if (coredump->captured && !coredump->snapshot.gt) {
+		mutex_unlock(&coredump->lock);
+		flush_work(&coredump->snapshot.work);
+		mutex_lock(&coredump->lock);
+	}
+#endif
+
+#ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
+	if (coredump->captured && coredump->snapshot.gt) {
+#else
 	if (coredump->captured) {
+#endif
 		drm_dbg(&xe->drm, "Multiple hangs are occurring, but only the first snapshot was taken\n");
 		mutex_unlock(&coredump->lock);
 		return;
@@ -435,7 +451,11 @@ void xe_devcoredump(struct xe_exec_queue *q, struct xe_sched_job *job, const cha
 
 static void xe_driver_devcoredump_fini(void *arg)
 {
-#ifndef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
+#ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
+	struct xe_device *xe = arg;
+
+	destroy_workqueue(xe->devcoredump.wq);
+#else
 	struct drm_device *drm = arg;
 
 	dev_coredump_put(drm->dev);
@@ -456,7 +476,15 @@ int xe_devcoredump_init(struct xe_device *xe)
 		fs_reclaim_release(GFP_KERNEL);
 	}
 
+#ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
+	xe->devcoredump.wq = alloc_workqueue("xe-devcoredump", WQ_UNBOUND | WQ_MEM_RECLAIM, 0);
+	if (!xe->devcoredump.wq)
+		return -ENOMEM;
+
+	return devm_add_action_or_reset(xe->drm.dev, xe_driver_devcoredump_fini, xe);
+#else
 	return devm_add_action_or_reset(xe->drm.dev, xe_driver_devcoredump_fini, &xe->drm);
+#endif
 }
 
 #endif

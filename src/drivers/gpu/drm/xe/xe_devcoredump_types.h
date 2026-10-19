@@ -86,6 +86,9 @@ struct xe_devcoredump {
 	struct mutex lock;
 	/** @captured: The snapshot of the first hang has already been taken */
 	bool captured;
+#ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
+	struct workqueue_struct *wq;
+#endif
 	/** @snapshot: Snapshot is captured at time of the first crash */
 	struct xe_devcoredump_snapshot snapshot;
 };

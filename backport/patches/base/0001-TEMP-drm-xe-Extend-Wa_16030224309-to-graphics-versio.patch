@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tangudu Tilak Tirumalesh <tilak.tirumalesh.tangudu@intel.com>
+Date: Tue, 19 Oct 2026 06:49:03 +0530
+Subject: [TEMP] drm/xe: Extend Wa_16030224309 to graphics version
+ 35.11
+
+Opt in to the GuC workaround that ignores context completion status
+with preemption or preemption-to-idle in the CSB when the multi-queue
+feature is enabled, on Graphics Version 35.11 as well.
+This WA is supported starting from GuC 70.73.
+
+Assisted-by: GitHub_Copilot:claude-sonnet-5
+Signed-off-by: Tangudu Tilak Tirumalesh <tilak.tirumalesh.tangudu@intel.com>
+
+Reviewed-by: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+
+(Backported from https://patchwork.freedesktop.org/patch/761238/?series=176414&rev=1)
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+---
+ drivers/gpu/drm/xe/xe_wa_oob.rules | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
+index 4364fb6b21cd..cdac196c67ba 100644
+--- a/drivers/gpu/drm/xe/xe_wa_oob.rules
++++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
+@@ -70,4 +70,4 @@
+ 16029897822	MEDIA_VERSION(3500)
+ 		GRAPHICS_VERSION(3510)
+ 14027054324	GRAPHICS_VERSION(3511)
+-16030224309	GRAPHICS_VERSION(3510)
++16030224309	GRAPHICS_VERSION_RANGE(3510, 3511)
+-- 
+2.43.0
+

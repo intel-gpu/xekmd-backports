@@ -1,0 +1,193 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tangudu Tilak Tirumalesh <tilak.tirumalesh.tangudu@intel.com>
+Date: Thu, 27 Aug 2026 13:50:10 +0530
+Subject: drm/xe/tlb_inval: add xe_tlb_inval_ggtt_full() GGTT
+ invalidation helper
+
+Add xe_tlb_inval_ggtt_full() and its GuC backend
+send_tlb_inval_ggtt_full() for full engine TLB invalidation
+within the requesting VF across all engines.
+
+v2:
+- Refactor with new helper xe_tlb_inval_issue_op_wait() and address
+  nits (Niranjana)
+v3:
+- Avoid TOCTOU issue around CT state (Matt Brost)
+v4:
+- Propagate real send errors instead of masking as -ECANCELED (Sashiko)
+v5:
+- Handle -ENOTRECOVERABLE (wedged), drop redundant -ECANCELED
+  (Matt Brost, Niranjana)
+
+Assisted-by: Claude:claude-opus-4-8
+Signed-off-by: Tangudu Tilak Tirumalesh <tilak.tirumalesh.tangudu@intel.com>
+Acked-by: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260827082011.3370672-3-tilak.tirumalesh.tangudu@intel.com
+Signed-off-by: Shuicheng Lin <shuicheng.lin@intel.com>
+(cherry-picked from commit 0f0a5aba875992c4d0aaf8c6178550557fa38ce2 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_tlb_inval.c   | 29 +++++++++++++++++
+ drivers/gpu/drm/xe/xe_tlb_inval.c       | 42 +++++++++++++++++++++----
+ drivers/gpu/drm/xe/xe_tlb_inval.h       |  1 +
+ drivers/gpu/drm/xe/xe_tlb_inval_types.h | 10 ++++++
+ 4 files changed, 76 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_tlb_inval.c b/drivers/gpu/drm/xe/xe_guc_tlb_inval.c
+index cf6d106e6..6acf08229 100644
+--- a/drivers/gpu/drm/xe/xe_guc_tlb_inval.c
++++ b/drivers/gpu/drm/xe/xe_guc_tlb_inval.c
+@@ -98,6 +98,33 @@ static int send_tlb_inval_ggtt(struct xe_tlb_inval *tlb_inval, u32 seqno)
+ 	return -ECANCELED;
+ }
+ 
++/*
++ * Emit INVAL_FULL (intra vf) to invalidate engine TLBs across all engines
++ * within the VF.
++ */
++static int send_tlb_inval_ggtt_full(struct xe_tlb_inval *tlb_inval, u32 seqno)
++{
++	struct xe_guc *guc = tlb_inval->private;
++	u32 action[] = {
++		XE_GUC_ACTION_TLB_INVALIDATION,
++		seqno,
++		MAKE_INVAL_OP(XE_GUC_TLB_INVAL_FULL),
++	};
++	int ret;
++
++	ret = send_tlb_inval(guc, action, ARRAY_SIZE(action));
++
++	/*
++	 * send_tlb_inval() may return -ENODEV (CT disabled at cold boot) or
++	 * -ENOTRECOVERABLE (device wedged); nothing runs on the engines in
++	 * either case, so treat as cancelled.
++	 */
++	if (ret == -ENODEV || ret == -ENOTRECOVERABLE)
++		return -ECANCELED;
++
++	return ret;
++}
++
+ static int send_page_reclaim(struct xe_guc *guc, u32 seqno,
+ 			     u64 gpu_addr)
+ {
+@@ -352,6 +379,7 @@ static long tlb_inval_timeout_delay(struct xe_tlb_inval *tlb_inval)
+ static const struct xe_tlb_inval_ops guc_tlb_inval_asid_ops = {
+ 	.all = send_tlb_inval_all,
+ 	.ggtt = send_tlb_inval_ggtt,
++	.ggtt_full = send_tlb_inval_ggtt_full,
+ 	.ppgtt = send_tlb_inval_asid_ppgtt,
+ 	.initialized = tlb_inval_initialized,
+ 	.flush = tlb_inval_flush,
+@@ -360,6 +388,7 @@ static const struct xe_tlb_inval_ops guc_tlb_inval_asid_ops = {
+ 
+ static const struct xe_tlb_inval_ops guc_tlb_inval_ctx_ops = {
+ 	.ggtt = send_tlb_inval_ggtt,
++	.ggtt_full = send_tlb_inval_ggtt_full,
+ 	.all = send_tlb_inval_all,
+ 	.ppgtt = send_tlb_inval_ctx_ppgtt,
+ 	.initialized = tlb_inval_initialized,
+diff --git a/drivers/gpu/drm/xe/xe_tlb_inval.c b/drivers/gpu/drm/xe/xe_tlb_inval.c
+index 10dcd4abb..e72d86edd 100644
+--- a/drivers/gpu/drm/xe/xe_tlb_inval.c
++++ b/drivers/gpu/drm/xe/xe_tlb_inval.c
+@@ -301,26 +301,56 @@ int xe_tlb_inval_all(struct xe_tlb_inval *tlb_inval,
+ }
+ 
+ /**
+- * xe_tlb_inval_ggtt() - Issue a TLB invalidation for the GGTT
++ * xe_tlb_inval_issue_op_wait() - Issue a TLB invalidation and wait
+  * @tlb_inval: TLB invalidation client
+- *
+- * Issue a TLB invalidation for the GGTT. Completion of TLB is asynchronous and
+- * caller can use the invalidation fence to wait for completion.
++ * @op: backend invalidation hook to issue
+  *
+  * Return: 0 on success, negative error code on error
+  */
+-int xe_tlb_inval_ggtt(struct xe_tlb_inval *tlb_inval)
++static int xe_tlb_inval_issue_op_wait(struct xe_tlb_inval *tlb_inval,
++				      int (*op)(struct xe_tlb_inval *tlb_inval, u32 seqno))
+ {
+ 	struct xe_tlb_inval_fence fence, *fence_ptr = &fence;
+ 	int ret;
+ 
+ 	xe_tlb_inval_fence_init(tlb_inval, fence_ptr, true);
+-	ret = xe_tlb_inval_issue(tlb_inval, fence_ptr, tlb_inval->ops->ggtt);
++	ret = xe_tlb_inval_issue(tlb_inval, fence_ptr, op);
+ 	xe_tlb_inval_fence_wait(fence_ptr);
+ 
+ 	return ret;
+ }
+ 
++/**
++ * xe_tlb_inval_ggtt() - Issue a TLB invalidation for the GGTT
++ * @tlb_inval: TLB invalidation client
++ *
++ * Issue a TLB invalidation for the GGTT. Completion of TLB is asynchronous and
++ * caller can use the invalidation fence to wait for completion.
++ *
++ * Return: 0 on success, negative error code on error
++ */
++int xe_tlb_inval_ggtt(struct xe_tlb_inval *tlb_inval)
++{
++	return xe_tlb_inval_issue_op_wait(tlb_inval, tlb_inval->ops->ggtt);
++}
++
++/**
++ * xe_tlb_inval_ggtt_full() - Full engine TLB invalidation within a VF
++ * @tlb_inval: TLB invalidation client
++ *
++ * Issue INVAL_FULL (intra vf) to flush engine TLBs across all engines
++ * within the requesting VF.
++ *
++ * Return: 0 on success, negative error code on error
++ */
++int xe_tlb_inval_ggtt_full(struct xe_tlb_inval *tlb_inval)
++{
++	if (!tlb_inval->ops->ggtt_full)
++		return -EOPNOTSUPP;
++
++	return xe_tlb_inval_issue_op_wait(tlb_inval, tlb_inval->ops->ggtt_full);
++}
++
+ /**
+  * xe_tlb_inval_range() - Issue a TLB invalidation for an address range
+  * @tlb_inval: TLB invalidation client
+diff --git a/drivers/gpu/drm/xe/xe_tlb_inval.h b/drivers/gpu/drm/xe/xe_tlb_inval.h
+index a76b7823a..665072b4b 100644
+--- a/drivers/gpu/drm/xe/xe_tlb_inval.h
++++ b/drivers/gpu/drm/xe/xe_tlb_inval.h
+@@ -20,6 +20,7 @@ void xe_tlb_inval_reset(struct xe_tlb_inval *tlb_inval);
+ int xe_tlb_inval_all(struct xe_tlb_inval *tlb_inval,
+ 		     struct xe_tlb_inval_fence *fence);
+ int xe_tlb_inval_ggtt(struct xe_tlb_inval *tlb_inval);
++int xe_tlb_inval_ggtt_full(struct xe_tlb_inval *tlb_inval);
+ void xe_tlb_inval_vm(struct xe_tlb_inval *tlb_inval, struct xe_vm *vm);
+ int xe_tlb_inval_range(struct xe_tlb_inval *tlb_inval,
+ 		       struct xe_tlb_inval_fence *fence,
+diff --git a/drivers/gpu/drm/xe/xe_tlb_inval_types.h b/drivers/gpu/drm/xe/xe_tlb_inval_types.h
+index 3d1797d18..d77be1aed 100644
+--- a/drivers/gpu/drm/xe/xe_tlb_inval_types.h
++++ b/drivers/gpu/drm/xe/xe_tlb_inval_types.h
+@@ -36,6 +36,16 @@ struct xe_tlb_inval_ops {
+ 	 */
+ 	int (*ggtt)(struct xe_tlb_inval *tlb_inval, u32 seqno);
+ 
++	/**
++	 * @ggtt_full: Full engine TLB invalidation within a VF
++	 * @tlb_inval: TLB invalidation client
++	 * @seqno: Seqno of TLB invalidation
++	 *
++	 * Return 0 on success, -ECANCELED if backend is mid-reset, error on
++	 * failure
++	 */
++	int (*ggtt_full)(struct xe_tlb_inval *tlb_inval, u32 seqno);
++
+ 	/**
+ 	 * @ppgtt: Invalidate per-process translation TLBs
+ 	 * @tlb_inval: TLB invalidation client
+-- 
+2.43.0
+

@@ -825,28 +825,28 @@ index 461ce00e7..c228014fd 100644
 +
 +	/** @fault: pagefault raw partial data passed from guc*/
 +	struct {
-+		/** @addr: ppgtt address where the pagefault occurred */
++		/** @fault.addr: ppgtt address where the pagefault occurred */
 +		u64 addr;
-+		/** @type: type of fault */
++		/** @fault.type: type of fault */
 +		int type;
-+		/** @level: level of fault */
++		/** @fault.level: level of fault */
 +		int level;
-+		/** @access: access type */
++		/** @fault.access: access type */
 +		int access;
 +	} fault;
 +
 +	/** @attentions: struct holding aggregated attensions */
 +	struct {
-+		/** @before: state of attention bits before page fault WA processing*/
++		/** @attentions.before: state of attention bits before page fault WA processing*/
 +		struct xe_eu_attentions before;
 +		/**
-+		 * @after: status of attention bits during page fault WA processing.
++		 * @attentions.after: status of attention bits during page fault WA processing.
 +		 * It includes eu threads where attention bits are turned on for
 +		 * reasons other than page fault WA (breakpoint, interrupt, etc.).
 +		 */
 +		struct xe_eu_attentions after;
 +		/**
-+		 * @resolved: state of the attention bits after page fault WA.
++		 * @attentions.resolved: state of the attention bits after page fault WA.
 +		 * It includes the eu thread that caused the page fault.
 +		 * To determine the eu thread that caused the page fault,
 +		 * do XOR attentions.after and attentions.resolved.
@@ -896,4 +896,3 @@ index ffeac4254..4cf516fc8 100644
  #endif
 -- 
 2.43.0
-

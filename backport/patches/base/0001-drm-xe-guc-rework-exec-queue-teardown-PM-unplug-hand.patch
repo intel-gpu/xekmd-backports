@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Nitin Gote <nitin.r.gote@intel.com>
 Date: Tue, 11 Aug 2026 19:07:55 +0530
-Subject: drm/xe/guc: rework exec queue teardown PM/unplug handling
+Subject: [PATCH] drm/xe/guc: rework exec queue teardown PM/unplug handling
 
 The core_hotunplug "with-load" subtests trigger a "Missing outer runtime
 PM protection" warning when an exec queue is torn down from a deferred fd
@@ -66,16 +66,18 @@ Link: https://patch.msgid.link/20260811133753.1742666-5-nitin.r.gote@intel.com
 Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
 (backported from commit ff796870f5ddb0e6040c71b44d3d6247420d216f drm-xe-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+Assisted-by: GNAI:gpt-5.3-codex
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
- drivers/gpu/drm/xe/xe_guc_submit.c | 91 +++++++++++++++---------------
+ drivers/gpu/drm/xe/xe_guc_submit.c | 93 +++++++++++++++---------------
  drivers/gpu/drm/xe/xe_pm.c         |  5 ++
- 2 files changed, 52 insertions(+), 44 deletions(-)
+ 2 files changed, 53 insertions(+), 45 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 9610e0e8a..dd6dfa27c 100644
+index 3a852ddb529b..ed0f3d872ceb 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -1780,32 +1780,15 @@ static void __guc_exec_queue_destroy_async(struct work_struct *w)
+@@ -1797,32 +1797,15 @@ static void __guc_exec_queue_destroy_async(struct work_struct *w)
  static void guc_exec_queue_destroy_async(struct xe_exec_queue *q)
  {
  	INIT_WORK(&q->guc->destroy_async, __guc_exec_queue_destroy_async);
@@ -111,7 +113,7 @@ index 9610e0e8a..dd6dfa27c 100644
  	trace_xe_exec_queue_cleanup_entity(q);
  
  	/*
-@@ -1818,10 +1801,12 @@ static void __guc_exec_queue_process_msg_cleanup(struct xe_sched_msg *msg)
+@@ -1835,10 +1818,12 @@ static void __guc_exec_queue_process_msg_cleanup(struct xe_sched_msg *msg)
  	 *   it is safe to directly destroy the exec queue on driver side, as the GuC
  	 *   will not process further requests and all resources must be cleaned up locally.
  	 */
@@ -126,7 +128,7 @@ index 9610e0e8a..dd6dfa27c 100644
  }
  
  static bool guc_exec_queue_allowed_to_change_state(struct xe_exec_queue *q)
-@@ -1829,12 +1814,13 @@ static bool guc_exec_queue_allowed_to_change_state(struct xe_exec_queue *q)
+@@ -1846,12 +1831,13 @@ static bool guc_exec_queue_allowed_to_change_state(struct xe_exec_queue *q)
  	return !exec_queue_killed_or_banned_or_wedged(q) && exec_queue_registered(q);
  }
  
@@ -142,7 +144,7 @@ index 9610e0e8a..dd6dfa27c 100644
  		init_policies(guc, q);
  	kfree(msg);
  }
-@@ -1872,13 +1858,14 @@ static void suspend_fence_signal(struct xe_exec_queue *q)
+@@ -1889,13 +1875,14 @@ static void suspend_fence_signal(struct xe_exec_queue *q)
  	__suspend_fence_signal(q);
  }
  
@@ -159,7 +161,16 @@ index 9610e0e8a..dd6dfa27c 100644
  		wait_event(guc->ct.wq, vf_recovery(guc) ||
  			   ((q->guc->resume_time != RESUME_PENDING ||
  			   xe_guc_read_stopped(guc)) && !exec_queue_pending_disable(q)));
-@@ -1902,11 +1889,12 @@ static void __guc_exec_queue_process_msg_suspend(struct xe_sched_msg *msg)
+@@ -1911,7 +1898,7 @@ static void __guc_exec_queue_process_msg_suspend(struct xe_sched_msg *msg)
+ 				xe_sleep_relaxed_ms(wait_ms);
+ 
+ 			set_exec_queue_suspended(q);
+-			disable_scheduling(q, false);
++disable_scheduling(q, false);
+ 		}
+ 	} else if (q->guc->suspend_pending) {
+ 		set_exec_queue_suspended(q);
+@@ -1919,11 +1906,12 @@ static void __guc_exec_queue_process_msg_suspend(struct xe_sched_msg *msg)
  	}
  }
  
@@ -174,22 +185,22 @@ index 9610e0e8a..dd6dfa27c 100644
  		clear_exec_queue_suspended(q);
  		if (!exec_queue_enabled(q)) {
  			q->guc->resume_time = RESUME_PENDING;
-@@ -1918,11 +1906,12 @@ static void __guc_exec_queue_process_msg_resume(struct xe_sched_msg *msg)
+@@ -1935,11 +1923,12 @@ static void __guc_exec_queue_process_msg_resume(struct xe_sched_msg *msg)
  	}
  }
  
 -static void __guc_exec_queue_process_msg_set_multi_queue_priority(struct xe_sched_msg *msg)
 +static void __guc_exec_queue_process_msg_set_multi_queue_priority(struct xe_sched_msg *msg,
-+								 bool bound)
++								  bool bound)
  {
  	struct xe_exec_queue *q = msg->private_data;
  
--	if (guc_exec_queue_allowed_to_change_state(q)) {
-+	if (guc_exec_queue_allowed_to_change_state(q) && bound) {
- #define MAX_MULTI_QUEUE_CGP_SYNC_SIZE        (2)
- 		struct xe_guc *guc = exec_queue_to_guc(q);
- 		struct xe_exec_queue_group *group = q->multi_queue.group;
-@@ -1949,34 +1938,42 @@ static void __guc_exec_queue_process_msg_set_multi_queue_priority(struct xe_sche
+-	if (guc_exec_queue_allowed_to_change_state(q))
++	if (guc_exec_queue_allowed_to_change_state(q) && bound)
+ 		guc_exec_queue_send_cgp_sync(q);
+ 
+ 	kfree(msg);
+@@ -1953,34 +1942,42 @@ static void __guc_exec_queue_process_msg_set_multi_queue_priority(struct xe_sche
  #define OPCODE_MASK	0xf
  #define MSG_LOCKED	BIT(8)
  #define MSG_HEAD	BIT(9)
@@ -239,7 +250,7 @@ index 9610e0e8a..dd6dfa27c 100644
  }
  
  static const struct drm_sched_backend_ops drm_sched_ops = {
-@@ -2103,10 +2100,16 @@ static void guc_exec_queue_kill(struct xe_exec_queue *q)
+@@ -2105,10 +2102,16 @@ static void guc_exec_queue_kill(struct xe_exec_queue *q)
  static void guc_exec_queue_add_msg(struct xe_exec_queue *q, struct xe_sched_msg *msg,
  				   u32 opcode)
  {
@@ -257,7 +268,7 @@ index 9610e0e8a..dd6dfa27c 100644
  	msg->private_data = q;
  
  	trace_xe_sched_msg_add(msg);
-@@ -2116,6 +2119,9 @@ static void guc_exec_queue_add_msg(struct xe_exec_queue *q, struct xe_sched_msg
+@@ -2118,6 +2121,9 @@ static void guc_exec_queue_add_msg(struct xe_exec_queue *q, struct xe_sched_msg
  		xe_sched_add_msg_locked(&q->guc->sched, msg);
  	else
  		xe_sched_add_msg(&q->guc->sched, msg);
@@ -267,7 +278,7 @@ index 9610e0e8a..dd6dfa27c 100644
  }
  
  static void guc_exec_queue_try_add_msg_head(struct xe_exec_queue *q,
-@@ -2147,10 +2153,7 @@ static void guc_exec_queue_destroy(struct xe_exec_queue *q)
+@@ -2149,10 +2155,7 @@ static void guc_exec_queue_destroy(struct xe_exec_queue *q)
  {
  	struct xe_sched_msg *msg = q->guc->static_msgs + STATIC_MSG_CLEANUP;
  
@@ -279,7 +290,7 @@ index 9610e0e8a..dd6dfa27c 100644
  }
  
  static int guc_exec_queue_set_priority(struct xe_exec_queue *q,
-@@ -2397,7 +2400,7 @@ static void guc_exec_queue_stop(struct xe_guc *guc, struct xe_exec_queue *q)
+@@ -2617,7 +2620,7 @@ static void guc_exec_queue_stop(struct xe_guc *guc, struct xe_exec_queue *q)
  	}
  
  	if (do_destroy)
@@ -288,7 +299,7 @@ index 9610e0e8a..dd6dfa27c 100644
  }
  
  static int guc_submit_reset_prepare(struct xe_guc *guc)
-@@ -2962,7 +2965,7 @@ static void handle_deregister_done(struct xe_guc *guc, struct xe_exec_queue *q)
+@@ -3182,7 +3185,7 @@ static void handle_deregister_done(struct xe_guc *guc, struct xe_exec_queue *q)
  	trace_xe_exec_queue_deregister_done(q);
  
  	clear_exec_queue_registered(q);
@@ -298,10 +309,10 @@ index 9610e0e8a..dd6dfa27c 100644
  
  int xe_guc_deregister_done_handler(struct xe_guc *guc, u32 *msg, u32 len)
 diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
-index b6cc3ebe1..7de616bd2 100644
+index 65b3c1001c4f..0b373f4e1560 100644
 --- a/drivers/gpu/drm/xe/xe_pm.c
 +++ b/drivers/gpu/drm/xe/xe_pm.c
-@@ -911,6 +911,11 @@ static bool xe_pm_suspending_or_resuming(struct xe_device *xe)
+@@ -913,6 +913,11 @@ static bool xe_pm_suspending_or_resuming(struct xe_device *xe)
   * break scope-based handling, or when the lifetime of the runtime PM reference
   * does not match a specific scope (e.g., runtime PM obtained in one function
   * and released in a different one).

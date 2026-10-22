@@ -35,23 +35,14 @@ Signed-off-by: Shuicheng Lin <shuicheng.lin@intel.com>
 (cherry-picked from commit ee460b8855d4a419a204bb68d91675e33b0c0d61 linux-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
- drivers/gpu/drm/xe/xe_ggtt.c | 40 ++++++++++++++++++++++--------------
- drivers/gpu/drm/xe/xe_gt.h   | 13 ++++++++++++
- 2 files changed, 38 insertions(+), 15 deletions(-)
+ drivers/gpu/drm/xe/xe_ggtt.c | 39 ++++++++++++++++++++++-------------
+ 1 file changed, 24 insertions(+), 15 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
 index a848d1a41..3cdebb1c2 100644
 --- a/drivers/gpu/drm/xe/xe_ggtt.c
 +++ b/drivers/gpu/drm/xe/xe_ggtt.c
-@@ -20,6 +20,7 @@
- #include "regs/xe_regs.h"
- #include "xe_assert.h"
- #include "xe_bo.h"
-+#include "xe_gt.h"
- #include "xe_gt_printk.h"
- #include "xe_gt_types.h"
- #include "xe_map.h"
-@@ -533,27 +534,36 @@ void xe_ggtt_node_remove(struct xe_ggtt_node *node, bool invalidate)
+@@ -533,27 +533,36 @@ void xe_ggtt_node_remove(struct xe_ggtt_node *node, bool invalidate)
  int xe_ggtt_init(struct xe_ggtt *ggtt)
  {
  	struct xe_device *xe = tile_to_xe(ggtt->tile);
@@ -71,7 +62,7 @@ index a848d1a41..3cdebb1c2 100644
 -		flags |= XE_BO_FLAG_SYSTEM;
 -	else
 -		flags |= XE_BO_FLAG_VRAM_IF_DGFX(ggtt->tile);
-+	if (!xe_gt_has_multi_queue(ggtt->tile->primary_gt)) {
++	if (!ggtt->tile->primary_gt->info.multi_queue_engine_class_mask) {
 +		unsigned int flags = 0;
 +
 +		/*
@@ -103,28 +94,11 @@ index a848d1a41..3cdebb1c2 100644
  
  	xe_ggtt_initial_clear(ggtt);
  
-diff --git a/drivers/gpu/drm/xe/xe_gt.h b/drivers/gpu/drm/xe/xe_gt.h
-index c72782472..0f753e08e 100644
---- a/drivers/gpu/drm/xe/xe_gt.h
-+++ b/drivers/gpu/drm/xe/xe_gt.h
-@@ -147,4 +147,17 @@ static inline bool xe_gt_recovery_pending(struct xe_gt *gt)
- 		xe_gt_sriov_vf_recovery_pending(gt);
+ 	return devm_add_action_or_reset(xe->drm.dev, ggtt_fini, ggtt);
+ err:
+ 	ggtt->scratch = NULL;
+ 	return err;
  }
- 
-+/**
-+ * xe_gt_has_multi_queue() - Check if gt supports multi-queue on
-+ * any engine class.
-+ *
-+ * @gt: the GT object (may be NULL)
-+ *
-+ * Return: true if any engine class on @gt supports multi queue, else false
-+ */
-+static inline bool xe_gt_has_multi_queue(const struct xe_gt *gt)
-+{
-+       return gt && gt->info.multi_queue_engine_class_mask;
-+}
-+
- #endif
--- 
-2.43.0
 
+ -- 
+ 2.43.0

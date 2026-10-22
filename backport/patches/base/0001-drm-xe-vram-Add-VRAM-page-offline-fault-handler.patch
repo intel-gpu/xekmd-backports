@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Date: Thu, 3 Sep 2026 21:46:02 +0530
-Subject: drm/xe/vram: Add VRAM page offline fault handler
+Subject: [PATCH] drm/xe/vram: Add VRAM page offline fault handler
 
 Add the core VRAM page offlining logic to handle HW-reported faulty
 physical addresses:
@@ -55,18 +55,18 @@ Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://patch.msgid.link/20260903161553.528932-26-tejas.upadhyay@intel.com
 (backported from 7737f819e9f1a0cbd653e1a58bda4be18e0306b8 drm-tip)
+Assisted-by: GNAI:gpt-5.3-codex
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
-
 ---
  drivers/gpu/drm/xe/xe_ttm_vram_mgr.c | 328 +++++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_ttm_vram_mgr.h |   1 +
  2 files changed, 329 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-index d97739a84a2d..aea4cb0b66fd 100644
+index ae16b824051e3..149e02a35c774 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-@@ -10,9 +10,16 @@
+@@ -13,10 +13,16 @@
  #include <drm/ttm/ttm_placement.h>
  #include <drm/ttm/ttm_range_manager.h>
  
@@ -77,13 +77,13 @@ index d97739a84a2d..aea4cb0b66fd 100644
 +#include "xe_exec_queue.h"
 +#include "xe_lrc.h"
 +#include "xe_mmio.h"
-+#include "xe_pm.h"
+ #include "xe_pm.h"
  #include "xe_res_cursor.h"
 +#include "xe_ttm_stolen_mgr.h"
  #include "xe_ttm_vram_mgr.h"
  #include "xe_vram_types.h"
  
-@@ -201,18 +208,52 @@ static void xe_ttm_vram_buddy_free(struct xe_ttm_vram_mgr *mgr,
+@@ -200,6 +206,38 @@ static void xe_ttm_vram_buddy_free(struct xe_ttm_vram_mgr *mgr,
  	mgr->visible_avail += used_visible;
  }
  
@@ -122,9 +122,7 @@ index d97739a84a2d..aea4cb0b66fd 100644
  static void xe_ttm_vram_mgr_del(struct ttm_resource_manager *man,
  				struct ttm_resource *res)
  {
- 	struct xe_ttm_vram_mgr_resource *vres =
- 		to_xe_ttm_vram_mgr_resource(res);
- 	struct xe_ttm_vram_mgr *mgr = to_xe_ttm_vram_mgr(man);
+@@ -209,6 +247,8 @@ static void xe_ttm_vram_mgr_del(struct ttm_resource_manager *man,
  
  	mutex_lock(&mgr->lock);
  	xe_ttm_vram_buddy_free(mgr, &vres->blocks, vres->used_visible_size);
@@ -133,11 +131,7 @@ index d97739a84a2d..aea4cb0b66fd 100644
  	mutex_unlock(&mgr->lock);
  
  	ttm_resource_fini(man, res);
- 
- 	kfree(vres);
- }
-@@ -519,4 +553,292 @@ u64 xe_ttm_vram_get_avail(struct ttm_resource_manager *man)
- 	mutex_unlock(&mgr->lock);
+@@ -574,3 +614,291 @@ u64 xe_ttm_vram_get_avail(struct ttm_resource_manager *man)
  
  	return avail;
  }
@@ -430,7 +424,7 @@ index d97739a84a2d..aea4cb0b66fd 100644
 +}
 +EXPORT_SYMBOL(xe_ttm_vram_handle_addr_fault);
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h
-index 87b7fae5edba..764d493b4d50 100644
+index 87b7fae5edba1..764d493b4d50a 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h
 @@ -30,6 +30,7 @@ u64 xe_ttm_vram_get_avail(struct ttm_resource_manager *man);

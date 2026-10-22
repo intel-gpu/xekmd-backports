@@ -71,7 +71,7 @@ index 3cdebb1c2..cf953d3cf 100644
 +	 * lite-restore skips the full context restore), so the engine
 +	 * flush is needed there.
 +	 */
-+	if (!gt || !xe_gt_has_multi_queue(gt))
++	if (!gt || !gt->info.multi_queue_engine_class_mask)
 +		return;
 +
 +	err = xe_tlb_inval_ggtt_full(&gt->tlb_inval);
@@ -95,4 +95,3 @@ index 3cdebb1c2..cf953d3cf 100644
   * @ggtt: the &xe_ggtt struct instance
 -- 
 2.43.0
-

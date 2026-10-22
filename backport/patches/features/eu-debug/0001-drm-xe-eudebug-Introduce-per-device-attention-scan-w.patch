@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Sat, 17 Jun 2023 14:40:31 +0200
-Subject: drm/xe/eudebug: Introduce per device attention scan
- worker
+Subject: [PATCH] drm/xe/eudebug: Introduce per device attention scan worker
 
 Scan for EU debugging attention bits periodically to detect if some EU
 thread has entered the system routine (SIP) due to EU thread exception.
@@ -31,6 +30,8 @@ Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 (backported from commit 0fb00ea4a4fad06214c1efc05d10760f397451ca drm-tip-eudebug)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+Assisted-by: GNAI:gpt-5.3-codex
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
  drivers/gpu/drm/xe/Makefile              |   1 +
  drivers/gpu/drm/xe/regs/xe_engine_regs.h |   1 +
@@ -39,16 +40,16 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  drivers/gpu/drm/xe/xe_device_types.h     |   3 +
  drivers/gpu/drm/xe/xe_eudebug.c          | 409 ++++++++++++++++++++++-
  drivers/gpu/drm/xe/xe_eudebug.h          |   2 +
- drivers/gpu/drm/xe/xe_eudebug_types.h    |  32 ++
+ drivers/gpu/drm/xe/xe_eudebug_types.h    |  34 +-
  drivers/gpu/drm/xe/xe_gt_debug.c         | 148 ++++++++
  drivers/gpu/drm/xe/xe_gt_debug.h         |  20 ++
  include/uapi/drm/xe_drm_eudebug.h        |  12 +
- 11 files changed, 635 insertions(+), 2 deletions(-)
+ 11 files changed, 636 insertions(+), 3 deletions(-)
  create mode 100644 drivers/gpu/drm/xe/xe_gt_debug.c
  create mode 100644 drivers/gpu/drm/xe/xe_gt_debug.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index 811d4c8b3..8c312f9d0 100644
+index 92fb82863..ab4110700 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -58,6 +58,7 @@ xe-y += xe_bb.o \
@@ -60,7 +61,7 @@ index 811d4c8b3..8c312f9d0 100644
  	xe_gt_sysfs.o \
  	xe_gt_throttle.o \
 diff --git a/drivers/gpu/drm/xe/regs/xe_engine_regs.h b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
-index 7ae6ea2d7..e87f606bf 100644
+index 4c5e63820..95c3b2375 100644
 --- a/drivers/gpu/drm/xe/regs/xe_engine_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_engine_regs.h
 @@ -157,6 +157,7 @@
@@ -72,10 +73,10 @@ index 7ae6ea2d7..e87f606bf 100644
  #define RING_CONTEXT_CONTROL(base)		XE_REG((base) + 0x244, XE_REG_OPTION_MASKED)
  #define	  CTX_CTRL_PXP_ENABLE			REG_BIT(10)
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index ae82759bb..38a2a0603 100644
+index f97d786d8..86df418ff 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -527,6 +527,8 @@
+@@ -528,6 +528,8 @@
  #define   DISABLE_ECC				REG_BIT(5)
  #define   ENABLE_PREFETCH_INTO_IC		REG_BIT(3)
  
@@ -84,7 +85,7 @@ index ae82759bb..38a2a0603 100644
  #define ROW_CHICKEN4				XE_REG_MCR(0xe48c, XE_REG_OPTION_MASKED)
  #define   DISABLE_GRF_CLEAR			REG_BIT(13)
  #define   XEHP_DIS_BBL_SYSPIPE			REG_BIT(11)
-@@ -621,6 +623,11 @@
+@@ -627,6 +629,11 @@
  #define   CCS_MODE_CSLICE(cslice, ccs) \
  	((ccs) << ((cslice) * CCS_MODE_CSLICE_WIDTH))
  
@@ -97,10 +98,10 @@ index ae82759bb..38a2a0603 100644
  
  /* Applicable for all FORCEWAKE_DOMAIN and FORCEWAKE_ACK_DOMAIN regs */
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 62ae80f6b..0e41df4c3 100644
+index 12be747e8..e3216ae95 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -1014,6 +1014,8 @@ int xe_device_probe(struct xe_device *xe)
+@@ -1148,6 +1148,8 @@ int xe_device_probe(struct xe_device *xe)
  
  	xe_debugfs_register(xe);
  
@@ -110,10 +111,10 @@ index 62ae80f6b..0e41df4c3 100644
  	if (err)
  		goto err_unregister_display;
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 4ed01d81c..06d0ad37f 100644
+index 3f18cb734..56ba37444 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -581,6 +581,9 @@ struct xe_device {
+@@ -654,6 +654,9 @@ struct xe_device {
  
  		/** @eudebug.discovery_lock: used for discovery to block xe ioctls */
  		struct rw_semaphore discovery_lock;
@@ -616,10 +617,19 @@ index 4a04cec98..98352a56f 100644
  static inline void xe_eudebug_init_hw_engine(struct xe_hw_engine *hwe) { }
  
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index c1ac938c0..3ecce8e4c 100644
+index dba002bba..38657d1e5 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
-@@ -107,6 +107,9 @@ struct xe_eudebug {
+@@ -80,7 +80,7 @@ struct rcu_head rcu;
+ 	struct list_head connection_link;
+ 
+ 	/** @connection: eu debug connection status */
+-	struct {
++struct {
+ 		/** @connection.status: connected = 1, disconnected = error */
+ #define XE_EUDEBUG_STATUS_CONNECTED 1
+ 		int status;
+@@ -107,6 +107,9 @@ struct rcu_head rcu;
  	/** @discovery_work: worker to discover resources for target_task */
  	struct work_struct discovery_work;
  
@@ -628,8 +638,8 @@ index c1ac938c0..3ecce8e4c 100644
 +
  	/** @events: kfifo queue of to-be-delivered events */
  	struct {
- 		/** @lock: guards access to fifo */
-@@ -204,4 +207,33 @@ struct xe_eudebug_event_exec_queue {
+ 		/** @events.lock: guards access to fifo */
+@@ -203,4 +206,33 @@ struct xe_eudebug_event_exec_queue {
  	u64 lrc_handle[] __counted_by(width);
  };
  

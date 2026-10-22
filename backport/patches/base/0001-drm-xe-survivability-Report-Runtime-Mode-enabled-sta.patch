@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:50 +0200
-Subject: drm/xe/survivability: Report 'Runtime Mode enabled' status
+Subject: [PATCH] drm/xe/survivability: Report 'Runtime Mode enabled' status
  using SIGID
 
 Report 'Runtime Mode' status or failure using xe_log_err() helper.
@@ -16,40 +16,42 @@ Link: https://patch.msgid.link/20260814171801.13347-25-michal.wajdeczko@intel.co
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (backported from commit f04f7c7aa651534d723af98c03132c44ffa281c2 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Assisted-by: GNAI:gpt-5.3-codex
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
- drivers/gpu/drm/xe/xe_survivability_mode.c | 9 ++++++---
- 1 file changed, 6 insertions(+), 3 deletions(-)
+ drivers/gpu/drm/xe/xe_survivability_mode.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
-index c9d709e9b51b..696fed96a589 100644
+index b528cd3e99e2..305367a03282 100644
 --- a/drivers/gpu/drm/xe/xe_survivability_mode.c
 +++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
-@@ -438,7 +438,7 @@ int xe_survivability_mode_runtime_enable(struct xe_device *xe)
- 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+@@ -232,7 +232,7 @@ static ssize_t survivability_info_show(struct device *dev,
+ 	struct xe_survivability *survivability = &xe->survivability;
+ 	u32 *info = survivability->info;
  
- 	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe) || xe->info.platform < XE_BATTLEMAGE) {
--		dev_err(&pdev->dev, "Runtime Survivability Mode not supported\n");
-+		xe_log_err(xe, SURVIVABILITY, -EOPNOTSUPP, "Runtime Mode not supported!\n");
- 		return -EINVAL;
- 	}
+-	if (sa->index == FDO_INFO)
++if (sa->index == FDO_INFO)
+ 		return sysfs_emit(buff, "%s\n", str_enabled_disabled(survivability->fdo_mode));
  
-@@ -447,11 +447,14 @@ int xe_survivability_mode_runtime_enable(struct xe_device *xe)
- 	create_survivability_sysfs(pdev);
+ 	return sysfs_emit(buff, "0x%x\n", info[sa->index]);
+@@ -296,7 +296,6 @@ static struct attribute *survivability_info_attrs[] = {
+ 	&attr_fdo_mode.attr.attr,
+ 	NULL,
+ };
+-
+ static const struct attribute_group survivability_info_group = {
+ 	.name = "survivability_info",
+ 	.attrs = survivability_info_attrs,
+@@ -317,7 +316,7 @@ static int create_survivability_sysfs(struct pci_dev *pdev)
  
- 	survivability->type = XE_SURVIVABILITY_TYPE_RUNTIME;
--	dev_err(&pdev->dev, "Runtime Survivability mode enabled\n");
-+	xe_log_err(xe, SURVIVABILITY, 0, "Runtime Mode enabled!\n");
+ 	ret = devm_add_action_or_reset(xe->drm.dev,
+ 				       xe_survivability_mode_fini, xe);
+-	if (ret)
++if (ret)
+ 		goto failed;
  
- 	xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_VENDOR);
- 	xe_device_declare_wedged(xe);
--	dev_err(&pdev->dev, "Firmware flash required, Please refer to the userspace documentation for more details!\n");
-+
-+	xe_log_err(xe, SURVIVABILITY, 0, "Firmware flash required!\n");
-+	xe_info(xe, "Please refer to the userspace documentation for more details how to flash the firmware on %s!\n",
-+			xe->info.platform_name);
- 
- 	return 0;
- }
+ 	if (needs_info) {
 -- 
 2.43.0
 

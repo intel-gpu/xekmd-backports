@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Nitin Gote <nitin.r.gote@intel.com>
 Date: Tue, 11 Aug 2026 19:07:56 +0530
-Subject: drm/xe: remove EXEC_QUEUE_FLAG_PERMANENT
+Subject: [PATCH] drm/xe: remove EXEC_QUEUE_FLAG_PERMANENT
 
 EXEC_QUEUE_FLAG_PERMANENT used to mark kernel-owned exec queues that were
 only torn down at driver unload, so that guc_exec_queue_destroy() could
@@ -24,21 +24,23 @@ Link: https://patch.msgid.link/20260811133753.1742666-6-nitin.r.gote@intel.com
 Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
 (backported from commit b7501c4fd941a9f8e7c8a4d073658b4a49dcbde9 drm-xe-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+Assisted-by: GNAI:gpt-5.3-codex
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
  drivers/gpu/drm/xe/xe_exec_queue.c       |  3 ---
  drivers/gpu/drm/xe/xe_exec_queue_types.h | 14 ++++++--------
  drivers/gpu/drm/xe/xe_gsc.c              |  3 +--
- drivers/gpu/drm/xe/xe_migrate.c          |  2 --
+ drivers/gpu/drm/xe/xe_migrate.c          |  6 +-----
  drivers/gpu/drm/xe/xe_pxp_submit.c       |  5 ++---
  drivers/gpu/drm/xe/xe_sriov_vf_ccs.c     |  1 -
  drivers/gpu/drm/xe/xe_vm.c               |  1 -
- 7 files changed, 9 insertions(+), 20 deletions(-)
+ 7 files changed, 10 insertions(+), 23 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 4a9995ae4..1b2406550 100644
+index c441af6e26e10..8d13e7a05b1c3 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -209,9 +209,6 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
+@@ -207,9 +207,6 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
  	struct xe_gt *gt = hwe->gt;
  	int err;
  
@@ -49,10 +51,10 @@ index 4a9995ae4..1b2406550 100644
  	if (!q)
  		return ERR_PTR(-ENOMEM);
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index 76d5a2dfc..dbfc4bd83 100644
+index 5d016d82015fb..833cc9d80adba 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-@@ -122,20 +122,18 @@ struct xe_exec_queue {
+@@ -128,20 +128,18 @@ struct xe_exec_queue {
  
  /* queue used for kernel submission only */
  #define EXEC_QUEUE_FLAG_KERNEL			BIT(0)
@@ -80,7 +82,7 @@ index 76d5a2dfc..dbfc4bd83 100644
  	/**
  	 * @flags: flags for this exec queue, should statically setup aside from ban
 diff --git a/drivers/gpu/drm/xe/xe_gsc.c b/drivers/gpu/drm/xe/xe_gsc.c
-index aab59dc64..524ac56bd 100644
+index aab59dc647fbd..524ac56bdcc7b 100644
 --- a/drivers/gpu/drm/xe/xe_gsc.c
 +++ b/drivers/gpu/drm/xe/xe_gsc.c
 @@ -478,8 +478,7 @@ int xe_gsc_init_post_hwconfig(struct xe_gsc *gsc)
@@ -94,18 +96,28 @@ index aab59dc64..524ac56bd 100644
  		xe_gt_err(gt, "Failed to create queue for GSC submission\n");
  		return PTR_ERR(q);
 diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
-index 5dd03d4cb..c987da6b4 100644
+index f79d0047bec69..8d3beeeb89345 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.c
 +++ b/drivers/gpu/drm/xe/xe_migrate.c
-@@ -495,7 +495,6 @@ int xe_migrate_init(struct xe_migrate *m)
+@@ -467,8 +467,7 @@ int xe_migrate_init(struct xe_migrate *m)
+ 	struct xe_device *xe = tile_to_xe(tile);
+ 	struct xe_vm *vm;
+ 	int err;
+-
+-	/* Special layout, prepared below.. */
++/* Special layout, prepared below.. */
+ 	vm = xe_vm_create(xe, XE_VM_FLAG_MIGRATION |
+ 			  XE_VM_FLAG_SET_TILE_ID(tile), NULL);
+ 	if (IS_ERR(vm))
+@@ -493,7 +492,6 @@ int xe_migrate_init(struct xe_migrate *m)
  		 */
- 		m->q = xe_exec_queue_create(xe, vm, logical_mask, 1, hwe,
+ 		m->q = xe_exec_queue_create(xe, vm, logical_mask, 1, hwe0,
  					    EXEC_QUEUE_FLAG_KERNEL |
 -					    EXEC_QUEUE_FLAG_PERMANENT |
  					    EXEC_QUEUE_FLAG_HIGH_PRIORITY |
  					    EXEC_QUEUE_FLAG_MIGRATE |
  					    EXEC_QUEUE_FLAG_LOW_LATENCY, 0);
-@@ -503,7 +502,6 @@ int xe_migrate_init(struct xe_migrate *m)
+@@ -501,7 +499,6 @@ int xe_migrate_init(struct xe_migrate *m)
  		m->q = xe_exec_queue_create_class(xe, primary_gt, vm,
  						  XE_ENGINE_CLASS_COPY,
  						  EXEC_QUEUE_FLAG_KERNEL |
@@ -113,8 +125,16 @@ index 5dd03d4cb..c987da6b4 100644
  						  EXEC_QUEUE_FLAG_MIGRATE, 0);
  	}
  	if (IS_ERR(m->q)) {
+@@ -532,7 +529,6 @@ int xe_migrate_init(struct xe_migrate *m)
+ 	}
+ 
+ 	return err;
+-
+ err_out:
+ 	xe_vm_close_and_put(vm);
+ 	return err;
 diff --git a/drivers/gpu/drm/xe/xe_pxp_submit.c b/drivers/gpu/drm/xe/xe_pxp_submit.c
-index e60526e30..5de86a8cf 100644
+index e60526e300309..5de86a8cf27d9 100644
 --- a/drivers/gpu/drm/xe/xe_pxp_submit.c
 +++ b/drivers/gpu/drm/xe/xe_pxp_submit.c
 @@ -46,7 +46,7 @@ static int allocate_vcs_execution_resources(struct xe_pxp *pxp)
@@ -137,7 +157,7 @@ index e60526e30..5de86a8cf 100644
  		err = PTR_ERR(q);
  		goto bo_out;
 diff --git a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
-index a8c831fbe..a54138461 100644
+index a8c831fbee3b5..a54138461f442 100644
 --- a/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
 +++ b/drivers/gpu/drm/xe/xe_sriov_vf_ccs.c
 @@ -354,7 +354,6 @@ int xe_sriov_vf_ccs_init(struct xe_device *xe)
@@ -149,10 +169,10 @@ index a8c831fbe..a54138461 100644
  		q = xe_exec_queue_create_bind(xe, tile, NULL, flags, 0);
  		if (IS_ERR(q)) {
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 231234811..17a09d443 100644
+index 99e42bd29e790..fab72f27a090b 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -5056,7 +5056,6 @@ void xe_vm_add_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
+@@ -4977,7 +4977,6 @@ void xe_vm_add_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
  
  	/* User VMs and queues only */
  	xe_assert(xe, !(q->flags & EXEC_QUEUE_FLAG_KERNEL));

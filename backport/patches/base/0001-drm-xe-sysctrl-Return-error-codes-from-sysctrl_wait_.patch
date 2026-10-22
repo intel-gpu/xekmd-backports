@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Date: Thu, 24 Sep 2026 11:39:02 +0530
-Subject: drm/xe/sysctrl: Return error codes from
+Subject: [PATCH] drm/xe/sysctrl: Return error codes from
  sysctrl_wait_bit_clear()
 
 Make sysctrl_wait_bit_clear() return an error code rather than a bool
@@ -9,12 +9,14 @@ and update callers to use xe_log_err() with the propagated error code.
 
 (cherry-picked from commit d511f9d1c1cf0422bfd008e81956734b6bf9be2a linux-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+Assisted-by: GNAI:gpt-5.3-codex
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
- drivers/gpu/drm/xe/xe_sysctrl_mailbox.c | 28 ++++++++++++-------------
- 1 file changed, 14 insertions(+), 14 deletions(-)
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox.c | 29 ++++++++++++-------------
+ 1 file changed, 14 insertions(+), 15 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
-index 72baf1aa4..c36cac8c6 100644
+index a0179e6..7381981 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
 @@ -11,6 +11,7 @@
@@ -27,7 +29,7 @@ index 72baf1aa4..c36cac8c6 100644
  #include "xe_printk.h"
 @@ -34,15 +35,11 @@ struct xe_sysctrl_mailbox_msg_hdr {
  #define XE_SYSCTRL_HDR_RESULT(hdr) \
- 	FIELD_GET(SYSCTRL_HDR_RESULT_MASK, le32_to_cpu((hdr)->data))
+ 	FIELD_GET(SYSCTRL_HDR_RESULT_MASK, (hdr)->data)
  
 -static bool sysctrl_wait_bit_clear(struct xe_sysctrl *sc, u32 bit_mask,
 -				   unsigned int timeout_ms)
@@ -45,7 +47,15 @@ index 72baf1aa4..c36cac8c6 100644
  }
  
  static bool sysctrl_wait_bit_set(struct xe_sysctrl *sc, u32 bit_mask,
-@@ -146,12 +143,14 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
+@@ -70,7 +67,6 @@ static int sysctrl_write_frame(struct xe_sysctrl *sc, const void *frame,
+ 	xe_assert(xe, len > 0 && len <= XE_SYSCTRL_MB_FRAME_SIZE);
+ 
+ 	memcpy(val, frame, len);
+-
+ 	for (i = 0; i < dw; i++)
+ 		xe_mmio_write32(sc->mmio, regs[i], val[i]);
+ 
+@@ -146,12 +142,14 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
  	u32 ctrl_reg, total_frames, frame;
  	size_t bytes_sent, frame_size;
  	bool phase;
@@ -63,7 +73,7 @@ index 72baf1aa4..c36cac8c6 100644
  	}
  
  	ctrl_reg = xe_mmio_read32(sc->mmio, SYSCTRL_MB_CTRL);
-@@ -174,9 +173,10 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
+@@ -174,9 +172,10 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
  
  		xe_mmio_write32(sc->mmio, SYSCTRL_MB_CTRL, ctrl_reg);
  

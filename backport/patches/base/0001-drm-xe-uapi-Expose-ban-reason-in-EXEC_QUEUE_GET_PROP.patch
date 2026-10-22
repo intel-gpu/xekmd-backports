@@ -74,15 +74,13 @@ index 95f75d61a647..836f88fc0faa 100644
  	union {
  		/** @multi_gt_list: list head for VM bind engines if multi-GT */
  		struct list_head multi_gt_list;
-@@ -335,7 +338,7 @@ struct xe_exec_queue_ops {
+@@ -335,5 +338,5 @@ struct xe_exec_queue_ops {
  	 */
  	void (*resume)(struct xe_exec_queue *q);
 -	/** @reset_status: check exec queue reset status */
 -	bool (*reset_status)(struct xe_exec_queue *q);
 +	/** @reset_status: check exec queue ban status, returns ban reason bitmask */
 +	u64 (*reset_status)(struct xe_exec_queue *q);
- 	/** @active: check exec queue is active */
- 	bool (*active)(struct xe_exec_queue *q);
  };
 diff --git a/drivers/gpu/drm/xe/xe_execlist.c b/drivers/gpu/drm/xe/xe_execlist.c
 index 0d0db66c6ea2..a36db39dcda8 100644
@@ -100,7 +98,7 @@ index 0d0db66c6ea2..a36db39dcda8 100644
 +	return 0;
  }
  
- static bool execlist_exec_queue_active(struct xe_exec_queue *q)
+ static const struct xe_exec_queue_ops execlist_exec_queue_ops = {
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
 index 99d8c807ff05..0a6e2b81b5a5 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
@@ -136,10 +134,7 @@ index 99d8c807ff05..0a6e2b81b5a5 100644
  				xe_gt_reset_async(q->gt);
  				goto rearm;
  			}
-@@ -2313,13 +2323,29 @@ static void guc_exec_queue_resume(struct xe_exec_queue *q)
- 	xe_sched_msg_unlock(sched);
- }
- 
+@@ -2530,8 +2540,24 @@ static bool guc_exec_queue_reset_status(struct xe_exec_queue *q)
 -static bool guc_exec_queue_reset_status(struct xe_exec_queue *q)
 +static u64 guc_exec_queue_reset_status(struct xe_exec_queue *q)
  {
@@ -170,7 +165,7 @@ index 99d8c807ff05..0a6e2b81b5a5 100644
 +	return 0;
  }
  
- static bool guc_exec_queue_active(struct xe_exec_queue *q)
+ /*
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 index 3dcee4590126..6aa24eb064eb 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c

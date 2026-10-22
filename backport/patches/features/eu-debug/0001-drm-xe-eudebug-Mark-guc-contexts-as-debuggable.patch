@@ -23,17 +23,19 @@ Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Assisted-by: GNAI:gpt-5.3-codex
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
  drivers/gpu/drm/xe/abi/guc_actions_abi.h |  4 +++
- drivers/gpu/drm/xe/abi/guc_klvs_abi.h    |  3 ++-
+ drivers/gpu/drm/xe/abi/guc_klvs_abi.h    |  1 +
  drivers/gpu/drm/xe/xe_exec_queue.c       |  5 ++++
- drivers/gpu/drm/xe/xe_guc.c              | 17 +++++++++++++
- drivers/gpu/drm/xe/xe_guc.h              |  3 +++
- drivers/gpu/drm/xe/xe_guc_ads.c          | 17 +++++++++++++
- drivers/gpu/drm/xe/xe_guc_submit.c       | 31 ++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_guc.c              | 19 ++++++++++++-
+ drivers/gpu/drm/xe/xe_guc.h              |  4 +++
+ drivers/gpu/drm/xe/xe_guc_ads.c          | 17 ++++++++++++
+ drivers/gpu/drm/xe/xe_guc_submit.c       | 35 ++++++++++++++++++++++--
  drivers/gpu/drm/xe/xe_guc_submit.h       |  1 +
  drivers/gpu/drm/xe/xe_wa_oob.rules       |  2 ++
- 9 files changed, 82 insertions(+), 1 deletion(-)
+ 9 files changed, 85 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/abi/guc_actions_abi.h b/drivers/gpu/drm/xe/abi/guc_actions_abi.h
 index f5c9b3703..76b3c6167 100644
@@ -56,21 +58,19 @@ index f5c9b3703..76b3c6167 100644
 +};
  #endif
 diff --git a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
-index 217652c71..2ad8aa08a 100644
+index 4bcdc1a96..147a1d0a1 100644
 --- a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
 +++ b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
-@@ -513,7 +513,8 @@ enum xe_guc_klv_ids {
+@@ -522,6 +522,7 @@ enum xe_guc_klv_ids {
  	GUC_WA_KLV_WAKE_POWER_DOMAINS_FOR_OUTBOUND_MMIO					= 0x900a,
  	GUC_WA_KLV_RESET_BB_STACK_PTR_ON_VF_SWITCH					= 0x900b,
  	GUC_WA_KLV_RESTORE_UNSAVED_MEDIA_CONTROL_REG					= 0x900c,
--	GUC_WA_KLV_REMAP_RANGED_TLB_INV							= 0x900d,
 +	GUC_WA_KLV_RESET_DEP_ENGINES_ON_DEBUG_CTX_SWITCH				= 0x900d,
-+	GUC_WA_KLV_REMAP_RANGED_TLB_INV							= 0x900f,
- 	GUC_WA_KLV_IGNORE_MULTIQ_CTX_COMPLETE_WITH_PREEMPT_IN_CSB                       = 0x9011,
- };
- 
+ 	GUC_WA_KLV_CLR_CS_INDIRECT_RING_STATE_IF_IDLE_AT_CTX_REG			= 0x900e,
+ 	GUC_WA_KLV_REMAP_RANGED_TLB_INV							= 0x900f,
+ 	GUC_WA_KLV_IGNORE_MMIO_READ_SEM_TOKEN_64					= 0x9010,
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 0b32ba075..be71d838a 100644
+index 99b94b42c..b777d68a8 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -19,6 +19,7 @@
@@ -81,7 +81,7 @@ index 0b32ba075..be71d838a 100644
  #include "xe_hw_engine_class_sysfs.h"
  #include "xe_hw_engine_group.h"
  #include "xe_irq.h"
-@@ -1064,6 +1065,7 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+@@ -1062,6 +1063,7 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
  				  u64 value)
  {
  	const u64 known_flags = DRM_XE_EXEC_QUEUE_EUDEBUG_FLAG_ENABLE;
@@ -89,7 +89,7 @@ index 0b32ba075..be71d838a 100644
  
  	if (XE_IOCTL_DBG(xe, (q->class != XE_ENGINE_CLASS_RENDER &&
  			      q->class != XE_ENGINE_CLASS_COMPUTE)))
-@@ -1075,6 +1077,9 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
+@@ -1073,6 +1075,9 @@ static int exec_queue_set_eudebug(struct xe_device *xe, struct xe_exec_queue *q,
  	if (XE_IOCTL_DBG(xe, !IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)))
  		return -EOPNOTSUPP;
  
@@ -100,10 +100,19 @@ index 0b32ba075..be71d838a 100644
  		return -EINVAL;
  	/*
 diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
-index fbd8fc0e3..e899d2172 100644
+index 2c7f411b8..119001d64 100644
 --- a/drivers/gpu/drm/xe/xe_guc.c
 +++ b/drivers/gpu/drm/xe/xe_guc.c
-@@ -1868,6 +1868,23 @@ bool xe_guc_using_main_gamctrl_queues(struct xe_guc *guc)
+@@ -1843,7 +1843,7 @@ void xe_guc_declare_wedged(struct xe_guc *guc)
+  * registers for pagefault handling and avoid some unnecessary
+  * complications with MCR register range handling.
+  *
+- * Return: true if can use new main gamctrl queues.
++* Return: true if can use new main gamctrl queues.
+  */
+ bool xe_guc_using_main_gamctrl_queues(struct xe_guc *guc)
+ {
+@@ -1871,6 +1871,23 @@ bool xe_guc_using_main_gamctrl_queues(struct xe_guc *guc)
  	return GT_VER(gt) >= 35;
  }
  
@@ -124,11 +133,11 @@ index fbd8fc0e3..e899d2172 100644
 +	return true;
 +}
 +
- #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
- #include "tests/xe_guc_g2g_test.c"
- #endif
+ bool xe_guc_has_paging_engine(struct xe_guc *guc)
+ {
+ 	struct xe_gt *gt = guc_to_gt(guc);
 diff --git a/drivers/gpu/drm/xe/xe_guc.h b/drivers/gpu/drm/xe/xe_guc.h
-index 02514914f..9c6b3845d 100644
+index 61e3ee19a..dc657b80c 100644
 --- a/drivers/gpu/drm/xe/xe_guc.h
 +++ b/drivers/gpu/drm/xe/xe_guc.h
 @@ -29,6 +29,8 @@
@@ -145,14 +154,14 @@ index 02514914f..9c6b3845d 100644
  void xe_guc_declare_wedged(struct xe_guc *guc);
  bool xe_guc_using_main_gamctrl_queues(struct xe_guc *guc);
 +bool xe_guc_has_debug_contexts(struct xe_guc *guc);
+ bool xe_guc_has_paging_engine(struct xe_guc *guc);
  
  #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
- int xe_guc_g2g_test_notification(struct xe_guc *guc, u32 *payload, u32 len);
 diff --git a/drivers/gpu/drm/xe/xe_guc_ads.c b/drivers/gpu/drm/xe/xe_guc_ads.c
-index 2d1278d35..78933a01e 100644
+index de51ac612..ec3db10db 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ads.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ads.c
-@@ -370,6 +370,23 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
+@@ -402,6 +402,23 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
  				 GUC_FEATURE_KLV_DISABLE_MULTI_QUEUE);
  	}
  
@@ -177,10 +186,19 @@ index 2d1278d35..78933a01e 100644
  	if (!size)
  		return;
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 29a988c12..a02e58ab1 100644
+index acd66ccea..b77ba01eb 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -980,6 +980,34 @@ static void __register_exec_queue(struct xe_guc *guc,
+@@ -955,7 +955,7 @@ static void __register_mlrc_exec_queue(struct xe_guc *guc,
+ }
+ 
+ static void __register_exec_queue(struct xe_guc *guc,
+-				  struct guc_ctxt_registration_info *info)
++struct guc_ctxt_registration_info *info)
+ {
+ 	u32 action[] = {
+ 		XE_GUC_ACTION_REGISTER_CONTEXT,
+@@ -983,6 +983,34 @@ static void __register_exec_queue(struct xe_guc *guc,
  	xe_guc_ct_send(&guc->ct, action, ARRAY_SIZE(action), 0, 0);
  }
  
@@ -212,13 +230,22 @@ index 29a988c12..a02e58ab1 100644
 +		xe_gt_dbg(gt, "GuC ctx=%u enabled for debug", q->guc->id);
 +}
 +
- static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
+ static u32 xe_hwe_guc_logical_to_submit_mask(struct xe_hw_engine *hwe, u32 logical_mask)
  {
- 	struct xe_guc *guc = exec_queue_to_guc(q);
-@@ -1040,6 +1068,9 @@ static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
+ 	struct xe_gt *gt = hwe->gt;
+@@ -1038,7 +1066,7 @@ static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
+ 		info.wq_desc_lo = lower_32_bits(ggtt_addr +
+ 			offsetof(struct guc_submit_parallel_scratch, wq_desc));
+ 		info.wq_desc_hi = upper_32_bits(ggtt_addr +
+-			offsetof(struct guc_submit_parallel_scratch, wq_desc));
++offsetof(struct guc_submit_parallel_scratch, wq_desc));
+ 		info.wq_base_lo = lower_32_bits(ggtt_addr +
+ 			offsetof(struct guc_submit_parallel_scratch, wq[0]));
+ 		info.wq_base_hi = upper_32_bits(ggtt_addr +
+@@ -1065,6 +1093,9 @@ static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
  
  	if (xe_exec_queue_is_multi_queue_secondary(q))
- 		xe_guc_exec_queue_group_add(guc, q);
+ 		guc_exec_queue_send_cgp_sync(q);
 +
 +	if (xe_exec_queue_is_debuggable(q))
 +		set_eu_kernel_debug(q);
@@ -237,18 +264,17 @@ index be6d26bea..25e323598 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
-index 23f11e32a..ebce6c1fa 100644
+index 6cb01f941..d362d85d2 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
-@@ -53,6 +53,8 @@
+@@ -53,6 +53,8 @@ MEDIA_VERSION_RANGE(1301, 3002)
  		MEDIA_VERSION(3000), MEDIA_STEP(A0, B0), FUNC(xe_rtp_match_psmi_enabled)
  18022722726	GRAPHICS_VERSION_RANGE(1250, 1274)
  14015474168	PLATFORM(PVC)
 +14022766366	GRAPHICS_VERSION_RANGE(2001, 2004)
 +		GRAPHICS_VERSION_RANGE(3000, 3005)
- 
- 15015404425_disable	PLATFORM(PANTHERLAKE), MEDIA_STEP(B0, FOREVER)
- 16026007364    MEDIA_VERSION(3000)
+ 14025515070	GRAPHICS_VERSION(2004)
+ 		MEDIA_VERSION_RANGE(1301, 3000)
+ 		MEDIA_VERSION(3002)
 -- 
 2.43.0
-

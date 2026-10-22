@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Date: Sat, 29 Aug 2026 19:17:41 +0200
-Subject: drm/xe/vram: Add page offline data structures and lifecycle
+Subject: [PATCH] drm/xe/vram: Add page offline data structures and lifecycle
 
 Add xe_ttm_vram_offline_resource to track individual offlined VRAM
 pages, and extend xe_ttm_vram_mgr with offlined_pages/queued_pages
@@ -24,19 +24,29 @@ Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://patch.msgid.link/20260903161553.528932-25-tejas.upadhyay@intel.com
 (cherry-picked from 556774b11e1d87a4235ca87d6921cf557df1340a drm-tip)
+Assisted-by: GNAI:gpt-5.3-codex
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
-
 ---
- drivers/gpu/drm/xe/xe_ttm_vram_mgr.c       | 25 ++++++++++++++
+ drivers/gpu/drm/xe/xe_ttm_vram_mgr.c       | 29 ++++++++++++++++-
  drivers/gpu/drm/xe/xe_ttm_vram_mgr_types.h | 38 ++++++++++++++++++++++
- 2 files changed, 63 insertions(+)
+ 2 files changed, 66 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-index 16ecea497780..1253989a8d06 100644
+index 16ecea497780..ae16b824051e 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-@@ -301,13 +301,36 @@ static const struct ttm_resource_manager_func xe_ttm_vram_mgr_func = {
- };
+@@ -313,7 +313,7 @@ static int xe_ttm_vram_mgr_dmem_reclaim(struct dmem_cgroup_pool_state *pool,
+ 	int ret, idx;
+ 
+ 	if (!drm_dev_enter(&xe->drm, &idx))
+-		return -ENODEV;
++return -ENODEV;
+ 
+ 	{
+ 		ACQUIRE(xe_pm_runtime_ioctl, pm)(xe);
+@@ -338,12 +338,37 @@ static void xe_ttm_vram_mgr_set_unused(struct drm_device *dev, void *arg)
+ 	ttm_resource_manager_set_used(man, false);
+ }
  
 +static void xe_ttm_vram_free_bad_pages(struct xe_ttm_vram_mgr *mgr)
 +{
@@ -65,17 +75,17 @@ index 16ecea497780..1253989a8d06 100644
  
 +	mutex_lock(&mgr->lock);
 +	xe_ttm_vram_free_bad_pages(mgr);
-+	mutex_unlock(&mgr->lock);
++mutex_unlock(&mgr->lock);
 +
- 	ttm_resource_manager_set_used(man, false);
- 
++	ttm_resource_manager_set_used(man, false);
++
  	if (ttm_resource_manager_evict_all(&xe->ttm, man))
  		return;
  
-@@ -339,6 +362,8 @@ int __xe_ttm_vram_mgr_init(struct xe_device *xe, struct xe_ttm_vram_mgr *mgr,
- 	man->func = &xe_ttm_vram_mgr_func;
- 	mgr->mem_type = mem_type;
- 	mutex_init(&mgr->lock);
+@@ -370,6 +395,8 @@ int __xe_ttm_vram_mgr_init(struct xe_device *xe, struct xe_ttm_vram_mgr *mgr,
+ 	err = drmm_mutex_init(&xe->drm, &mgr->lock);
+ 	if (err)
+ 		return err;
 +	INIT_LIST_HEAD(&mgr->offlined_pages);
 +	INIT_LIST_HEAD(&mgr->queued_pages);
  	mgr->default_page_size = default_page_size;
@@ -135,3 +145,6 @@ index 9106da056b49..dc97b0ad0e51 100644
 +};
 +
  #endif
+-- 
+2.43.0
+

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Raag Jadav <raag.jadav@intel.com>
 Date: Fri, 27 Mar 2026 06:18:40 -0700
-Subject: [TEMP] drm/xe/xe_hw_error: Handle non-fatal errors routed via direct
+Subject: [PATCH] drm/xe/xe_hw_error: Handle non-fatal errors routed via direct
  IRQ
 
 Process, log and recover non-fatal errors routed via direct IRQ. For errors
@@ -10,13 +10,14 @@ recovery action.
 
 Signed-off-by: Riana Tauro <riana.tauro@intel.com>
 (backported from https://patchwork.freedesktop.org/patch/749204/?series=173001&rev=1)
+Assisted-by: GNAI:gpt-5.3-codex
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
- drivers/gpu/drm/xe/xe_hw_error.c | 35 ++++++++++++++++++++++++++++----
- 1 file changed, 31 insertions(+), 4 deletions(-)
+ drivers/gpu/drm/xe/xe_hw_error.c | 39 ++++++++++++++++++++++++++++----
+ 1 file changed, 34 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
-index b3c01c058..c7ce301fb 100644
+index 34f5e1f86b09..e32078d81c34 100644
 --- a/drivers/gpu/drm/xe/xe_hw_error.c
 +++ b/drivers/gpu/drm/xe/xe_hw_error.c
 @@ -14,6 +14,7 @@
@@ -49,11 +50,10 @@ index b3c01c058..c7ce301fb 100644
  {
  	struct xe_tile *tile = container_of(work, typeof(*tile), hw_error_work);
  	struct xe_device *xe = tile_to_xe(tile);
- 	int ret;
- 
++	int ret;
++
 +	if (xe->info.has_sysctrl) {
 +		ret = xe_ras_process_errors(xe);
-+		/* For any non-fatal errors that do not return recovered, declare wedged */
 +		if (ret) {
 +			xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_BUS_RESET);
 +			xe_device_declare_wedged(xe);
@@ -61,11 +61,13 @@ index b3c01c058..c7ce301fb 100644
 +
 +		return;
 +	}
-+
- 	ret = xe_survivability_mode_runtime_enable(xe);
- 	if (ret)
- 		drm_err(&xe->drm, "Failed to enable runtime survivability mode\n");
-@@ -434,12 +460,13 @@ static void hw_error_source_handler(struct xe_tile *tile, const enum hardware_er
+ 
+-	xe_survivability_mode_runtime_enable(xe);
++	xe_survivability_mode_runtime_enable(xe);
+ }
+ 
+ static void csc_hw_error_handler(struct xe_tile *tile, const enum hardware_error hw_err)
+@@ -430,12 +458,13 @@ static void hw_error_source_handler(struct xe_tile *tile, const enum hardware_er
  		return;
  
  	/*
@@ -85,4 +87,3 @@ index b3c01c058..c7ce301fb 100644
  
 -- 
 2.43.0
-

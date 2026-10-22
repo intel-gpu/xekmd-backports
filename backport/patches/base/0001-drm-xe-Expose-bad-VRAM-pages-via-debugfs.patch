@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Date: Thu, 3 Sep 2026 21:46:06 +0530
-Subject: drm/xe: Expose bad VRAM pages via debugfs
+Subject: [PATCH] drm/xe: Expose bad VRAM pages via debugfs
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -31,20 +31,20 @@ Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://patch.msgid.link/20260903161553.528932-30-tejas.upadhyay@intel.com
 (cherry-picked from fb19798cc366eaacd68b6f59226120045e0b8f7e drm-tip)
+Assisted-by: GNAI:gpt-5.3-codex
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
-
 ---
  drivers/gpu/drm/xe/xe_debugfs.c            |  3 +
  drivers/gpu/drm/xe/xe_ttm_vram_mgr.c       | 71 ++++++++++++++++++++++
- drivers/gpu/drm/xe/xe_ttm_vram_mgr.h       |  1 +
+ drivers/gpu/drm/xe/xe_ttm_vram_mgr.h       |  2 +
  drivers/gpu/drm/xe/xe_ttm_vram_mgr_types.h |  2 +
- 4 files changed, 77 insertions(+)
+ 4 files changed, 78 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index 28135f84e286..cb24e001b142 100644
+index acd34cc5dcbd..dcfcdc5afee2 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
-@@ -32,6 +32,7 @@
+@@ -31,6 +31,7 @@
  #include "xe_sriov_vf.h"
  #include "xe_step.h"
  #include "xe_tile_debugfs.h"
@@ -52,7 +52,7 @@ index 28135f84e286..cb24e001b142 100644
  #include "xe_vsec.h"
  #include "xe_wa.h"
  
-@@ -773,6 +774,8 @@ void xe_debugfs_register(struct xe_device *xe)
+@@ -762,6 +763,8 @@ void xe_debugfs_register(struct xe_device *xe)
  	if (man)
  		ttm_resource_manager_create_debugfs(man, root, "stolen_mm");
  
@@ -62,19 +62,18 @@ index 28135f84e286..cb24e001b142 100644
  		xe_tile_debugfs_register(tile);
  
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-index f4810cb961df..3dcee4590126 100644
+index 762f4662b9cc..2999b0a97e31 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-@@ -4,6 +4,8 @@
-  * Copyright (C) 2021-2022 Red Hat
+@@ -5,6 +5,7 @@
   */
  
+ #include <linux/cgroup_dmem.h>
 +#include <linux/debugfs.h>
-+
+ 
  #include <drm/drm_managed.h>
  #include <drm/drm_drv.h>
- #include <drm/drm_buddy.h>
-@@ -915,3 +916,73 @@ int xe_ttm_vram_handle_addr_fault(struct xe_device *xe, u64 addr)
+@@ -909,3 +910,73 @@ int xe_ttm_vram_handle_addr_fault(struct xe_device *xe, u64 addr)
  	return xe_ttm_vram_reserve_page_at_addr(xe, addr - vr->dpa_base, vram_mgr, mm);
  }
  EXPORT_SYMBOL(xe_ttm_vram_handle_addr_fault);
@@ -149,7 +148,7 @@ index f4810cb961df..3dcee4590126 100644
 +	debugfs_create_file("vram_bad_pages", 0444, root, xe, &vram_bad_pages_fops);
 +}
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h
-index 764d493b4d50..48f39fd20e44 100644
+index 764d493b4d50..fa13daad0cc5 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h
 @@ -9,6 +9,7 @@
@@ -160,14 +159,14 @@ index 764d493b4d50..48f39fd20e44 100644
  struct xe_device;
  struct xe_tile;
  struct xe_vram_region;
-@@ -30,6 +31,7 @@ u64 xe_ttm_vram_get_avail(struct ttm_resource_manager *man);
- u64 xe_ttm_vram_get_cpu_visible_size(struct ttm_resource_manager *man);
+@@ -31,6 +32,7 @@ u64 xe_ttm_vram_get_cpu_visible_size(struct ttm_resource_manager *man);
  void xe_ttm_vram_get_used(struct ttm_resource_manager *man,
  			  u64 *used, u64 *used_visible);
  int xe_ttm_vram_handle_addr_fault(struct xe_device *xe, u64 addr);
 +void xe_ttm_vram_debugfs_init(struct xe_device *xe, struct dentry *root);
  
  static inline struct xe_ttm_vram_mgr_resource *
+ to_xe_ttm_vram_mgr_resource(struct ttm_resource *res)
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr_types.h b/drivers/gpu/drm/xe/xe_ttm_vram_mgr_types.h
 index dc97b0ad0e51..efcf3e1d4e80 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr_types.h

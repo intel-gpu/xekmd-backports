@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alexander Usyskin <alexander.usyskin@intel.com>
 Date: Mon, 31 Aug 2026 14:38:33 +0300
-Subject: mei: me: avoid hw access in polling when not active
+Subject: [PATCH] mei: me: avoid hw access in polling when not active
 
 Polling thread should not access hardware when not active.
 Check for active state under device lock to avoid such
@@ -11,23 +11,28 @@ Reviewed-by: Menachem Adin <menachem.adin@intel.com>
 Signed-off-by: Alexander Usyskin <alexander.usyskin@intel.com>
 (backported from [mei: me: avoid hw access in polling when not active via char-misc-next])
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Assisted-by: GNAI:gpt-5.3-codex
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
- drivers/misc/mei/hw-me.c | 99 +++++++++++++++++++++++-----------------
- 1 file changed, 58 insertions(+), 41 deletions(-)
+ drivers/misc/mei/hw-me.c | 102 +++++++++++++++++++++++----------------
+ 1 file changed, 61 insertions(+), 41 deletions(-)
 
 diff --git a/drivers/misc/mei/hw-me.c b/drivers/misc/mei/hw-me.c
-index e286763b5..5f571e6b6 100644
+index e7fbc02fb70f..32723a4ac09a 100644
 --- a/drivers/misc/mei/hw-me.c
 +++ b/drivers/misc/mei/hw-me.c
-@@ -6,6 +6,7 @@
+@@ -6,6 +6,10 @@
  
- #include <linux/pci.h>
- 
+ #include <linux/bitfield.h>
+ #include <linux/delay.h>
++#include <linux/pci.h>
++
 +#include <linux/cleanup.h>
- #include <linux/kthread.h>
++#include <linux/kthread.h>
  #include <linux/interrupt.h>
- #include <linux/pm_runtime.h>
-@@ -1290,29 +1291,14 @@ irqreturn_t mei_me_irq_quick_handler(int irq, void *dev_id)
+ #include <linux/kthread.h>
+ #include <linux/pci.h>
+@@ -1290,29 +1294,14 @@ irqreturn_t mei_me_irq_quick_handler(int irq, void *dev_id)
  }
  EXPORT_SYMBOL_GPL(mei_me_irq_quick_handler);
  
@@ -58,7 +63,7 @@ index e286763b5..5f571e6b6 100644
  	hcsr = mei_hcsr_read(dev);
  	me_intr_clear(dev, hcsr);
  
-@@ -1406,13 +1392,33 @@ irqreturn_t mei_me_irq_thread_handler(int irq, void *dev_id)
+@@ -1406,13 +1395,33 @@ irqreturn_t mei_me_irq_thread_handler(int irq, void *dev_id)
  end:
  	dev_dbg(&dev->dev, "interrupt thread end ret = %d\n", rets);
  	mei_me_intr_enable(dev);
@@ -95,7 +100,7 @@ index e286763b5..5f571e6b6 100644
  
  /**
   * mei_me_polling_thread - interrupt register polling thread
-@@ -1423,45 +1429,56 @@ EXPORT_SYMBOL_GPL(mei_me_irq_thread_handler);
+@@ -1423,45 +1432,56 @@ EXPORT_SYMBOL_GPL(mei_me_irq_thread_handler);
   * mei_me_irq_thread_handler() to handle the firmware
   * input.
   *
@@ -175,4 +180,5 @@ index e286763b5..5f571e6b6 100644
  
  		schedule_timeout_interruptible(msecs_to_jiffies(polling_timeout));
 -- 
-2.34.1
+2.43.0
+

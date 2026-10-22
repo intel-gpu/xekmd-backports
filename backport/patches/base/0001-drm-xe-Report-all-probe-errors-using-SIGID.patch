@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:45 +0200
-Subject: drm/xe: Report all probe errors using SIGID
+Subject: [PATCH] drm/xe: Report all probe errors using SIGID
 
 For completeness, we should catch and report all probe errors, not
 just the ones that have explicit error message. Split xe_pci_probe()
@@ -17,21 +17,34 @@ Link: https://patch.msgid.link/20260814171801.13347-20-michal.wajdeczko@intel.co
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (backported from commit 9d91d2c1f947f7a1fa698f1881248feb602c4b15 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Assisted-by: GNAI:gpt-5.3-codex
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
- drivers/gpu/drm/xe/xe_pci.c | 25 ++++++++++++++++++++-----
- 1 file changed, 20 insertions(+), 5 deletions(-)
+ drivers/gpu/drm/xe/xe_pci.c | 28 +++++++++++++++++++++-------
+ 1 file changed, 21 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index 6bc6ea632efe..aab0f6369cf4 100644
+index 4068b6bf9eaa..f58ca5c9918c 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -1101,16 +1101,12 @@ static void xe_pci_remove(struct pci_dev *pdev)
+@@ -1118,8 +1118,7 @@ static void xe_pci_remove(struct pci_dev *pdev)
+ 		return;
+ 
+ 	xe_device_remove(xe);
+-
+-	/*
++/*
+ 	 * Preserve remove-time flush after moving destroy work to module
+ 	 * lifetime.
+ 	 */
+@@ -1146,17 +1145,12 @@ static void xe_pci_remove(struct pci_dev *pdev)
   * caller. Therefore there is no consequence on those specific callers when
   * function error injection skips the whole function.
   */
 +static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *desc);
  static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
  {
+-	struct xe_probed_info probed_info = {};
  	const struct xe_device_desc *desc = (const void *)ent->driver_data;
 -	const struct xe_subplatform_desc *subplatform_desc;
 -	struct xe_device *xe;
@@ -43,7 +56,7 @@ index 6bc6ea632efe..aab0f6369cf4 100644
  	xe_configfs_check_device(pdev);
  
  	if (desc->require_force_probe && !id_forced(pdev->device)) {
-@@ -1134,6 +1130,25 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+@@ -1180,6 +1175,26 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
  	if (xe_display_driver_probe_defer(pdev))
  		return -EPROBE_DEFER;
  
@@ -60,6 +73,7 @@ index 6bc6ea632efe..aab0f6369cf4 100644
 +static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *desc)
 +{
 +	const struct xe_subplatform_desc *subplatform_desc;
++	struct xe_probed_info probed_info = {};
 +	struct xe_device *xe;
 +	void *group;
 +	int err;
@@ -71,4 +85,3 @@ index 6bc6ea632efe..aab0f6369cf4 100644
  	if (!group)
 -- 
 2.43.0
-

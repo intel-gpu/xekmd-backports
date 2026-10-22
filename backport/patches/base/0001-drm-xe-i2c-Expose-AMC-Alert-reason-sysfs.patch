@@ -14,15 +14,16 @@ Assisted-by: Claude:claude-opus-4.8
 Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
 (cherry-picked from https://patchwork.freedesktop.org/series/173403/#rev2)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
 ---
  .../ABI/testing/sysfs-driver-intel-xe-amc     | 25 ++++++
- drivers/gpu/drm/xe/xe_amc.c                   | 78 ++++++++++++++++---
- 2 files changed, 93 insertions(+), 10 deletions(-)
+ drivers/gpu/drm/xe/xe_amc.c                   | 80 ++++++++++++++++---
+ 2 files changed, 94 insertions(+), 11 deletions(-)
  create mode 100644 Documentation/ABI/testing/sysfs-driver-intel-xe-amc
 
 diff --git a/Documentation/ABI/testing/sysfs-driver-intel-xe-amc b/Documentation/ABI/testing/sysfs-driver-intel-xe-amc
 new file mode 100644
-index 000000000..3bae78d1e
+index 0000000..3bae78d
 --- /dev/null
 +++ b/Documentation/ABI/testing/sysfs-driver-intel-xe-amc
 @@ -0,0 +1,25 @@
@@ -52,7 +53,7 @@ index 000000000..3bae78d1e
 +			oob_reset
 +			catastrophic
 diff --git a/drivers/gpu/drm/xe/xe_amc.c b/drivers/gpu/drm/xe/xe_amc.c
-index 8ecadee6e..bef059393 100644
+index edd50bf..16e4e9d 100644
 --- a/drivers/gpu/drm/xe/xe_amc.c
 +++ b/drivers/gpu/drm/xe/xe_amc.c
 @@ -18,6 +18,7 @@
@@ -135,8 +136,12 @@ index 8ecadee6e..bef059393 100644
  static void xe_amc_work(struct work_struct *work)
  {
  	const struct amc_request *request = &amc_get_alert_reason;
-@@ -158,12 +199,19 @@ static void xe_amc_work(struct work_struct *work)
- 	case AMC_ALERT_THERMAL_TRIP:
+@@ -155,15 +196,22 @@ static void xe_amc_work(struct work_struct *work)
+ 
+ 	switch (alert_reason) {
+ 	case AMC_ALERT_FW_DOWNLOAD:
+-	case AMC_ALERT_THERMAL_TRIP:
++case AMC_ALERT_THERMAL_TRIP:
  	case AMC_ALERT_OOB_REQUEST:
  	case AMC_ALERT_OOB_RESET:
 -	case AMC_ALERT_CATERR:
@@ -165,7 +170,7 @@ index 8ecadee6e..bef059393 100644
  	struct xe_amc *amc;
 +	int ret;
  
- 	amc = kzalloc(sizeof(*amc), GFP_KERNEL);
+ 	amc = kzalloc_obj(*amc);
  	if (!amc)
 @@ -185,13 +234,22 @@ int xe_amc_init(struct xe_i2c *i2c)
  	i2c->amc = amc;

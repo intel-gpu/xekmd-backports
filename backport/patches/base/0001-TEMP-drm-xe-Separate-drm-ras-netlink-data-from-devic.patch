@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Riana Tauro <riana.tauro@intel.com>
 Date: Mon, 28 Sep 2026 11:48:33 +0530
-Subject: [TEMP]: drm/xe: Separate drm-ras netlink data from device and
+Subject: [TEMP] drm/xe: Separate drm-ras netlink data from device and
  firmware RAS state
 
 Keep the DRM RAS data used for netlink reporting separate from the
@@ -11,6 +11,7 @@ Signed-off-by: Riana Tauro <riana.tauro@intel.com>
 Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 (backported from https://patchwork.freedesktop.org/series/172710/#rev3)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
 ---
  drivers/gpu/drm/xe/xe_device_types.h  | 11 +++++++--
  drivers/gpu/drm/xe/xe_drm_ras.c       | 16 +++++++-------
@@ -18,12 +19,12 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  drivers/gpu/drm/xe/xe_hw_error.c      |  6 ++---
  drivers/gpu/drm/xe/xe_ras.c           | 32 ++++++++++++++++++---------
  drivers/gpu/drm/xe/xe_ras.h           |  2 ++
- drivers/gpu/drm/xe/xe_ras_types.h     | 10 +++++++++
+ drivers/gpu/drm/xe/xe_ras_types.h     | 13 ++++++++++-
  drivers/gpu/drm/xe/xe_ttm_vram_mgr.c  |  3 ++-
- 8 files changed, 55 insertions(+), 28 deletions(-)
+ 8 files changed, 57 insertions(+), 29 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 1b9ea1c23..d6800e1f4 100644
+index a12ae6e0479c..746f00a5a789 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
 @@ -22,6 +22,7 @@
@@ -34,7 +35,7 @@ index 1b9ea1c23..d6800e1f4 100644
  #include "xe_sriov_pf_types.h"
  #include "xe_sriov_types.h"
  #include "xe_sriov_vf_types.h"
-@@ -562,8 +563,14 @@ struct xe_device {
+@@ -565,8 +566,14 @@ struct xe_device {
  	/** @pmu: performance monitoring unit */
  	struct xe_pmu pmu;
  
@@ -52,7 +53,7 @@ index 1b9ea1c23..d6800e1f4 100644
  	/** @i2c: I2C host controller */
  	struct xe_i2c *i2c;
 diff --git a/drivers/gpu/drm/xe/xe_drm_ras.c b/drivers/gpu/drm/xe/xe_drm_ras.c
-index 30cf40ee5..7554803aa 100644
+index 30cf40ee5fe4..7554803aae11 100644
 --- a/drivers/gpu/drm/xe/xe_drm_ras.c
 +++ b/drivers/gpu/drm/xe/xe_drm_ras.c
 @@ -31,7 +31,7 @@ static int query_error_counter(struct xe_device *xe,
@@ -128,7 +129,7 @@ index 30cf40ee5..7554803aa 100644
  	int err;
  
 diff --git a/drivers/gpu/drm/xe/xe_drm_ras_types.h b/drivers/gpu/drm/xe/xe_drm_ras_types.h
-index 8fb5d6457..419e42ef8 100644
+index 8fb5d6457c53..419e42ef8e75 100644
 --- a/drivers/gpu/drm/xe/xe_drm_ras_types.h
 +++ b/drivers/gpu/drm/xe/xe_drm_ras_types.h
 @@ -44,9 +44,6 @@ struct xe_drm_ras {
@@ -142,10 +143,10 @@ index 8fb5d6457..419e42ef8 100644
  	bool cper_on_query;
  };
 diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
-index c7ce301fb..62ff4ae08 100644
+index e32078d81c34..8b9ab1d26954 100644
 --- a/drivers/gpu/drm/xe/xe_hw_error.c
 +++ b/drivers/gpu/drm/xe/xe_hw_error.c
-@@ -269,7 +269,7 @@ static void log_soc_error(struct xe_tile *tile, const char * const *reg_info,
+@@ -267,7 +267,7 @@ static void log_soc_error(struct xe_tile *tile, const char * const *reg_info,
  {
  	const char *severity_str = error_severity[severity];
  	struct xe_device *xe = tile_to_xe(tile);
@@ -154,7 +155,7 @@ index c7ce301fb..62ff4ae08 100644
  	struct xe_drm_ras_counter *info = ras->info[severity];
  	const char *name;
  
-@@ -289,7 +289,7 @@ static void gt_hw_error_handler(struct xe_tile *tile, const enum hardware_error
+@@ -287,7 +287,7 @@ static void gt_hw_error_handler(struct xe_tile *tile, const enum hardware_error
  {
  	const enum drm_xe_ras_error_severity severity = hw_err_to_severity(hw_err);
  	struct xe_device *xe = tile_to_xe(tile);
@@ -163,7 +164,7 @@ index c7ce301fb..62ff4ae08 100644
  	struct xe_drm_ras_counter *info = ras->info[severity];
  	struct xe_mmio *mmio = &tile->mmio;
  	unsigned long err_stat = 0;
-@@ -451,7 +451,7 @@ static void hw_error_source_handler(struct xe_tile *tile, const enum hardware_er
+@@ -449,7 +449,7 @@ static void hw_error_source_handler(struct xe_tile *tile, const enum hardware_er
  	const enum drm_xe_ras_error_severity severity = hw_err_to_severity(hw_err);
  	const char *severity_str = error_severity[severity];
  	struct xe_device *xe = tile_to_xe(tile);
@@ -173,7 +174,7 @@ index c7ce301fb..62ff4ae08 100644
  	unsigned long flags, err_src;
  	u32 err_bit;
 diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
-index d2a252f12..ec0c2fcf7 100644
+index c351d18ec31b..b08c51adee47 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
 @@ -912,7 +912,7 @@ int xe_ras_get_counter(struct xe_device *xe, u8 severity, u8 component, u32 *val
@@ -249,7 +250,7 @@ index d2a252f12..ec0c2fcf7 100644
  		ras_usp_aer_init(xe);
  
 diff --git a/drivers/gpu/drm/xe/xe_ras.h b/drivers/gpu/drm/xe/xe_ras.h
-index d31e093c0..48bb5b351 100644
+index d31e093c0fe9..48bb5b3519b8 100644
 --- a/drivers/gpu/drm/xe/xe_ras.h
 +++ b/drivers/gpu/drm/xe/xe_ras.h
 @@ -7,6 +7,7 @@
@@ -269,13 +270,23 @@ index d31e093c0..48bb5b351 100644
  				struct xe_ras_get_counter_response *out);
  bool xe_ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter);
 diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
-index c0c2ba4dc..bac2d7793 100644
+index c79bebcf7cbe..433789c5d77b 100644
 --- a/drivers/gpu/drm/xe/xe_ras_types.h
 +++ b/drivers/gpu/drm/xe/xe_ras_types.h
-@@ -527,4 +527,14 @@ struct xe_ras_offline_list_response {
+@@ -208,7 +208,7 @@ struct xe_ras_error_log {
+ struct xe_ras_offline_common {
+ 	/** @total_pages: Total number of queued pages */
+ 	u32 total_pages;
+-	/** @pages_returned: Number of pages returned in this response */
++/** @pages_returned: Number of pages returned in this response */
+ 	u32 pages_returned;
+ 	/** @page_addresses: Array of page addresses (4KB aligned) */
+ 	u64 page_addresses[XE_RAS_NUM_PAGES];
+@@ -235,6 +235,17 @@ struct xe_ras_offline_list_response {
+ 	/** @common: Common offline page information */
  	struct xe_ras_offline_common common;
  } __packed;
- 
++
 +/* Device structures */
 +
 +/**
@@ -286,12 +297,14 @@ index c0c2ba4dc..bac2d7793 100644
 +	bool disable_page_offline;
 +};
 +
- #endif
+ /**
+  * struct xe_ras_get_info_queue_data_request - Request for RAS_CMD_GET_INFO_QUEUE_DATA
+  */
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-index 8341d2057..0979cd184 100644
+index fa9a81fa1c87..53976f3dc300 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-@@ -23,6 +23,7 @@
+@@ -24,6 +24,7 @@
  #include "xe_mmio.h"
  #include "xe_pm.h"
  #include "xe_printk.h"
@@ -299,7 +312,7 @@ index 8341d2057..0979cd184 100644
  #include "xe_res_cursor.h"
  #include "xe_ttm_stolen_mgr.h"
  #include "xe_ttm_vram_mgr.h"
-@@ -875,7 +876,7 @@ int xe_ttm_vram_handle_addr_fault(struct xe_device *xe, u64 addr)
+@@ -927,7 +928,7 @@ int xe_ttm_vram_handle_addr_fault(struct xe_device *xe, u64 addr)
  	vram_mgr = &vr->ttm;
  	mm = &vram_mgr->mm;
  

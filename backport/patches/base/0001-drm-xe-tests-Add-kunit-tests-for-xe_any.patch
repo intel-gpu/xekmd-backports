@@ -23,13 +23,14 @@ diff --git a/drivers/gpu/drm/xe/tests/Makefile b/drivers/gpu/drm/xe/tests/Makefi
 index 0e3408f4952c..f5f5d4ed8cbf 100644
 --- a/drivers/gpu/drm/xe/tests/Makefile
 +++ b/drivers/gpu/drm/xe/tests/Makefile
-@@ -7,6 +7,7 @@ xe_live_test-y = xe_live_test_mod.o
+@@ -7,7 +7,8 @@ xe_live_test-y = xe_live_test_mod.o
  # Normal kunit tests
  obj-$(CONFIG_DRM_XE_KUNIT_TEST) += xe_test.o
  xe_test-y = xe_test_mod.o \
 +	xe_any_kunit.o \
  	xe_args_test.o \
  	xe_pci_test.o \
+ 	xe_rtp_tables_test.o \
  	xe_rtp_test.o \
 diff --git a/drivers/gpu/drm/xe/tests/xe_any_kunit.c b/drivers/gpu/drm/xe/tests/xe_any_kunit.c
 new file mode 100644
@@ -252,4 +253,3 @@ index 000000000000..0a5f28894cd2
 +kunit_test_suite(xe_any_test_suite);
 -- 
 2.43.0
-

@@ -42,13 +42,6 @@ diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
 index fd2f1cc6d..87eb6ac16 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -31,5 +31,6 @@
- #include "xe_exec_queue.h"
- #include "xe_gt.h"
- #include "xe_migrate.h"
-+#include "xe_module.h"
- #include "xe_pat.h"
- #include "xe_pm.h"
 @@ -2010,11 +2010,19 @@ static void vm_destroy_work_func(struct work_struct *w)
  		xe_file_put(vm->xef);
  

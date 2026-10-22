@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Badal Nilawar <badal.nilawar@intel.com>
 Date: Sun, 6 Sep 2026 22:56:10 +0530
-Subject: [TEMP] drm/xe/xe_ras: Add support to retrieve info queue data
- for CRI
+Subject: [TEMP] drm/xe/xe_ras: Add support to retrieve info queue data for
+ CRI
 
 Retrieve the RAS info queue data, in multiple chunks, and assemble
 it into flat raw buffer. Follow up patch will use this data to
@@ -12,6 +12,7 @@ Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
 Assisted-by: Copilot:claude-opus-4.8
 (backported from https://patchwork.freedesktop.org/series/169692/#rev3)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
 ---
  drivers/gpu/drm/xe/xe_ras.c                   | 139 ++++++++++++++++++
  drivers/gpu/drm/xe/xe_ras.h                   |   3 +
@@ -20,10 +21,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  4 files changed, 259 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
-index da1729243..a4237d9ee 100644
+index 1c7052fb42c5..bc88cd663460 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
-@@ -772,6 +772,145 @@ int xe_ras_set_threshold(struct xe_device *xe, u8 severity, u8 component, u32 th
+@@ -841,6 +841,145 @@ int xe_ras_set_threshold(struct xe_device *xe, u8 severity, u8 component, u32 th
  	return 0;
  }
  
@@ -170,7 +171,7 @@ index da1729243..a4237d9ee 100644
  {
  	struct xe_ras_get_health_response response = {0};
 diff --git a/drivers/gpu/drm/xe/xe_ras.h b/drivers/gpu/drm/xe/xe_ras.h
-index e83e022cd..d31e093c0 100644
+index e83e022cd363..d31e093c0fe9 100644
 --- a/drivers/gpu/drm/xe/xe_ras.h
 +++ b/drivers/gpu/drm/xe/xe_ras.h
 @@ -23,5 +23,8 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe);
@@ -183,10 +184,10 @@ index e83e022cd..d31e093c0 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
-index 99b4ae3ac..2364dbc2c 100644
+index 324e9754742b..f5a1e8af615b 100644
 --- a/drivers/gpu/drm/xe/xe_ras_types.h
 +++ b/drivers/gpu/drm/xe/xe_ras_types.h
-@@ -16,6 +16,10 @@
+@@ -23,6 +23,10 @@
  #define XE_RAS_MEMORY_DB_ECC			BIT(1)
  #define XE_RAS_MEMORY_POISON			BIT(2)
  #define XE_RAS_MEMORY_DATA_PARITY		BIT(5)
@@ -197,7 +198,7 @@ index 99b4ae3ac..2364dbc2c 100644
  
  /**
   * enum xe_ras_recovery_action - RAS recovery actions
-@@ -95,6 +99,109 @@ struct xe_ras_threshold_crossed {
+@@ -102,6 +106,109 @@ struct xe_ras_threshold_crossed {
  	struct xe_ras_error_class counters[XE_RAS_NUM_COUNTERS];
  } __packed;
  
@@ -307,7 +308,7 @@ index 99b4ae3ac..2364dbc2c 100644
  /**
   * struct xe_ras_get_counter_request - Request structure for get counter
   */
-@@ -117,8 +224,14 @@ struct xe_ras_get_counter_response {
+@@ -124,8 +231,14 @@ struct xe_ras_get_counter_response {
  	u64 timestamp;
  	/** @threshold: Threshold value for the counter */
  	u32 threshold;
@@ -324,19 +325,19 @@ index 99b4ae3ac..2364dbc2c 100644
  } __packed;
  
  /**
-@@ -274,7 +387,6 @@ struct xe_ras_set_health_response {
+@@ -203,7 +316,6 @@ struct xe_ras_set_threshold_response {
  	/** @reserved1: Reserved for future use */
  	u32 reserved1[2];
  } __packed;
 -
  /**
-  * struct xe_ras_soc_error_source - Source of SoC error
+  * struct xe_ras_error_array - Details of the error types
   */
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
-index 66e7cbcc3..c00fe0e69 100644
+index f658c9c54b49..eb0e7b84ff0e 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
-@@ -30,6 +30,7 @@ enum xe_sysctrl_group {
+@@ -34,6 +34,7 @@ enum xe_sysctrl_group {
   * @XE_SYSCTRL_CMD_GET_PENDING_EVENT: Retrieve pending event
   * @XE_SYSCTRL_CMD_GET_HEALTH: Retrieve gpu health
   * @XE_SYSCTRL_CMD_SET_HEALTH: Set gpu health
@@ -344,7 +345,7 @@ index 66e7cbcc3..c00fe0e69 100644
   */
  enum xe_sysctrl_gfsp_cmd {
  	XE_SYSCTRL_CMD_GET_SOC_ERROR		= 0x01,
-@@ -40,6 +41,7 @@ enum xe_sysctrl_gfsp_cmd {
+@@ -44,6 +45,7 @@ enum xe_sysctrl_gfsp_cmd {
  	XE_SYSCTRL_CMD_GET_PENDING_EVENT	= 0x07,
  	XE_SYSCTRL_CMD_GET_HEALTH		= 0x0B,
  	XE_SYSCTRL_CMD_SET_HEALTH		= 0x0C,
@@ -352,7 +353,6 @@ index 66e7cbcc3..c00fe0e69 100644
  };
  
  /**
----
 -- 
 2.43.0
 

@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Anoop Vijay <anoop.c.vijay@intel.com>
 Date: Thu, 8 Oct 2026 23:47:55 -0700
-Subject: drm/xe/sysctrl: Add mailbox control state to error
- messages
+Subject: [PATCH] drm/xe/sysctrl: Add mailbox control state to error messages
 
 Include decoded mailbox control register information in mailbox
 busy, timeout and firmware error paths to provide additional
@@ -10,31 +9,35 @@ context for failure debugging
 
 (cherry-picked from commit 0b3aec1e9b6f71840f579f202c978777629b9e3f linux-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
 ---
- drivers/gpu/drm/xe/xe_sysctrl_mailbox.c | 56 ++++++++++++++++++-------
- 1 file changed, 41 insertions(+), 15 deletions(-)
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox.c | 59 ++++++++++++++++++-------
+ 1 file changed, 42 insertions(+), 17 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
-index 1b938cb57..0e3a5c259 100644
+index 2ff2d2a..b80bec5 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
-@@ -7,6 +7,7 @@
+@@ -7,8 +7,8 @@
  #include <linux/cleanup.h>
  #include <linux/minmax.h>
  #include <linux/slab.h>
 +#include <linux/sprintf.h>
  #include <linux/string.h>
- 
+-
  #include "regs/xe_sysctrl_regs.h"
-@@ -36,17 +37,27 @@ struct xe_sysctrl_mailbox_msg_hdr {
+ #include "xe_device.h"
+ #include "xe_log.h"
+@@ -36,17 +36,27 @@ struct xe_sysctrl_mailbox_msg_hdr {
  	REG_FIELD_GET(SYSCTRL_HDR_RESULT_MASK, (hdr)->data)
  
  static int sysctrl_wait_bit_clear(struct xe_sysctrl *sc, u32 bit_mask,
 -				  unsigned int timeout_ms)
 +				  unsigned int timeout_ms, u32 *out_val)
  {
- 	return xe_mmio_wait32_not(sc->mmio, SYSCTRL_MB_CTRL, bit_mask, bit_mask,
+-return xe_mmio_wait32_not(sc->mmio, SYSCTRL_MB_CTRL, bit_mask, bit_mask,
 -				  timeout_ms * 1000, NULL, false);
++	return xe_mmio_wait32_not(sc->mmio, SYSCTRL_MB_CTRL, bit_mask, bit_mask,
 +				  timeout_ms * 1000, out_val, false);
  }
  
@@ -58,7 +61,7 @@ index 1b938cb57..0e3a5c259 100644
  }
  
  static void sysctrl_write_frame(struct xe_sysctrl *sc, const void *frame,
-@@ -128,17 +139,23 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
+@@ -127,17 +137,23 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
  			       const u8 *mbox_cmd,
  			       size_t cmd_size, unsigned int timeout_ms)
  {
@@ -84,7 +87,7 @@ index 1b938cb57..0e3a5c259 100644
  		return ret;
  	}
  
-@@ -159,9 +176,12 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
+@@ -158,9 +174,12 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
  
  		xe_mmio_write32(sc->mmio, SYSCTRL_MB_CTRL, ctrl_reg);
  
@@ -99,7 +102,7 @@ index 1b938cb57..0e3a5c259 100644
  			return ret;
  		}
  
-@@ -171,17 +191,22 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
+@@ -170,17 +189,22 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
  	return 0;
  }
  
@@ -126,7 +129,7 @@ index 1b938cb57..0e3a5c259 100644
  		return ret;
  	}
  
-@@ -219,7 +244,7 @@ static int sysctrl_receive_frames(struct xe_sysctrl *sc,
+@@ -218,7 +242,7 @@ static int sysctrl_receive_frames(struct xe_sysctrl *sc,
  	while (!done && remain) {
  		frame_size = min_t(size_t, remain, XE_SYSCTRL_MB_FRAME_SIZE);
  
@@ -135,7 +138,7 @@ index 1b938cb57..0e3a5c259 100644
  					    &done);
  		if (ret)
  			return ret;
-@@ -240,8 +265,9 @@ static int sysctrl_receive_frames(struct xe_sysctrl *sc,
+@@ -239,8 +263,9 @@ static int sysctrl_receive_frames(struct xe_sysctrl *sc,
  	}
  
  	if (XE_SYSCTRL_HDR_RESULT(hdr) != 0) {

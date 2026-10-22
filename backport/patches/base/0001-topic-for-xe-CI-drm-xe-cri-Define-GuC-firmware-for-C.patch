@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Balasubramani Vivekanandan <balasubramani.vivekanandan@intel.com>
 Date: Fri, 29 May 2026 12:36:04 -0700
-Subject: topic/for-xe-CI: drm/xe/cri: Define GuC firmware for CRI
+Subject: [PATCH] topic/for-xe-CI: drm/xe/cri: Define GuC firmware for CRI
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -20,22 +20,23 @@ Link: https://patch.msgid.link/20260529193558.185436-13-daniele.ceraolospurio@in
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry picked from commit 70680e8c7300e361d46a466288abfdd673e927ef drm-tip)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
 ---
  drivers/gpu/drm/xe/xe_uc_fw.c | 1 +
  1 file changed, 1 insertion(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_uc_fw.c b/drivers/gpu/drm/xe/xe_uc_fw.c
-index 18ebefd444fe..546bac3cc149 100644
+index a8e6f18cc9b4..53f9ef3714a9 100644
 --- a/drivers/gpu/drm/xe/xe_uc_fw.c
 +++ b/drivers/gpu/drm/xe/xe_uc_fw.c
 @@ -115,6 +115,7 @@ struct fw_blobs_by_type {
  #define XE_GT_TYPE_ANY XE_GT_TYPE_UNINITIALIZED
  
  #define XE_GUC_FIRMWARE_DEFS(fw_def, mmp_ver, major_ver)					\
-+	fw_def(CRESCENTISLAND,	GT_TYPE_ANY,	mmp_ver(xe,	guc,	cri,	70, 68, 0))	\
++fw_def(CRESCENTISLAND,	GT_TYPE_ANY,	mmp_ver(xe,	guc,	cri,	70, 68, 0))	\
+ 	fw_def(NOVALAKE_S,	GT_TYPE_ANY,	major_ver(xe,	guc,	nvl,	70, 71, 0))	\
  	fw_def(PANTHERLAKE,	GT_TYPE_ANY,	major_ver(xe,	guc,	ptl,	70, 54, 0))	\
  	fw_def(BATTLEMAGE,	GT_TYPE_ANY,	major_ver(xe,	guc,	bmg,	70, 54, 0))	\
- 	fw_def(LUNARLAKE,	GT_TYPE_ANY,	major_ver(xe,	guc,	lnl,	70, 53, 0))	\
 -- 
 2.43.0
 

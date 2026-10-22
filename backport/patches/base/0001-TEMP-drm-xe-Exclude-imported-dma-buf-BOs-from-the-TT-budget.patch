@@ -39,11 +39,7 @@ diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device
 index d99881c6e1d5..c70f17ca8bba 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -303,9 +303,15 @@ struct xe_device {
- 	/** @mem: memory info for device */
- 	struct {
- 		/** @mem.vram: VRAM info for device */
- 		struct xe_vram_region *vram;
+@@ -303,4 +303,10 @@ struct xe_device {
  		/** @mem.sys_mgr: system TTM manager */
  		struct ttm_resource_manager sys_mgr;
 +		/**
@@ -52,9 +48,8 @@ index d99881c6e1d5..c70f17ca8bba 100644
 +		 * for P2P), which consume no local system memory.
 +		 */
 +		atomic64_t sys_mgr_charged;
- 		/** @mem.sys_mgr: system memory shrinker. */
+ 		/** @mem.shrinker: system memory shrinker. */
  		struct xe_shrinker *shrinker;
- 	} mem;
 diff --git a/drivers/gpu/drm/xe/xe_query.c b/drivers/gpu/drm/xe/xe_query.c
 index dc975f595368..ab3a4ca79e75 100644
 --- a/drivers/gpu/drm/xe/xe_query.c

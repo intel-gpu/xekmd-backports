@@ -46,7 +46,7 @@ index d73cdad0b3a9..91a0680e449b 100644
 +	int idx;
  
  	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe) || xe->info.platform < XE_BATTLEMAGE) {
- 		xe_log_err(xe, SURVIVABILITY, -EOPNOTSUPP, "Runtime Mode not supported!\n");
+ 		dev_err(&pdev->dev, "Runtime Survivability Mode not supported\n");
  		return;
  	}
  
@@ -56,10 +56,9 @@ index d73cdad0b3a9..91a0680e449b 100644
 +
  	populate_survivability_info(xe);
  
-@@ -456,4 +463,6 @@ void xe_survivability_mode_runtime_enable(struct xe_device *xe)
- 	xe_log_err(xe, SURVIVABILITY, 0, "Firmware flash required!\n");
- 	xe_info(xe, "Please refer to the userspace documentation for more details how to flash the firmware on %s!\n",
- 			xe->info.platform_name);
+@@ -456,3 +463,5 @@ void xe_survivability_mode_runtime_enable(struct xe_device *xe)
+ 	xe_device_declare_wedged(xe);
+ 	dev_err(&pdev->dev, "Firmware flash required, Please refer to the userspace documentation for more details!\n");
 +
 +	drm_dev_exit(idx);
  }

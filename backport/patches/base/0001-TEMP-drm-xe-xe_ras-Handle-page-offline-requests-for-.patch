@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Riana Tauro <riana.tauro@intel.com>
 Date: Mon, 28 Sep 2026 11:48:31 +0530
-Subject: [TEMP]: drm/xe/xe_ras: Handle page offline requests for
- device memory ecc errors
+Subject: [TEMP] drm/xe/xe_ras: Handle page offline requests for device memory
+ ecc errors
 
 Add basic support for sending page offline/remove requests to system
 controller and use it for device memory ECC error handling.
@@ -22,14 +22,15 @@ Cc: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Signed-off-by: Riana Tauro <riana.tauro@intel.com>
 (backported from https://patchwork.freedesktop.org/series/172710/#rev3)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
 ---
  drivers/gpu/drm/xe/xe_ras.c                   | 129 +++++++++++++++++-
- drivers/gpu/drm/xe/xe_ras_types.h             |  36 +++++
+ drivers/gpu/drm/xe/xe_ras_types.h             |  38 +++++-
  drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h |   2 +
- 3 files changed, 161 insertions(+), 6 deletions(-)
+ 3 files changed, 162 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
-index 2fc2322b2..c716f883f 100644
+index 865833500061..f906d8c3bb59 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
 @@ -5,6 +5,8 @@
@@ -201,7 +202,7 @@ index 2fc2322b2..c716f883f 100644
  		return XE_RAS_RECOVERY_ACTION_RESET;
  	}
 diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
-index a7d030238..147992a92 100644
+index f5a1e8af615b..2878c92c6572 100644
 --- a/drivers/gpu/drm/xe/xe_ras_types.h
 +++ b/drivers/gpu/drm/xe/xe_ras_types.h
 @@ -23,6 +23,20 @@
@@ -225,7 +226,16 @@ index a7d030238..147992a92 100644
  #define XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE	200
  #define XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE	5120
  #define XE_RAS_INFO_QUEUE_FLAG_AVAILABLE	0x01
-@@ -456,4 +470,26 @@ struct xe_ras_memory_error {
+@@ -386,7 +400,7 @@ struct xe_ras_csc_error {
+ 
+ /**
+  * struct xe_ras_ieh_error - IEH (Integrated Error Handler) error details
+- */
++*/
+ struct xe_ras_ieh_error {
+ 	/** @reserved: Reserved for future use */
+ 	u32 reserved;
+@@ -414,6 +428,28 @@ struct xe_ras_memory_error {
  	u32 reserved2[10];
  } __packed;
  
@@ -251,9 +261,11 @@ index a7d030238..147992a92 100644
 +	u32 reserved;
 +} __packed;
 +
- #endif
+ /**
+  * struct xe_ras_get_health_request - Request structure for obtaining gpu health
+  */
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
-index eb0e7b84f..9403baaf4 100644
+index eb0e7b84ff0e..9403baaf4847 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
 @@ -32,6 +32,7 @@ enum xe_sysctrl_group {

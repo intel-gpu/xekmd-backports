@@ -521,7 +521,7 @@ index a6d0e2287..0e00b4202 100644
  
 +	/** @acks: user fences tracked by this debugger */
 +	struct {
-+		/** @lock: guards access to tree */
++		/** @acks.lock: guards access to tree */
 +		spinlock_t lock;
 +
 +		struct rb_root tree;
@@ -823,4 +823,3 @@ index 505529bc1..d597648ec 100644
  #endif
 -- 
 2.43.0
-

@@ -25,10 +25,11 @@ diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
 index 7745387ad..411dcd54c 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -694,7 +694,7 @@ static void vf_update_device_info(struct xe_device *xe)
+@@ -694,8 +694,8 @@ static void vf_update_device_info(struct xe_device *xe)
  	xe->info.probe_display = 0;
  	xe->info.has_heci_cscfi = 0;
  	xe->info.has_heci_gscfi = 0;
+ 	xe->info.has_i2c = 0;
 -	xe->info.has_late_bind = 0;
 +	xe->info.late_bind_mask = 0;
  	xe->info.skip_guc_pc = 1;

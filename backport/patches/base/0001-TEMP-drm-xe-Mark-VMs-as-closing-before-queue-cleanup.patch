@@ -54,23 +54,24 @@ diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault
 index 43d210d80..fbcad98ec 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
-@@ -191,7 +191,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
- 	 */
- 	down_write(&vm->lock);
+@@ -283,7 +283,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
+ 	down_read(&vm->lock);
  
 -	if (xe_vm_is_closed(vm)) {
 +	if (xe_vm_is_closed_or_banned(vm)) {
  		err = -ENOENT;
+ 		xe_pagefault_set_error(pf, XE_PAGEFAULT_ERROR_VM_CLOSED);
  		goto unlock_vm;
  	}
 diff --git a/drivers/gpu/drm/xe/xe_svm.c b/drivers/gpu/drm/xe/xe_svm.c
 index 1c0df523a..ea5bf9d32 100644
 --- a/drivers/gpu/drm/xe/xe_svm.c
 +++ b/drivers/gpu/drm/xe/xe_svm.c
-@@ -209,7 +209,8 @@ xe_svm_range_notifier_event_end(struct xe_vm *vm, struct drm_gpusvm_range *r,
+@@ -211,8 +211,9 @@ xe_svm_range_notifier_event_end(struct xe_vm *vm, struct drm_gpusvm_range *r,
  	xe_svm_assert_in_notifier(vm);
  
- 	drm_gpusvm_range_unmap_pages(&vm->svm.gpusvm, r, &ctx);
+ 	drm_gpusvm_unmap_pages(&vm->svm.gpusvm, &(to_xe_range(r)->pages),
+ 			       drm_gpusvm_range_size(r) >> PAGE_SHIFT, &ctx);
 -	if (!xe_vm_is_closed(vm) && mmu_range->event == MMU_NOTIFY_UNMAP)
 +	if (!xe_vm_is_closed(vm) && !xe_vm_is_closing(vm) &&
 +	    mmu_range->event == MMU_NOTIFY_UNMAP)

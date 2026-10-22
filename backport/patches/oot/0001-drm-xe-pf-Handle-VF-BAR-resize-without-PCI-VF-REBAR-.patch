@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Marcin Bernatowicz <marcin.bernatowicz@linux.intel.com>
 Date: Thu, 22 Jan 2026 00:00:00 +0000
-Subject: drm/xe/pf: Handle VF BAR resize without PCI VF REBAR helpers
+Subject: [PATCH] drm/xe/pf: Handle VF BAR resize without PCI VF REBAR helpers
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -16,15 +16,25 @@ Reference:
 
 Suggested-by: Michał Winiarski <michal.winiarski@intel.com>
 Signed-off-by: Marcin Bernatowicz <marcin.bernatowicz@linux.intel.com>
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
- drivers/gpu/drm/xe/xe_pci_sriov.c | 94 +++++++++++++++++++++++++++++--
- 1 file changed, 90 insertions(+), 4 deletions(-)
+ drivers/gpu/drm/xe/xe_pci_sriov.c | 98 +++++++++++++++++++++++++++----
+ 1 file changed, 85 insertions(+), 13 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov.c
-index 9ff69c484..1246ffc76 100644
+index 5d41efbec..e8e3daa46 100644
 --- a/drivers/gpu/drm/xe/xe_pci_sriov.c
 +++ b/drivers/gpu/drm/xe/xe_pci_sriov.c
-@@ -82,16 +82,102 @@ static void pf_engine_activity_stats(struct xe_device *xe, unsigned int num_vfs,
+@@ -59,7 +59,7 @@ static void pf_link_vfs(struct xe_device *xe, int num_vfs)
+ 		}
+ 
+ 		link = device_link_add(&pdev_vf->dev, &pdev_pf->dev,
+-				       DL_FLAG_AUTOREMOVE_CONSUMER);
++DL_FLAG_AUTOREMOVE_CONSUMER);
+ 		/* unlikely and harmless, continue with other VFs */
+ 		if (!link)
+ 			xe_sriov_notice(xe, "Failed linking VF%u\n", n);
+@@ -82,32 +82,104 @@ static void pf_engine_activity_stats(struct xe_device *xe, unsigned int num_vfs,
  	}
  }
  
@@ -53,7 +63,7 @@ index 9ff69c484..1246ffc76 100644
 +	u16		ctrl;			/* SR-IOV Control */
 +	u16		total_VFs;		/* Total VFs associated with the PF */
 +	u16		initial_VFs;		/* Initial VFs associated with the PF */
-+	u16		num_VFs;			/* Number of VFs available */
++	u16		num_VFs;		/* Number of VFs available */
 +	u16		offset;			/* First VF Routing ID offset */
 +	u16		stride;			/* Following VF stride */
 +	u16		vf_device;		/* VF device ID */
@@ -71,14 +81,19 @@ index 9ff69c484..1246ffc76 100644
 +	bool		drivers_autoprobe;	/* Auto probing of VFs by driver */
 +};
 +
- static int resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
+ static int pf_resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
  {
  	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+-	char buf[10];
 -	u32 sizes;
+-	int size;
 +	resource_size_t size, total;
 +	int pos, i, vf_bar_idx = VF_LMEM_BAR - PCI_IOV_RESOURCES;
 +	u32 rebar, ctrl;
-+	int err;
+ 	int err;
+ 
+ 	if (!IS_DGFX(xe))
+ 		return 0;
  
 -	sizes = pci_iov_vf_bar_get_sizes(pdev, VF_LMEM_BAR, num_vfs);
 -	if (!sizes)
@@ -86,21 +101,26 @@ index 9ff69c484..1246ffc76 100644
 +	if (!pos)
  		return 0;
  
--	return pci_iov_vf_bar_set_size(pdev, VF_LMEM_BAR, __fls(sizes));
+-	size = __fls(sizes);
+-	string_get_size(pci_rebar_size_to_bytes(size), 1, STRING_UNITS_2, buf, sizeof(buf));
 +	/* Expecting a single VF resizable BAR, and it to be BAR2. */
 +	err = pci_read_config_dword(pdev, pos + PCI_REBAR_CTRL, &ctrl);
 +	if (err)
 +		return err;
-+
+ 
+-	err = pci_iov_vf_bar_set_size(pdev, VF_LMEM_BAR, size);
+-	if (err) {
+-		xe_sriov_notice(xe, "Failed to resize VF BAR %u to %s (%pe)\n",
+-				VF_LMEM_BAR, buf, ERR_PTR(err));
 +	if (FIELD_GET(PCI_REBAR_CTRL_NBAR_MASK, ctrl) != 1 ||
 +	    FIELD_GET(PCI_REBAR_CTRL_BAR_IDX, ctrl) != vf_bar_idx) {
-+		xe_sriov_warn(xe, "Unexpected resource in VF resizable BAR, skipping resize\\n");
++		xe_sriov_warn(xe, "Unexpected resource in VF resizable BAR, skipping resize\n");
 +		return 0;
 +	}
 +
 +	err = pci_read_config_dword(pdev, pos + PCI_REBAR_CAP, &rebar);
 +	if (err)
-+		return err;
+ 		return err;
 +
 +	rebar = FIELD_GET(PCI_REBAR_CAP_SIZES, rebar);
 +	total = pci_resource_len(pdev, VF_LMEM_BAR);
@@ -119,18 +139,18 @@ index 9ff69c484..1246ffc76 100644
 +
 +			((struct pci_sriov *)pdev->sriov)->barsz[vf_bar_idx] = size;
 +
-+			xe_sriov_info(xe, "VF BAR%d resized to %llu MiB\\n",
++			xe_sriov_info(xe, "VF BAR%d resized to %llu MiB\n",
 +				      vf_bar_idx, (unsigned long long)(size >> 20));
 +			break;
 +		}
 +
 +		rebar &= ~BIT(i);
-+	}
-+
-+	return 0;
+ 	}
+ 
+-	xe_sriov_dbg(xe, "VF LMEM BAR resized to %s\n", buf);
+ 	return 0;
  }
  
- static int pf_prepare_vfs_enabling(struct xe_device *xe)
 -- 
-2.34.1
+2.43.0
 

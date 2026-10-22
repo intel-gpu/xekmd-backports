@@ -47,23 +47,21 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_device.c     |  20 +++-
  drivers/gpu/drm/xe/xe_exec_queue.c |  22 ++--
- drivers/gpu/drm/xe/xe_vm.c         | 177 +++++++++++++++++++++++++----
+ drivers/gpu/drm/xe/xe_vm.c         | 178 +++++++++++++++++++++++++----
  drivers/gpu/drm/xe/xe_vm.h         |   5 +
  drivers/gpu/drm/xe/xe_vm_types.h   |  15 +++
- 5 files changed, 210 insertions(+), 29 deletions(-)
+ 5 files changed, 211 insertions(+), 29 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
 index 6416939e3..d8b94b2d4 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -8,6 +8,7 @@
+@@ -8,4 +8,5 @@
  #include <linux/aperture.h>
  #include <linux/delay.h>
  #include <linux/fault-inject.h>
 +#include <linux/jiffies.h>
  #include <linux/units.h>
- 
- #include <drm/drm_atomic_helper.h>
 @@ -169,6 +170,8 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  	struct xe_file *xef = file->driver_priv;
  	struct xe_vm *vm;
@@ -161,6 +159,14 @@ diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
 index 1358e6c2b..d4278033e 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -31,6 +31,7 @@
+ #include "xe_exec_queue.h"
+ #include "xe_gt.h"
+ #include "xe_migrate.h"
++#include "xe_module.h"
+ #include "xe_pagefault.h"
+ #include "xe_pat.h"
+ #include "xe_pm.h"
 @@ -1516,6 +1516,7 @@ static const struct xe_pt_ops xelp_pt_ops = {
  	.pde_encode_bo = xelp_pde_encode_bo,
  };

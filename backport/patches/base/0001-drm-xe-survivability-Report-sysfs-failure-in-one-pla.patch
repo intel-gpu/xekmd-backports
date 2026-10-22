@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:47 +0200
-Subject: drm/xe/survivability: Report sysfs failure in one place
+Subject: [PATCH] drm/xe/survivability: Report sysfs failure in one place
 
 If we fail to create any of the survivability sysfs files, actual
 error is reported by the caller. Move that reporting to sysfs helper.
@@ -16,12 +16,13 @@ Link: https://patch.msgid.link/20260814171801.13347-22-michal.wajdeczko@intel.co
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (backported from commit 33cc29e3dc0e6530a1eb0a318ff7a414c0c21068 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
 ---
- drivers/gpu/drm/xe/xe_survivability_mode.c | 20 ++++++++++----------
- 1 file changed, 10 insertions(+), 10 deletions(-)
+ drivers/gpu/drm/xe/xe_survivability_mode.c | 23 +++++++++++-----------
+ 1 file changed, 12 insertions(+), 11 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
-index b8838c2c7681..1c9740c1cd35 100644
+index 0ace10ae500a..4fe44bdc0161 100644
 --- a/drivers/gpu/drm/xe/xe_survivability_mode.c
 +++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
 @@ -18,6 +18,7 @@
@@ -32,6 +33,15 @@ index b8838c2c7681..1c9740c1cd35 100644
  #include "xe_vsec.h"
  
  /**
+@@ -118,7 +119,7 @@ static const char * const reg_map[] = {
+ 	[POSTCODE_TRACE_OVERFLOW] = "Postcode trace overflow",
+ 	[AUX_INFO0]               = "Auxiliary Info 0",
+ 	[AUX_INFO1]               = "Auxiliary Info 1",
+-	[AUX_INFO2]               = "Auxiliary Info 2",
++[AUX_INFO2]               = "Auxiliary Info 2",
+ 	[AUX_INFO3]               = "Auxiliary Info 3",
+ 	[AUX_INFO4]               = "Auxiliary Info 4",
+ };
 @@ -309,24 +310,26 @@ static int create_survivability_sysfs(struct pci_dev *pdev)
  	int ret;
  
@@ -65,25 +75,33 @@ index b8838c2c7681..1c9740c1cd35 100644
  }
  
  static int enable_boot_survivability_mode(struct pci_dev *pdev)
-@@ -427,7 +430,6 @@ int xe_survivability_mode_runtime_enable(struct xe_device *xe)
- {
- 	struct xe_survivability *survivability = &xe->survivability;
- 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
--	int ret;
+@@ -406,7 +409,7 @@ bool xe_survivability_mode_is_requested(struct xe_device *xe)
+ 	if (survivability_mode)
+ 		return true;
  
- 	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe) || xe->info.platform < XE_BATTLEMAGE) {
- 		dev_err(&pdev->dev, "Runtime Survivability Mode not supported\n");
-@@ -436,9 +438,7 @@ int xe_survivability_mode_runtime_enable(struct xe_device *xe)
+-	data = xe_mmio_read32(mmio, PCODE_SCRATCH(0));
++data = xe_mmio_read32(mmio, PCODE_SCRATCH(0));
+ 	survivability->boot_status = REG_FIELD_GET(BOOT_STATUS, data);
+ 
+ 	return check_boot_failure(xe);
+@@ -433,8 +436,7 @@ void xe_survivability_mode_runtime_enable(struct xe_device *xe)
  
  	populate_survivability_info(xe);
  
--	ret = create_survivability_sysfs(pdev);
--	if (ret)
--		dev_err(&pdev->dev, "Failed to create survivability mode sysfs\n");
+-	if (create_survivability_sysfs(pdev))
+-		dev_err(&pdev->dev, "Failed to create survivability sysfs\n");
 +	create_survivability_sysfs(pdev);
  
  	survivability->type = XE_SURVIVABILITY_TYPE_RUNTIME;
  	dev_err(&pdev->dev, "Runtime Survivability mode enabled\n");
+@@ -470,7 +472,6 @@ int xe_survivability_mode_boot_enable(struct xe_device *xe)
+ 		log_survivability_info(xe);
+ 		return -ENXIO;
+ 	}
+-
+ 	survivability->type = XE_SURVIVABILITY_TYPE_BOOT;
+ 
+ 	return enable_boot_survivability_mode(pdev);
 -- 
 2.43.0
 

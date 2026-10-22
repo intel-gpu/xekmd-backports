@@ -26,7 +26,7 @@ Signed-off-by: Pravalika Gurram pravalika.gurram@intel.com
  drivers/gpu/drm/xe/xe_sysctrl.c               | 32 +++++++++++++
  drivers/gpu/drm/xe/xe_sysctrl.h               |  1 +
  drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h | 12 +++++
- drivers/gpu/drm/xe/xe_uc_fw_abi.h             | 11 ++++-
+ drivers/gpu/drm/xe/abi/uc_fw_abi.h            | 11 ++++-
  6 files changed, 97 insertions(+), 13 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
@@ -142,9 +142,10 @@ diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw_types.h b/drivers/gpu/drm/xe/xe_
 index 7fdb24e81..0be3913aa 100644
 --- a/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
 +++ b/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
-@@ -12,14 +12,14 @@
+@@ -12,15 +12,15 @@
  #include <linux/workqueue.h>
- #include "xe_uc_fw_abi.h"
+ 
+ #include "abi/uc_fw_abi.h"
  
 -#define XE_LB_MAX_PAYLOAD_SIZE SZ_4K
 -
@@ -253,10 +254,10 @@ index f658c9c54..87f4ae104 100644
  /**
   * struct xe_sysctrl_mailbox_command - System Controller mailbox command
   */
-diff --git a/drivers/gpu/drm/xe/xe_uc_fw_abi.h b/drivers/gpu/drm/xe/xe_uc_fw_abi.h
+diff --git a/drivers/gpu/drm/xe/abi/uc_fw_abi.h b/drivers/gpu/drm/xe/abi/uc_fw_abi.h
 index 3c9a63d13..7d02e147e 100644
---- a/drivers/gpu/drm/xe/xe_uc_fw_abi.h
-+++ b/drivers/gpu/drm/xe/xe_uc_fw_abi.h
+--- a/drivers/gpu/drm/xe/abi/uc_fw_abi.h
++++ b/drivers/gpu/drm/xe/abi/uc_fw_abi.h
 @@ -316,6 +316,11 @@ struct gsc_cpd_entry {
  	u8 reserved[4];
  } __packed;

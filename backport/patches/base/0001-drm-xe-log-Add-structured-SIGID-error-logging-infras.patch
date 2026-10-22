@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Date: Fri, 14 Aug 2026 19:17:28 +0200
-Subject: drm/xe/log: Add structured SIGID error logging infrastructure
+Subject: [PATCH] drm/xe/log: Add structured SIGID error logging infrastructure
 
 Today the driver reports faults with ad-hoc drm_err()/xe_gt_err()
 strings that have no stable shape. That is readable for a human, but it
@@ -28,27 +28,30 @@ Link: https://patch.msgid.link/20260814171801.13347-3-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit 1d2292f8f116a6323923352352115931ddefef53 linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
 ---
- Documentation/gpu/xe/index.rst        |   1 +
+ Documentation/gpu/xe/index.rst        |   3 +-
  Documentation/gpu/xe/xe_sigid.rst     |  14 +++
  drivers/gpu/drm/xe/Makefile           |   1 +
  drivers/gpu/drm/xe/abi/xe_sigid_abi.h | 159 ++++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_log.c           | 138 ++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_log.h           |  20 ++++
- 6 files changed, 333 insertions(+)
+ 6 files changed, 334 insertions(+), 1 deletion(-)
  create mode 100644 Documentation/gpu/xe/xe_sigid.rst
  create mode 100644 drivers/gpu/drm/xe/abi/xe_sigid_abi.h
  create mode 100644 drivers/gpu/drm/xe/xe_log.c
  create mode 100644 drivers/gpu/drm/xe/xe_log.h
 
 diff --git a/Documentation/gpu/xe/index.rst b/Documentation/gpu/xe/index.rst
-index bc432c95d1a3..fde796d1f865 100644
+index 665c0e93601c..53c05aa72b51 100644
 --- a/Documentation/gpu/xe/index.rst
 +++ b/Documentation/gpu/xe/index.rst
-@@ -29,3 +29,4 @@ DG2, etc is provided to prototype the driver.
+@@ -34,4 +34,5 @@ The display, or :ref:`drm-kms`, support for drm/xe is provided by
     xe_device
     xe-drm-usage-stats.rst
     xe_configfs
+-   xe_gt_stats
++xe_gt_stats
 +   xe_sigid
 diff --git a/Documentation/gpu/xe/xe_sigid.rst b/Documentation/gpu/xe/xe_sigid.rst
 new file mode 100644
@@ -71,7 +74,7 @@ index 000000000000..45d84a62f185
 +.. kernel-doc:: drivers/gpu/drm/xe/abi/xe_sigid_abi.h
 +   :internal:
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index bd1697733335..61c89d954aec 100644
+index c92468cb9b89..adc2de37e768 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -87,6 +87,7 @@ xe-y += xe_bb.o \

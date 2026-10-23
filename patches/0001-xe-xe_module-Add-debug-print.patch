@@ -22,7 +22,7 @@ index 65a7b99..4345089 100644
  {
  	int err, i;
 -
-+	printk(KERN_INFO "XE Backport init, Module is backported from " CPTCFG_BACKPORTS_RELEASE_TAG "\n");
++	printk(KERN_INFO "XE Backport init, Backported from " CPTCFG_BASE_KERNEL_TAG " and oot-module version " CPTCFG_BACKPORTS_RELEASE_TAG "\n");
  	for (i = 0; i < ARRAY_SIZE(init_funcs); i++) {
  		err = xe_call_init_func(init_funcs + i);
  		if (err) {

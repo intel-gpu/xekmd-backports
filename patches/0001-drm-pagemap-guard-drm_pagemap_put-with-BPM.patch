@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Tue, 17 Jun 2026 00:00:00 +0530
+Subject: drm/pagemap: guard drm_pagemap_put with BPM compatibility macro
+
+When BPM_DRM_PAGEMAP_PUT_NOT_PRESENT is defined (kernel lacks
+drm_pagemap_put), drm_pagemap.h provides a static inline fallback.
+The unconditional definition of drm_pagemap_put() in drm_pagemap.c
+then conflicts with that inline, causing a redefinition or unresolved
+symbol mismatch depending on target API surface.
+
+Guard the .c definition with BPM_DRM_PAGEMAP_PUT_NOT_PRESENT and
+keep a safe header-side no-op fallback so that:
+- On kernels without drm_pagemap_put: the header fallback is used.
+- On kernels with drm_pagemap_put: the full implementation is compiled
+  and exported.
+
+Reference:
+   a599b98607de
+   drm/pagemap, drm/xe: Add refcounting to struct drm_pagemap
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+diff --git a/drivers/gpu/drm/drm_pagemap.c b/drivers/gpu/drm/drm_pagemap.c
+index 0f7e68a..86f97c4 100644
+--- a/drivers/gpu/drm/drm_pagemap.c
++++ b/drivers/gpu/drm/drm_pagemap.c
+@@ -930,6 +930,7 @@ EXPORT_SYMBOL(drm_pagemap_init);
+  * Puts a struct drm_pagemap reference and frees the drm_pagemap object
+  * if the refount reaches zero.
+  */
++#ifndef BPM_DRM_PAGEMAP_PUT_NOT_PRESENT
+ void drm_pagemap_put(struct drm_pagemap *dpagemap)
+ {
+ 	if (likely(dpagemap)) {
+@@ -938,6 +939,7 @@ void drm_pagemap_put(struct drm_pagemap *dpagemap)
+ 	}
+ }
+ EXPORT_SYMBOL(drm_pagemap_put);
++#endif
+
+ /**
+  * drm_pagemap_evict_to_ram() - Evict GPU SVM range to RAM
+diff --git a/include/drm/drm_pagemap.h b/include/drm/drm_pagemap.h
+index c848f57..382d4f5 100644
+--- a/include/drm/drm_pagemap.h
++++ b/include/drm/drm_pagemap.h
+@@ -256,7 +256,13 @@ struct drm_pagemap *drm_pagemap_create(struct drm_device *drm,
+
+ struct drm_pagemap *drm_pagemap_page_to_dpagemap(struct page *page);
+
++#ifdef BPM_DRM_PAGEMAP_PUT_NOT_PRESENT
++static inline void drm_pagemap_put(struct drm_pagemap *dpagemap)
++{
++}
++#else
+ void drm_pagemap_put(struct drm_pagemap *dpagemap);
++#endif
+
+ #else
+
+
+--
+2.43.0

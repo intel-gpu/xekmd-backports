@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
-Date: Wed, 14 Oct 2026 22:01:34 -0700
+Date: Fri, 16 Oct 2026 12:59:02 -0700
 Subject: [TEMP]: drm/xe: Read scheduler message opcode under lock
 
 For static scheduler messages, the opcode is only guaranteed to remain
@@ -8,11 +8,14 @@ stable while the message is on the pending message list. Read the opcode
 under the message lock before removing the message from the pending list,
 and pass it through the processing pipeline.
 
+Bv1: Update to rev4 [Pravalika]
+
 Fixes: ff796870f5dd ("drm/xe/guc: rework exec queue teardown PM/unplug handling")
 Cc: stable <stable@kernel.org>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
-(cherry-picked from https://patchwork.freedesktop.org/series/175996/#rev3)
+(cherry-picked from https://patchwork.freedesktop.org/series/175996/#rev4)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_gpu_scheduler.c       | 13 +++++++++----
  drivers/gpu/drm/xe/xe_gpu_scheduler_types.h |  2 +-
@@ -76,10 +79,10 @@ index 63d9bf925..ea8b0d703 100644
  
  /**
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 3d8859b22..3d95ac22d 100644
+index 484902503..7cdad90eb 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -1909,16 +1909,17 @@ static void __guc_exec_queue_process_msg_set_multi_queue_priority(struct xe_sche
+@@ -1950,16 +1950,17 @@ static void __guc_exec_queue_process_msg_set_multi_queue_priority(struct xe_sche
  #define MSG_HEAD	BIT(9)
  #define MSG_PM_REF	BIT(10)
  

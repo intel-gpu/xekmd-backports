@@ -2030,9 +2030,31 @@ static void __guc_exec_queue_process_msg_kill(struct xe_sched_msg *msg,
 {
 	struct xe_exec_queue *q = msg->private_data;
 	struct xe_exec_queue *primary = xe_exec_queue_multi_queue_primary(q);
+	struct xe_guc *guc = exec_queue_to_guc(primary);
+	int ret;
 
-	if (exec_queue_enabled(primary) && bound)
-	disable_scheduling(primary, true);
+	/* At zero references, the queued CLEANUP message handles disabling. */
+	if (!kref_read(&q->refcount) || !bound || exec_queue_wedged(q))
+		return;
+
+	ret = wait_event_timeout(guc->ct.wq,
+			(!exec_queue_pending_enable(primary) &&
+			 !exec_queue_pending_disable(primary)) ||
+			xe_guc_read_stopped(guc) ||
+			vf_recovery(guc), HZ * 5);
+	if (!ret && !vf_recovery(guc)) {
+		xe_gt_warn(primary->gt, "Pending enable/disable failed to respond on kill, guc_id=%d\n",
+				primary->guc->id);
+		xe_gt_reset_async(primary->gt);
+		xe_sched_tdr_queue_imm(&q->guc->sched);
+		return;
+	}
+
+	if (xe_guc_read_stopped(guc) || vf_recovery(guc))
+		return;
+
+	if (exec_queue_enabled(primary))
+		disable_scheduling(primary, true);
 }
 
 #define CLEANUP				1	/* Non-zero values to catch uninitialized msg */
@@ -2204,22 +2226,25 @@ err_free:
 }
 
 static bool guc_exec_queue_try_add_msg(struct xe_exec_queue *q,
-		struct xe_sched_msg *msg,
-		u32 opcode);
+	struct xe_sched_msg *msg,
+	u32 opcode);
 
-#define STATIC_MSG_CLEANUP	0
-#define STATIC_MSG_SUSPEND	1
-#define STATIC_MSG_RESUME	2
-#define STATIC_MSG_CGP_SYNC	3
-#define STATIC_MSG_KILL		4
+#define STATIC_MSG_CLEANUP 0
+#define STATIC_MSG_SUSPEND 1
+#define STATIC_MSG_RESUME  2
+#define STATIC_MSG_CGP_SYNC   3
+#define STATIC_MSG_KILL       4
 
 static void guc_exec_queue_kill(struct xe_exec_queue *q)
 {
 	struct xe_sched_msg *msg = q->guc->static_msgs + STATIC_MSG_KILL;
 
+	xe_gt_assert(q->gt, kref_read(&q->refcount));
+
 	trace_xe_exec_queue_kill(q);
 	set_exec_queue_killed(q);
 	__suspend_fence_signal(q);
+
 
 	/*
 	* We eagerly send a message to ourselves to disable scheduling, as the
@@ -2229,7 +2254,7 @@ static void guc_exec_queue_kill(struct xe_exec_queue *q)
 	* cascade of CAT errors and engine resets, which is quite slow. Avoid
 	* this by immediately disabling scheduling outside of the TDR.
 	*/
-	if (kref_read(&q->refcount) && !exec_queue_wedged(q)) {
+	if (!exec_queue_wedged(q)) {
 		struct xe_gpu_scheduler *sched = &q->guc->sched;
 
 		xe_sched_msg_lock(sched);

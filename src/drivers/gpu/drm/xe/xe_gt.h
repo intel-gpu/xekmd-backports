@@ -157,7 +157,7 @@ static inline bool xe_gt_recovery_pending(struct xe_gt *gt)
  */
 static inline bool xe_gt_has_multi_queue(const struct xe_gt *gt)
 {
-       return gt && gt->info.multi_queue_engine_class_mask;
+	return gt && gt->info.multi_queue_engine_class_mask;
 }
 
 #endif

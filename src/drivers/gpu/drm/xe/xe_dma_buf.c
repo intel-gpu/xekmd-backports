@@ -227,6 +227,11 @@ static const struct dma_buf_ops xe_dmabuf_ops = {
 	.vunmap = drm_gem_dmabuf_vunmap,
 };
 
+bool xe_dma_buf_is_xe_exporter(const struct dma_buf *dma_buf)
+{
+	return dma_buf && dma_buf->ops == &xe_dmabuf_ops;
+}
+
 struct dma_buf *xe_gem_prime_export(struct drm_gem_object *obj, int flags)
 {
 	struct xe_bo *bo = gem_to_xe_bo(obj);

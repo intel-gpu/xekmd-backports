@@ -63,3 +63,60 @@ AC_DEFUN([AC_DRM_GEM_GPUVA_LOCK_DEP_MAP_NOT_PRESENT], [
                 ])
         ])
 ])
+
+dnl #
+dnl # v6.10-7eabaa892d9 drm/gem: Add evict() callback to drm_gem_object_funcs
+dnl #
+AC_DEFUN([AC_DRM_GEM_OBJECT_FUNCS_EVICT_NOT_PRESENT], [
+        AC_KERNEL_DO_BACKGROUND([
+                AC_KERNEL_TRY_COMPILE([
+                        #include <drm/drm_gem.h>
+                ],[
+                        struct drm_gem_object_funcs f;
+                        f.evict = NULL;
+                        (void)f;
+                ],[
+                ],[
+                        AC_DEFINE(BPM_DRM_GEM_OBJECT_FUNCS_EVICT_NOT_PRESENT, 1,
+                                [struct drm_gem_object_funcs lacks evict callback])
+                ])
+        ])
+])
+
+dnl #
+dnl # v6.10-686b21b5f6c drm: Add fdinfo memory stats
+dnl #
+AC_DEFUN([AC_DRM_GEM_OBJECT_FUNCS_STATUS_NOT_PRESENT], [
+        AC_KERNEL_DO_BACKGROUND([
+                AC_KERNEL_TRY_COMPILE([
+                        #include <drm/drm_gem.h>
+                ],[
+                        struct drm_gem_object_funcs f;
+                        f.status = NULL;
+                        (void)f;
+                ],[
+                ],[
+                        AC_DEFINE(BPM_DRM_GEM_OBJECT_FUNCS_STATUS_NOT_PRESENT, 1,
+                                [struct drm_gem_object_funcs lacks status callback])
+                ])
+        ])
+])
+
+dnl #
+dnl # v6.10-553c84892bac drm/drm_file: Add DRM obj's RSS reporting function for fdinfo
+dnl #
+AC_DEFUN([AC_DRM_GEM_OBJECT_FUNCS_RSS_NOT_PRESENT], [
+        AC_KERNEL_DO_BACKGROUND([
+                AC_KERNEL_TRY_COMPILE([
+                        #include <drm/drm_gem.h>
+                ],[
+                        struct drm_gem_object_funcs f;
+                        f.rss = NULL;
+                        (void)f;
+                ],[
+                ],[
+                        AC_DEFINE(BPM_DRM_GEM_OBJECT_FUNCS_RSS_NOT_PRESENT, 1,
+                                [struct drm_gem_object_funcs lacks rss callback])
+                ])
+        ])
+])

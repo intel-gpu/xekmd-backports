@@ -194,6 +194,7 @@ struct drm_gem_object_funcs {
 	 */
 	int (*mmap)(struct drm_gem_object *obj, struct vm_area_struct *vma);
 
+#ifndef BPM_DRM_GEM_OBJECT_FUNCS_EVICT_NOT_PRESENT
 	/**
 	 * @evict:
 	 *
@@ -204,7 +205,9 @@ struct drm_gem_object_funcs {
 	 * This callback is optional.
 	 */
 	int (*evict)(struct drm_gem_object *obj);
+#endif
 
+#ifndef BPM_DRM_GEM_OBJECT_FUNCS_STATUS_NOT_PRESENT
 	/**
 	 * @status:
 	 *
@@ -217,7 +220,9 @@ struct drm_gem_object_funcs {
 	 * Called by drm_show_memory_stats().
 	 */
 	enum drm_gem_object_status (*status)(struct drm_gem_object *obj);
+#endif
 
+#ifndef BPM_DRM_GEM_OBJECT_FUNCS_RSS_NOT_PRESENT
 	/**
 	 * @rss:
 	 *
@@ -226,6 +231,7 @@ struct drm_gem_object_funcs {
 	 * Called by drm_show_memory_stats().
 	 */
 	size_t (*rss)(struct drm_gem_object *obj);
+#endif
 
 	/**
 	 * @vm_ops:

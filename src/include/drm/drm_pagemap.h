@@ -257,13 +257,7 @@ struct drm_pagemap *drm_pagemap_create(struct drm_device *drm,
 
 struct drm_pagemap *drm_pagemap_page_to_dpagemap(struct page *page);
 
-#ifdef BPM_DRM_PAGEMAP_PUT_NOT_PRESENT
-static inline void drm_pagemap_put(struct drm_pagemap *dpagemap)
-{
-}
-#else
 void drm_pagemap_put(struct drm_pagemap *dpagemap);
-#endif
 
 #else
 

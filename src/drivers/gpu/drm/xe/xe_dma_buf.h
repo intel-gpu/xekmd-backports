@@ -8,8 +8,11 @@
 
 #include <drm/drm_gem.h>
 
+struct dma_buf;
+
 struct dma_buf *xe_gem_prime_export(struct drm_gem_object *obj, int flags);
 struct drm_gem_object *xe_gem_prime_import(struct drm_device *dev,
 					   struct dma_buf *dma_buf);
+bool xe_dma_buf_is_xe_exporter(const struct dma_buf *dma_buf);
 
 #endif

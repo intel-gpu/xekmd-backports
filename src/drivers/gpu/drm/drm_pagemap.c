@@ -1015,7 +1015,6 @@ EXPORT_SYMBOL(drm_pagemap_init);
  * Puts a struct drm_pagemap reference and frees the drm_pagemap object
  * if the refount reaches zero.
  */
-#ifndef BPM_DRM_PAGEMAP_PUT_NOT_PRESENT
 void drm_pagemap_put(struct drm_pagemap *dpagemap)
 {
 	if (likely(dpagemap)) {
@@ -1024,7 +1023,6 @@ void drm_pagemap_put(struct drm_pagemap *dpagemap)
 	}
 }
 EXPORT_SYMBOL(drm_pagemap_put);
-#endif
 
 /**
  * drm_pagemap_evict_to_ram() - Evict GPU SVM range to RAM

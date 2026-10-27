@@ -1855,8 +1855,18 @@ static void xe_ttm_bo_destroy(struct ttm_buffer_object *ttm_bo)
 	struct xe_tile *tile;
 	u8 id;
 
-	if (bo->ttm.base.import_attach)
+	if (bo->ttm.base.import_attach) {
+#ifdef BPM_DMA_RESV_USAGE_NOT_PRESENT
+		struct dma_buf *imported_dma_buf = bo->ttm.base.import_attach->dmabuf;
+
+		if (!xe_dma_buf_is_xe_exporter(imported_dma_buf)) {
+			dma_resv_lock(bo->ttm.base.resv, NULL);
+			dma_resv_recover_ptr(bo->ttm.base.resv);
+			dma_resv_unlock(bo->ttm.base.resv);
+		}
+#endif
 		drm_prime_gem_destroy(&bo->ttm.base, NULL);
+	}
 	if (bo->dma_buf)
 		dma_buf_put(bo->dma_buf);
 	drm_gem_object_release(&bo->ttm.base);

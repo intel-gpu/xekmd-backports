@@ -1,0 +1,170 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Brian Nguyen <brian3.nguyen@intel.com>
+Date: Mon, 28 Sep 2026 22:22:42 +0000
+Subject: [PATCH] drm/xe: Implement print vfunc for page fault info logging
+
+Add a print vfunc to xe_pagefault_ops so different producer backends can
+log specific relevant debug info while keeping the consumer layer free
+of potential backend-specific formatting logic.
+
+Consumer-specific error prints are handled by passing as input into
+the vfunc.
+
+v2:
+ - Decode producer specific fields for print message. (Matthew)
+ - Combine consumer and producer prints to one print call. (Sashiko)
+
+v3:
+ - Change assert to WARN_ON_ONCE. (Matthew)
+
+Suggested-by: Stuart Summers <stuart.summers@intel.com>
+Signed-off-by: Brian Nguyen <brian3.nguyen@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260928222241.3815153-2-brian3.nguyen@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(backported from commit 965f624349945ad15c86f44c72fafa11ed962794 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_pagefault.c   | 32 +++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_pagefault.c       | 37 ++++---------------------
+ drivers/gpu/drm/xe/xe_pagefault_types.h | 10 +++++++
+ 3 files changed, 48 insertions(+), 31 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_pagefault.c b/drivers/gpu/drm/xe/xe_guc_pagefault.c
+index df237fd40..e65e4962a 100644
+--- a/drivers/gpu/drm/xe/xe_guc_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_guc_pagefault.c
+@@ -4,9 +4,11 @@
+  */
+ 
+ #include "abi/guc_actions_abi.h"
++#include "xe_gt_printk.h"
+ #include "xe_guc.h"
+ #include "xe_guc_ct.h"
+ #include "xe_guc_pagefault.h"
++#include "xe_hw_engine.h"
+ #include "xe_pagefault.h"
+ #include "xe_pagefault_types.h"
+ 
+@@ -68,10 +70,40 @@ static void guc_ack_fault_end(void *private)
+ 	xe_guc_ct_unlock(&guc->ct);
+ }
+ 
++static void xe_guc_pagefault_print(struct xe_pagefault *pf,
++				   const char *err_str)
++{
++	const u32 *msg = pf->producer.msg;
++	u32 engine_class = FIELD_GET(PFD_ENG_CLASS, msg[0]);
++
++	xe_gt_info(pf->gt, "\n\tASID: %lu\n"
++		   "\tFaulted Address: 0x%08lx%08lx\n"
++		   "\tFaultType: %lu\n"
++		   "\tAccessType: %lu\n"
++		   "\tFaultLevel: %lu\n"
++		   "\tEngineClass: %u %s\n"
++		   "\tEngineInstance: %lu\n"
++		   "\tSRCID: 0x%02lx\n"
++		   "\tError: %s\n",
++		   FIELD_GET(PFD_ASID, msg[1]),
++		   FIELD_GET(PFD_VIRTUAL_ADDR_HI, msg[3]),
++		   FIELD_GET(PFD_VIRTUAL_ADDR_LO, msg[2]) <<
++		   PFD_VIRTUAL_ADDR_LO_SHIFT,
++		   FIELD_GET(PFD_FAULT_TYPE, msg[2]),
++		   FIELD_GET(PFD_ACCESS_TYPE, msg[2]),
++		   FIELD_GET(PFD_FAULT_LEVEL, msg[0]),
++		   engine_class,
++		   xe_hw_engine_class_to_str(engine_class),
++		   FIELD_GET(PFD_ENG_INSTANCE, msg[0]),
++		   FIELD_GET(PFD_SRC_ID, msg[0]),
++		   err_str);
++}
++
+ static const struct xe_pagefault_ops guc_pagefault_ops = {
+ 	.ack_fault_begin = guc_ack_fault_begin,
+ 	.ack_fault = guc_ack_fault,
+ 	.ack_fault_end = guc_ack_fault_end,
++	.print = xe_guc_pagefault_print,
+ };
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
+index c4aafdbdb..46ff7d6bc 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_pagefault.c
+@@ -13,7 +13,6 @@
+ #include "xe_gt_printk.h"
+ #include "xe_gt_types.h"
+ #include "xe_gt_stats.h"
+-#include "xe_hw_engine.h"
+ #include "xe_log.h"
+ #include "xe_pagefault.h"
+ #include "xe_pagefault_types.h"
+@@ -607,36 +606,12 @@ static const char *xe_pagefault_error_to_str(enum xe_pagefault_error error)
+ 
+ static void xe_pagefault_print(struct xe_pagefault *pf)
+ {
+-	u8 engine_class = FIELD_GET(XE_PAGEFAULT_ENGINE_CLASS_MASK,
+-				    pf->consumer.engine_class_instance);
+-	u64 addr = xe_pagefault_addr(pf);
+-
+-	xe_gt_info(pf->gt, "\n\tASID: %lu\n"
+-		   "\tFaulted Address: 0x%08x%08x\n"
+-		   "\tFaultType: %lu\n"
+-		   "\tAccessType: %lu\n"
+-		   "\tFaultLevel: %lu\n"
+-		   "\tEngineClass: %d %s\n"
+-		   "\tEngineInstance: %lu\n"
+-		   "\tSRCID: 0x%02lx\n"
+-		   "\tError: %s\n",
+-		   FIELD_GET(XE_PAGEFAULT_ASID_MASK,
+-			     pf->consumer.id),
+-		   upper_32_bits(addr),
+-		   lower_32_bits(addr),
+-		   FIELD_GET(XE_PAGEFAULT_TYPE_MASK,
+-			     pf->consumer.fault_type_level),
+-		   FIELD_GET(XE_PAGEFAULT_ACCESS_TYPE_MASK,
+-			     pf->consumer.access_type),
+-		   FIELD_GET(XE_PAGEFAULT_LEVEL_MASK,
+-			     pf->consumer.fault_type_level),
+-		   engine_class,
+-		   xe_hw_engine_class_to_str(engine_class),
+-		   FIELD_GET(XE_PAGEFAULT_ENGINE_INSTANCE_MASK,
+-			     pf->consumer.engine_class_instance),
+-		   FIELD_GET(XE_PAGEFAULT_SRCID_MASK,
+-			     pf->consumer.id),
+-		   xe_pagefault_error_to_str(xe_pagefault_get_error(pf)));
++	enum xe_pagefault_error err = xe_pagefault_get_error(pf);
++
++	if (WARN_ON_ONCE(!pf->producer.ops->print))
++		return;
++
++	pf->producer.ops->print(pf, xe_pagefault_error_to_str(err));
+ }
+ 
+ static void xe_pagefault_save_to_vm(struct xe_device *xe, struct xe_pagefault *pf)
+diff --git a/drivers/gpu/drm/xe/xe_pagefault_types.h b/drivers/gpu/drm/xe/xe_pagefault_types.h
+index 8ae6b9848..ee467117a 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault_types.h
++++ b/drivers/gpu/drm/xe/xe_pagefault_types.h
+@@ -139,6 +139,16 @@ struct xe_pagefault_ops {
+ 	 * Page fault producer ends acknowledgment from the consumer.
+ 	 */
+ 	void (*ack_fault_end)(void *private);
++	/**
++	 * @print: Print pagefault info
++	 * @pf: Page fault
++	 * @err_str: Consumer servicing error string
++	 *
++	 * Print pagefault identification fields decoded from producer,
++	 * along with consumer-specific @err_str prints.
++	 * Must be implemented by all producers.
++	 */
++	void (*print)(struct xe_pagefault *pf, const char *err_str);
+ };
+ 
+ /**
+-- 
+2.43.0
+

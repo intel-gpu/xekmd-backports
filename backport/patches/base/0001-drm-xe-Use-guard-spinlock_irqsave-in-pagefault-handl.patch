@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Tue, 11 Aug 2026 22:09:04 +0200
+Subject: [PATCH] drm/xe: Use guard(spinlock_irqsave) in pagefault handler
+
+It is safer and easier to use guard() instead of explicit lock
+unlock calls.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260811200906.10400-2-michal.wajdeczko@intel.com
+(cherry-picked from commit bcd8734f2afeb1bfb81f06e5af0e49a3573e0873 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pagefault.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
+index c3634981b..15d815478 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_pagefault.c
+@@ -873,10 +873,9 @@ static int xe_pagefault_work_index(struct xe_device *xe)
+ int xe_pagefault_handler(struct xe_device *xe, struct xe_pagefault *pf)
+ {
+ 	struct xe_pagefault_queue *pf_queue = &xe->usm.pf_queue;
+-	unsigned long flags;
+ 	bool full;
+ 
+-	spin_lock_irqsave(&pf_queue->lock, flags);
++	guard(spinlock_irqsave)(&pf_queue->lock);
+ 	full = xe_pagefault_queue_full(pf_queue);
+ 	if (!full) {
+ 		struct xe_pagefault *lpf;
+@@ -907,7 +906,6 @@ int xe_pagefault_handler(struct xe_device *xe, struct xe_pagefault *pf)
+ 		drm_warn(&xe->drm,
+ 			 "PageFault Queue full, shouldn't be possible\n");
+ 	}
+-	spin_unlock_irqrestore(&pf_queue->lock, flags);
+ 
+ 	return full ? -ENOSPC : 0;
+ }
+-- 
+2.43.0
+

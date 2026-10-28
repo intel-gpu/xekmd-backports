@@ -1,0 +1,116 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Date: Fri, 31 Jul 2026 12:28:32 +0200
+Subject: [PATCH] drm/xe: export prep_vma_destroy as xe_vm_prep_vma_destroy
+
+Rename and export helper function for wider usage.
+
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry-picked from commit 88ac27a4862165383deacf1047d60ac29af20908 eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vm.c | 29 +++++++++++++++++++----------
+ drivers/gpu/drm/xe/xe_vm.h |  2 ++
+ 2 files changed, 21 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index 0450db644..20d22596b 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -2485,8 +2485,17 @@ static const u32 region_to_mem_type[] = {
+ 	XE_PL_VRAM1,
+ };
+ 
+-static void prep_vma_destroy(struct xe_vm *vm, struct xe_vma *vma,
+-			     bool post_commit)
++/**
++ * xe_vm_prep_vma_destroy - Prepare vma to be destroyed.
++ * @vm: the vm vma belongs to
++ * @vma: vma to be removed
++ * @post_commit: if to remove vma from gpuvm tree
++ *
++ * Marks vma as destroyed and if post_commit is true
++ * also removes it from gpuvm tree.
++ */
++void xe_vm_prep_vma_destroy(struct xe_vm *vm, struct xe_vma *vma,
++			    bool post_commit)
+ {
+ 	xe_svm_notifier_lock(vm);
+ 	vma->gpuva.flags |= XE_VMA_DESTROYED;
+@@ -2817,7 +2826,7 @@ static struct xe_vma *new_vma(struct xe_vm *vm, struct drm_gpuva_op_map *op,
+ 			if (!bo->vm) {
+ 				err = add_preempt_fences(vm, bo);
+ 				if (err) {
+-					prep_vma_destroy(vm, vma, false);
++					xe_vm_prep_vma_destroy(vm, vma, false);
+ 					xe_vma_destroy(vma, NULL);
+ 				}
+ 			}
+@@ -2844,7 +2853,7 @@ static struct xe_vma *new_vma(struct xe_vm *vm, struct drm_gpuva_op_map *op,
+ 		}
+ 	}
+ 	if (err) {
+-		prep_vma_destroy(vm, vma, false);
++		xe_vm_prep_vma_destroy(vm, vma, false);
+ 		xe_vma_destroy_unlocked(vma);
+ 		vma = ERR_PTR(err);
+ 	}
+@@ -2905,8 +2914,8 @@ static int xe_vma_op_commit(struct xe_vm *vm, struct xe_vma_op *op)
+ 
+ 		xe_vm_assert_write_mode_or_garbage_collector(vm);
+ 
+-		prep_vma_destroy(vm, gpuva_to_vma(op->base.remap.unmap->va),
+-				 true);
++		xe_vm_prep_vma_destroy(vm, gpuva_to_vma(op->base.remap.unmap->va),
++				       true);
+ 		op->flags |= XE_VMA_OP_COMMITTED;
+ 
+ 		if (op->remap.prev) {
+@@ -2941,7 +2950,7 @@ static int xe_vma_op_commit(struct xe_vm *vm, struct xe_vma_op *op)
+ 	case DRM_GPUVA_OP_UNMAP:
+ 		xe_vm_assert_write_mode_or_garbage_collector(vm);
+ 
+-		prep_vma_destroy(vm, gpuva_to_vma(op->base.unmap.va), true);
++		xe_vm_prep_vma_destroy(vm, gpuva_to_vma(op->base.unmap.va), true);
+ 		op->flags |= XE_VMA_OP_COMMITTED;
+ 		break;
+ 	case DRM_GPUVA_OP_PREFETCH:
+@@ -3185,7 +3194,7 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
+ 
+ 		if (op->map.vma) {
+ 			xe_eudebug_free_op_metadata(op);
+-			prep_vma_destroy(vm, op->map.vma, post_commit);
++			xe_vm_prep_vma_destroy(vm, op->map.vma, post_commit);
+ 			xe_vma_destroy_unlocked(op->map.vma);
+ 		}
+ 		break;
+@@ -3211,11 +3220,11 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
+ 		xe_vm_assert_write_mode_or_garbage_collector(vm);
+ 
+ 		if (op->remap.prev) {
+-			prep_vma_destroy(vm, op->remap.prev, prev_post_commit);
++			xe_vm_prep_vma_destroy(vm, op->remap.prev, prev_post_commit);
+ 			xe_vma_destroy_unlocked(op->remap.prev);
+ 		}
+ 		if (op->remap.next) {
+-			prep_vma_destroy(vm, op->remap.next, next_post_commit);
++			xe_vm_prep_vma_destroy(vm, op->remap.next, next_post_commit);
+ 			xe_vma_destroy_unlocked(op->remap.next);
+ 		}
+ 		if (vma) {
+diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
+index f4393c57d..7dcf5c98c 100644
+--- a/drivers/gpu/drm/xe/xe_vm.h
++++ b/drivers/gpu/drm/xe/xe_vm.h
+@@ -444,6 +444,8 @@ void xe_vma_mem_attr_copy(struct xe_vma_mem_attr *to, struct xe_vma_mem_attr *fr
+ 
+ int xe_vm_insert_vma(struct xe_vm *vm, struct xe_vma *vma);
+ struct xe_vma *xe_vm_create_null_vma(struct xe_vm *vm, u64 addr);
++void xe_vm_prep_vma_destroy(struct xe_vm *vm, struct xe_vma *vma,
++			    bool post_commit);
+ void xe_vm_destroy_vma(struct xe_vma *vma);
+ void xe_vma_destroy(struct xe_vma *vma, struct dma_fence *fence);
+ 
+-- 
+2.43.0
+

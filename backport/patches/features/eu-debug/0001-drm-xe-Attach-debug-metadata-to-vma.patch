@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Sun, 17 Sep 2023 12:53:47 +0200
-Subject: drm/xe: Attach debug metadata to vma
+Subject: [PATCH] drm/xe: Attach debug metadata to vma
 
 Introduces a vm_bind_op extension, enabling users to attach metadata
 objects to each [OP_MAP|OP_MAP_USERPTR] operation. This interface
@@ -14,8 +14,8 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 946f4a15d3d9cb64cc8b422b75e8715386abe14d drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+(backported from commit cf81427dd1a0f6a7cd3e6d0f1cdae2e82057746e eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_debug_metadata.c | 165 +++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_debug_metadata.h |  57 +++++++++
@@ -302,7 +302,7 @@ index a02f02bb7..65d66153a 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 332b5699d..1ecc62bba 100644
+index 1dfaabee9..8db86a451 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -24,6 +24,7 @@
@@ -313,7 +313,7 @@ index 332b5699d..1ecc62bba 100644
  #include "xe_device.h"
  #include "xe_drm_client.h"
  #include "xe_eudebug.h"
-@@ -1101,6 +1102,7 @@ static struct xe_vma *xe_vma_create(struct xe_vm *vm,
+@@ -1159,6 +1160,7 @@ static struct xe_vma *xe_vma_create(struct xe_vm *vm,
  			vma->gpuva.gem.obj = &bo->ttm.base;
  	}
  
@@ -321,15 +321,15 @@ index 332b5699d..1ecc62bba 100644
  	INIT_LIST_HEAD(&vma->combined_links.rebind);
  
  	INIT_LIST_HEAD(&vma->gpuva.gem.entry);
-@@ -1197,6 +1199,7 @@ static void xe_vma_destroy_late(struct xe_vma *vma)
- 		xe_bo_put(bo);
+@@ -1258,6 +1260,7 @@ static void xe_vma_destroy_late(struct xe_vma *vma)
  	}
  
+ 	mutex_destroy(&vma->fault_lock);
 +	xe_eudebug_free_vma_metadata(vma);
  	xe_vma_free(vma);
  }
  
-@@ -2495,6 +2498,8 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
+@@ -2553,6 +2556,8 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
  			op->map.pat_index = pat_index;
  			op->map.invalidate_on_bind =
  				__xe_vm_needs_clear_scratch_pages(vm, flags);
@@ -338,7 +338,7 @@ index 332b5699d..1ecc62bba 100644
  		} else if (__op->op == DRM_GPUVA_OP_PREFETCH) {
  			struct xe_vma *vma = gpuva_to_vma(op->base.prefetch.va);
  			struct xe_tile *tile;
-@@ -2816,6 +2821,8 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
+@@ -2894,6 +2899,8 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
  			if (IS_ERR(vma))
  				return PTR_ERR(vma);
  
@@ -347,7 +347,7 @@ index 332b5699d..1ecc62bba 100644
  			op->map.vma = vma;
  			if (((op->map.immediate || !xe_vm_in_fault_mode(vm)) &&
  			     !(op->map.vma_flags & XE_VMA_SYSTEM_ALLOCATOR)) ||
-@@ -2858,6 +2865,8 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
+@@ -2936,6 +2943,8 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
  				if (IS_ERR(vma))
  					return PTR_ERR(vma);
  
@@ -356,7 +356,7 @@ index 332b5699d..1ecc62bba 100644
  				op->remap.prev = vma;
  
  				/*
-@@ -2888,6 +2897,14 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
+@@ -2966,6 +2975,14 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
  				if (IS_ERR(vma))
  					return PTR_ERR(vma);
  
@@ -371,15 +371,15 @@ index 332b5699d..1ecc62bba 100644
  				op->remap.next = vma;
  
  				/*
-@@ -2965,6 +2982,7 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
- 	switch (op->base.op) {
- 	case DRM_GPUVA_OP_MAP:
+@@ -3045,6 +3062,7 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
+ 		xe_vm_assert_write_mode_or_garbage_collector(vm);
+ 
  		if (op->map.vma) {
 +			xe_eudebug_free_op_metadata(op);
  			prep_vma_destroy(vm, op->map.vma, post_commit);
  			xe_vma_destroy_unlocked(op->map.vma);
  		}
-@@ -3382,6 +3400,58 @@ static int vm_ops_setup_tile_args(struct xe_vm *vm, struct xe_vma_ops *vops)
+@@ -3566,6 +3584,58 @@ static int vm_ops_setup_tile_args(struct xe_vm *vm, struct xe_vma_ops *vops)
  	}
  
  	return number_tiles;
@@ -438,7 +438,7 @@ index 332b5699d..1ecc62bba 100644
  }
  
  static struct dma_fence *ops_execute(struct xe_vm *vm,
-@@ -3601,7 +3671,9 @@ ALLOW_ERROR_INJECTION(vm_bind_ioctl_ops_execute, ERRNO);
+@@ -3785,7 +3855,9 @@ ALLOW_ERROR_INJECTION(vm_bind_ioctl_ops_execute, ERRNO);
  #define XE_64K_PAGE_MASK 0xffffull
  #define ALL_DRM_XE_SYNCS_FLAGS (DRM_XE_SYNCS_FLAG_WAIT_FOR_OP)
  
@@ -449,7 +449,7 @@ index 332b5699d..1ecc62bba 100644
  				    struct drm_xe_vm_bind *args,
  				    struct drm_xe_vm_bind_op **bind_ops)
  {
-@@ -3651,6 +3723,7 @@ static int vm_bind_ioctl_check_args(struct xe_device *xe, struct xe_vm *vm,
+@@ -3835,6 +3907,7 @@ static int vm_bind_ioctl_check_args(struct xe_device *xe, struct xe_vm *vm,
  		bool is_cpu_addr_mirror = flags &
  			DRM_XE_VM_BIND_FLAG_CPU_ADDR_MIRROR;
  		bool is_decompress = flags & DRM_XE_VM_BIND_FLAG_DECOMPRESS;
@@ -457,7 +457,7 @@ index 332b5699d..1ecc62bba 100644
  		u16 pat_index = (*bind_ops)[i].pat_index;
  		u16 coh_mode;
  		bool comp_en;
-@@ -3744,6 +3817,13 @@ static int vm_bind_ioctl_check_args(struct xe_device *xe, struct xe_vm *vm,
+@@ -3928,6 +4001,13 @@ static int vm_bind_ioctl_check_args(struct xe_device *xe, struct xe_vm *vm,
  			err = -EOPNOTSUPP;
  			goto free_bind_ops;
  		}
@@ -471,7 +471,7 @@ index 332b5699d..1ecc62bba 100644
  	}
  
  	return 0;
-@@ -3885,7 +3965,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -4069,7 +4149,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  	if (XE_IOCTL_DBG(xe, !vm))
  		return -EINVAL;
  
@@ -480,7 +480,7 @@ index 332b5699d..1ecc62bba 100644
  	if (err)
  		goto put_vm;
  
-@@ -4023,11 +4103,17 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -4207,11 +4287,17 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		u64 obj_offset = bind_ops[i].obj_offset;
  		u32 prefetch_region = bind_ops[i].prefetch_mem_region_instance;
  		u16 pat_index = bind_ops[i].pat_index;
@@ -499,7 +499,7 @@ index 332b5699d..1ecc62bba 100644
  			err = PTR_ERR(ops[i]);
  			ops[i] = NULL;
  			goto unwind_ops;
-@@ -4763,6 +4849,7 @@ static int xe_vm_alloc_vma(struct xe_vm *vm,
+@@ -4962,6 +5048,7 @@ static int xe_vm_alloc_vma(struct xe_vm *vm,
  			if (__op->op == DRM_GPUVA_OP_MAP) {
  				op->map.vma_flags |= vma_flags & XE_VMA_CREATE_MASK;
  				op->map.pat_index = default_pat;
@@ -507,7 +507,7 @@ index 332b5699d..1ecc62bba 100644
  			}
  		} else {
  			if (__op->op == DRM_GPUVA_OP_REMAP) {
-@@ -4783,6 +4870,7 @@ static int xe_vm_alloc_vma(struct xe_vm *vm,
+@@ -4982,6 +5069,7 @@ static int xe_vm_alloc_vma(struct xe_vm *vm,
  				 * unmapping.
  				 */
  				op->map.vma_flags |= vma_flags & XE_VMA_CREATE_MASK;
@@ -516,7 +516,7 @@ index 332b5699d..1ecc62bba 100644
  		}
  		print_op(vm->xe, __op);
 diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
-index 61850fb72..ec0f4d444 100644
+index 3e36358dd..52540b036 100644
 --- a/drivers/gpu/drm/xe/xe_vm_types.h
 +++ b/drivers/gpu/drm/xe/xe_vm_types.h
 @@ -109,6 +109,14 @@ struct xe_vma_mem_attr {
@@ -534,7 +534,7 @@ index 61850fb72..ec0f4d444 100644
  struct xe_vma {
  	/** @gpuva: Base GPUVA object */
  	struct drm_gpuva gpuva;
-@@ -174,6 +182,11 @@ struct xe_vma {
+@@ -180,6 +188,11 @@ struct xe_vma {
  	 * and encoding of the PTEs for this vma.
  	 */
  	struct xe_vma_mem_attr attr;
@@ -546,7 +546,7 @@ index 61850fb72..ec0f4d444 100644
  };
  
  /**
-@@ -434,6 +447,10 @@ struct xe_vma_op_map {
+@@ -452,6 +465,10 @@ struct xe_vma_op_map {
  	bool request_decompress;
  	/** @pat_index: The pat index to use for this operation. */
  	u16 pat_index;
@@ -557,7 +557,7 @@ index 61850fb72..ec0f4d444 100644
  };
  
  /** struct xe_vma_op_remap - VMA remap operation */
-@@ -565,4 +582,14 @@ struct xe_vma_ops {
+@@ -586,4 +603,14 @@ struct xe_vma_ops {
  #endif
  };
  
@@ -573,10 +573,10 @@ index 61850fb72..ec0f4d444 100644
 +
  #endif
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 0eeb53dbc..9d519ea80 100644
+index a87d9ee2c..3b8ee9b21 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
-@@ -1021,6 +1021,23 @@ struct drm_xe_vm_destroy {
+@@ -1024,6 +1024,23 @@ struct drm_xe_vm_destroy {
  	__u64 reserved[2];
  };
  
@@ -600,7 +600,7 @@ index 0eeb53dbc..9d519ea80 100644
  /**
   * struct drm_xe_vm_bind_op - run bind operations
   *
-@@ -1080,6 +1097,7 @@ struct drm_xe_vm_destroy {
+@@ -1084,6 +1101,7 @@ struct drm_xe_vm_destroy {
   *    the memory region advised by madvise.
   */
  struct drm_xe_vm_bind_op {

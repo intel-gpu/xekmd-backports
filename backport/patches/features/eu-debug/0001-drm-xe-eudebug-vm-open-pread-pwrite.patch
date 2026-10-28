@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Mon, 26 Jun 2023 13:05:02 +0300
-Subject: drm/xe/eudebug: vm open/pread/pwrite
+Subject: [PATCH] drm/xe/eudebug: vm open/pread/pwrite
 
 Debugger needs access to the client's vm to read and write. For
 example inspecting ISA/ELF and setting up breakpoints.
@@ -32,8 +32,8 @@ v4: - offset as unsigned long (Thomas)
 Cc: Matthew Brost <matthew.brost@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 1f5c37a54b2c4018c73d7735bdde057b1804a897 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+(cherry-picked from commit 77aa81e63ce084c4734868e1dc8f631647482265 eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h |  24 ++
  drivers/gpu/drm/xe/xe_eudebug.c      | 446 +++++++++++++++++++++++++++
@@ -41,10 +41,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  3 files changed, 489 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index d55576ba8..ceb394c03 100644
+index d6d8b67e0..0265243b8 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -625,6 +625,30 @@
+@@ -631,6 +631,30 @@
  #define   CCS_MODE_CSLICE(cslice, ccs) \
  	((ccs) << ((cslice) * CCS_MODE_CSLICE_WIDTH))
  
@@ -76,7 +76,7 @@ index d55576ba8..ceb394c03 100644
  #define   RCU_DEBUG_1_ENGINE_STATUS		REG_GENMASK(2, 0)
  #define   RCU_DEBUG_1_RUNALONE_ACTIVE		REG_BIT(2)
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index ebd8551c4..99449462d 100644
+index cf5f24a8b..e1ba49d0c 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -5,9 +5,12 @@
@@ -100,7 +100,7 @@ index ebd8551c4..99449462d 100644
  #include "xe_device.h"
  #include "xe_eudebug.h"
  #include "xe_eudebug_types.h"
-@@ -1242,6 +1246,8 @@ static long xe_eudebug_eu_control(struct xe_eudebug *d, const u64 arg)
+@@ -1259,6 +1263,8 @@ static long xe_eudebug_eu_control(struct xe_eudebug *d, const u64 arg)
  	return ret;
  }
  
@@ -109,7 +109,7 @@ index ebd8551c4..99449462d 100644
  static long xe_eudebug_ioctl(struct file *file,
  			     unsigned int cmd,
  			     unsigned long arg)
-@@ -1266,6 +1272,11 @@ static long xe_eudebug_ioctl(struct file *file,
+@@ -1283,6 +1289,11 @@ static long xe_eudebug_ioctl(struct file *file,
  		ret = xe_eudebug_ack_event_ioctl(d, cmd, arg);
  		eu_dbg(d, "ioctl cmd=EVENT_ACK ret=%ld\n", ret);
  		break;
@@ -121,7 +121,7 @@ index ebd8551c4..99449462d 100644
  	default:
  		ret = -EINVAL;
  	}
-@@ -2976,3 +2987,438 @@ static void discovery_work_fn(struct work_struct *work)
+@@ -2988,3 +2999,438 @@ static void discovery_work_fn(struct work_struct *work)
  
  	xe_eudebug_put(d);
  }
@@ -392,7 +392,7 @@ index ebd8551c4..99449462d 100644
 +			     timeout_us, NULL, false);
 +out:
 +	if (!(psmi_ctrl & IDLE_MSG_DISABLE))
-+		xe_mmio_write32(&gt->mmio, psmi_addr, REG_MASKED_FIELD_ENABLE(IDLE_MSG_DISABLE));
++		xe_mmio_write32(&gt->mmio, psmi_addr, REG_MASKED_FIELD_DISABLE(IDLE_MSG_DISABLE));
 +
 +	mutex_unlock(&d->eu_lock);
 +	xe_force_wake_put(gt_to_fw(gt), fw_ref);

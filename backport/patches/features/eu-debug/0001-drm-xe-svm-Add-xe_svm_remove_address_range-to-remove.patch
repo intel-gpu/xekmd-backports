@@ -1,0 +1,124 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Date: Tue, 29 Sep 2026 18:16:27 +0200
+Subject: [PATCH] drm/xe/svm: Add xe_svm_remove_address_range() to remove whole
+ range
+
+The xe_svm_unmap_address_range() removes only partial range.
+This variant is unconditional.
+
+Assisted-by: GitHub-Copilot:claude-opus-5
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry picked from commit a35278ef5b27a15564f8bd422450311988bebb90)
+(cherry picked from commit 3ed85992c3be278363d2cd1f6a5ed14cce68d1c8)
+(cherry-picked from commit f15d30a9cb9e75775dd0531c4822c98e99deb48b eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_svm.c | 53 ++++++++++++++++++++++++++++++-------
+ drivers/gpu/drm/xe/xe_svm.h |  7 +++++
+ 2 files changed, 50 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_svm.c b/drivers/gpu/drm/xe/xe_svm.c
+index 75ab51a97..f5f083ed8 100644
+--- a/drivers/gpu/drm/xe/xe_svm.c
++++ b/drivers/gpu/drm/xe/xe_svm.c
+@@ -1515,6 +1515,21 @@ bool xe_svm_has_mapping(struct xe_vm *vm, u64 start, u64 end)
+ 	return drm_gpusvm_has_mapping(&vm->svm.gpusvm, start, end);
+ }
+ 
++static void __xe_svm_range_remove(struct xe_vm *vm,
++				  struct drm_gpusvm_range *range)
++{
++	if (IS_DGFX(vm->xe) && xe_svm_range_in_vram(to_xe_range(range)))
++		drm_gpusvm_range_evict(&vm->svm.gpusvm, range);
++	drm_gpusvm_range_get(range);
++	__xe_svm_garbage_collector(vm, to_xe_range(range));
++	if (!list_empty(&to_xe_range(range)->garbage_collector_link)) {
++		spin_lock(&vm->svm.garbage_collector.list_lock);
++		list_del(&to_xe_range(range)->garbage_collector_link);
++		spin_unlock(&vm->svm.garbage_collector.list_lock);
++	}
++	drm_gpusvm_range_put(range);
++}
++
+ /**
+  * xe_svm_unmap_address_range - UNMAP SVM mappings and ranges
+  * @vm: The VM
+@@ -1535,21 +1550,39 @@ void xe_svm_unmap_address_range(struct xe_vm *vm, u64 start, u64 end)
+ 		drm_gpusvm_for_each_range_safe(range, __next, notifier, start, end) {
+ 			if (start > drm_gpusvm_range_start(range) ||
+ 			    end < drm_gpusvm_range_end(range)) {
+-				if (IS_DGFX(vm->xe) && xe_svm_range_in_vram(to_xe_range(range)))
+-					drm_gpusvm_range_evict(&vm->svm.gpusvm, range);
+-				drm_gpusvm_range_get(range);
+-				__xe_svm_garbage_collector(vm, to_xe_range(range));
+-				if (!list_empty(&to_xe_range(range)->garbage_collector_link)) {
+-					spin_lock(&vm->svm.garbage_collector.list_lock);
+-					list_del(&to_xe_range(range)->garbage_collector_link);
+-					spin_unlock(&vm->svm.garbage_collector.list_lock);
+-				}
+-				drm_gpusvm_range_put(range);
++				__xe_svm_range_remove(vm, range);
+ 			}
+ 		}
+ 	}
+ }
+ 
++/**
++ * xe_svm_remove_address_range - Remove every SVM range in an address range
++ * @vm: The VM
++ * @start: start addr
++ * @end: end addr, exclusive
++ *
++ * Unlike xe_svm_unmap_address_range(), which only removes ranges crossing
++ * @start or @end, this removes every range overlapping [@start, @end),
++ * including ranges contained entirely within it. Use it when the address
++ * range stops being backed by a cpu-addr-mirror VMA altogether.
++ *
++ * Caller must hold vm->lock for write.
++ */
++void xe_svm_remove_address_range(struct xe_vm *vm, u64 start, u64 end)
++{
++	struct drm_gpusvm_notifier *notifier, *next;
++
++	lockdep_assert_held_write(&vm->lock);
++
++	drm_gpusvm_for_each_notifier_safe(notifier, next, &vm->svm.gpusvm, start, end) {
++		struct drm_gpusvm_range *range, *__next;
++
++		drm_gpusvm_for_each_range_safe(range, __next, notifier, start, end)
++			__xe_svm_range_remove(vm, range);
++	}
++}
++
+ /**
+  * xe_svm_bo_evict() - SVM evict BO to system memory
+  * @bo: BO to evict
+diff --git a/drivers/gpu/drm/xe/xe_svm.h b/drivers/gpu/drm/xe/xe_svm.h
+index 2a0dc0d12..b5903e31d 100644
+--- a/drivers/gpu/drm/xe/xe_svm.h
++++ b/drivers/gpu/drm/xe/xe_svm.h
+@@ -142,6 +142,8 @@ u64 xe_svm_find_vma_start(struct xe_vm *vm, u64 addr, u64 end,  struct xe_vma *v
+ 
+ void xe_svm_unmap_address_range(struct xe_vm *vm, u64 start, u64 end);
+ 
++void xe_svm_remove_address_range(struct xe_vm *vm, u64 start, u64 end);
++
+ u8 xe_svm_ranges_zap_ptes_in_range(struct xe_vm *vm, u64 start, u64 end);
+ 
+ struct drm_pagemap *xe_vma_resolve_pagemap(struct xe_vma *vma, struct xe_tile *tile);
+@@ -395,6 +397,11 @@ void xe_svm_unmap_address_range(struct xe_vm *vm, u64 start, u64 end)
+ {
+ }
+ 
++static inline
++void xe_svm_remove_address_range(struct xe_vm *vm, u64 start, u64 end)
++{
++}
++
+ static inline
+ u8 xe_svm_ranges_zap_ptes_in_range(struct xe_vm *vm, u64 start, u64 end)
+ {
+-- 
+2.43.0
+

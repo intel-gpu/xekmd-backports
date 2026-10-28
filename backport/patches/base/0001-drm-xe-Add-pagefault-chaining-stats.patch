@@ -1,0 +1,129 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Thu, 6 Aug 2026 11:51:59 -0700
+Subject: [PATCH] drm/xe: Add pagefault chaining stats
+
+Add GT stats to quantify pagefault chaining behavior during fault storms.
+
+Track total chained faults, faults chained directly from the IRQ
+handler, cases where IRQ chaining also drained the queue, chained faults
+that had to be requeued due to range mismatch, and cases where the last
+serviced range allowed immediate ack.
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Link: https://patch.msgid.link/20260806185202.3922432-10-matthew.brost@intel.com
+(cherry-picked from commit d67f04046641b7aa1607d66111581226d4da681f linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_stats.c       |  5 +++++
+ drivers/gpu/drm/xe/xe_gt_stats_types.h | 16 ++++++++++++++++
+ drivers/gpu/drm/xe/xe_pagefault.c      | 19 +++++++++++++++++--
+ 3 files changed, 38 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_stats.c b/drivers/gpu/drm/xe/xe_gt_stats.c
+index 513fe28c0..f2e77df0f 100644
+--- a/drivers/gpu/drm/xe/xe_gt_stats.c
++++ b/drivers/gpu/drm/xe/xe_gt_stats.c
+@@ -95,6 +95,11 @@ void xe_gt_stats_incr(struct xe_gt *gt, const enum xe_gt_stats_id id, int incr)
+ #define DEF_STAT_STR(ID, name) [XE_GT_STATS_ID_##ID] = name
+ 
+ static const char *const stat_description[__XE_GT_STATS_NUM_IDS] = {
++	DEF_STAT_STR(CHAIN_PAGEFAULT_COUNT, "chain_pagefault_count"),
++	DEF_STAT_STR(CHAIN_IRQ_PAGEFAULT_COUNT, "chain_irq_pagefault_count"),
++	DEF_STAT_STR(CHAIN_DRAIN_IRQ_PAGEFAULT_COUNT, "chain_drain_irq_pagefault_count"),
++	DEF_STAT_STR(CHAIN_MISMATCH_PAGEFAULT_COUNT, "chain_mismatch_pagefault_count"),
++	DEF_STAT_STR(LAST_PAGEFAULT_COUNT, "last_pagefault_count"),
+ 	DEF_STAT_STR(SVM_PAGEFAULT_COUNT, "svm_pagefault_count"),
+ 	DEF_STAT_STR(TLB_INVAL, "tlb_inval_count"),
+ 	DEF_STAT_STR(SVM_TLB_INVAL_COUNT, "svm_tlb_inval_count"),
+diff --git a/drivers/gpu/drm/xe/xe_gt_stats_types.h b/drivers/gpu/drm/xe/xe_gt_stats_types.h
+index a7021a298..ab5506f91 100644
+--- a/drivers/gpu/drm/xe/xe_gt_stats_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_stats_types.h
+@@ -10,6 +10,17 @@
+ 
+ /**
+  * enum xe_gt_stats_id - GT statistics identifiers
++ * @XE_GT_STATS_ID_CHAIN_PAGEFAULT_COUNT: Total page faults chained onto an
++ *   in-flight fault instead of being queued separately.
++ * @XE_GT_STATS_ID_CHAIN_IRQ_PAGEFAULT_COUNT: Page faults chained directly from
++ *   the IRQ handler.
++ * @XE_GT_STATS_ID_CHAIN_DRAIN_IRQ_PAGEFAULT_COUNT: IRQ-handler chained faults
++ *   that also drained the fault queue.
++ * @XE_GT_STATS_ID_CHAIN_MISMATCH_PAGEFAULT_COUNT: Chained faults requeued
++ *   because their fault range did not match the fault they were chained onto.
++ * @XE_GT_STATS_ID_LAST_PAGEFAULT_COUNT: Faults whose range matched the last
++ *   serviced range, allowing an immediate ack.
++ *
+  * @XE_GT_STATS_ID_SVM_PAGEFAULT_COUNT: Total SVM page faults handled.
+  * @XE_GT_STATS_ID_TLB_INVAL: Total GPU Translation Lookaside Buffer (TLB)
+  *   invalidations issued.
+@@ -129,6 +140,11 @@
+  * See Documentation/gpu/xe/xe_gt_stats.rst.
+  */
+ enum xe_gt_stats_id {
++	XE_GT_STATS_ID_CHAIN_PAGEFAULT_COUNT,
++	XE_GT_STATS_ID_CHAIN_IRQ_PAGEFAULT_COUNT,
++	XE_GT_STATS_ID_CHAIN_DRAIN_IRQ_PAGEFAULT_COUNT,
++	XE_GT_STATS_ID_CHAIN_MISMATCH_PAGEFAULT_COUNT,
++	XE_GT_STATS_ID_LAST_PAGEFAULT_COUNT,
+ 	XE_GT_STATS_ID_SVM_PAGEFAULT_COUNT,
+ 	XE_GT_STATS_ID_TLB_INVAL,
+ 	XE_GT_STATS_ID_SVM_TLB_INVAL_COUNT,
+diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
+index 4d7427d6b..bfde93154 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_pagefault.c
+@@ -353,6 +353,8 @@ xe_pagefault_queue_unchain_requeue(struct xe_pagefault_queue *pf_queue,
+ 	xe_assert(xe, pf->consumer.alloc_state ==
+ 		  XE_PAGEFAULT_ALLOC_STATE_CHAINED);
+ 
++	xe_gt_stats_incr(gt, XE_GT_STATS_ID_CHAIN_MISMATCH_PAGEFAULT_COUNT, 1);
++
+ 	pf->consumer.alloc_state = XE_PAGEFAULT_ALLOC_STATE_FREE;
+ 	lpf = xe_pagefault_queue_add(pf_queue, pf);
+ 	if (lpf) {
+@@ -409,6 +411,10 @@ static bool xe_pagefault_try_chain(struct xe_pagefault_queue *pf_queue,
+ 			xe_assert(xe, pf_work->cache.pf->consumer.alloc_state ==
+ 				  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
+ 
++			xe_gt_stats_incr(pf->gt,
++					 XE_GT_STATS_ID_CHAIN_PAGEFAULT_COUNT,
++					 1);
++
+ 			pf->consumer.alloc_state =
+ 				XE_PAGEFAULT_ALLOC_STATE_CHAINED;
+ 			pf->consumer.next = pf_work->cache.pf->consumer.next;
+@@ -591,8 +597,10 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+ 		bool invalidated = false;
+ 
+ 		/* Last fault same address, ack immediately */
+-		if (xe_pagefault_match(pf, cache_start, cache_end, cache_asid))
++		if (xe_pagefault_match(pf, cache_start, cache_end, cache_asid)) {
++			xe_gt_stats_incr(gt, XE_GT_STATS_ID_LAST_PAGEFAULT_COUNT, 1);
+ 			goto ack_fault;
++		}
+ 
+ 		err = xe_pagefault_service(pf);
+ 
+@@ -850,8 +858,15 @@ int xe_pagefault_handler(struct xe_device *xe, struct xe_pagefault *pf)
+ 			lpf->consumer.next = NULL;
+ 
+ 			if (xe_pagefault_try_chain(pf_queue, lpf)) {
+-				if (empty)
++				xe_gt_stats_incr(pf->gt,
++						 XE_GT_STATS_ID_CHAIN_IRQ_PAGEFAULT_COUNT,
++						 1);
++				if (empty) {
++					xe_gt_stats_incr(pf->gt,
++							 XE_GT_STATS_ID_CHAIN_DRAIN_IRQ_PAGEFAULT_COUNT,
++							 1);
+ 					xe_pagefault_queue_advance(pf_queue);
++				}
+ 			} else {
+ 				int work_index = xe_pagefault_work_index(xe);
+ 
+-- 
+2.43.0
+

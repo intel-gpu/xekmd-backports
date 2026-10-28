@@ -23,19 +23,18 @@ Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Acked-by: Matthew Brost <matthew.brost@intel.com> #locking
 Acked-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 72d7c76597410b0add2159092c1ab3283560d1dc drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
-Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+(cherry-picked from commit 1b9f2298efc1f5bcce0cfd074cbcdece04153a25 eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
- drivers/gpu/drm/xe/xe_device.c        |   10 +-
- drivers/gpu/drm/xe/xe_device.h        |   34 +
- drivers/gpu/drm/xe/xe_device_types.h  |    6 +
- drivers/gpu/drm/xe/xe_eudebug.c       |  135 ++-
- drivers/gpu/drm/xe/xe_eudebug_types.h |   10 +-
- 5 files changed, 186 insertions(+), 9 deletions(-)
+ drivers/gpu/drm/xe/xe_device.c        |  10 +-
+ drivers/gpu/drm/xe/xe_device.h        |  34 +++++++
+ drivers/gpu/drm/xe/xe_device_types.h  |   6 ++
+ drivers/gpu/drm/xe/xe_eudebug.c       | 135 +++++++++++++++++++++++++-
+ drivers/gpu/drm/xe/xe_eudebug_types.h |   7 ++
+ 5 files changed, 185 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 491b39c6b..12be747e8 100644
+index 83d726e73..0506cee91 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -241,8 +241,11 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
@@ -115,10 +114,10 @@ index a1127ab7d..8bacb3689 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 5dbab8065..3f18cb734 100644
+index cc7293ef7..aa89c4076 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -648,6 +648,12 @@ struct xe_device {
+@@ -651,6 +651,12 @@ struct xe_device {
  
  		/** @eudebug.available: is the debugging functionality available */
  		bool available;
@@ -366,10 +365,10 @@ index 79b25f6bb..7fb865e3f 100644
 +	xe_eudebug_put(d);
 +}
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index 065082357..0a4f881de 100644
+index 37c81c939..6f5034780 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
-@@ -20,6 +20,7 @@
+@@ -21,6 +21,7 @@
  struct xe_device;
  struct task_struct;
  struct xe_eudebug_event;
@@ -377,16 +376,7 @@ index 065082357..0a4f881de 100644
  
  #define CONFIG_DRM_XE_DEBUGGER_EVENT_QUEUE_SIZE 64
  
-@@ -71,7 +72,7 @@ struct xe_eudebug {
- 	struct kref ref;
- 
- 	/** @rcu: rcu_head for rcu destruction */
--	struct rcu_head rcu;
-+struct rcu_head rcu;
- 
- 	/** @connection_link: our link into the xe_device:eudebug.list */
- 	struct list_head connection_link;
-@@ -98,6 +99,12 @@ struct xe_eudebug {
+@@ -99,6 +100,12 @@ struct xe_eudebug {
  	/** @session: session number for this connection (for logs) */
  	u64 session;
  
@@ -399,14 +389,6 @@ index 065082357..0a4f881de 100644
  	/** @events: kfifo queue of to-be-delivered events */
  	struct {
  		/** @events.lock: guards access to fifo */
-@@ -135,7 +142,6 @@ struct xe_eudebug_event {
- 
- 	/** @seqno: sequence number for ordering */
- 	u64 seqno;
--
- 	/** @reserved: reserved field MBZ */
- 	u64 reserved;
- 
 -- 
 2.43.0
 

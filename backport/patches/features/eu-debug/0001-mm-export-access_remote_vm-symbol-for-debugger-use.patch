@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Wed, 8 Jan 2025 13:19:32 +0200
-Subject: mm: export access_remote_vm symbol for debugger use
+Subject: [PATCH] mm: export access_remote_vm symbol for debugger use
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -24,17 +24,17 @@ Cc: Joonas Lahtinen <joonas.lahtinen@linux.intel.com>
 Cc: Simona Vetter <simona@ffwll.ch>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 32f4488a5e173562c6d2fe9d530133839550dcd5 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+(cherry-picked from commit 3ce9a8e700e70bf189299e76f8f06ba5c66c2d8d eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  mm/memory.c | 1 +
  1 file changed, 1 insertion(+)
 
 diff --git a/mm/memory.c b/mm/memory.c
-index 86a973119..9b7db7ff8 100644
+index 8b0c2c735..d30381da2 100644
 --- a/mm/memory.c
 +++ b/mm/memory.c
-@@ -7160,6 +7160,7 @@ int access_remote_vm(struct mm_struct *mm, unsigned long addr,
+@@ -7302,6 +7302,7 @@ int access_remote_vm(struct mm_struct *mm, unsigned long addr,
  {
  	return __access_remote_vm(mm, addr, buf, len, gup_flags);
  }

@@ -1,0 +1,152 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Date: Wed, 10 Jun 2026 15:32:27 +0200
+Subject: [PATCH] drm/xe/pagefault: export pagefault queue properties
+
+Export pagefault queue related properties for eudebug.
+
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry-picked from commit 5983d61dc6b4101a537f3788b12df2ced0a8ecea eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pagefault.c       | 44 -------------------------
+ drivers/gpu/drm/xe/xe_pagefault.h       | 10 ++++++
+ drivers/gpu/drm/xe/xe_pagefault_types.h | 34 +++++++++++++++++++
+ 3 files changed, 44 insertions(+), 44 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
+index 46ff7d6bc..ba6c3f381 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_pagefault.c
+@@ -70,49 +70,6 @@
+  * free state once they are complete.
+  */
+ 
+-/**
+- * enum xe_pagefault_alloc_state - lifetime state for a page fault queue entry
+- * @XE_PAGEFAULT_ALLOC_STATE_FREE:
+- *	Entry is unused and may be overwritten by the producer, consumer retry
+- *	or requeue..
+- * @XE_PAGEFAULT_ALLOC_STATE_QUEUED:
+- *	Entry has been enqueued and may be dequeued by a worker.
+- * @XE_PAGEFAULT_ALLOC_STATE_ACTIVE:
+- *	Entry has been dequeued and is the worker's currently serviced fault.
+- *	The worker may attach additional faults to it via consumer.next.
+- * @XE_PAGEFAULT_ALLOC_STATE_CHAINED:
+- *	Entry is not independently serviced; it has been chained onto an
+- *	ACTIVE entry via consumer.next and will be acknowledged when the
+- *	leading fault completes.
+- * @XE_PAGEFAULT_ALLOC_STATE_COUNT:
+- *	Count of allocation states.
+- *
+- * The page fault queue provides stable storage for outstanding faults so the
+- * IRQ handler can chain new cache hits directly onto a worker's active fault.
+- * Because entries may remain referenced outside the consumer dequeue window,
+- * the producer must only write into entries in the FREE state.
+- *
+- * State transitions are protected by the page fault queue lock. Workers return
+- * entries to FREE after acknowledging the fault (either as ACTIVE or CHAINED).
+- */
+-enum xe_pagefault_alloc_state {
+-	XE_PAGEFAULT_ALLOC_STATE_FREE		= 0,
+-	XE_PAGEFAULT_ALLOC_STATE_QUEUED		= 1,
+-	XE_PAGEFAULT_ALLOC_STATE_CHAINED	= 2,
+-	XE_PAGEFAULT_ALLOC_STATE_ACTIVE		= 3,
+-	XE_PAGEFAULT_ALLOC_STATE_COUNT		= 4,
+-};
+-
+-static int xe_pagefault_entry_size(void)
+-{
+-	/*
+-	 * Power of two alignment is not a hardware requirement, rather a
+-	 * software restriction which makes the math for page fault queue
+-	 * management simplier.
+-	 */
+-	return roundup_pow_of_two(sizeof(struct xe_pagefault));
+-}
+-
+ static int xe_pagefault_begin(struct drm_exec *exec, struct xe_vma *vma,
+ 			      struct xe_vram_region *vram, bool need_vram_move)
+ {
+@@ -317,7 +274,6 @@ unlock_vm:
+ 	return err;
+ }
+ 
+-#define XE_PAGEFAULT_CACHE_START_INVALID	U64_MAX
+ #define xe_pagefault_cache_start_invalidate(val)	\
+ 	(val = XE_PAGEFAULT_CACHE_START_INVALID)
+ 
+diff --git a/drivers/gpu/drm/xe/xe_pagefault.h b/drivers/gpu/drm/xe/xe_pagefault.h
+index 799c984de..67e94252f 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault.h
++++ b/drivers/gpu/drm/xe/xe_pagefault.h
+@@ -153,4 +153,14 @@ static inline u64 xe_pagefault_start_addr(struct xe_pagefault *pf)
+ 	return xe_pagefault_addr(pf);
+ }
+ 
++static inline int xe_pagefault_entry_size(void)
++{
++	/*
++	 * Power of two alignment is not a hardware requirement, rather a
++	 * software restriction which makes the math for page fault queue
++	 * management simpler.
++	 */
++	return roundup_pow_of_two(sizeof(struct xe_pagefault));
++}
++
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_pagefault_types.h b/drivers/gpu/drm/xe/xe_pagefault_types.h
+index ee467117a..1d5fc685e 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault_types.h
++++ b/drivers/gpu/drm/xe/xe_pagefault_types.h
+@@ -247,6 +247,39 @@ struct xe_pagefault {
+ 	} producer;
+ };
+ 
++/**
++ * enum xe_pagefault_alloc_state - lifetime state for a page fault queue entry
++ * @XE_PAGEFAULT_ALLOC_STATE_FREE:
++ *	Entry is unused and may be overwritten by the producer, consumer retry
++ *	or requeue..
++ * @XE_PAGEFAULT_ALLOC_STATE_QUEUED:
++ *	Entry has been enqueued and may be dequeued by a worker.
++ * @XE_PAGEFAULT_ALLOC_STATE_ACTIVE:
++ *	Entry has been dequeued and is the worker's currently serviced fault.
++ *	The worker may attach additional faults to it via consumer.next.
++ * @XE_PAGEFAULT_ALLOC_STATE_CHAINED:
++ *	Entry is not independently serviced; it has been chained onto an
++ *	ACTIVE entry via consumer.next and will be acknowledged when the
++ *	leading fault completes.
++ * @XE_PAGEFAULT_ALLOC_STATE_COUNT:
++ *	Maximum enum value.
++ *
++ * The page fault queue provides stable storage for outstanding faults so the
++ * IRQ handler can chain new cache hits directly onto a worker's active fault.
++ * Because entries may remain referenced outside the consumer dequeue window,
++ * the producer must only write into entries in the FREE state.
++ *
++ * State transitions are protected by the page fault queue lock. Workers return
++ * entries to FREE after acknowledging the fault (either as ACTIVE or CHAINED).
++ */
++enum xe_pagefault_alloc_state {
++	XE_PAGEFAULT_ALLOC_STATE_FREE		= 0,
++	XE_PAGEFAULT_ALLOC_STATE_QUEUED		= 1,
++	XE_PAGEFAULT_ALLOC_STATE_CHAINED	= 2,
++	XE_PAGEFAULT_ALLOC_STATE_ACTIVE		= 3,
++	XE_PAGEFAULT_ALLOC_STATE_COUNT		= 4,
++};
++
+ /**
+  * struct xe_pagefault_queue - Xe pagefault queue (consumer)
+  *
+@@ -288,6 +321,7 @@ struct xe_pagefault_work {
+ 	 * Protected by the page fault queue lock.
+ 	 */
+ 	struct {
++#define XE_PAGEFAULT_CACHE_START_INVALID	U64_MAX
+ 		/** @cache.start: Start address of the current page fault */
+ 		u64 start;
+ 		/** @cache.end: End address of the current page fault */
+-- 
+2.43.0
+

@@ -1,0 +1,95 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Wed, 2 Sep 2026 13:41:21 +0100
+Subject: [PATCH] drm/xe/vram: revamp CPU VRAM mapping
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Previously, we called devm_ioremap_wc() for the entire PCI LMEM BAR (which
+can be significantly larger than usable memory, e.g., mapping 16G for a
+10G card), and then simply assigned subsets of this global mapping to each
+tile.
+
+By moving the devm_ioremap_wc() call into vram_region_init() and mapping
+on a per-tile basis, we restrict the virtual address space to exactly
+the usable_size of each tile. The other big win is that the core kernel
+will place a guard page at the end of each per-tile mapping to help
+catch OOB CPU writes (e.g. into the flat CCS storage) by triggering an
+immediate page fault instead of silent memory corruption.
+
+As a consequence the global vram->mapping is now NULL. But that was
+unused anyway, with CPU access already correctly routed through the per
+tile mapping.
+
+v2 (Sashiko)
+  - Make sure to update the panic flow to now use the root tile.
+
+Assisted-by: Gemini:gemini-3.1-pro-preview
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Cc: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260902124117.918018-10-matthew.auld@intel.com
+(cherry-picked from commit bab69ad31cd35b282921efe825a496cf89dd7374 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/display/xe_panic.c |  3 ++-
+ drivers/gpu/drm/xe/xe_vram.c          | 14 +++++++++-----
+ 2 files changed, 11 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/display/xe_panic.c b/drivers/gpu/drm/xe/display/xe_panic.c
+index 12c6fb99015d..1a6cee25e9d7 100644
+--- a/drivers/gpu/drm/xe/display/xe_panic.c
++++ b/drivers/gpu/drm/xe/display/xe_panic.c
+@@ -52,7 +52,8 @@ static void xe_panic_page_set_pixel(struct drm_scanout_buffer *sb, unsigned int
+ 	if (new_page != panic->page) {
+ 		if (xe_bo_is_vram(bo)) {
+ 			/* Display is always mapped on root tile */
+-			struct xe_vram_region *vram = xe_bo_device(bo)->mem.vram;
++			struct xe_vram_region *vram =
++				xe_device_get_root_tile(xe_bo_device(bo))->mem.vram;
+ 
+ 			if (panic->page < 0 || new_page < panic->page) {
+ 				xe_res_first(bo->ttm.resource, new_page * PAGE_SIZE,
+diff --git a/drivers/gpu/drm/xe/xe_vram.c b/drivers/gpu/drm/xe/xe_vram.c
+index 56cff1e44530..04d831b101bd 100644
+--- a/drivers/gpu/drm/xe/xe_vram.c
++++ b/drivers/gpu/drm/xe/xe_vram.c
+@@ -55,9 +55,6 @@ static int determine_lmem_bar_size(struct xe_device *xe, struct xe_vram_region *
+ 	/* XXX: Need to change when xe link code is ready */
+ 	lmem_bar->dpa_base = 0;
+ 
+-	/* set up a map to the total memory area. */
+-	lmem_bar->mapping = devm_ioremap_wc(&pdev->dev, lmem_bar->io_start, lmem_bar->io_size);
+-
+ 	return 0;
+ }
+ 
+@@ -196,7 +193,7 @@ static void vram_fini(void *arg)
+ 	struct xe_tile *tile;
+ 	int id;
+ 
+-	xe->mem.vram->mapping = NULL;
++	xe_assert(xe, !xe->mem.vram->mapping);
+ 
+ 	for_each_tile(tile, xe, id) {
+ 		tile->mem.vram->mapping = NULL;
+@@ -257,8 +254,15 @@ static int vram_region_init(struct xe_device *xe, struct xe_vram_region *vram,
+ 		return -ENODEV;
+ 	}
+ 
++	if (vram != xe->mem.vram) {
++		struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
++
++		vram->mapping = devm_ioremap_wc(&pdev->dev, vram->io_start, vram->io_size);
++		if (!vram->mapping)
++			return -ENOMEM;
++	}
++
+ 	vram->dpa_base = lmem_bar->dpa_base + offset;
+-	vram->mapping = lmem_bar->mapping + offset;
+ 	vram->usable_size = usable_size;
+ 
+ 	print_vram_region_info(xe, vram);

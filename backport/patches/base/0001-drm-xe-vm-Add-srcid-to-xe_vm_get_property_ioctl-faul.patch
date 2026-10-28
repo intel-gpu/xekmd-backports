@@ -1,0 +1,109 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Date: Thu, 3 Sep 2026 05:43:58 +0800
+Subject: [PATCH] drm/xe/vm: Add srcid to xe_vm_get_property_ioctl fault report
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add the SRCID of the faulting hardware unit to the return of the
+xe_vm_get_property_ioctl fault report.
+
+v2:
+- Readd pad check, as the pad in the ioctl struct was not changed
+  (jcavitt)
+
+v3:
+- Squash SRCID with ASID to keep the struct compact (Matthew)
+
+Signed-off-by: Jonathan Cavitt <jonathan.cavitt@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: David Airlie <airlied@gmail.com>
+Cc: Simona Vetter <simona@ffwll.ch>
+Cc: Maarten Lankhorst <maarten.lankhorst@linux.intel.com>
+Cc: Maxime Ripard <mripard@kernel.org>
+Cc: Thomas Zimmermann <tzimmermann@suse.de>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260902214358.348399-3-jonathan.cavitt@intel.com
+(cherry-picked from commit 88064894bcce6d239804e54bd7f577645d4739ab linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vm.c       | 8 ++++++++
+ drivers/gpu/drm/xe/xe_vm_types.h | 2 ++
+ include/uapi/drm/xe_drm.h        | 4 ++--
+ 3 files changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index 2c350517d..c0874ded7 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -680,6 +680,7 @@ void xe_vm_add_fault_entry_pf(struct xe_vm *vm, struct xe_pagefault *pf)
+ 				  pf->consumer.fault_type_level);
+ 	e->fault_level = FIELD_GET(XE_PAGEFAULT_LEVEL_MASK,
+ 				   pf->consumer.fault_type_level);
++	e->srcid = FIELD_GET(XE_PAGEFAULT_SRCID_MASK, pf->consumer.id);
+ 
+ 	list_add_tail(&e->list, &vm->faults.list);
+ 	vm->faults.len++;
+@@ -4299,6 +4300,11 @@ static u8 xe_to_user_fault_level(u8 fault_level)
+ 	return fault_level;
+ }
+ 
++static u8 xe_to_user_srcid(u8 srcid)
++{
++	return srcid;
++}
++
+ static int fill_faults(struct xe_vm *vm,
+ 		       struct drm_xe_vm_get_property *args)
+ {
+@@ -4326,6 +4332,8 @@ static int fill_faults(struct xe_vm *vm,
+ 		fault_entry.fault_type = xe_to_user_fault_type(entry->fault_type);
+ 		fault_entry.fault_level = xe_to_user_fault_level(entry->fault_level);
+ 
++		fault_entry.srcid = xe_to_user_srcid(entry->srcid);
++
+ 		memcpy(&fault_list[i], &fault_entry, entry_size);
+ 
+ 		i++;
+diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
+index 68588b624..648031e64 100644
+--- a/drivers/gpu/drm/xe/xe_vm_types.h
++++ b/drivers/gpu/drm/xe/xe_vm_types.h
+@@ -202,6 +202,7 @@ struct xe_device;
+  * @access_type: type of address access that resulted in fault
+  * @fault_type: type of fault reported
+  * @fault_level: fault level of the fault
++ * @srcid: ID of the faulting hardware unit
+  */
+ struct xe_vm_fault_entry {
+ 	struct list_head list;
+@@ -210,6 +211,7 @@ struct xe_vm_fault_entry {
+ 	u8 access_type;
+ 	u8 fault_type;
+ 	u8 fault_level;
++	u8 srcid;
+ };
+ 
+ struct xe_vm {
+diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
+index ee4a921b2..578f0c1eb 100644
+--- a/include/uapi/drm/xe_drm.h
++++ b/include/uapi/drm/xe_drm.h
+@@ -1294,8 +1294,8 @@ struct xe_vm_fault {
+ #define FAULT_LEVEL_PML4	3
+ #define FAULT_LEVEL_PML5	4
+ 	__u8 fault_level;
+-	/** @pad: MBZ */
+-	__u8 pad;
++	/** @srcid: ID of the faulting hardware unit */
++	__u8 srcid;
+ 	/** @reserved: MBZ */
+ 	__u64 reserved[4];
+ };
+-- 
+2.43.0
+

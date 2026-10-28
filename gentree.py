@@ -31,6 +31,9 @@ class Bp_Identity(object):
     are added, how we actually use the others for regular printing will
     need to be considered.
     """
+    RELEASE_TAG = re.compile(r'^xebr_(v[^_]+)_(\d{6})\.(\d+)$')
+    OOT_BACKPORT_TAG = re.compile(r'^xeb_(v[^_]+)_(\d{6})\.(\d+)$')
+
     def __init__(self, integrate=False, kconfig_prefix='CPTCFG_',
                  project_prefix='', project_dir='',
                  target_dir='', target_dir_name='',
@@ -50,6 +53,44 @@ class Bp_Identity(object):
             self.kconfig_source_var_resafe = re.escape(self.kconfig_source_var)
         else:
             self.kconfig_source_var_resafe = None
+
+    @classmethod
+    def create_release_tag(cls, source_tree, kernel_tag, backport_tag=None):
+        """
+        Build xebr_ tag for generated versions metadata.
+        Utilise date/revision from latest xeb_* tag (oot-backport), and only
+        updates the base version from kernel tag.
+        """
+        base_ver = kernel_tag.split('/')[-1]
+        if base_ver.startswith('xe-'):
+            base_ver = base_ver[3:]
+        date = None
+        rev = None
+
+        if backport_tag:
+            m = cls.OOT_BACKPORT_TAG.match(backport_tag)
+            if m:
+                date = m.group(2)
+                rev = int(m.group(3))
+
+        if date is None or rev is None:
+            cmd = "git tag -l 'xebr_*' | sort -V | tail -1"
+            try:
+                latest_xebr = subprocess.check_output(cmd, shell=True,
+                                                      cwd=source_tree,
+                                                      universal_newlines=True).strip()
+            except subprocess.CalledProcessError:
+                latest_xebr = None
+            if latest_xebr:
+                m = cls.RELEASE_TAG.match(latest_xebr)
+                if m:
+                    date = m.group(2)
+                    rev = int(m.group(3))
+        if date is None or rev is None:
+            date = time.strftime("%y%m%d", time.gmtime())
+            rev = 0
+        release_tag = 'xebr_{0}_{1}.{2}'.format(base_ver, date, rev)
+        return release_tag
 
 def read_copy_list(copyfile):
     """
@@ -916,24 +957,35 @@ def process(kerneldir, copy_list_file, git_revision=None,
 
     disable_list = add_automatic_backports(args)
     if git_tracked_version:
-        backports_version = "(see git)"
-        kernel_version = "(see git)"
+        backports_release_tag = "(see git)"
+        backport_tag = "(see git)"
         kernel_tag = "(see git)"
+        kernel_head = "(see git)"
     else:
-        backports_version = git.describe(tree=source_dir, extra_args=['--tags'])
-        kernel_version = git.describe(rev=args.git_revision or 'HEAD',
-                                      tree=args.kerneldir,
-                                      extra_args=['--long'])
         kernel_tag = git.describe(tree=args.kerneldir, extra_args=['--tags'])
+        kernel_head = git.rev_parse(rev=args.git_revision or 'HEAD',
+                                    tree=args.kerneldir)[:9]
+        cmd = "git tag -l 'xeb_*' | sort -V | tail -1"
+        try:
+            backport_tag = subprocess.check_output(cmd, shell=True,
+                                                   cwd=source_dir,
+                                                   universal_newlines=True).strip()
+        except subprocess.CalledProcessError:
+            backport_tag = ""
+        backports_release_tag = args.bpid.create_release_tag(source_dir, kernel_tag, backport_tag=backport_tag)
 
     if '/' in kernel_tag:
          kernel_tag = kernel_tag.split('/')[-1]
 
+    backports_version = backports_release_tag
+    kernel_version = kernel_head
+
     if not bpid.integrate:
         f = open(os.path.join(bpid.target_dir, 'versions'), 'w')
-        f.write('BACKPORTS_RELEASE_TAG="%s"\n' % backports_version)
+        f.write('BACKPORTS_RELEASE_TAG="%s"\n' % backports_release_tag)
+        f.write('BACKPORT_TAG="%s"\n' % backport_tag)
         f.write('BASE_KERNEL_TAG="%s"\n' % kernel_tag)
-        f.write('BASE_KERNEL_HEAD="%s"\n' % kernel_version)
+        f.write('BASE_KERNEL_HEAD="%s"\n' % kernel_head)
         if git_tracked_version:
             f.write('BACKPORTS_GIT_TRACKED="backport tracker ID: $(shell git rev-parse HEAD 2>/dev/null || echo \'not built in git tree\')"\n')
         f.close()

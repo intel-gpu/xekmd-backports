@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Ashutosh Dixit <ashutosh.dixit@intel.com>
 Date: Fri, 16 Jan 2026 18:23:50 +0100
-Subject: drm/xe: Add PRELIM infrastructure
+Subject: [PATCH] drm/xe: Add PRELIM infrastructure
 
 * Add xe_drm_prelim.h for maintaining internal/downstream declarations
   separate from upstream declarations in xe_drm.h. Because xe_drm_prelim.h
@@ -14,8 +14,8 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Kolanupaka Naveena <kolanupaka.naveena@intel.com>
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit bee22cd9bda2892832a7ed05a545fdffd42ddad2 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+(cherry-picked from commit 2f6e42c1a5c0bbd3981b99929161b1721a1fa4fd eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  Documentation/gpu/driver-uapi.rst |  5 ++
  drivers/gpu/drm/xe/xe_device.c    |  8 +++
@@ -25,10 +25,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  create mode 100644 include/uapi/drm/xe_drm_prelim.h
 
 diff --git a/Documentation/gpu/driver-uapi.rst b/Documentation/gpu/driver-uapi.rst
-index 1f15a8ca1..ccc6c5cd5 100644
+index 627fc68c7..09f534d15 100644
 --- a/Documentation/gpu/driver-uapi.rst
 +++ b/Documentation/gpu/driver-uapi.rst
-@@ -28,6 +28,11 @@ drm/xe uAPI
+@@ -30,6 +30,11 @@ drm/xe uAPI
  
  .. kernel-doc:: include/uapi/drm/xe_drm.h
  
@@ -41,10 +41,10 @@ index 1f15a8ca1..ccc6c5cd5 100644
  ================
  
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 6be605889..689d7ed8a 100644
+index 23f921348..36cc5cbb4 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -195,6 +195,14 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -204,6 +204,14 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  	xe_file_put(xef);
  }
  
@@ -60,10 +60,10 @@ index 6be605889..689d7ed8a 100644
  	DRM_IOCTL_DEF_DRV(XE_DEVICE_QUERY, xe_query_ioctl, DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_GEM_CREATE, xe_gem_create_ioctl, DRM_RENDER_ALLOW),
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 586e25683..28df35626 100644
+index e2a08e3f4..9381472c5 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
-@@ -2702,6 +2702,7 @@ struct drm_xe_debug_metadata_destroy {
+@@ -2727,6 +2727,7 @@ struct drm_xe_debug_metadata_destroy {
  };
  
  #include "xe_drm_eudebug.h"

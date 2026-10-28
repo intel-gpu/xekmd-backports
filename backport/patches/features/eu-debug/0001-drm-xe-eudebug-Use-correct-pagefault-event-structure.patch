@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Date: Wed, 4 Nov 2026 19:06:02 +0100
+Subject: [PATCH] drm/xe/eudebug: Use correct pagefault event structure on
+ queueing
+
+Incorrect structure was used to build pagefault event.
+
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(cherry-picked from commit ceec46134d0895052528301ef459e0e8da52023c eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+index a8318dba976c..5e214fd5ed9e 100644
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+@@ -1877,11 +1877,11 @@ int prelim_xe_eudebug_send_pagefault_event(struct xe_eudebug *d, struct xe_eudeb
+ 		return -ENOSPC;
+ 
+ 	ep = cast_event(ep, event);
+-	write_member(struct xe_eudebug_event_pagefault, ep, client_handle, (u64)h_c);
+-	write_member(struct xe_eudebug_event_pagefault, ep, exec_queue_handle, (u64)h_queue);
+-	write_member(struct xe_eudebug_event_pagefault, ep, lrc_handle, (u64)h_lrc);
+-	write_member(struct xe_eudebug_event_pagefault, ep, bitmask_size, size);
+-	write_member(struct xe_eudebug_event_pagefault, ep, pagefault_address, epf->fault.addr);
++	write_member(struct prelim_drm_xe_eudebug_event_pagefault, ep, client_handle, (u64)h_c);
++	write_member(struct prelim_drm_xe_eudebug_event_pagefault, ep, exec_queue_handle, (u64)h_queue);
++	write_member(struct prelim_drm_xe_eudebug_event_pagefault, ep, lrc_handle, (u64)h_lrc);
++	write_member(struct prelim_drm_xe_eudebug_event_pagefault, ep, bitmask_size, size);
++	write_member(struct prelim_drm_xe_eudebug_event_pagefault, ep, pagefault_address, epf->fault.addr);
+ 
+ 	memcpy(ep->bitmask, epf->attentions.before.att, epf->attentions.before.size);
+ 	memcpy(ep->bitmask + epf->attentions.before.size,
+-- 
+2.43.0
+

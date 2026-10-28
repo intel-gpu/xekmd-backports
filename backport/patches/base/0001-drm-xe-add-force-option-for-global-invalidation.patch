@@ -1,0 +1,96 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Wed, 2 Sep 2026 13:41:22 +0100
+Subject: [PATCH] drm/xe: add force option for global invalidation
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The flush is gated by the WA, since there would no valid use for it
+otherwise, but for some very special usecases allow bypassing the WA.
+
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Cc: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260902124117.918018-11-matthew.auld@intel.com
+(cherry-picked from commit 6df8aa0e8a323201a1eb85a98864e90b6b59230a linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/display/xe_dsb_buffer.c | 2 +-
+ drivers/gpu/drm/xe/display/xe_fb_pin.c     | 2 +-
+ drivers/gpu/drm/xe/xe_device.c             | 6 +++---
+ drivers/gpu/drm/xe/xe_device.h             | 2 +-
+ 4 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/display/xe_dsb_buffer.c b/drivers/gpu/drm/xe/display/xe_dsb_buffer.c
+index a7158c73a14c..82974e933e8d 100644
+--- a/drivers/gpu/drm/xe/display/xe_dsb_buffer.c
++++ b/drivers/gpu/drm/xe/display/xe_dsb_buffer.c
+@@ -88,7 +88,7 @@ static void xe_dsb_buffer_flush_map(struct intel_dsb_buffer *dsb_buf)
+ 	 * both for weak ordering archs and discrete cards.
+ 	 */
+ 	xe_device_wmb(xe);
+-	xe_device_l2_flush(xe);
++	xe_device_l2_flush(xe, false);
+ }
+ 
+ const struct intel_display_dsb_interface xe_display_dsb_interface = {
+diff --git a/drivers/gpu/drm/xe/display/xe_fb_pin.c b/drivers/gpu/drm/xe/display/xe_fb_pin.c
+index f1dbdc802df8..4f5cee474c64 100644
+--- a/drivers/gpu/drm/xe/display/xe_fb_pin.c
++++ b/drivers/gpu/drm/xe/display/xe_fb_pin.c
+@@ -203,7 +203,7 @@ static int __xe_pin_fb_vma_dpt(struct drm_gem_object *obj,
+ 	vma->node = dpt->ggtt_node[tile0->id];
+ 
+ 	/* Ensure DPT writes are flushed */
+-	xe_device_l2_flush(xe);
++	xe_device_l2_flush(xe, false);
+ 	return 0;
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 373fe4e805f0..0f2c9bbf1a1a 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -1281,7 +1281,7 @@ bool xe_device_is_l2_flush_optimized(struct xe_device *xe)
+ 	return false;
+ }
+ 
+-void xe_device_l2_flush(struct xe_device *xe)
++void xe_device_l2_flush(struct xe_device *xe, bool force)
+ {
+ 	struct xe_gt *gt;
+ 
+@@ -1289,7 +1289,7 @@ void xe_device_l2_flush(struct xe_device *xe)
+ 	if (!gt)
+ 		return;
+ 
+-	if (!XE_GT_WA(gt, 16023588340))
++	if (!force && !XE_GT_WA(gt, 16023588340))
+ 		return;
+ 
+ 	CLASS(xe_force_wake, fw_ref)(gt_to_fw(gt), XE_FW_GT);
+@@ -1344,7 +1344,7 @@ void xe_device_td_flush(struct xe_device *xe)
+ 
+ 	if (XE_GT_WA(root_gt, 16023588340)) {
+ 		/* A transient flush is not sufficient: flush the L2 */
+-		xe_device_l2_flush(xe);
++		xe_device_l2_flush(xe, false);
+ 	} else {
+ 		xe_guc_pc_apply_flush_freq_limit(&root_gt->uc.guc.pc);
+ 		tdf_request_sync(xe);
+diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
+index a1127ab7d1a2..f496ac9c65d7 100644
+--- a/drivers/gpu/drm/xe/xe_device.h
++++ b/drivers/gpu/drm/xe/xe_device.h
+@@ -200,7 +200,7 @@ u64 xe_device_uncanonicalize_addr(struct xe_device *xe, u64 address);
+ 
+ bool xe_device_is_l2_flush_optimized(struct xe_device *xe);
+ void xe_device_td_flush(struct xe_device *xe);
+-void xe_device_l2_flush(struct xe_device *xe);
++void xe_device_l2_flush(struct xe_device *xe, bool force);
+ 
+ static inline bool xe_device_wedged(struct xe_device *xe)
+ {

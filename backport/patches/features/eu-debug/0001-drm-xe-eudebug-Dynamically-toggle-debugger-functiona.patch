@@ -19,26 +19,26 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit ecab484710fbd81e99736988fcc4fd35d9b3f8f8 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
-Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+(cherry-picked from commit fe3e11b0639bd0534b73487b7d4a1841debfac68 eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
- drivers/gpu/drm/xe/xe_device.c       |   2 -
- drivers/gpu/drm/xe/xe_device_types.h |   6 +-
- drivers/gpu/drm/xe/xe_eudebug.c      | 131 ++++++++++++++++++++++-----
- drivers/gpu/drm/xe/xe_eudebug.h      |   4 -
- drivers/gpu/drm/xe/xe_exec_queue.c   |   5 +
- drivers/gpu/drm/xe/xe_hw_engine.c    |   2 -
- drivers/gpu/drm/xe/xe_reg_sr.c       |  23 +++--
- drivers/gpu/drm/xe/xe_reg_sr.h       |   4 +-
- drivers/gpu/drm/xe/xe_rtp.c          |   4 +-
- 9 files changed, 137 insertions(+), 44 deletions(-)
+ drivers/gpu/drm/xe/xe_device.c        |   2 -
+ drivers/gpu/drm/xe/xe_device_types.h  |   6 +-
+ drivers/gpu/drm/xe/xe_eudebug.c       | 131 +++++++++++++++++++++-----
+ drivers/gpu/drm/xe/xe_eudebug.h       |   4 -
+ drivers/gpu/drm/xe/xe_exec_queue.c    |   5 +
+ drivers/gpu/drm/xe/xe_hw_engine.c     |   2 -
+ drivers/gpu/drm/xe/xe_reg_sr.c        |  21 +++--
+ drivers/gpu/drm/xe/xe_reg_sr.h        |   4 +-
+ drivers/gpu/drm/xe/xe_reg_whitelist.c |   3 +-
+ drivers/gpu/drm/xe/xe_rtp.c           |   2 +-
+ 10 files changed, 137 insertions(+), 43 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 1363723c3..8a22715fd 100644
+index 59527060d..bc188fb0f 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -1153,8 +1153,6 @@ int xe_device_probe(struct xe_device *xe)
+@@ -1163,8 +1163,6 @@ int xe_device_probe(struct xe_device *xe)
  
  	xe_debugfs_register(xe);
  
@@ -48,10 +48,10 @@ index 1363723c3..8a22715fd 100644
  	if (err)
  		goto err_unregister_display;
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index a86bc4819..a6e63e136 100644
+index ff0747efa..e5daca3f3 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -646,15 +646,15 @@ struct xe_device {
+@@ -649,15 +649,15 @@ struct xe_device {
  		/** @eudebug.session_count: session counter to track connections */
  		u64 session_count;
  
@@ -71,10 +71,10 @@ index a86bc4819..a6e63e136 100644
  		struct delayed_work attention_scan;
  	} eudebug;
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index a5686900e..f3fd8b3fe 100644
+index 4911d4c09..0c90c34f1 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -2056,9 +2056,6 @@ xe_eudebug_connect(struct xe_device *xe,
+@@ -2065,9 +2065,6 @@ xe_eudebug_connect(struct xe_device *xe,
  
  	param->version = DRM_XE_EUDEBUG_VERSION;
  
@@ -84,7 +84,7 @@ index a5686900e..f3fd8b3fe 100644
  	d = kzalloc(sizeof(*d), GFP_KERNEL);
  	if (!d)
  		return -ENOMEM;
-@@ -2118,56 +2115,143 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
+@@ -2126,56 +2123,143 @@ int xe_eudebug_connect_ioctl(struct drm_device *dev,
  {
  	struct xe_device *xe = to_xe_device(dev);
  	struct drm_xe_eudebug_connect * const param = data;
@@ -241,7 +241,7 @@ index a5686900e..f3fd8b3fe 100644
  	spin_lock_init(&xe->eudebug.lock);
  	INIT_LIST_HEAD(&xe->eudebug.list);
  
-@@ -2177,15 +2261,16 @@ void xe_eudebug_init(struct xe_device *xe)
+@@ -2185,15 +2269,16 @@ void xe_eudebug_init(struct xe_device *xe)
  	INIT_DELAYED_WORK(&xe->eudebug.attention_scan, attention_scan_fn);
  
  	xe->eudebug.ordered_wq = alloc_ordered_workqueue("xe-eudebug-ordered-wq", 0);
@@ -326,18 +326,9 @@ index e7bca7afb..9680d2a5a 100644
  	xe_reg_sr_init(&hwe->reg_whitelist, hwe->name, gt_to_xe(gt));
  	xe_reg_sr_init(&hwe->oa_whitelist, hwe->name, gt_to_xe(gt));
 diff --git a/drivers/gpu/drm/xe/xe_reg_sr.c b/drivers/gpu/drm/xe/xe_reg_sr.c
-index e328f5072..c2fa80c3e 100644
+index e328f5072..6d184a4b6 100644
 --- a/drivers/gpu/drm/xe/xe_reg_sr.c
 +++ b/drivers/gpu/drm/xe/xe_reg_sr.c
-@@ -77,7 +77,7 @@ static struct xe_reg sanitize_mcr(struct xe_reg_sr *sr,
- 	struct xe_reg reg = e->reg;
- 	bool is_mcr;
- 
--	/*
-+/*
- 	 * We need the gt structure to check MCR ranges.
- 	 */
- 	if (!gt)
 @@ -104,7 +104,8 @@ static struct xe_reg sanitize_mcr(struct xe_reg_sr *sr,
  
  int xe_reg_sr_add(struct xe_reg_sr *sr,
@@ -399,19 +390,24 @@ index d26cf4713..8231640ed 100644
  void xe_reg_sr_apply_mmio(struct xe_reg_sr *sr, struct xe_gt *gt);
  void xe_reg_sr_apply_whitelist(struct xe_hw_engine *hwe);
  
+diff --git a/drivers/gpu/drm/xe/xe_reg_whitelist.c b/drivers/gpu/drm/xe/xe_reg_whitelist.c
+index cab1b578c..fada53d29 100644
+--- a/drivers/gpu/drm/xe/xe_reg_whitelist.c
++++ b/drivers/gpu/drm/xe/xe_reg_whitelist.c
+@@ -193,7 +193,8 @@ static int whitelist_apply_to_hwe(struct xe_hw_engine *hwe, struct xe_reg_sr *in
+ 		}
+ 
+ 		xe_reg_whitelist_print_entry(&p, 0, reg, entry);
+-		xe_reg_sr_add(out, &hwe_entry, hwe->gt);
++
++		xe_reg_sr_add(out, &hwe_entry, hwe->gt, false);
+ 
+ 		slot++;
+ 	}
 diff --git a/drivers/gpu/drm/xe/xe_rtp.c b/drivers/gpu/drm/xe/xe_rtp.c
-index 6a8d6ea68..45ae47c20 100644
+index 6a8d6ea68..56641a72f 100644
 --- a/drivers/gpu/drm/xe/xe_rtp.c
 +++ b/drivers/gpu/drm/xe/xe_rtp.c
-@@ -217,7 +217,7 @@ static bool rule_matches_with_err(const struct xe_device *xe,
- }
- 
- static bool rule_matches(const struct xe_device *xe,
--			 struct xe_gt *gt,
-+struct xe_gt *gt,
- 			 struct xe_hw_engine *hwe,
- 			 const struct xe_rtp_rule *rules,
- 			 unsigned int n_rules)
 @@ -244,7 +244,7 @@ static void rtp_add_sr_entry(const struct xe_rtp_action *action,
  
  	sr_entry.reg.addr += mmio_base;
@@ -421,18 +417,6 @@ index 6a8d6ea68..45ae47c20 100644
  }
  
  static bool rtp_process_one_sr(const struct xe_rtp_entry_sr *entry,
-diff --git a/drivers/gpu/drm/xe/xe_reg_whitelist.c b/drivers/gpu/drm/xe/xe_reg_whitelist.c
-index 96282f5f5..8a2d3e5ee 100644
---- a/drivers/gpu/drm/xe/xe_reg_whitelist.c
-+++ b/drivers/gpu/drm/xe/xe_reg_whitelist.c
-@@ -193,7 +193,7 @@ static int whitelist_apply_to_hwe(struct xe_hw_engine *hwe, struct xe_reg_sr *i
- 		}
- 
- 		xe_reg_whitelist_print_entry(&p, 0, reg, entry);
--		xe_reg_sr_add(out, &hwe_entry, hwe->gt);
-+		xe_reg_sr_add(out, &hwe_entry, hwe->gt, false);
- 
- 		slot++;
- 	}
 -- 
 2.43.0
+

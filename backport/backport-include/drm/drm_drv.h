@@ -30,4 +30,13 @@ static inline int backport_drm_dev_wedged_event_arg3(struct drm_device *dev,
 #define DRIVER_GEM_GPUVA        (1U << 8)
 #endif
 
+#ifdef BPM_DRM_SHOW_FDINFO_NOT_PRESENT
+struct drm_printer;
+struct seq_file;
+
+void bpm_drm_show_fdinfo(struct seq_file *m, struct file *f, u64 client_id,
+			 void (*show_fdinfo)(struct drm_printer *p,
+					     struct drm_file *file));
+#endif
+
 #endif /* __BACKPORT_DRM_DRV_H__ */

@@ -1,0 +1,91 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Date: Wed, 28 Oct 2026 17:52:00 +0530
+Subject: drm/xe: Backport fdinfo support for kernels without drm_show_fdinfo
+
+Older kernels have no drm_show_fdinfo() and no drm_driver.show_fdinfo hook,
+As a result, /proc/<pid>/fdinfo showed no DRM client stats on those kernels.
+
+Add bpm_drm_show_fdinfo() to the compat layer which prints the common
+drm-driver, drm-client-id and drm-pdev keys, then calls a callback that
+the driver passes in for its own stats.
+xe now sets .show_fdinfo to an xe_show_fdinfo() wrapper, which passes
+xe_drm_client_fdinfo as the callback. When drm_file.client_id is missing,
+xe_drm_client_alloc() gives each client a unique id from an atomic counter.
+
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c     | 22 ++++++++++++++++++++--
+ drivers/gpu/drm/xe/xe_drm_client.c |  7 +++++++
+ 2 files changed, 27 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 8f318da..c3b3cca 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -393,6 +393,20 @@ static int xe_mmap(struct file *filp, struct vm_area_struct *vma)
+ 	return drm_gem_mmap(filp, vma);
+ }
+ 
++#if defined(CONFIG_PROC_FS) && defined(BPM_DRM_SHOW_FDINFO_NOT_PRESENT)
++static void xe_show_fdinfo(struct seq_file *m, struct file *f)
++{
++	struct drm_file *file = f->private_data;
++#ifdef BPM_DRM_FILE_CLIENT_ID_NOT_PRESENT
++	u64 client_id = to_xe_file(file)->client->id;
++#else
++	u64 client_id = file->client_id;
++#endif
++
++	bpm_drm_show_fdinfo(m, f, client_id, xe_drm_client_fdinfo);
++}
++#endif
++
+ static const struct file_operations xe_driver_fops = {
+ 	.owner = THIS_MODULE,
+ 	.open = drm_open,
+@@ -403,9 +417,13 @@ static const struct file_operations xe_driver_fops = {
+ 	.read = drm_read,
+ 	.compat_ioctl = xe_drm_compat_ioctl,
+ 	.llseek = noop_llseek,
+-#ifdef CONFIG_PROC_FS
++#if defined(CONFIG_PROC_FS)
++#ifdef BPM_DRM_SHOW_FDINFO_NOT_PRESENT
++	.show_fdinfo = xe_show_fdinfo,
++#else
+ 	.show_fdinfo = drm_show_fdinfo,
+ #endif
++#endif
+ #ifndef BPM_FOP_UNSIGNED_OFFSET_NOT_PRESENT
+ 	.fop_flags = FOP_UNSIGNED_OFFSET,
+ #endif
+@@ -441,7 +459,7 @@ static struct drm_driver driver = {
+ #endif
+ 	.dumb_create = xe_bo_dumb_create,
+ 	.dumb_map_offset = drm_gem_ttm_dumb_map_offset,
+-#ifdef CONFIG_PROC_FS
++#if defined(CONFIG_PROC_FS) && !defined(BPM_DRM_SHOW_FDINFO_NOT_PRESENT)
+ 	.show_fdinfo = xe_drm_client_fdinfo,
+ #endif
+ 	.ioctls = xe_ioctls,
+diff --git a/drivers/gpu/drm/xe/xe_drm_client.c b/drivers/gpu/drm/xe/xe_drm_client.c
+index 81020b4..edb55ad 100644
+--- a/drivers/gpu/drm/xe/xe_drm_client.c
++++ b/drivers/gpu/drm/xe/xe_drm_client.c
+@@ -94,6 +94,13 @@ struct xe_drm_client *xe_drm_client_alloc(void)
+ 
+ 	kref_init(&client->kref);
+ 
++#ifdef BPM_DRM_FILE_CLIENT_ID_NOT_PRESENT
++	{
++		static atomic_t next_client_id = ATOMIC_INIT(0);
++		client->id = atomic_inc_return(&next_client_id);
++	}
++#endif
++
+ #ifdef CONFIG_PROC_FS
+ 	spin_lock_init(&client->bos_lock);
+ 	INIT_LIST_HEAD(&client->bos_list);
+-- 
+2.43.0
+

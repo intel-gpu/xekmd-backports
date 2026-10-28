@@ -21,7 +21,7 @@ Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
  3 files changed, 29 insertions(+), 16 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index d02960ebadff..7137710f73ea 100644
+index 958fb7176..c56f0e4a9 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
 @@ -5,6 +5,7 @@
@@ -37,10 +37,10 @@ index d02960ebadff..7137710f73ea 100644
  #include "xe_guc_ads.h"
  #include "xe_hw_engine.h"
 -#include "xe_mmio.h"
+ #include "xe_pagefault.h"
  #include "xe_pcode.h"
  #include "xe_pm.h"
- #include "xe_psmi.h"
-@@ -145,15 +145,20 @@ static void xe_fault_inject_debugfs_register(struct xe_device *xe,
+@@ -146,15 +146,20 @@ static void xe_fault_inject_debugfs_register(struct xe_device *xe,
  	}
  }
  
@@ -66,7 +66,7 @@ index d02960ebadff..7137710f73ea 100644
  	if (ret != sizeof(residency)) {
  		drm_warn(&xe->drm, "%s counter failed to read, ret %d\n", name, ret);
  		return;
-@@ -283,13 +288,12 @@ static int pcode_info(struct seq_file *m, void *data)
+@@ -293,13 +298,12 @@ static int pcode_info(struct seq_file *m, void *data)
  static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
  {
  	struct xe_device *xe;
@@ -81,7 +81,7 @@ index d02960ebadff..7137710f73ea 100644
  	static const struct {
  		u32 offset;
  		const char *name;
-@@ -303,7 +307,7 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
+@@ -313,7 +317,7 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
  	};
  
  	for (int i = 0; i < ARRAY_SIZE(residencies); i++)
@@ -90,7 +90,7 @@ index d02960ebadff..7137710f73ea 100644
  
  	return 0;
  }
-@@ -311,13 +315,11 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
+@@ -321,13 +325,11 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
  static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
  {
  	struct xe_device *xe;
@@ -104,7 +104,7 @@ index d02960ebadff..7137710f73ea 100644
  
  	static const struct {
  		u32 offset;
-@@ -329,7 +331,7 @@ static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
+@@ -339,7 +341,7 @@ static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
  	};
  
  	for (int i = 0; i < ARRAY_SIZE(residencies); i++)
@@ -114,7 +114,7 @@ index d02960ebadff..7137710f73ea 100644
  	return 0;
  }
 diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
-index 547c468a2ab7..4d6509238513 100644
+index 547c468a2..4d6509238 100644
 --- a/drivers/gpu/drm/xe/xe_hwmon.c
 +++ b/drivers/gpu/drm/xe/xe_hwmon.c
 @@ -517,9 +517,15 @@ xe_hwmon_energy_get(struct xe_hwmon *hwmon, int channel, long *energy)
@@ -136,7 +136,7 @@ index 547c468a2ab7..4d6509238513 100644
  		if (ret != sizeof(pmt_val)) {
  			drm_warn(&hwmon->xe->drm, "energy read from pmt failed, ret %d\n", ret);
 diff --git a/drivers/gpu/drm/xe/xe_pcode.c b/drivers/gpu/drm/xe/xe_pcode.c
-index 622d35242435..3ce8ddfafcaa 100644
+index 622d35242..3ce8ddfaf 100644
 --- a/drivers/gpu/drm/xe/xe_pcode.c
 +++ b/drivers/gpu/drm/xe/xe_pcode.c
 @@ -366,11 +366,16 @@ ALLOW_ERROR_INJECTION(xe_pcode_probe_early, ERRNO); /* See xe_pci_probe */

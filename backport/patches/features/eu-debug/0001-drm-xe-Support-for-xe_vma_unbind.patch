@@ -1,0 +1,132 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Date: Fri, 31 Jul 2026 12:14:31 +0200
+Subject: [PATCH] drm/xe: Support for xe_vma_unbind()
+
+Introduced a API to single VMA unbind from VM.
+New funcion xe_vma_unbind() added.
+
+Use per-tile wait_vm_bookkeep on Linux 7.3, which predates the shared
+XE_VMA_OPS_FLAG_WAIT_VM_BOOKKEEP flag.
+
+Assisted-by: GitHub Copilot CLI:claude-opus-4.7
+Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+(backported from commit af20fe1e9931e36cceb6c8d582bcd0a1d0a941e0 eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vm.c | 84 ++++++++++++++++++++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_vm.h |  3 ++
+ 2 files changed, 87 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index de385f5e9..bb8a5abcc 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -1093,6 +1093,90 @@ struct dma_fence *xe_vm_range_unbind(struct xe_vm *vm,
+ 	return fence;
+ }
+ 
++static void xe_vm_populate_unbind(struct xe_vma_op *op,
++				  struct xe_vma *vma,
++				  u8 tile_mask)
++{
++	INIT_LIST_HEAD(&op->link);
++	op->tile_mask = tile_mask;
++	op->base.op = DRM_GPUVA_OP_UNMAP;
++	op->base.unmap.va = &vma->gpuva;
++	op->base.unmap.keep = false;
++}
++
++static int xe_vm_ops_add_unbind(struct xe_vma_ops *vops,
++				struct xe_vma *vma,
++				u8 tile_mask)
++{
++	struct xe_vma_op *op;
++
++	op = kzalloc_obj(*op);
++	if (!op)
++		return -ENOMEM;
++
++	xe_vm_populate_unbind(op, vma, tile_mask);
++	list_add_tail(&op->link, &vops->list);
++	xe_vma_ops_incr_pt_update_ops(vops, tile_mask, 1);
++
++	return 0;
++}
++
++/**
++ * xe_vma_unbind() - Unbind a vma from GPU page tables.
++ * @vm: The VM which the vma belongs to.
++ * @vma: The vma to be unbound.
++ * @tile_mask: tiles for unbind.
++ *
++ * Return: dma fence for unbind to signal completion on success, ERR_PTR on
++ * failure
++ */
++struct dma_fence *xe_vma_unbind(struct xe_vm *vm, struct xe_vma *vma,
++				u8 tile_mask)
++{
++	struct dma_fence *fence = NULL;
++	struct xe_vma_ops vops;
++	struct xe_vma_op *op, *next_op;
++	struct xe_tile *tile;
++	u8 id;
++	int err;
++
++	lockdep_assert_held_write(&vm->lock);
++	xe_vm_assert_held(vm);
++	xe_assert(vm->xe, xe_vm_in_fault_mode(vm));
++
++	if (!vma->tile_present)
++		return dma_fence_get_stub();
++
++	xe_vma_ops_init(&vops, vm, NULL, NULL, 0);
++
++	for_each_tile(tile, vm->xe, id)
++		vops.pt_update_ops[id].wait_vm_bookkeep = true;
++
++	err = xe_vm_ops_add_unbind(&vops, vma, tile_mask);
++	if (err) {
++		fence = ERR_PTR(err);
++		goto err_fini;
++	}
++
++	err = xe_vma_ops_alloc(&vops, false);
++	if (err) {
++		fence = ERR_PTR(err);
++		goto free_ops;
++	}
++
++	fence = ops_execute(vm, &vops);
++
++free_ops:
++	list_for_each_entry_safe(op, next_op, &vops.list, link) {
++		list_del(&op->link);
++		kfree(op);
++	}
++err_fini:
++	xe_vma_ops_fini(&vops);
++
++	return fence;
++}
++
+ static void xe_vma_mem_attr_fini(struct xe_vma_mem_attr *attr)
+ {
+ 	drm_pagemap_put(attr->preferred_loc.dpagemap);
+diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
+index cc4d8707a..f4393c57d 100644
+--- a/drivers/gpu/drm/xe/xe_vm.h
++++ b/drivers/gpu/drm/xe/xe_vm.h
+@@ -249,6 +249,9 @@ struct dma_fence *xe_vm_range_rebind(struct xe_vm *vm,
+ 				     u8 tile_mask);
+ struct dma_fence *xe_vm_range_unbind(struct xe_vm *vm,
+ 				     struct xe_svm_range *range);
++struct dma_fence *xe_vma_unbind(struct xe_vm *vm,
++				struct xe_vma *vma,
++				u8 tile_mask);
+ 
+ int xe_vm_invalidate_vma(struct xe_vma *vma);
+ 
+-- 
+2.43.0
+

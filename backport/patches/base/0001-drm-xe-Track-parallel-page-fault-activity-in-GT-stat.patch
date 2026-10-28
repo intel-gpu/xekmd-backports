@@ -1,0 +1,98 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Thu, 6 Aug 2026 11:52:02 -0700
+Subject: [PATCH] drm/xe: Track parallel page fault activity in GT stats
+
+Add a new GT statistic, PARALLEL_PAGEFAULT_COUNT, to record when
+multiple page fault workers are active concurrently.
+
+When a worker dequeues a fault, scan peer workers for an active
+cache entry and increment the counter if another fault is already
+in flight. This provides basic visibility into parallel fault
+handling behavior for performance analysis and tuning.
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Link: https://patch.msgid.link/20260806185202.3922432-13-matthew.brost@intel.com
+(cherry-picked from commit aa8216142a6c8bbc6cb4b83d8782d4fa34c97baa linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_stats.c       |  1 +
+ drivers/gpu/drm/xe/xe_gt_stats_types.h |  3 +++
+ drivers/gpu/drm/xe/xe_pagefault.c      | 18 +++++++++++++++++-
+ 3 files changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_stats.c b/drivers/gpu/drm/xe/xe_gt_stats.c
+index f2e77df0f..2a4092466 100644
+--- a/drivers/gpu/drm/xe/xe_gt_stats.c
++++ b/drivers/gpu/drm/xe/xe_gt_stats.c
+@@ -99,6 +99,7 @@ static const char *const stat_description[__XE_GT_STATS_NUM_IDS] = {
+ 	DEF_STAT_STR(CHAIN_IRQ_PAGEFAULT_COUNT, "chain_irq_pagefault_count"),
+ 	DEF_STAT_STR(CHAIN_DRAIN_IRQ_PAGEFAULT_COUNT, "chain_drain_irq_pagefault_count"),
+ 	DEF_STAT_STR(CHAIN_MISMATCH_PAGEFAULT_COUNT, "chain_mismatch_pagefault_count"),
++	DEF_STAT_STR(PARALLEL_PAGEFAULT_COUNT, "parallel_pagefault_count"),
+ 	DEF_STAT_STR(LAST_PAGEFAULT_COUNT, "last_pagefault_count"),
+ 	DEF_STAT_STR(SVM_PAGEFAULT_COUNT, "svm_pagefault_count"),
+ 	DEF_STAT_STR(TLB_INVAL, "tlb_inval_count"),
+diff --git a/drivers/gpu/drm/xe/xe_gt_stats_types.h b/drivers/gpu/drm/xe/xe_gt_stats_types.h
+index ab5506f91..24abeb9f2 100644
+--- a/drivers/gpu/drm/xe/xe_gt_stats_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_stats_types.h
+@@ -18,6 +18,8 @@
+  *   that also drained the fault queue.
+  * @XE_GT_STATS_ID_CHAIN_MISMATCH_PAGEFAULT_COUNT: Chained faults requeued
+  *   because their fault range did not match the fault they were chained onto.
++ * @XE_GT_STATS_ID_PARALLEL_PAGEFAULT_COUNT: Faults dequeued while another page
++ *   fault worker was already handling a fault concurrently.
+  * @XE_GT_STATS_ID_LAST_PAGEFAULT_COUNT: Faults whose range matched the last
+  *   serviced range, allowing an immediate ack.
+  *
+@@ -144,6 +146,7 @@ enum xe_gt_stats_id {
+ 	XE_GT_STATS_ID_CHAIN_IRQ_PAGEFAULT_COUNT,
+ 	XE_GT_STATS_ID_CHAIN_DRAIN_IRQ_PAGEFAULT_COUNT,
+ 	XE_GT_STATS_ID_CHAIN_MISMATCH_PAGEFAULT_COUNT,
++	XE_GT_STATS_ID_PARALLEL_PAGEFAULT_COUNT,
+ 	XE_GT_STATS_ID_LAST_PAGEFAULT_COUNT,
+ 	XE_GT_STATS_ID_SVM_PAGEFAULT_COUNT,
+ 	XE_GT_STATS_ID_TLB_INVAL,
+diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
+index dbcb9b0dd..c3634981b 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_pagefault.c
+@@ -462,9 +462,10 @@ static bool xe_pagefault_queue_pop(struct xe_pagefault_queue *pf_queue,
+ {
+ 	struct xe_device *xe = container_of(pf_queue, typeof(*xe),
+ 					    usm.pf_queue);
+-	struct xe_pagefault_work *pf_work;
++	struct xe_pagefault_work *pf_work, *__pf_work;
+ 	struct xe_pagefault *lpf;
+ 	size_t align = SZ_2M;
++	int i;
+ 
+ 	guard(spinlock_irq)(&pf_queue->lock);
+ 
+@@ -501,6 +502,21 @@ static bool xe_pagefault_queue_pop(struct xe_pagefault_queue *pf_queue,
+ 	pf_work->cache.pf = lpf;
+ 	lpf->consumer.alloc_state = XE_PAGEFAULT_ALLOC_STATE_ACTIVE;
+ 
++	for (i = 0, __pf_work = xe->usm.pf_workers;
++	     i < xe->info.num_pf_work; ++i, ++__pf_work) {
++		u64 cache_start = __pf_work->cache.start;
++
++		if (__pf_work == pf_work)
++			continue;
++
++		if (cache_start != XE_PAGEFAULT_CACHE_START_INVALID) {
++			xe_gt_stats_incr(xe_root_mmio_gt(xe),
++					 XE_GT_STATS_ID_PARALLEL_PAGEFAULT_COUNT,
++					 1);
++			break;
++		}
++	}
++
+ 	/* Drain queue until empty or new fault found */
+ 	while (1) {
+ 		if (xe_pagefault_queue_empty(pf_queue))
+-- 
+2.43.0
+

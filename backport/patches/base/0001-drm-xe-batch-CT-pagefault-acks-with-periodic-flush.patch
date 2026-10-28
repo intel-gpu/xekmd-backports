@@ -1,0 +1,477 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Thu, 6 Aug 2026 11:52:01 -0700
+Subject: [PATCH] drm/xe: batch CT pagefault acks with periodic flush
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Pagefault storms can generate long chains of acknowledgments back to the
+GuC. Sending each ack as a full CT submission forces a barrier,
+descriptor update and doorbell per fault.
+
+Extend xe_guc_ct_send_locked() with a “defer-flush” mode that copies the
+message into the H2G ring but defers publishing the descriptor and
+ringing the doorbell. Add xe_guc_ct_send_flush() to publish pending
+writes and notify GuC once per batch. Wire this into the pagefault
+producer via new ack_fault_begin/ack_fault_end callbacks and CT lock
+wrappers.
+
+To avoid excessive flush latency while still amortizing MMIO costs, use
+a simple periodic flush heuristic for GuC pagefault acks: batch most
+acks as defer-flush and force a publish at a fixed interval (e.g., every
+16th ack), with a final flush at end-of-batch.
+
+Also increase the H2G CTB size to 16K to better absorb bursts.
+
+Assisted-by: ChatGPT:gpt-5 # Documentation
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Francois Dugast <francois.dugast@intel.com>
+Link: https://patch.msgid.link/20260806185202.3922432-12-matthew.brost@intel.com
+(cherry-picked from commit d4a7e1611716ac4c211f5f022363c2123d92d812 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_ct.c          | 95 +++++++++++++++++++------
+ drivers/gpu/drm/xe/xe_guc_ct.h          | 38 +++++++++-
+ drivers/gpu/drm/xe/xe_guc_pagefault.c   | 32 ++++++++-
+ drivers/gpu/drm/xe/xe_guc_types.h       |  6 ++
+ drivers/gpu/drm/xe/xe_pagefault.c       | 12 +++-
+ drivers/gpu/drm/xe/xe_pagefault_types.h | 14 ++++
+ 6 files changed, 172 insertions(+), 25 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
+index fe70c0fd8..5c4733da3 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ct.c
++++ b/drivers/gpu/drm/xe/xe_guc_ct.c
+@@ -265,7 +265,7 @@ static bool g2h_fence_needs_alloc(struct g2h_fence *g2h_fence)
+ #define CTB_DESC_SIZE		ALIGN(sizeof(struct guc_ct_buffer_desc), SZ_2K)
+ #define CTB_H2G_BUFFER_OFFSET	(CTB_DESC_SIZE * 2)
+ #define CTB_G2H_BUFFER_OFFSET	(CTB_DESC_SIZE * 2)
+-#define CTB_H2G_BUFFER_SIZE	(SZ_4K)
++#define CTB_H2G_BUFFER_SIZE	(SZ_16K)
+ #define CTB_H2G_BUFFER_DWORDS	(CTB_H2G_BUFFER_SIZE / sizeof(u32))
+ #define CTB_G2H_BUFFER_SIZE	(SZ_128K)
+ #define CTB_G2H_BUFFER_DWORDS	(CTB_G2H_BUFFER_SIZE / sizeof(u32))
+@@ -939,7 +939,7 @@ static bool vf_action_can_safely_fail(struct xe_device *xe, u32 action)
+ #define H2G_CT_HEADERS (GUC_CTB_HDR_LEN + 1) /* one DW CTB header and one DW HxG header */
+ 
+ static int h2g_write(struct xe_guc_ct *ct, const u32 *action, u32 len,
+-		     u32 ct_fence_value, bool want_response)
++		     u32 ct_fence_value, bool want_response, bool defer_flush)
+ {
+ 	struct xe_device *xe = ct_to_xe(ct);
+ 	struct xe_gt *gt = ct_to_gt(ct);
+@@ -956,7 +956,6 @@ static int h2g_write(struct xe_guc_ct *ct, const u32 *action, u32 len,
+ 	xe_gt_assert(gt, full_len <= GUC_CTB_MSG_MAX_LEN);
+ 
+ 	if (IS_ENABLED(CONFIG_DRM_XE_DEBUG)) {
+-		u32 desc_tail = desc_read(xe, h2g, tail);
+ 		u32 desc_head = desc_read(xe, h2g, head);
+ 		u32 desc_status;
+ 
+@@ -966,12 +965,6 @@ static int h2g_write(struct xe_guc_ct *ct, const u32 *action, u32 len,
+ 			goto corrupted;
+ 		}
+ 
+-		if (tail != desc_tail) {
+-			desc_write(xe, h2g, status, desc_status | GUC_CTB_STATUS_MISMATCH);
+-			xe_gt_err(gt, "CT write: tail was modified %u != %u\n", desc_tail, tail);
+-			goto corrupted;
+-		}
+-
+ 		if (tail > h2g->info.size) {
+ 			desc_write(xe, h2g, status, desc_status | GUC_CTB_STATUS_OVERFLOW);
+ 			xe_gt_err(gt, "CT write: tail out of range: %u vs %u\n",
+@@ -993,7 +986,10 @@ static int h2g_write(struct xe_guc_ct *ct, const u32 *action, u32 len,
+ 			      (h2g->info.size - tail) * sizeof(u32));
+ 		h2g_reserve_space(ct, (h2g->info.size - tail));
+ 		h2g->info.tail = 0;
+-		desc_write(xe, h2g, tail, h2g->info.tail);
++		if (!defer_flush) {
++			xe_device_wmb(xe);
++			desc_write(xe, h2g, tail, h2g->info.tail);
++		}
+ 
+ 		return -EAGAIN;
+ 	}
+@@ -1024,14 +1020,15 @@ static int h2g_write(struct xe_guc_ct *ct, const u32 *action, u32 len,
+ 	/* Write H2G ensuring visible before descriptor update */
+ 	xe_map_memcpy_to(xe, &map, 0, cmd, H2G_CT_HEADERS * sizeof(u32));
+ 	xe_map_memcpy_to(xe, &map, H2G_CT_HEADERS * sizeof(u32), action, len * sizeof(u32));
+-	xe_device_wmb(xe);
+-
+ 	/* Update local copies */
+ 	h2g->info.tail = (tail + full_len) % h2g->info.size;
+ 	h2g_reserve_space(ct, full_len);
+ 
+ 	/* Update descriptor */
+-	desc_write(xe, h2g, tail, h2g->info.tail);
++	if (!defer_flush) {
++		xe_device_wmb(xe);
++		desc_write(xe, h2g, tail, h2g->info.tail);
++	}
+ 
+ 	/*
+ 	 * desc_read() performs an VRAM read which serializes the CPU and drains
+@@ -1052,7 +1049,7 @@ corrupted:
+ 
+ static int __guc_ct_send_locked(struct xe_guc_ct *ct, const u32 *action,
+ 				u32 len, u32 g2h_len, u32 num_g2h,
+-				struct g2h_fence *g2h_fence)
++				struct g2h_fence *g2h_fence, bool defer_flush)
+ {
+ 	struct xe_gt *gt = ct_to_gt(ct);
+ 	u16 seqno;
+@@ -1112,7 +1109,7 @@ retry:
+ 	if (unlikely(ret))
+ 		goto out_unlock;
+ 
+-	ret = h2g_write(ct, action, len, seqno, !!g2h_fence);
++	ret = h2g_write(ct, action, len, seqno, !!g2h_fence, defer_flush);
+ 	if (unlikely(ret)) {
+ 		if (ret == -EAGAIN)
+ 			goto retry;
+@@ -1120,7 +1117,8 @@ retry:
+ 	}
+ 
+ 	__g2h_reserve_space(ct, g2h_len, num_g2h);
+-	xe_guc_notify(ct_to_guc(ct));
++	if (!defer_flush)
++		xe_guc_notify(ct_to_guc(ct));
+ out_unlock:
+ 	if (g2h_len)
+ 		spin_unlock_irq(&ct->fast_lock);
+@@ -1196,7 +1194,7 @@ static bool guc_ct_send_wait_for_retry(struct xe_guc_ct *ct, u32 len,
+ 
+ static int guc_ct_send_locked(struct xe_guc_ct *ct, const u32 *action, u32 len,
+ 			      u32 g2h_len, u32 num_g2h,
+-			      struct g2h_fence *g2h_fence)
++			      struct g2h_fence *g2h_fence, bool defer_flush)
+ {
+ 	struct xe_gt *gt = ct_to_gt(ct);
+ 	unsigned int sleep_period_ms = 1;
+@@ -1209,9 +1207,10 @@ static int guc_ct_send_locked(struct xe_guc_ct *ct, const u32 *action, u32 len,
+ 
+ try_again:
+ 	ret = __guc_ct_send_locked(ct, action, len, g2h_len, num_g2h,
+-				   g2h_fence);
++				   g2h_fence, defer_flush);
+ 
+ 	if (unlikely(ret == -EBUSY)) {
++		xe_guc_ct_send_flush(ct);
+ 		if (!guc_ct_send_wait_for_retry(ct, len, g2h_len, g2h_fence,
+ 						&sleep_period_ms, &sleep_total_ms))
+ 			goto broken;
+@@ -1235,7 +1234,8 @@ static int guc_ct_send(struct xe_guc_ct *ct, const u32 *action, u32 len,
+ 	xe_gt_assert(ct_to_gt(ct), !g2h_len || !g2h_fence);
+ 
+ 	mutex_lock(&ct->lock);
+-	ret = guc_ct_send_locked(ct, action, len, g2h_len, num_g2h, g2h_fence);
++	ret = guc_ct_send_locked(ct, action, len, g2h_len, num_g2h, g2h_fence,
++				 false);
+ 	mutex_unlock(&ct->lock);
+ 
+ 	return ret;
+@@ -1283,25 +1283,76 @@ int xe_guc_ct_send(struct xe_guc_ct *ct, const u32 *action, u32 len,
+ 	return ret;
+ }
+ 
++/**
++ * xe_guc_ct_send_locked() - submit a GuC CT H2G message with CT lock held
++ * @ct: GuC CT object
++ * @action: payload dwords (HxG header dword is expected at @action[-1])
++ * @len: number of payload dwords in @action
++ * @defer_flush: defer publishing/doorbell for batching
++ *
++ * Sends a single H2G message to the GuC CT buffer while the caller already
++ * holds @ct->lock.
++ *
++ * If @defer_flush is false, the function completes the submission immediately:
++ * it makes the payload visible to the device, updates the H2G descriptor and
++ * rings the GuC doorbell.
++ *
++ * If @defer_flush is true, the message payload is copied into the H2G ring and
++ * the software tail is advanced, but the descriptor update and doorbell are
++ * deferred so multiple messages can be batched. In this mode, the caller must
++ * eventually call xe_guc_ct_send_flush() (still holding @ct->lock) to publish
++ * the descriptor and notify the GuC. On internal retry paths (-EBUSY), the
++ * implementation may force a flush to ensure forward progress.
++ *
++ * Return: 0 on success, negative errno on failure.
++ *
++ * Locking:
++ *   Must be called with @ct->lock held.
++ */
+ int xe_guc_ct_send_locked(struct xe_guc_ct *ct, const u32 *action, u32 len,
+-			  u32 g2h_len, u32 num_g2h)
++			  bool defer_flush)
+ {
+ 	int ret;
+ 
+-	ret = guc_ct_send_locked(ct, action, len, g2h_len, num_g2h, NULL);
++	ret = guc_ct_send_locked(ct, action, len, 0, 0, NULL, defer_flush);
+ 	if (ret == -EDEADLK)
+ 		kick_reset(ct);
+ 
+ 	return ret;
+ }
+ 
++/**
++ * xe_guc_ct_send_flush() - flush pending GuC CT H2G writes
++ * @ct: GuC CT instance
++ *
++ * Some callers batch multiple H2G writes using xe_guc_ct_send_locked() in
++ * "write-only" mode (i.e., queue the message payloads but defer ringing the
++ * doorbell / updating the CT descriptor). This helper completes the submission
++ * by ensuring the payload writes are visible to the device, updating the H2G
++ * descriptor, and ringing the GuC CT doorbell.
++ *
++ * Locking:
++ *   Must be called with @ct->lock held.
++ */
++void xe_guc_ct_send_flush(struct xe_guc_ct *ct)
++{
++	struct xe_device *xe = ct_to_xe(ct);
++	struct guc_ctb *h2g = &ct->ctbs.h2g;
++
++	lockdep_assert_held(&ct->lock);
++
++	xe_device_wmb(xe);
++	desc_write(xe, h2g, tail, h2g->info.tail);
++	xe_guc_notify(ct_to_guc(ct));
++}
++
+ int xe_guc_ct_send_g2h_handler(struct xe_guc_ct *ct, const u32 *action, u32 len)
+ {
+ 	int ret;
+ 
+ 	lockdep_assert_held(&ct->lock);
+ 
+-	ret = guc_ct_send_locked(ct, action, len, 0, 0, NULL);
++	ret = guc_ct_send_locked(ct, action, len, 0, 0, NULL, false);
+ 	if (ret == -EDEADLK)
+ 		kick_reset(ct);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_guc_ct.h b/drivers/gpu/drm/xe/xe_guc_ct.h
+index 767365a33..3ddc665ab 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ct.h
++++ b/drivers/gpu/drm/xe/xe_guc_ct.h
+@@ -6,6 +6,8 @@
+ #ifndef _XE_GUC_CT_H_
+ #define _XE_GUC_CT_H_
+ 
++#include <linux/mutex.h>
++
+ #include "xe_guc_ct_types.h"
+ 
+ struct drm_printer;
+@@ -54,7 +56,7 @@ static inline void xe_guc_ct_irq_handler(struct xe_guc_ct *ct)
+ int xe_guc_ct_send(struct xe_guc_ct *ct, const u32 *action, u32 len,
+ 		   u32 g2h_len, u32 num_g2h);
+ int xe_guc_ct_send_locked(struct xe_guc_ct *ct, const u32 *action, u32 len,
+-			  u32 g2h_len, u32 num_g2h);
++			  bool defer_flush);
+ int xe_guc_ct_send_recv(struct xe_guc_ct *ct, const u32 *action, u32 len,
+ 			u32 *response_buffer);
+ static inline int
+@@ -63,6 +65,8 @@ xe_guc_ct_send_block(struct xe_guc_ct *ct, const u32 *action, u32 len)
+ 	return xe_guc_ct_send_recv(ct, action, len, NULL);
+ }
+ 
++void xe_guc_ct_send_flush(struct xe_guc_ct *ct);
++
+ /* This is only version of the send CT you can call from a G2H handler */
+ int xe_guc_ct_send_g2h_handler(struct xe_guc_ct *ct, const u32 *action,
+ 			       u32 len);
+@@ -87,4 +91,36 @@ static inline void xe_guc_ct_wake_waiters(struct xe_guc_ct *ct)
+ 	wake_up_all(&ct->wq);
+ }
+ 
++/**
++ * xe_guc_ct_lock() - take the GuC CT mutex
++ * @ct: GuC CT object
++ *
++ * Wrapper around mutex_lock(&ct->lock) for cases where CT operations need to be
++ * performed from contexts that want an explicit "CT locked" pair without
++ * exporting the lock itself.
++ *
++ * Return/Locking:
++ *   Acquires @ct->lock.
++ */
++static inline void xe_guc_ct_lock(struct xe_guc_ct *ct)
++__acquires(&ct->lock)
++{
++	mutex_lock(&ct->lock);
++}
++
++/**
++ * xe_guc_ct_unlock() - release the GuC CT mutex
++ * @ct: GuC CT object
++ *
++ * Counterpart to xe_guc_ct_lock().
++ *
++ * Locking:
++ *   Releases @ct->lock.
++ */
++static inline void xe_guc_ct_unlock(struct xe_guc_ct *ct)
++__releases(&ct->lock)
++{
++	mutex_unlock(&ct->lock);
++}
++
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_guc_pagefault.c b/drivers/gpu/drm/xe/xe_guc_pagefault.c
+index 2470faf3d..8f8210a73 100644
+--- a/drivers/gpu/drm/xe/xe_guc_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_guc_pagefault.c
+@@ -10,6 +10,22 @@
+ #include "xe_pagefault.h"
+ #include "xe_pagefault_types.h"
+ 
++#define XE_GUC_PAGEFAULT_FLUSH_PERIOD	BIT(4)	/* Sixteen */
++
++static void guc_ack_fault_begin(void *private)
++{
++	struct xe_guc *guc = private;
++
++	xe_guc_ct_lock(&guc->ct);
++
++	BUILD_BUG_ON(((XE_GUC_PAGEFAULT_FLUSH_PERIOD - 1) &
++		     XE_GUC_PAGEFAULT_FLUSH_PERIOD) != 0);
++
++	/* Ack the 2nd, then 18th, etc... */
++	guc->pagefault_ack_counter =
++		XE_GUC_PAGEFAULT_FLUSH_PERIOD - 1;
++}
++
+ static void guc_ack_fault(struct xe_pagefault *pf, int err)
+ {
+ 	u32 vfid = FIELD_GET(PFD_VFID, pf->producer.msg[2]);
+@@ -36,12 +52,26 @@ static void guc_ack_fault(struct xe_pagefault *pf, int err)
+ 		FIELD_PREP(PFR_PDATA, pdata),
+ 	};
+ 	struct xe_guc *guc = pf->producer.private;
++	bool write_only = guc->pagefault_ack_counter++ &
++		(XE_GUC_PAGEFAULT_FLUSH_PERIOD - 1);
++
++	xe_guc_ct_send_locked(&guc->ct, action, ARRAY_SIZE(action),
++			      write_only);
++}
++
++static void guc_ack_fault_end(void *private)
++{
++	struct xe_guc *guc = private;
+ 
+-	xe_guc_ct_send(&guc->ct, action, ARRAY_SIZE(action), 0, 0);
++	if ((guc->pagefault_ack_counter & (XE_GUC_PAGEFAULT_FLUSH_PERIOD - 1)) != 1)
++		xe_guc_ct_send_flush(&guc->ct);
++	xe_guc_ct_unlock(&guc->ct);
+ }
+ 
+ static const struct xe_pagefault_ops guc_pagefault_ops = {
++	.ack_fault_begin = guc_ack_fault_begin,
+ 	.ack_fault = guc_ack_fault,
++	.ack_fault_end = guc_ack_fault_end,
+ };
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_guc_types.h b/drivers/gpu/drm/xe/xe_guc_types.h
+index 7e6a41df0..3f3138d67 100644
+--- a/drivers/gpu/drm/xe/xe_guc_types.h
++++ b/drivers/gpu/drm/xe/xe_guc_types.h
+@@ -128,6 +128,12 @@ struct xe_guc {
+ 	struct xe_reg notify_reg;
+ 	/** @params: Control params for fw initialization */
+ 	u32 params[GUC_CTL_MAX_DWORDS];
++
++	/**
++	 * @pagefault_ack_counter: Counter to determine when periodically ack
++	 * pagefaults in a batch.
++	 */
++	u32 pagefault_ack_counter;
+ };
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
+index 790fc7fa9..dbcb9b0dd 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_pagefault.c
+@@ -414,6 +414,10 @@ static bool xe_pagefault_try_chain(struct xe_pagefault_queue *pf_queue,
+ 			xe_assert(xe, pf_work->cache.pf->consumer.alloc_state ==
+ 				  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
+ 
++			if (pf->producer.private !=
++			    pf_work->cache.pf->producer.private)
++				continue;
++
+ 			xe_gt_stats_incr(pf->gt,
+ 					 XE_GT_STATS_ID_CHAIN_PAGEFAULT_COUNT,
+ 					 1);
+@@ -594,6 +598,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+ 	threshold = jiffies + msecs_to_jiffies(USM_QUEUE_MAX_RUNTIME_MS);
+ 
+ 	while (xe_pagefault_queue_pop(pf_queue, &pf, pf_work->id)) {
++		const struct xe_pagefault_ops *ops = pf->producer.ops;
++		void *private = pf->producer.private;
+ 		struct xe_gt *gt = pf->gt;
+ 		u32 asid = pf->consumer.asid;
+ 		int err = 0;
+@@ -630,11 +636,14 @@ ack_fault:
+ 			  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
+ 		xe_assert(xe, pf == pf_work->cache.pf);
+ 
++		ops->ack_fault_begin(private);
+ 		while (pf) {
+ 			xe_assert(xe, pf->consumer.alloc_state ==
+ 				  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
++			xe_assert(xe, ops == pf->producer.ops);
++			xe_assert(xe, gt == pf->gt);
+ 
+-			pf->producer.ops->ack_fault(pf, err);
++			ops->ack_fault(pf, err);
+ 
+ 			spin_lock_irq(&pf_queue->lock);
+ 
+@@ -662,6 +671,7 @@ ack_fault:
+ 
+ 			spin_unlock_irq(&pf_queue->lock);
+ 		}
++		ops->ack_fault_end(private);
+ 
+ 		if (time_after(jiffies, threshold)) {
+ 			queue_work(xe->usm.pagefault_wq, w);
+diff --git a/drivers/gpu/drm/xe/xe_pagefault_types.h b/drivers/gpu/drm/xe/xe_pagefault_types.h
+index 94bcd10f8..185d0813f 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault_types.h
++++ b/drivers/gpu/drm/xe/xe_pagefault_types.h
+@@ -34,6 +34,13 @@ enum xe_pagefault_type {
+ 
+ /** struct xe_pagefault_ops - Xe pagefault ops (producer) */
+ struct xe_pagefault_ops {
++	/**
++	 * @ack_fault_begin: Ack fault begin
++	 * @private: producer private data
++	 *
++	 * Page fault producer begins acknowledgment from the consumer.
++	 */
++	void (*ack_fault_begin)(void *private);
+ 	/**
+ 	 * @ack_fault: Ack fault
+ 	 * @pf: Page fault
+@@ -43,6 +50,13 @@ struct xe_pagefault_ops {
+ 	 * sends the result to the HW/FW interface.
+ 	 */
+ 	void (*ack_fault)(struct xe_pagefault *pf, int err);
++	/**
++	 * @ack_fault_end: Ack fault end
++	 * @private: producer private data
++	 *
++	 * Page fault producer ends acknowledgment from the consumer.
++	 */
++	void (*ack_fault_end)(void *private);
+ };
+ 
+ /**
+-- 
+2.43.0
+

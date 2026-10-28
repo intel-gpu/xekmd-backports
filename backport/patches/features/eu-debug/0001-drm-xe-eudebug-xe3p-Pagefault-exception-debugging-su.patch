@@ -36,18 +36,17 @@ Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Andrzej Hajda <andrzej.hajda@intel.com>
-(backported from commit 3daeea6e4edcc4771f4fe96cf45c1828070579ba drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
-Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+(cherry-picked from commit d9874b80cdbaf71c4791d479a0b746b8c7c9c8c4 eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
- drivers/gpu/drm/xe/regs/xe_lrc_layout.h  |  2 ++
- drivers/gpu/drm/xe/xe_eudebug.c          |  3 +++
- drivers/gpu/drm/xe/xe_exec_queue.c       | 16 ++++++++++++----
- drivers/gpu/drm/xe/xe_exec_queue_types.h |  3 ++-
- drivers/gpu/drm/xe/xe_lrc.c              |  2 +-
- drivers/gpu/drm/xe/xe_lrc.h              |  2 ++
- include/uapi/drm/xe_drm.h                |  1 +
- 7 files changed, 23 insertions(+), 6 deletions(-)
+ drivers/gpu/drm/xe/regs/xe_lrc_layout.h   |  2 ++
+ drivers/gpu/drm/xe/xe_eudebug_pagefault.c |  3 +++
+ drivers/gpu/drm/xe/xe_exec_queue.c        | 16 ++++++++++++----
+ drivers/gpu/drm/xe/xe_exec_queue_types.h  |  3 ++-
+ drivers/gpu/drm/xe/xe_lrc.c               |  8 ++++++--
+ drivers/gpu/drm/xe/xe_lrc.h               |  2 ++
+ include/uapi/drm/xe_drm.h                 |  1 +
+ 7 files changed, 28 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_lrc_layout.h b/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
 index 9cf18eac6..51a3463c8 100644
@@ -60,20 +59,20 @@ index 9cf18eac6..51a3463c8 100644
 +#define SUP_TRANS_CATERR		BIT(24)
 +
  #endif
-diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 79f640155..d9f386c6d 100644
---- a/drivers/gpu/drm/xe/xe_eudebug.c
-+++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -4348,6 +4348,9 @@ xe_eudebug_pagefault_create(struct xe_gt *gt, struct xe_vm *vm,
+diff --git a/drivers/gpu/drm/xe/xe_eudebug_pagefault.c b/drivers/gpu/drm/xe/xe_eudebug_pagefault.c
+index 4a2b68fc6..06bfa2dd2 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_eudebug_pagefault.c
+@@ -278,6 +278,9 @@ xe_eudebug_pagefault_start(struct xe_vm *vm, struct xe_vma *vma,
+ 	unsigned int fw_ref;
  	int lrc_idx;
- 	u32 td_ctl;
  
 +	if (GRAPHICS_VER(gt_to_xe(gt)) >= 35)
-+		return NULL;
++		return -EOPNOTSUPP;
 +
- 	down_read(&vm->lock);
- 	vma = xe_vm_find_vma_by_addr(vm, xe_pf->consumer.page_addr);
- 	up_read(&vm->lock);
+ 	if (!xe_eudebug_is_enabled(vm->xe))
+ 		return -EOPNOTSUPP;
+ 
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
 index e43ff90e1..c3ab112da 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
@@ -116,7 +115,7 @@ index e43ff90e1..c3ab112da 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index c08f4a974..d094cbf67 100644
+index 14de1b828..1a815b050 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
 @@ -154,7 +154,8 @@ struct xe_exec_queue {
@@ -130,18 +129,31 @@ index c08f4a974..d094cbf67 100644
  
  	union {
 diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
-index e72b76945..8ddf7909e 100644
+index e72b76945..328887bf6 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.c
 +++ b/drivers/gpu/drm/xe/xe_lrc.c
-@@ -1094,7 +1094,7 @@ static void xe_lrc_finish(struct xe_lrc *lrc)
-  * While doing so, we need to read the CTX_TIMESTAMP MMIO for the specific
-  * engine instance. Since we do not know which instance the context is running
-  * on until it is scheduled, we also read the ENGINE_ID MMIO in the WA BB and
-- * store it in the PPHSWP.
-+* store it in the PPHSWP.
-  */
- #define CONTEXT_ACTIVE XE_LRC_CTX_TIMESTAMP_ACTIVE
- static ssize_t setup_utilization_wa(struct xe_lrc *lrc,
+@@ -1616,6 +1616,7 @@ static int xe_lrc_ctx_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe, struct
+ 	if (lrc_to_xe(lrc)->info.has_64bit_timestamp)
+ 		xe_lrc_write_ctx_reg(lrc, CTX_TIMESTAMP_UDW, 0);
+ 
++
+ 	/*
+ 	 * Note: It's possible that this LRC may belong to an exec_queue that is
+ 	 * not part of a multi-queue group. That said, it doesn't hurt to set
+@@ -1628,8 +1629,11 @@ static int xe_lrc_ctx_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe, struct
+ 		xe_lrc_write_ctx_reg(lrc, CTX_QUEUE_TIMESTAMP_UDW, 0);
+ 	}
+ 
+-	if (xe->info.has_asid && vm)
+-		xe_lrc_write_ctx_reg(lrc, CTX_ASID, vm->usm.asid);
++	if (xe->info.has_asid && vm) {
++		u32 asid = vm->usm.asid;
++		asid |= init_flags & XE_LRC_CREATE_SUP_TRANS_CATERR ? SUP_TRANS_CATERR : 0;
++		xe_lrc_write_ctx_reg(lrc, CTX_ASID, asid);
++	}
+ 
+ 	if (GRAPHICS_VER(xe) >= 20 && hwe->class == XE_ENGINE_CLASS_RENDER)
+ 		xe_lrc_set_gpgpu_preemption_level(lrc, gt);
 diff --git a/drivers/gpu/drm/xe/xe_lrc.h b/drivers/gpu/drm/xe/xe_lrc.h
 index 7be5e3da8..b065f41a5 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.h
@@ -156,7 +168,7 @@ index 7be5e3da8..b065f41a5 100644
  struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
  			     void *replay_state, u32 ring_size, u16 msix_vec, u32 flags);
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index b34c85c7a..d27480957 100644
+index 3b8ee9b21..e2a08e3f4 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -1466,6 +1466,7 @@ struct drm_xe_exec_queue_create {

@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Date: Wed, 28 Oct 2026 17:37:22 +0530
+Subject: [PATCH] drm/xe/eudebug: Do not warn when debugging is unsupported
+
+XE_EUDEBUG_NOT_SUPPORTED is a valid zero-valued state. Initialization
+leaves the device in this state for SR-IOV VFs and when EUdebug setup
+fails. Ordinary pagefault handling also checks whether EUdebug is
+enabled, so warning on a zero state taints the kernel even without a
+debugger session.
+
+Return false for unsupported devices without warning. Initialization
+failures retain their existing diagnostic messages.
+
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/prelim/xe_eudebug.c | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+--- a/drivers/gpu/drm/xe/prelim/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
+@@ -2429,9 +2429,6 @@ int prelim_xe_eudebug_connect_ioctl(struct drm_device *dev,
+ 
+ bool prelim_xe_eudebug_is_enabled(struct xe_device *xe)
+ {
+-	if (XE_WARN_ON(!xe->eudebug.state))
+-		return false;
+-
+ 	return xe->eudebug.state == XE_EUDEBUG_ENABLED;
+ }
+ 

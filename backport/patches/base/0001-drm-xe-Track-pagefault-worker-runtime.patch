@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Thu, 6 Aug 2026 11:51:57 -0700
+Subject: [PATCH] drm/xe: Track pagefault worker runtime
+
+Add a GT stat measuring total time spent servicing pagefault workqueue
+iterations. The counter accumulates the runtime of the pagefault worker
+in microseconds, allowing correlation of fault storms and chaining
+behavior with CPU time spent in the fault handler.
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Link: https://patch.msgid.link/20260806185202.3922432-8-matthew.brost@intel.com
+(backported from commit 107156dc6b9cc5710c9b1545d1e61a47a46c72bf linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_stats.c       | 1 +
+ drivers/gpu/drm/xe/xe_gt_stats_types.h | 3 +++
+ drivers/gpu/drm/xe/xe_pagefault.c      | 8 ++++++++
+ 3 files changed, 12 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_stats.c b/drivers/gpu/drm/xe/xe_gt_stats.c
+index 789397514..513fe28c0 100644
+--- a/drivers/gpu/drm/xe/xe_gt_stats.c
++++ b/drivers/gpu/drm/xe/xe_gt_stats.c
+@@ -101,6 +101,7 @@ static const char *const stat_description[__XE_GT_STATS_NUM_IDS] = {
+ 	DEF_STAT_STR(SVM_TLB_INVAL_US, "svm_tlb_inval_us"),
+ 	DEF_STAT_STR(VMA_PAGEFAULT_COUNT, "vma_pagefault_count"),
+ 	DEF_STAT_STR(VMA_PAGEFAULT_KB, "vma_pagefault_kb"),
++	DEF_STAT_STR(PAGEFAULT_US, "pagefault_us"),
+ 	DEF_STAT_STR(INVALID_PREFETCH_PAGEFAULT_COUNT, "invalid_prefetch_pagefault_count"),
+ 	DEF_STAT_STR(SVM_4K_PAGEFAULT_COUNT, "svm_4K_pagefault_count"),
+ 	DEF_STAT_STR(SVM_64K_PAGEFAULT_COUNT, "svm_64K_pagefault_count"),
+diff --git a/drivers/gpu/drm/xe/xe_gt_stats_types.h b/drivers/gpu/drm/xe/xe_gt_stats_types.h
+index 425491bed..a7021a298 100644
+--- a/drivers/gpu/drm/xe/xe_gt_stats_types.h
++++ b/drivers/gpu/drm/xe/xe_gt_stats_types.h
+@@ -22,6 +22,8 @@
+  *   handled.
+  * @XE_GT_STATS_ID_VMA_PAGEFAULT_KB: Size (KiB) of VMAs involved in
+  *   buffer-object page fault handling.
++ * @XE_GT_STATS_ID_PAGEFAULT_US: Cumulative time (µs) handling of all page
++ *   faults.
+  * @XE_GT_STATS_ID_INVALID_PREFETCH_PAGEFAULT_COUNT: GPU prefetch faults for
+  *   addresses with no valid backing.
+  *
+@@ -133,6 +135,7 @@ enum xe_gt_stats_id {
+ 	XE_GT_STATS_ID_SVM_TLB_INVAL_US,
+ 	XE_GT_STATS_ID_VMA_PAGEFAULT_COUNT,
+ 	XE_GT_STATS_ID_VMA_PAGEFAULT_KB,
++	XE_GT_STATS_ID_PAGEFAULT_US,
+ 	XE_GT_STATS_ID_INVALID_PREFETCH_PAGEFAULT_COUNT,
+ 	XE_GT_STATS_ID_SVM_4K_PAGEFAULT_COUNT,
+ 	XE_GT_STATS_ID_SVM_64K_PAGEFAULT_COUNT,
+diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
+index 0944e087d..ecad76dcb 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_pagefault.c
+@@ -298,6 +298,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+ 	struct xe_device *xe = pf_work->xe;
+ 	struct xe_pagefault_queue *pf_queue = &xe->usm.pf_queue;
+ 	struct xe_pagefault pf;
++	ktime_t start = xe_gt_stats_ktime_get();
++	struct xe_gt *gt = NULL;
+ 	unsigned long threshold;
+ 
+ 	/*
+@@ -316,6 +318,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+ 		if (!pf.gt)	/* Fault squashed during reset */
+ 			continue;
+ 
++		gt = pf.gt;
+ 		err = xe_pagefault_service(&pf);
+ 		if (err) {
+ 			if (!(pf.consumer.access_type & XE_PAGEFAULT_ACCESS_PREFETCH)) {
+@@ -337,6 +340,11 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+ 		}
+ 	}
+ #undef USM_QUEUE_MAX_RUNTIME_MS
++
++	if (gt)
++		xe_gt_stats_incr(xe_root_mmio_gt(gt_to_xe(gt)),
++				 XE_GT_STATS_ID_PAGEFAULT_US,
++				 xe_gt_stats_ktime_us_delta(start));
+ }
+ 
+ static int xe_pagefault_queue_init(struct xe_device *xe,
+-- 
+2.43.0
+

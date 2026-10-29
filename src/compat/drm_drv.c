@@ -41,6 +41,8 @@
 #include <linux/sprintf.h>
 #include <linux/srcu.h>
 #include <linux/xarray.h>
+#include <linux/pci.h>
+#include <linux/seq_file.h>
 
 #include <drm/drm_accel.h>
 #include <drm/drm_bridge.h>
@@ -137,4 +139,37 @@ int backport_drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
 }
 #define drm_dev_wedged_event backport_drm_dev_wedged_event
 EXPORT_SYMBOL(drm_dev_wedged_event);
+#endif
+
+#ifdef BPM_DRM_SHOW_FDINFO_NOT_PRESENT
+/*
+ * Backport of drm_show_fdinfo(). Older kernels have neither
+ * drm_driver.show_fdinfo nor drm_file.client_id, so the driver passes in
+ * its own client id and fdinfo callback. Keeping the callback here (instead
+ * of calling into xe directly) avoids a circular xe <-> xe-compat module
+ * dependency.
+ */
+void bpm_drm_show_fdinfo(struct seq_file *m, struct file *f, u64 client_id,
+			 void (*show_fdinfo)(struct drm_printer *p,
+					     struct drm_file *file))
+{
+	struct drm_file *file = f->private_data;
+	struct drm_device *dev = file->minor->dev;
+	struct drm_printer p = drm_seq_file_printer(m);
+
+	drm_printf(&p, "drm-driver:\t%s\n", dev->driver->name);
+	drm_printf(&p, "drm-client-id:\t%llu\n", client_id);
+
+	if (dev_is_pci(dev->dev)) {
+		struct pci_dev *pdev = to_pci_dev(dev->dev);
+
+		drm_printf(&p, "drm-pdev:\t%04x:%02x:%02x.%d\n",
+			   pci_domain_nr(pdev->bus), pdev->bus->number,
+			   PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn));
+	}
+
+	if (show_fdinfo)
+		show_fdinfo(&p, file);
+}
+EXPORT_SYMBOL(bpm_drm_show_fdinfo);
 #endif

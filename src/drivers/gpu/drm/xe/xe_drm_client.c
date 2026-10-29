@@ -94,6 +94,13 @@ struct xe_drm_client *xe_drm_client_alloc(void)
 
 	kref_init(&client->kref);
 
+#ifdef BPM_DRM_FILE_CLIENT_ID_NOT_PRESENT
+	{
+		static atomic_t next_client_id = ATOMIC_INIT(0);
+		client->id = atomic_inc_return(&next_client_id);
+	}
+#endif
+
 #ifdef CONFIG_PROC_FS
 	spin_lock_init(&client->bos_lock);
 	INIT_LIST_HEAD(&client->bos_list);

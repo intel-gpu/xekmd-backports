@@ -393,6 +393,20 @@ static int xe_mmap(struct file *filp, struct vm_area_struct *vma)
 	return drm_gem_mmap(filp, vma);
 }
 
+#if defined(CONFIG_PROC_FS) && defined(BPM_DRM_SHOW_FDINFO_NOT_PRESENT)
+static void xe_show_fdinfo(struct seq_file *m, struct file *f)
+{
+	struct drm_file *file = f->private_data;
+#ifdef BPM_DRM_FILE_CLIENT_ID_NOT_PRESENT
+	u64 client_id = to_xe_file(file)->client->id;
+#else
+	u64 client_id = file->client_id;
+#endif
+
+	bpm_drm_show_fdinfo(m, f, client_id, xe_drm_client_fdinfo);
+}
+#endif
+
 static const struct file_operations xe_driver_fops = {
 	.owner = THIS_MODULE,
 	.open = drm_open,
@@ -403,8 +417,12 @@ static const struct file_operations xe_driver_fops = {
 	.read = drm_read,
 	.compat_ioctl = xe_drm_compat_ioctl,
 	.llseek = noop_llseek,
-#if defined(CONFIG_PROC_FS) && !defined(BPM_DRM_SHOW_FDINFO_NOT_PRESENT)
+#if defined(CONFIG_PROC_FS)
+#ifdef BPM_DRM_SHOW_FDINFO_NOT_PRESENT
+	.show_fdinfo = xe_show_fdinfo,
+#else
 	.show_fdinfo = drm_show_fdinfo,
+#endif
 #endif
 #ifndef BPM_FOP_UNSIGNED_OFFSET_NOT_PRESENT
 	.fop_flags = FOP_UNSIGNED_OFFSET,

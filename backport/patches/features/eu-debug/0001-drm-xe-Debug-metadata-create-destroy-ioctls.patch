@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Fri, 8 Sep 2023 17:32:30 +0200
-Subject: drm/xe: Debug metadata create/destroy ioctls
+Subject: [PATCH] drm/xe: Debug metadata create/destroy ioctls
 
 Ad a part of eu debug feature introduce debug metadata objects.
 These are to be used to pass metadata between client and debugger,
@@ -18,8 +18,8 @@ Cc: Matthew Auld <matthew.auld@intel.com>
 Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit e7f9dd9ccc7660babbf1c7654ac183ba2de7d241 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+(cherry-picked from commit 4f0432a6ca2a5f17864d8417b2729159868eb2a2 eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/Makefile                  |   3 +-
  drivers/gpu/drm/xe/xe_debug_metadata.c       | 107 +++++++++++++++++++
@@ -36,16 +36,16 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  create mode 100644 drivers/gpu/drm/xe/xe_debug_metadata_types.h
 
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index ea4869f8c..8b577c5c9 100644
+index c85cbb4d1..a29bd7c64 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -157,7 +157,8 @@ xe-y += xe_bb.o \
- 
+@@ -159,7 +159,8 @@ xe-y += xe_bb.o \
  xe-$(CONFIG_I2C)	+= xe_i2c.o \
  			   xe_amc.o
+ 
 -xe-$(CONFIG_DRM_XE_EUDEBUG) += xe_eudebug.o
 +xe-$(CONFIG_DRM_XE_EUDEBUG) += xe_eudebug.o \
-+	xe_debug_metadata.o
++		xe_debug_metadata.o
  xe-$(CONFIG_DRM_XE_GPUSVM) += xe_svm.o
  xe-$(CONFIG_DRM_GPUSVM) += xe_userptr.o
  
@@ -249,10 +249,10 @@ index 000000000..624852920
 +
 +#endif
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 7bffd8223..a9f87c329 100644
+index 3a1ed9b82..59527060d 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -29,6 +29,7 @@
+@@ -30,6 +30,7 @@
  #include "xe_defaults.h"
  #include "xe_devcoredump.h"
  #include "xe_device_sysfs.h"
@@ -260,7 +260,7 @@ index 7bffd8223..a9f87c329 100644
  #include "xe_dma_buf.h"
  #include "xe_drm_client.h"
  #include "xe_drv.h"
-@@ -222,6 +223,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
+@@ -228,6 +229,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
  	DRM_IOCTL_DEF_DRV(XE_VM_GET_PROPERTY, xe_vm_get_property_ioctl,
  			  DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_EUDEBUG_CONNECT, xe_eudebug_connect_ioctl, DRM_RENDER_ALLOW),
@@ -272,10 +272,10 @@ index 7bffd8223..a9f87c329 100644
  
  static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
-index ed601f151..98b7b715d 100644
+index 8bacb3689..0cb04cc27 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
-@@ -301,6 +301,8 @@ static inline int xe_eudebug_needs_lock(const unsigned int cmd)
+@@ -305,6 +305,8 @@ static inline int xe_eudebug_needs_lock(const unsigned int cmd)
  	case DRM_XE_EXEC_QUEUE_CREATE:
  	case DRM_XE_EXEC_QUEUE_DESTROY:
  	case DRM_XE_EUDEBUG_CONNECT:
@@ -285,10 +285,10 @@ index ed601f151..98b7b715d 100644
  	}
  
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 0e4dccd2e..df9ffe358 100644
+index 85f03bb8c..ff0747efa 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -717,10 +717,18 @@ struct xe_file {
+@@ -740,10 +740,18 @@ struct xe_file {
  	struct kref refcount;
  
  #if IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)
@@ -309,7 +309,7 @@ index 0e4dccd2e..df9ffe358 100644
  #endif
  };
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index e240073ae..836c048df 100644
+index f9c72677a..3224c135b 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -21,6 +21,7 @@
@@ -320,7 +320,7 @@ index e240073ae..836c048df 100644
  #include "xe_eudebug.h"
  #include "xe_eudebug_types.h"
  #include "xe_exec_queue.h"
-@@ -2169,6 +2170,8 @@ void xe_eudebug_file_open(struct xe_file *xef)
+@@ -2177,6 +2178,8 @@ void xe_eudebug_file_open(struct xe_file *xef)
  	struct xe_eudebug *d;
  
  	INIT_LIST_HEAD(&xef->eudebug.client_link);
@@ -329,7 +329,7 @@ index e240073ae..836c048df 100644
  
  	down_read(&xef->xe->eudebug.discovery_lock);
  
-@@ -2186,12 +2189,22 @@ void xe_eudebug_file_open(struct xe_file *xef)
+@@ -2194,12 +2197,22 @@ void xe_eudebug_file_open(struct xe_file *xef)
  void xe_eudebug_file_close(struct xe_file *xef)
  {
  	struct xe_eudebug *d;
@@ -353,10 +353,10 @@ index e240073ae..836c048df 100644
  	list_del_init(&xef->eudebug.client_link);
  	spin_unlock(&xef->xe->clients.lock);
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 750ba6fc6..a6cbc3703 100644
+index 9d5be46e8..a87d9ee2c 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
-@@ -110,6 +110,8 @@ extern "C" {
+@@ -111,6 +111,8 @@ extern "C" {
  #define DRM_XE_EXEC_QUEUE_SET_PROPERTY	0x0e
  #define DRM_XE_VM_GET_PROPERTY		0x0f
  #define DRM_XE_EUDEBUG_CONNECT		0x10
@@ -365,7 +365,7 @@ index 750ba6fc6..a6cbc3703 100644
  
  /* Must be kept compact -- no holes */
  
-@@ -130,6 +132,8 @@ extern "C" {
+@@ -131,6 +133,8 @@ extern "C" {
  #define DRM_IOCTL_XE_EXEC_QUEUE_SET_PROPERTY	DRM_IOW(DRM_COMMAND_BASE + DRM_XE_EXEC_QUEUE_SET_PROPERTY, struct drm_xe_exec_queue_set_property)
  #define DRM_IOCTL_XE_VM_GET_PROPERTY		DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_VM_GET_PROPERTY, struct drm_xe_vm_get_property)
  #define DRM_IOCTL_XE_EUDEBUG_CONNECT		DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_EUDEBUG_CONNECT, struct drm_xe_eudebug_connect)
@@ -374,7 +374,7 @@ index 750ba6fc6..a6cbc3703 100644
  
  /**
   * DOC: Xe IOCTL Extensions
-@@ -2639,6 +2643,54 @@ struct drm_xe_eudebug_connect {
+@@ -2655,6 +2659,54 @@ struct drm_xe_eudebug_connect {
  	__u32 version; /* output: current ABI (ioctl / events) version */
  };
  

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Thu, 22 Feb 2024 15:12:37 +0100
-Subject: drm/xe/eudebug/xe3p: Per context debugging support
+Subject: [PATCH] drm/xe/eudebug/xe3p: Per context debugging support
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -36,36 +36,43 @@ v5: fix oops
 v6: added kunit test
 
 v7: fixed oops from accessing closed file data (Andrzej)
+
+v8: merge notify msg into one with same guc_id (Jakub)
+
+v9: exec queue tracking (Leonard).
+
 Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Andrzej Hajda <andrzej.hajda@intel.com> #v5,7
 Signed-off-by: Jan Sokolowski <jan.sokolowski@intel.com> #v6
+Signed-off-by: Jakub Legowski <jakub.legowski@intel.com>
+Signed-off-by: Leonard Madzielewski <leonard.madzielewski@intel.com>
 Reviewed-by: Andrzej Hajda <andrzej.hajda@intel.com>
 Reviewed-by: Dominik Karol Piątkowski <dominik.karol.piatkowski@intel.com> #v5
-(backported from commit d9e93b23b06455b2d037ce090551a729f4ee4265 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+(backported from commit d54479f1eb9b78261787e47e30eb0b96cb8e8118 eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h  |   1 +
  drivers/gpu/drm/xe/tests/xe_eudebug.c |  10 +-
  drivers/gpu/drm/xe/xe_device.h        |   5 +
- drivers/gpu/drm/xe/xe_eudebug.c       | 189 ++++++++++++++++++++++----
+ drivers/gpu/drm/xe/xe_eudebug.c       | 276 +++++++++++++++++++++++---
  drivers/gpu/drm/xe/xe_eudebug.h       |   5 +
- drivers/gpu/drm/xe/xe_eudebug_types.h |  22 +++
+ drivers/gpu/drm/xe/xe_eudebug_types.h |  36 ++++
  drivers/gpu/drm/xe/xe_exec_queue.c    |   3 +-
  drivers/gpu/drm/xe/xe_gt.c            |   6 +
- drivers/gpu/drm/xe/xe_gt_debug.c      | 156 ++++++++++++++++++++-
+ drivers/gpu/drm/xe/xe_gt_debug.c      | 169 +++++++++++++++-
  drivers/gpu/drm/xe/xe_gt_debug.h      |   7 +
- drivers/gpu/drm/xe/xe_gt_types.h      |  33 +++++
+ drivers/gpu/drm/xe/xe_gt_types.h      |  49 +++--
  drivers/gpu/drm/xe/xe_guc_ct.c        |   4 +
- drivers/gpu/drm/xe/xe_guc_submit.c    |  16 ++-
- include/uapi/drm/xe_drm_eudebug.h     |   9 ++
- 14 files changed, 432 insertions(+), 34 deletions(-)
+ drivers/gpu/drm/xe/xe_guc_submit.c    |  16 +-
+ include/uapi/drm/xe_drm_eudebug.h     |   9 +
+ 14 files changed, 550 insertions(+), 46 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index e399c0a05e57..5fe12e5d6af9 100644
+index 02461145b..19bff6f18 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -517,6 +517,7 @@
+@@ -518,6 +518,7 @@
  #define   CLEAR_OPTIMIZATION_DISABLE			REG_BIT(6)
  
  #define TD_CTL					XE_REG_MCR(0xe400)
@@ -74,7 +81,7 @@ index e399c0a05e57..5fe12e5d6af9 100644
  #define   TD_CTL_FORCE_EXTERNAL_HALT		REG_BIT(6)
  #define   TD_CTL_FORCE_THREAD_BREAKPOINT_ENABLE	REG_BIT(4)
 diff --git a/drivers/gpu/drm/xe/tests/xe_eudebug.c b/drivers/gpu/drm/xe/tests/xe_eudebug.c
-index 41df9d28f47a..2b39f72d745d 100644
+index 41df9d28f..2b39f72d7 100644
 --- a/drivers/gpu/drm/xe/tests/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/tests/xe_eudebug.c
 @@ -36,13 +36,17 @@ static u32 get_reg_mask(struct xe_device *xe, struct xe_reg reg)
@@ -99,11 +106,11 @@ index 41df9d28f47a..2b39f72d745d 100644
  		val = GLOBAL_DEBUG_ENABLE;
  	} else if (reg.raw == ROW_CHICKEN.__reg.raw) {
 diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
-index bf7c4e96f4ce..bf5061aa6ea9 100644
+index 0cb04cc27..9a9f698c8 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
-@@ -182,6 +182,11 @@ static inline bool xe_device_has_mert(struct xe_device *xe)
- 	return xe->info.has_mert;
+@@ -192,6 +192,11 @@ static inline void xe_device_set_in_reset(struct xe_device *xe)
+ 	atomic_set(&xe->in_reset, 1);
  }
  
 +static inline bool xe_device_eudebug_uses_guc(struct xe_device *xe)
@@ -111,11 +118,11 @@ index bf7c4e96f4ce..bf5061aa6ea9 100644
 +	return GRAPHICS_VERx100(xe) >= 3500;
 +}
 +
- static inline bool xe_device_is_in_reset(struct xe_device *xe)
- {
- 	return atomic_read(&xe->in_reset);
+ u32 xe_device_ccs_bytes(struct xe_device *xe, u64 size);
+ 
+ void xe_device_snapshot_print(struct xe_device *xe, struct drm_printer *p);
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index 76d800e3f717..79f640155e68 100644
+index 3555f8771..c3c6358ee 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -15,6 +15,8 @@
@@ -127,16 +134,106 @@ index 76d800e3f717..79f640155e68 100644
  #include "regs/xe_gt_regs.h"
  #include "regs/xe_engine_regs.h"
  
-@@ -31,6 +33,8 @@
- #include "xe_gt.h"
+@@ -32,6 +34,8 @@
  #include "xe_gt_debug.h"
+ #include "xe_gt_debug_types.h"
  #include "xe_gt_mcr.h"
 +#include "xe_guc_ct.h"
 +#include "xe_guc_submit.h"
  #include "xe_guc_exec_queue_types.h"
  #include "xe_hw_engine.h"
  #include "xe_lrc.h"
-@@ -553,21 +557,6 @@ xe_eudebug_for_task_get(struct xe_device *xe,
+@@ -222,11 +226,17 @@ xe_eudebug_destroy_resources(struct xe_eudebug *d)
+ static void xe_eudebug_free(struct kref *ref)
+ {
+ 	struct xe_eudebug *d = container_of(ref, typeof(*d), ref);
++	struct xe_eudebug_stopped_queue *sq, *sq_temp;
+ 	struct xe_eudebug_event *event;
+ 
+ 	while (kfifo_get(&d->events.fifo, &event))
+ 		kfree(event);
+ 
++	list_for_each_entry_safe(sq, sq_temp, &d->stopped_queues, link) {
++		xe_exec_queue_put(sq->queue);
++		kfree(sq);
++	}
++
+ 	xe_eudebug_pagefault_fini(d);
+ 	xe_eudebug_destroy_resources(d);
+ 	mutex_destroy(&d->pf.lock);
+@@ -436,6 +446,62 @@ xe_eudebug_attach(struct xe_device *xe, struct xe_eudebug *d,
+ 	return 0;
+ }
+ 
++static void kill_stopped_queues(struct xe_eudebug *d)
++{
++	struct xe_eudebug_stopped_queue *sq, *tmp;
++
++	if (!xe_device_eudebug_uses_guc(d->xe))
++		return;
++
++	guard(mutex)(&d->eu_lock);
++
++	list_for_each_entry_safe(sq, tmp, &d->stopped_queues, link) {
++		xe_exec_queue_kill(sq->queue);
++		xe_exec_queue_put(sq->queue);
++
++		list_del(&sq->link);
++		kfree(sq);
++	}
++}
++
++static int add_stopped_queue(struct xe_eudebug *d, struct xe_exec_queue *q)
++{
++	struct xe_eudebug_stopped_queue *sq;
++
++	if (!xe_device_eudebug_uses_guc(d->xe))
++		return 0;
++
++	list_for_each_entry(sq, &d->stopped_queues, link)
++		if (sq->queue == q)
++			return 0;
++
++	sq = kzalloc_obj(*sq);
++	if (!sq)
++		return -ENOMEM;
++
++	sq->queue = xe_exec_queue_get(q);
++	list_add(&sq->link, &d->stopped_queues);
++
++	return 0;
++}
++
++static void remove_stopped_queue(struct xe_eudebug *d, struct xe_exec_queue *q)
++{
++	struct xe_eudebug_stopped_queue *sq, *tmp;
++
++	if (!xe_device_eudebug_uses_guc(d->xe))
++		return;
++
++	list_for_each_entry_safe(sq, tmp, &d->stopped_queues, link) {
++		if (sq->queue == q) {
++			xe_exec_queue_put(sq->queue);
++			list_del(&sq->link);
++			kfree(sq);
++			break;
++		}
++	}
++}
++
+ static bool xe_eudebug_detach(struct xe_device *xe,
+ 			      struct xe_eudebug *d,
+ 			      const int err)
+@@ -464,6 +530,8 @@ static bool xe_eudebug_detach(struct xe_device *xe,
+ 
+ 	release_acks(d);
+ 
++	kill_stopped_queues(d);
++
+ 	if (d->pf.fence) {
+ 		dma_fence_signal(d->pf.fence);
+ 		dma_fence_put(d->pf.fence);
+@@ -558,21 +626,6 @@ xe_eudebug_for_task_get(struct xe_device *xe,
  	return d;
  }
  
@@ -156,9 +253,9 @@ index 76d800e3f717..79f640155e68 100644
 -}
 -
  static struct xe_eudebug *
- _xe_eudebug_get(struct xe_file *xef)
+ __xe_eudebug_get(struct xe_file *xef)
  {
-@@ -575,10 +564,9 @@ _xe_eudebug_get(struct xe_file *xef)
+@@ -580,10 +633,9 @@ __xe_eudebug_get(struct xe_file *xef)
  	struct xe_eudebug *d;
  
  	d = NULL;
@@ -171,7 +268,7 @@ index 76d800e3f717..79f640155e68 100644
  		put_task_struct(task);
  	}
  
-@@ -932,7 +920,7 @@ static struct xe_eudebug_event *
+@@ -951,7 +1003,7 @@ static struct xe_eudebug_event *
  xe_eudebug_create_event(struct xe_eudebug *d, u16 type, u64 seqno, u16 flags,
  			u32 len)
  {
@@ -180,7 +277,7 @@ index 76d800e3f717..79f640155e68 100644
  	const u16 known_flags =
  		DRM_XE_EUDEBUG_EVENT_CREATE |
  		DRM_XE_EUDEBUG_EVENT_DESTROY |
-@@ -967,7 +955,7 @@ static long xe_eudebug_read_event(struct xe_eudebug *d,
+@@ -986,7 +1038,7 @@ static long xe_eudebug_read_event(struct xe_eudebug *d,
  		u64_to_user_ptr(arg);
  	struct drm_xe_eudebug_event user_event;
  	struct xe_eudebug_event *pending, *event_out;
@@ -189,7 +286,17 @@ index 76d800e3f717..79f640155e68 100644
  	long ret = 0;
  
  	if (XE_IOCTL_DBG(xe, copy_from_user(&user_event, user_orig, sizeof(user_event))))
-@@ -1183,11 +1171,16 @@ static int do_eu_control(struct xe_eudebug *d,
+@@ -1076,7 +1128,8 @@ void xe_eudebug_attention_poll_stop(struct xe_device *xe)
+ 
+ void xe_eudebug_attention_poll_start(struct xe_device *xe)
+ {
+-	mod_delayed_work(system_wq, &xe->eudebug.attention_scan, 0);
++	if (!xe_device_eudebug_uses_guc(xe))
++		mod_delayed_work(system_wq, &xe->eudebug.attention_scan, 0);
+ }
+ 
+ static long
+@@ -1215,10 +1268,22 @@ static int do_eu_control(struct xe_eudebug *d,
  			ret = d->ops->interrupt_all(d, q, lrc);
  		break;
  	case DRM_XE_EUDEBUG_EU_CONTROL_CMD_STOPPED:
@@ -198,26 +305,48 @@ index 76d800e3f717..79f640155e68 100644
 +			ret = d->ops->stopped(d, q, lrc, bits, attn_size);
  		break;
  	case DRM_XE_EUDEBUG_EU_CONTROL_CMD_RESUME:
++		/*
++		 * We need to remove the exec queue from the list before calling resume
++		 * because all sync-host events can appear before the resume operation returns.
++		 */
++		remove_stopped_queue(d, q);
  		ret = d->ops->resume(d, q, lrc, bits, attn_size);
- 		break;
++		if (ret)
++			add_stopped_queue(d, q);
++		break;
 +	case DRM_XE_EUDEBUG_EU_CONTROL_CMD_UNLOCK:
 +		if (d->ops->unlock)
 +			ret = d->ops->unlock(d, q, lrc, bits, attn_size);
-+		break;
+ 		break;
  	default:
  		break;
+@@ -1634,9 +1699,11 @@ static struct xe_exec_queue *active_hwe_to_exec_queue(struct xe_hw_engine *hwe,
+ 	if (err)
+ 		return ERR_PTR(err);
+ 
++	spin_lock(&xe->clients.lock);
+ 	list_for_each_entry_safe(xef, tmp_xef,
+ 				 &xe->clients.list, eudebug.client_link) {
+ 		xef = xe_file_get(xef);
++		spin_unlock(&xe->clients.lock);
+ 		mutex_lock(&xef->exec_queue.lock);
+ 		xa_for_each(&xef->exec_queue.xa, i, q) {
+ 			q = xe_exec_queue_get(q);
+@@ -1657,10 +1724,13 @@ static struct xe_exec_queue *active_hwe_to_exec_queue(struct xe_hw_engine *hwe,
+ 		}
+ 		mutex_unlock(&xef->exec_queue.lock);
+ 		xe_file_put(xef);
++		spin_lock(&xe->clients.lock);
+ 		if (found)
+ 			break;
  	}
-@@ -1992,7 +1985,8 @@ static void attention_scan_cancel(struct xe_device *xe)
  
- static void attention_scan_flush(struct xe_device *xe)
- {
--	mod_delayed_work(system_wq, &xe->eudebug.attention_scan, 0);
-+	if (!xe_device_eudebug_uses_guc(xe))
-+		mod_delayed_work(system_wq, &xe->eudebug.attention_scan, 0);
- }
++	spin_unlock(&xe->clients.lock);
++
+ 	if (!found)
+ 		return ERR_PTR(-ENOENT);
  
- static int xe_eu_control_interrupt_all(struct xe_eudebug *d,
-@@ -2248,12 +2242,83 @@ static int xe_eu_control_stopped(struct xe_eudebug *d,
+@@ -2176,12 +2246,83 @@ static int xe_eu_control_stopped(struct xe_eudebug *d,
  	return xe_gt_eu_attention_bitmap(q->gt, bits, bitmask_size);
  }
  
@@ -302,7 +431,15 @@ index 76d800e3f717..79f640155e68 100644
  static void discovery_work_fn(struct work_struct *work);
  
  static int
-@@ -2315,7 +2380,11 @@ xe_eudebug_connect(struct xe_device *xe,
+@@ -2216,6 +2357,7 @@ xe_eudebug_connect(struct xe_device *xe,
+ 	mutex_init(&d->eu_lock);
+ 
+ 	INIT_LIST_HEAD(&d->pf.pagefaults);
++	INIT_LIST_HEAD(&d->stopped_queues);
+ 
+ 	init_waitqueue_head(&d->events.write_done);
+ 	init_waitqueue_head(&d->events.read_done);
+@@ -2248,7 +2390,11 @@ xe_eudebug_connect(struct xe_device *xe,
  		goto err_detach;
  	}
  
@@ -314,8 +451,8 @@ index 76d800e3f717..79f640155e68 100644
 +
  	kref_get(&d->ref);
  	queue_work(xe->eudebug.ordered_wq, &d->discovery_work);
- 	attention_scan_flush(xe);
-@@ -2389,7 +2458,7 @@ static void xe_eudebug_reinit_hw_engine(struct xe_hw_engine *hwe, bool enable)
+ 
+@@ -2321,7 +2467,7 @@ static void xe_eudebug_reinit_hw_engine(struct xe_hw_engine *hwe, bool enable)
  			     XEHPC_DISABLE_BTB,
  			     enable);
  
@@ -324,7 +461,7 @@ index 76d800e3f717..79f640155e68 100644
  		add_sr_entry(hwe, TD_CTL,
  			     TD_CTL_BREAKPOINT_ENABLE |
  			     TD_CTL_FORCE_THREAD_BREAKPOINT_ENABLE |
-@@ -2399,6 +2468,10 @@ static void xe_eudebug_reinit_hw_engine(struct xe_hw_engine *hwe, bool enable)
+@@ -2331,6 +2477,10 @@ static void xe_eudebug_reinit_hw_engine(struct xe_hw_engine *hwe, bool enable)
  	if (xe->info.graphics_verx100 >= 1250)
  		add_sr_entry(hwe, TD_CTL,
  			     TD_CTL_GLOBAL_DEBUG_ENABLE, enable);
@@ -334,8 +471,19 @@ index 76d800e3f717..79f640155e68 100644
 +			     TD_CTL_ENABLE_EXID_FILTER, enable);
  }
  
- static int xe_eudebug_enable(struct xe_device *xe, bool enable)
-@@ -3663,7 +3736,7 @@ static bool xe_eudebug_task_match(struct xe_eudebug *d, struct xe_file *xef)
+ int xe_eudebug_enable(struct xe_device *xe, bool enable)
+@@ -2873,6 +3023,10 @@ void xe_eudebug_exec_queue_destroy(struct xe_file *xef, struct xe_exec_queue *q)
+ 	if (!d)
+ 		return;
+ 
++	mutex_lock(&d->eu_lock);
++	remove_stopped_queue(d, q);
++	mutex_unlock(&d->eu_lock);
++
+ 	xe_eudebug_event_put(d, exec_queue_destroy_event(d, xef, q));
+ }
+ 
+@@ -3609,7 +3763,7 @@ static bool xe_eudebug_task_match(struct xe_eudebug *d, struct xe_file *xef)
  	struct task_struct *task;
  	bool match;
  
@@ -344,8 +492,8 @@ index 76d800e3f717..79f640155e68 100644
  	if (!task)
  		return false;
  
-@@ -4455,6 +4528,70 @@ xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf, bool is_err)
- 	attention_scan_flush(gt_to_xe(gt));
+@@ -4124,6 +4278,76 @@ out_file_put:
+ 	return ret;
  }
  
 +static int send_sync_host_event(struct xe_eudebug *d,
@@ -401,7 +549,13 @@ index 76d800e3f717..79f640155e68 100644
 +	}
 +
 +	err = send_sync_host_event(d, q, lrc);
-+	if (err) {
++	if (!err) {
++		mutex_lock(&d->eu_lock);
++		err = add_stopped_queue(d, q);
++		mutex_unlock(&d->eu_lock);
++	}
++
++	if (err && !xe_eudebug_detached(d)) {
 +		eu_err(d, "error %d on %s, disconnecting", err, __func__);
 +		xe_eudebug_disconnect(d, err);
 +	}
@@ -416,28 +570,28 @@ index 76d800e3f717..79f640155e68 100644
  #include "tests/xe_eudebug.c"
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
-index cf2690b7fada..00ddd385fcc7 100644
+index f7a3f81d3..28b3f0c54 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug.h
 @@ -22,6 +22,7 @@ struct xe_debug_metadata;
  struct drm_gpuva_ops;
- struct xe_pagefault;
+ struct xe_eudebug;
  struct xe_eudebug_pagefault;
 +struct xe_lrc;
  
  #if IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)
- 
-@@ -60,6 +61,8 @@ struct xe_eudebug_pagefault *xe_eudebug_pagefault_create(struct xe_gt *gt, struc
- 							 struct xe_pagefault *xe_pf);
- void xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf, bool is_err);
+ #define XE_EUDEBUG_DBG_STR "eudbg: %lld:%lu:%s (%d/%d) -> (%d/%d): "
+@@ -92,6 +93,8 @@ void xe_eudebug_attention_poll_start(struct xe_device *xe);
+ struct xe_exec_queue *xe_gt_runalone_active_queue_get(struct xe_gt *gt, int *lrc_idx);
+ struct xe_exec_queue *xe_gt_runalone_active_queue_get_lockless(struct xe_gt *gt, int *lrc_idx);
  
 +int xe_eudebug_sync_host(struct xe_exec_queue *q, struct xe_lrc *lrc);
 +
  #else
  
  static inline int xe_eudebug_connect_ioctl(struct drm_device *dev,
-@@ -111,6 +114,8 @@ static inline void xe_eudebug_pagefault_finalize(struct xe_eudebug_pagefault *pf
- {
+@@ -137,6 +140,8 @@ static inline bool xe_eudebug_is_enabled(struct xe_device *xe)
+ 	return false;
  }
  
 +static inline int xe_eudebug_sync_host(struct xe_exec_queue *q, struct xe_lrc *lrc) { return 0; }
@@ -446,10 +600,10 @@ index cf2690b7fada..00ddd385fcc7 100644
  
  #endif /* _XE_EUDEBUG_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index 5276ff671790..5d4301fc63d3 100644
+index 84f3da1b6..62ddebb69 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
-@@ -91,6 +91,11 @@ struct xe_eudebug_eu_control_ops {
+@@ -90,6 +90,22 @@ struct xe_eudebug_eu_control_ops {
  	/** @stopped: returns bitmap reflecting threads which signal attention */
  	int (*stopped)(struct xe_eudebug *e, struct xe_exec_queue *q,
  		       struct xe_lrc *lrc, u8 *bitmap, unsigned int bitmap_size);
@@ -458,11 +612,32 @@ index 5276ff671790..5d4301fc63d3 100644
 +	int (*unlock)(struct xe_eudebug *e, struct xe_exec_queue *q,
 +		      struct xe_lrc *lrc, u8 *bitmap, unsigned int bitmap_size);
 +
++};
++
++/**
++ * struct xe_eudebug_stopped_queue - an exec queue stopped by the debugger
++ */
++struct xe_eudebug_stopped_queue {
++	/** @link: link into xe_eudebug::stopped_queues.list */
++	struct list_head link;
++
++	/** @queue: stopped exec queue, a reference is held by this entry */
++	struct xe_exec_queue *queue;
  };
  
  /**
-@@ -472,4 +477,21 @@ struct xe_eudebug_pagefault {
- 	bool deferred_resolved;
+@@ -213,6 +229,9 @@ struct xe_eudebug {
+ 		 */
+ 		u32 asid;
+ 	} pf;
++
++	/** @stopped_queues: exec queues currently stopped by this debugger */
++	struct list_head stopped_queues;
+ };
+ 
+ /**
+@@ -516,4 +535,21 @@ struct xe_eudebug_pagefault {
+ 	struct xe_vma *svm_vma;
  };
  
 +/**
@@ -484,10 +659,10 @@ index 5276ff671790..5d4301fc63d3 100644
 +
  #endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index e73e6b83621a..d561c14ec659 100644
+index b777d68a8..e43ff90e1 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -359,7 +359,8 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
+@@ -416,7 +416,8 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
  		flags |= XE_LRC_DISABLE_STATE_CACHE_PERF_FIX;
  
  	if (q->eudebug_flags & EXEC_QUEUE_EUDEBUG_FLAG_ENABLE)
@@ -498,10 +673,10 @@ index e73e6b83621a..d561c14ec659 100644
  	err = q->ops->init(q);
  	if (err)
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index 113ba578f9bf..b0edefff16d5 100644
+index 63d3bc785..ded61f09f 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
-@@ -40,6 +40,7 @@
+@@ -43,6 +43,7 @@
  #include "xe_gt_stats.h"
  #include "xe_gt_sysfs.h"
  #include "xe_gt_topology.h"
@@ -509,7 +684,7 @@ index 113ba578f9bf..b0edefff16d5 100644
  #include "xe_guc_exec_queue_types.h"
  #include "xe_guc_pc.h"
  #include "xe_guc_rc.h"
-@@ -733,6 +734,10 @@ int xe_gt_init(struct xe_gt *gt)
+@@ -741,6 +742,10 @@ int xe_gt_init(struct xe_gt *gt)
  	if (err)
  		return err;
  
@@ -520,7 +695,7 @@ index 113ba578f9bf..b0edefff16d5 100644
  	err = gt_init_with_gt_forcewake(gt);
  	if (err)
  		return err;
-@@ -985,6 +990,7 @@ static void gt_reset_worker(struct work_struct *w)
+@@ -994,6 +999,7 @@ static void gt_reset_worker(struct work_struct *w)
  	xe_guc_rc_disable(&gt->uc.guc);
  	xe_uc_stop_prepare(&gt->uc);
  	xe_pagefault_reset(gt_to_xe(gt), gt);
@@ -529,16 +704,18 @@ index 113ba578f9bf..b0edefff16d5 100644
  	xe_uc_stop(&gt->uc);
  
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.c b/drivers/gpu/drm/xe/xe_gt_debug.c
-index 8386a527adf0..63d5e6ba08a2 100644
+index fbc984e23..aaac87da4 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug.c
 +++ b/drivers/gpu/drm/xe/xe_gt_debug.c
-@@ -2,15 +2,21 @@
+@@ -2,18 +2,24 @@
  /*
   * Copyright © 2023 Intel Corporation
   */
 +#include <linux/circ_buf.h>
  
  #include <linux/delay.h>
+ #include <linux/string.h>
+ 
  #include "regs/xe_gt_regs.h"
  #include "xe_device.h"
 +#include "xe_eudebug.h"
@@ -547,6 +724,7 @@ index 8386a527adf0..63d5e6ba08a2 100644
  #include "xe_gt.h"
 -#include "xe_gt_topology.h"
  #include "xe_gt_debug.h"
+ #include "xe_gt_debug_types.h"
  #include "xe_gt_mcr.h"
 +#include "xe_gt_topology.h"
 +#include "xe_gt_types.h"
@@ -555,7 +733,7 @@ index 8386a527adf0..63d5e6ba08a2 100644
  #include "xe_pm.h"
  #include "xe_macros.h"
  
-@@ -98,6 +104,9 @@ int xe_gt_eu_attention_bitmap_size(struct xe_gt *gt)
+@@ -101,6 +107,9 @@ int xe_gt_eu_attention_bitmap_size(struct xe_gt *gt)
  {
  	xe_dss_mask_t dss_mask;
  
@@ -565,9 +743,9 @@ index 8386a527adf0..63d5e6ba08a2 100644
  	bitmap_or(dss_mask, gt->fuse_topo.c_dss_mask,
  		  gt->fuse_topo.g_dss_mask, XE_MAX_DSS_FUSE_BITS);
  
-@@ -241,3 +250,148 @@ unsigned int xe_eu_attentions_xor_count(const struct xe_eu_attentions *a,
+@@ -269,3 +278,161 @@ int xe_gt_eu_attentions_read(struct xe_gt *gt,
  
- 	return count;
+ 	return 0;
  }
 +
 +/* XXX: copy-paste from xe_guc_submit.c, find common define place */
@@ -600,6 +778,15 @@ index 8386a527adf0..63d5e6ba08a2 100644
 +}
 +
 +#define NOTIFY_MSG_LEN_DW	1
++
++static void notify_queue_advance_tail(struct notify_queue *notify_queue)
++{
++	lockdep_assert_held(&notify_queue->lock);
++
++	notify_queue->tail = (notify_queue->tail + NOTIFY_MSG_LEN_DW) %
++		EUDEBUG_QUEUE_NUM_DW;
++}
++
 +static bool get_debug_notify(struct notify_queue *notify_queue, u32 *guc_id)
 +{
 +	bool ret = false;
@@ -607,8 +794,12 @@ index 8386a527adf0..63d5e6ba08a2 100644
 +	spin_lock_irq(&notify_queue->lock);
 +	if (notify_queue->tail != notify_queue->head) {
 +		*guc_id = notify_queue->data[notify_queue->tail];
-+		notify_queue->tail = (notify_queue->tail + NOTIFY_MSG_LEN_DW) %
-+			EUDEBUG_QUEUE_NUM_DW;
++		notify_queue_advance_tail(notify_queue);
++
++		while (notify_queue->tail != notify_queue->head &&
++		       notify_queue->data[notify_queue->tail] == *guc_id)
++			notify_queue_advance_tail(notify_queue);
++
 +		ret = true;
 +	}
 +	spin_unlock_irq(&notify_queue->lock);
@@ -715,18 +906,16 @@ index 8386a527adf0..63d5e6ba08a2 100644
 +	spin_unlock(&gt->eudebug.notify_queue.lock);
 +}
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.h b/drivers/gpu/drm/xe/xe_gt_debug.h
-index aba36bc5f85d..185d404274f7 100644
+index 689fb6481..aa57fcbc3 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug.h
 +++ b/drivers/gpu/drm/xe/xe_gt_debug.h
-@@ -10,6 +10,7 @@
- #include <linux/math.h>
+@@ -11,11 +11,15 @@
  
+ struct xe_eu_attentions;
  struct xe_gt;
 +struct xe_guc;
  
- #define XE_GT_ATTENTION_TIMEOUT_MS 100
- #define XE_GT_EU_ATT_ROWS 2u
-@@ -25,6 +26,9 @@ struct xe_eu_attentions {
+ #define XE_GT_ATTENTION_TIMEOUT_MS 150
  
  unsigned int xe_gt_eu_att_regs(struct xe_gt *gt);
  
@@ -736,7 +925,7 @@ index aba36bc5f85d..185d404274f7 100644
  int xe_gt_eu_threads_needing_attention(struct xe_gt *gt);
  int xe_gt_foreach_dss_group_instance(struct xe_gt *gt,
  				     int (*fn)(struct xe_gt *gt,
-@@ -44,4 +48,7 @@ void xe_gt_eu_attentions_read(struct xe_gt *gt,
+@@ -35,4 +39,7 @@ int xe_gt_eu_attentions_read(struct xe_gt *gt,
  
  unsigned int xe_eu_attentions_xor_count(const struct xe_eu_attentions *a,
  					const struct xe_eu_attentions *b);
@@ -745,11 +934,11 @@ index aba36bc5f85d..185d404274f7 100644
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_gt_types.h b/drivers/gpu/drm/xe/xe_gt_types.h
-index d53ec0f1de5b..14cc7e8fc9d2 100644
+index 28158c9e9..512eb90a1 100644
 --- a/drivers/gpu/drm/xe/xe_gt_types.h
 +++ b/drivers/gpu/drm/xe/xe_gt_types.h
-@@ -241,6 +241,39 @@ struct xe_gt {
- 		u16 reserved_bcs_instance;
+@@ -276,6 +276,43 @@ struct xe_gt {
+ 		u32 paging_logical_mask;
  	} usm;
  
 +	/** @eudebug: EU Debugger pagefault handling support */
@@ -783,13 +972,36 @@ index d53ec0f1de5b..14cc7e8fc9d2 100644
 +			/** @eudebug.notify_queue.worker: to send eudebug events */
 +			struct work_struct worker;
 +		} notify_queue;
++		/**
++		 * @eudebug.gt_reset_work: eudebug reset work for that gt.
++		 */
++		struct work_struct gt_reset_work;
 +	} eudebug;
 +
  	/** @ordered_wq: used to serialize GT resets and TDRs */
  	struct workqueue_struct *ordered_wq;
  
+@@ -419,18 +456,6 @@ struct xe_gt {
+ 
+ 	/** @eu_stall: EU stall counters subsystem per gt info */
+ 	struct xe_eu_stall_gt *eu_stall;
+-
+-#if IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)
+-	/**
+-	 * @eudebug: Worker to finalize eudebug pagefault on gt reset.
+-	 */
+-	struct {
+-		/**
+-		 * @eudebug.gt_reset_work: eudebug reset work for that gt.
+-		 */
+-		struct work_struct gt_reset_work;
+-	} eudebug;
+-#endif
+ };
+ 
+ #endif
 diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
-index b9c59aeed51a..209b03e2802a 100644
+index 5c4733da3..40083d260 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ct.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ct.c
 @@ -21,6 +21,7 @@
@@ -800,7 +1012,7 @@ index b9c59aeed51a..209b03e2802a 100644
  #include "xe_gt_printk.h"
  #include "xe_gt_sriov_pf_control.h"
  #include "xe_gt_sriov_pf_monitor.h"
-@@ -1639,6 +1640,9 @@ static int process_g2h_msg(struct xe_guc_ct *ct, u32 *msg, u32 len)
+@@ -1759,6 +1760,9 @@ static int process_g2h_msg(struct xe_guc_ct *ct, u32 *msg, u32 len)
  	case XE_GUC_ACTION_PAGE_RECLAMATION_DONE:
  		ret = xe_guc_page_reclaim_done_handler(guc, payload, adj_len);
  		break;
@@ -811,10 +1023,10 @@ index b9c59aeed51a..209b03e2802a 100644
  		ret = xe_guc_relay_process_guc2pf(&guc->relay, hxg, hxg_len);
  		break;
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 4553b5bf46c2..21da149d19eb 100644
+index a0863e346..04c8863ab 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -20,6 +20,7 @@
+@@ -21,6 +21,7 @@
  #include "xe_bo.h"
  #include "xe_devcoredump.h"
  #include "xe_device.h"
@@ -822,7 +1034,7 @@ index 4553b5bf46c2..21da149d19eb 100644
  #include "xe_exec_queue.h"
  #include "xe_force_wake.h"
  #include "xe_gpu_scheduler.h"
-@@ -966,9 +967,16 @@ int xe_guc_action_eu_kernel_debug(struct xe_guc *guc, u32 id, u32 cmd)
+@@ -1012,9 +1013,16 @@ int xe_guc_action_eu_kernel_debug(struct xe_guc *guc, u32 id, u32 cmd)
  		cmd,
  		0, /* reserved */
  	};
@@ -841,9 +1053,9 @@ index 4553b5bf46c2..21da149d19eb 100644
  }
  
  static void set_eu_kernel_debug(struct xe_exec_queue *q)
-@@ -1047,8 +1055,10 @@ static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
+@@ -1094,8 +1102,10 @@ static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
  	if (xe_exec_queue_is_multi_queue_secondary(q))
- 		xe_guc_exec_queue_group_add(guc, q);
+ 		guc_exec_queue_send_cgp_sync(q);
  
 -	if (xe_exec_queue_is_debuggable(q))
 +	if (xe_exec_queue_is_debuggable(q)) {
@@ -854,7 +1066,7 @@ index 4553b5bf46c2..21da149d19eb 100644
  
  static u32 wq_space_until_wrap(struct xe_exec_queue *q)
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
-index 4cf516fc8216..9af458bbff15 100644
+index 40cb2b446..e60639b81 100644
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ b/include/uapi/drm/xe_drm_eudebug.h
 @@ -40,6 +40,7 @@ struct drm_xe_eudebug_event {
@@ -873,7 +1085,7 @@ index 4cf516fc8216..9af458bbff15 100644
  	__u32 cmd;
  	__u32 flags;
  
-@@ -234,6 +236,13 @@ struct drm_xe_eudebug_event_pagefault {
+@@ -275,6 +277,13 @@ struct drm_xe_eudebug_event_pagefault {
  	__u8 bitmask[];
  };
  

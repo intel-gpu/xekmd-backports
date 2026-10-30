@@ -6,7 +6,29 @@
 #include <linux/export.h>
 #include <drm/drm_buddy.h>
 
-#if !defined(HAVE_LINUX_GPU_BUDDY_H_AVAILABLE) && !defined(CPTCFG_BUILD_XE_DRM_BUDDY)
+#if !defined(BPM_LINUX_GPU_BUDDY_NOT_PRESENT)
+#define drm_buddy gpu_buddy
+#define drm_buddy_block gpu_buddy_block
+#define drm_buddy_block_offset gpu_buddy_block_offset
+#define drm_buddy_block_size gpu_buddy_block_size
+#define drm_buddy_block_is_free gpu_buddy_block_is_free
+
+static inline unsigned int
+gpu_buddy_block_state(struct gpu_buddy_block *block)
+{
+        return block->header & GPU_BUDDY_HEADER_STATE;
+}
+
+static inline bool backport_gpu_buddy_block_is_allocated(struct gpu_buddy_block *block)
+{
+	return gpu_buddy_block_state(block) == GPU_BUDDY_ALLOCATED;
+}
+#define drm_buddy_block_is_allocated backport_gpu_buddy_block_is_allocated
+#endif
+
+#if (!defined(HAVE_LINUX_GPU_BUDDY_H_AVAILABLE) || \
+	defined(BPM_GPU_BUDDY_ALLOCATED_ADDR_TO_BLOCK_NOT_PRESENT)) && \
+	!defined(CPTCFG_BUILD_XE_DRM_BUDDY)
 struct drm_buddy_block *
 backport_gpu_buddy_allocated_addr_to_block(struct drm_buddy *mm, u64 addr)
 {

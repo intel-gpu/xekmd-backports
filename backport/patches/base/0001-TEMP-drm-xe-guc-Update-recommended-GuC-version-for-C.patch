@@ -5,6 +5,7 @@ Subject: [TEMP] drm/xe/guc: Update recommended GuC version for CRI
 
 v1: v70.77.0 (Pravalika)
 v2: v70.77.100 (Pravalika)
+v3: v70.82.0 (Pravalika)
 
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
@@ -12,7 +13,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_uc_fw.c b/drivers/gpu/drm/xe/xe_uc_fw.c
-index 4d05b06f5..bd3a5236f 100644
+index 4d05b06f5..f983669b1 100644
 --- a/drivers/gpu/drm/xe/xe_uc_fw.c
 +++ b/drivers/gpu/drm/xe/xe_uc_fw.c
 @@ -115,7 +115,7 @@ struct fw_blobs_by_type {
@@ -20,7 +21,7 @@ index 4d05b06f5..bd3a5236f 100644
  
  #define XE_GUC_FIRMWARE_DEFS(fw_def, mmp_ver, major_ver)					\
 -	fw_def(CRESCENTISLAND,	GT_TYPE_ANY,	mmp_ver(xe,	guc,	cri,	70, 70, 0))	\
-+	fw_def(CRESCENTISLAND,	GT_TYPE_ANY,	mmp_ver(xe,	guc,	cri,	70, 77, 100))	\
++	fw_def(CRESCENTISLAND,	GT_TYPE_ANY,	mmp_ver(xe,	guc,	cri,	70, 82, 0))	\
  	fw_def(PANTHERLAKE,	GT_TYPE_ANY,	major_ver(xe,	guc,	ptl,	70, 54, 0))	\
  	fw_def(BATTLEMAGE,	GT_TYPE_ANY,	major_ver(xe,	guc,	bmg,	70, 54, 0))	\
  	fw_def(LUNARLAKE,	GT_TYPE_ANY,	major_ver(xe,	guc,	lnl,	70, 53, 0))	\

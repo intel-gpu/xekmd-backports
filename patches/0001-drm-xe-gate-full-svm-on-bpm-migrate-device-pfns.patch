@@ -13,6 +13,8 @@ When BPM_MIGRATE_DEVICE_PFNS_NOT_PRESENT is set:
 - avoid tile-local pagemap cache lookups that assume full pagemap API
 - expose CPU_ADDR_MIRROR capability only when the effective path is valid
 
+v1: Rebase to v7.3 kernel [Raju]
+
 Reference:
         f86ad0ed620c
         drm/gpusvm, drm/pagemap: Move migration functionality to drm_pagemap
@@ -20,12 +22,18 @@ Reference:
         drm/xe/uapi: Add DRM_XE_QUERY_CONFIG_FLAG_HAS_CPU_ADDR_MIRROR
 
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
+ drivers/gpu/drm/xe/xe_query.c |  4 +++-
+ drivers/gpu/drm/xe/xe_svm.h   | 41 ++++++++++++++++++++++++++-------------
+ drivers/gpu/drm/xe/xe_tile.c  |  5 +++++
+ 3 files changed, 36 insertions(+), 14 deletions(-)
+
 diff --git a/drivers/gpu/drm/xe/xe_query.c b/drivers/gpu/drm/xe/xe_query.c
-index 7fcf96d..ee756fc 100644
+index dc975f5..59013dd 100644
 --- a/drivers/gpu/drm/xe/xe_query.c
 +++ b/drivers/gpu/drm/xe/xe_query.c
-@@ -335,9 +335,11 @@ static int query_config(struct xe_device *xe, struct drm_xe_device_query *query)
+@@ -342,9 +342,11 @@ static int query_config(struct xe_device *xe, struct drm_xe_device_query *query)
  	if (xe->mem.vram)
  		config->info[DRM_XE_QUERY_CONFIG_FLAGS] |=
  			DRM_XE_QUERY_CONFIG_FLAG_HAS_VRAM;
@@ -39,12 +47,13 @@ index 7fcf96d..ee756fc 100644
  		config->info[DRM_XE_QUERY_CONFIG_FLAGS] |=
  			DRM_XE_QUERY_CONFIG_FLAG_HAS_NO_COMPRESSION_HINT;
 diff --git a/drivers/gpu/drm/xe/xe_svm.h b/drivers/gpu/drm/xe/xe_svm.h
+index b5903e3..56b4bf1 100644
 --- a/drivers/gpu/drm/xe/xe_svm.h
 +++ b/drivers/gpu/drm/xe/xe_svm.h
 @@ -6,7 +6,20 @@
  #ifndef _XE_SVM_H_
  #define _XE_SVM_H_
-
+ 
 -#if IS_ENABLED(CONFIG_DRM_XE_GPUSVM)
 +/*
 + * Full SVM needs both Xe SVM enabled and a complete pagemap API.
@@ -63,7 +72,7 @@ diff --git a/drivers/gpu/drm/xe/xe_svm.h b/drivers/gpu/drm/xe/xe_svm.h
  
  #include <drm/drm_pagemap.h>
  #include <drm/drm_gpusvm.h>
-@@ -194,8 +203,9 @@
+@@ -230,8 +243,9 @@ int xe_pagemap_cache_create(struct xe_tile *tile);
  
  struct drm_pagemap *xe_drm_pagemap_from_fd(int fd, u32 region_instance);
  
@@ -74,23 +83,21 @@ diff --git a/drivers/gpu/drm/xe/xe_svm.h b/drivers/gpu/drm/xe/xe_svm.h
  #include "xe_vm.h"
  
  struct drm_pagemap_addr;
-@@ -236,21 +246,19 @@
+@@ -277,21 +291,18 @@ int xe_devm_add(struct xe_tile *tile, struct xe_vram_region *vr)
  static inline
  int xe_svm_init(struct xe_vm *vm)
  {
 -#if IS_ENABLED(CONFIG_DRM_GPUSVM)
--	return drm_gpusvm_init(&vm->svm.gpusvm, "Xe SVM (simple)", &vm->xe->drm,
--			       NULL, 0, 0, 0, NULL, NULL, 0);
--#else
--	return 0;
--#endif
 +	/*
 +	 * Non-full-SVM kernels still use drm_gpusvm for userptr pin/map flow.
 +	 * Initialize a simple drm_gpusvm instance with no fault notifier ranges.
 +	 */
-+	return drm_gpusvm_init(&vm->svm.gpusvm, "Xe SVM (simple)",
-+				&vm->xe->drm, NULL, 0, 0, 0, NULL,
-+				NULL, 0);
+ 	return drm_gpusvm_init(&vm->svm.gpusvm, "Xe SVM (simple)",
+-			       NULL, 0, 0, 0, NULL, NULL, 0);
+-#else
+-	return 0;
+-#endif
++				NULL, 0, 0, 0, NULL, NULL, 0);
  }
  
  static inline
@@ -103,7 +110,7 @@ diff --git a/drivers/gpu/drm/xe/xe_svm.h b/drivers/gpu/drm/xe/xe_svm.h
  }
  
  static inline
-@@ -388,7 +400,7 @@
+@@ -444,7 +455,7 @@ static inline bool xe_svm_range_is_removed(struct xe_svm_range *range)
  }
  
  #define xe_svm_range_has_dma_mapping(...) false
@@ -112,7 +119,7 @@ diff --git a/drivers/gpu/drm/xe/xe_svm.h b/drivers/gpu/drm/xe/xe_svm.h
  
  #if IS_ENABLED(CONFIG_DRM_GPUSVM) /* Need to support userptr without XE_GPUSVM */
  #define xe_svm_assert_in_notifier(vm__) \
-@@ -411,23 +419,27 @@
+@@ -474,23 +485,27 @@ static inline bool xe_svm_range_is_removed(struct xe_svm_range *range)
  	drm_gpusvm_notifier_unlock(&(vm__)->svm.gpusvm)
  
  #else
@@ -141,12 +148,12 @@ diff --git a/drivers/gpu/drm/xe/xe_svm.h b/drivers/gpu/drm/xe/xe_svm.h
 +	up_read(&vm->svm.gpusvm.notifier_lock);
  }
  #endif /* CONFIG_DRM_GPUSVM */
-
+ 
 diff --git a/drivers/gpu/drm/xe/xe_tile.c b/drivers/gpu/drm/xe/xe_tile.c
-index 31d3a77..dfe0db8 100644
+index 74d925a..b868c99 100644
 --- a/drivers/gpu/drm/xe/xe_tile.c
 +++ b/drivers/gpu/drm/xe/xe_tile.c
-@@ -233,6 +233,10 @@ void xe_tile_migrate_wait(struct xe_tile *tile)
+@@ -235,6 +235,10 @@ void xe_tile_migrate_wait(struct xe_tile *tile)
   */
  struct drm_pagemap *xe_tile_local_pagemap(struct xe_tile *tile)
  {
@@ -157,7 +164,7 @@ index 31d3a77..dfe0db8 100644
  	struct drm_pagemap *dpagemap =
  		drm_pagemap_get_from_cache_if_active(xe_tile_to_vr(tile)->dpagemap_cache);
  
-@@ -242,6 +246,7 @@ struct drm_pagemap *xe_tile_local_pagemap(struct xe_tile *tile)
+@@ -244,6 +248,7 @@ struct drm_pagemap *xe_tile_local_pagemap(struct xe_tile *tile)
  	}
  
  	return dpagemap;

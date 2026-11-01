@@ -11,6 +11,8 @@ Reference-id:
 	2c92ca849fcc
 	tracing/treewide: Remove second parameter of __assign_str()
 
+v1: Rebase to v7.3 kernel [Raju]
+
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
@@ -20,8 +22,8 @@ Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
  drivers/gpu/drm/xe/xe_trace_bo.h          | 21 ++++++++++++++
  drivers/gpu/drm/xe/xe_trace_cper.h        |  4 +++
  drivers/gpu/drm/xe/xe_trace_guc.h         | 13 +++++++++
- drivers/gpu/drm/xe/xe_trace_lrc.h         |  5 ++++
- 6 files changed, 80 insertions(+), 1 deletion(-)
+ drivers/gpu/drm/xe/xe_trace_lrc.h         | 10 +++++++
+ 6 files changed, 85 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/scheduler/gpu_scheduler_trace.h b/drivers/gpu/drm/scheduler/gpu_scheduler_trace.h
 index 261713d..b93d3e4 100644
@@ -277,6 +279,20 @@ index d525cbe..4653bd5 100644
  		   ),
  	    TP_printk("lrc=:%p lrc->name=%s old=%llu new=%llu device_id:%s",
  		      __entry->lrc, __get_str(name),
+@@ -59,9 +64,14 @@ TRACE_EVENT(xe_lrc_update_queue_timestamp,
+ 		   __entry->lrc = lrc;
+ 		   __entry->primary_lrc = lrc->multi_queue.primary_lrc;
+ 		   __entry->old = old;
+ 		   __entry->new = lrc->queue_timestamp;
++#ifdef BPM_ASSIGN_STR_SECOND_ARG_PRESENT
++		   __assign_str(name, lrc->fence_ctx.name);
++		   __assign_str(device_id, __dev_name_lrc(lrc));
++#else
+ 		   __assign_str(name);
+ 		   __assign_str(device_id);
++#endif
+ 		   ),
+ 	    TP_printk("lrc=%p primary_lrc=%p lrc->name=%s old=%llu new=%llu device_id:%s",
+ 		      __entry->lrc, __entry->primary_lrc, __get_str(name),
 -- 
 2.43.0
-

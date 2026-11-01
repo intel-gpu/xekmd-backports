@@ -6,37 +6,31 @@ Subject: [PATCH] drm/xe/pf: Handle VF BAR resize without PCI VF REBAR helpers
 Implement VF BAR resizing via the VF Resizable BAR capability directly
 in PCI config space for kernels that lack PCI VF REBAR helper APIs.
 
+v1: Rebase to v7.3 kernel [Raju]
+
 Suggested-by: Michał Winiarski <michal.winiarski@intel.com>
 Signed-off-by: Marcin Bernatowicz <marcin.bernatowicz@linux.intel.com>
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
+ drivers/gpu/drm/xe/xe_pci_sriov.c | 98 +++++++++++++++++++++++++++++++++++
+ 1 file changed, 98 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov.c
+index ff4cc6f..b025501 100644
 --- a/drivers/gpu/drm/xe/xe_pci_sriov.c
 +++ b/drivers/gpu/drm/xe/xe_pci_sriov.c
-@@ -85,13 +85,108 @@ static void pf_engine_activity_stats(struct xe_device *xe, unsigned int num_vfs, bool enable)
--static int resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
--{
--	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
--	u32 sizes;
--
--	sizes = pci_iov_vf_bar_get_sizes(pdev, VF_LMEM_BAR, num_vfs);
--	if (!sizes)
--		return 0;
--
--	return pci_iov_vf_bar_set_size(pdev, VF_LMEM_BAR, __fls(sizes));
--}
+@@ -82,6 +82,7 @@ static void pf_engine_activity_stats(struct xe_device *xe, unsigned int num_vfs,
+ 	}
+ }
+ 
 +#ifndef BPM_PCI_IOV_VF_BAR_FUNCTIONS_NOT_PRESENT
-+static int resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
-+{
-+	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
-+	u32 sizes;
-+
-+	sizes = pci_iov_vf_bar_get_sizes(pdev, VF_LMEM_BAR, num_vfs);
-+	if (!sizes)
-+		return 0;
-+
-+	return pci_iov_vf_bar_set_size(pdev, VF_LMEM_BAR, __fls(sizes));
-+}
+ static int pf_resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
+ {
+ 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+@@ -110,6 +111,103 @@ static int pf_resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
+ 	xe_sriov_dbg(xe, "VF LMEM BAR resized to %s\n", buf);
+ 	return 0;
+ }
 +#else
 +/*
 + * Backport-only fallback: program VF REBAR directly when PCI-core helpers
@@ -76,13 +70,16 @@ diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov
 +	bool		drivers_autoprobe;	/* Auto probing of VFs by driver */
 +};
 +
-+static int resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
++static int pf_resize_vf_vram_bar(struct xe_device *xe, int num_vfs)
 +{
 +	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
 +	resource_size_t size, total;
 +	int pos, i, vf_bar_idx = VF_LMEM_BAR - PCI_IOV_RESOURCES;
 +	u32 rebar, ctrl;
 +	int err;
++
++	if (!IS_DGFX(xe))
++		return 0;
 +
 +	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_VF_REBAR);
 +	if (!pos)
@@ -133,5 +130,6 @@ diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov
 +#endif
  
  static int pf_prepare_vfs_enabling(struct xe_device *xe)
+ {
 --
 2.43.0

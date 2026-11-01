@@ -7,15 +7,22 @@ In backport targets where full Xe SVM is gated, `xe_svm.o` still provides
 the drm_gpusvm-backed userptr runtime path. Build `xe_svm.o` under
 `CONFIG_DRM_GPUSVM` so it stays aligned with `xe_userptr.o` availability.
 
+v1: Rebase to v7.3 kernel [Raju]
+
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
+ drivers/gpu/drm/xe/Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
+index 9ab5a42..88ca3c6 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
-@@ -149,7 +149,7 @@
- xe-$(CONFIG_I2C)       += xe_i2c.o
+@@ -163,7 +163,7 @@ xe-$(CONFIG_I2C)	+= xe_i2c.o \
  xe-$(CONFIG_PRELIM_DRM_XE_EUDEBUG) += prelim/xe_eudebug.o \
- 	prelim/xe_debug_metadata.o
+ 		prelim/xe_debug_metadata.o \
+ 		prelim/xe_eudebug_pagefault.o
 -xe-$(CONFIG_DRM_XE_GPUSVM) += xe_svm.o
 +xe-$(CONFIG_DRM_GPUSVM) += xe_svm.o
  xe-$(CONFIG_DRM_GPUSVM) += xe_userptr.o

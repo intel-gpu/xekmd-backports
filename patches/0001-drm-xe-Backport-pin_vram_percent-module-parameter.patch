@@ -8,13 +8,16 @@ conditionally compiled under the macro BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESE
 However, in module param registration it was earlier declared
 unconditionally without guarding under the macro.
 
+v1: Rebase to v7.3 kernel [Raju]
+
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
  drivers/gpu/drm/xe/xe_module.c | 2 ++
  1 file changed, 2 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_module.c b/drivers/gpu/drm/xe/xe_module.c
-index cc58ddd..bdeccc1 100644
+index 128f1d5..07a8f69 100644
 --- a/drivers/gpu/drm/xe/xe_module.c
 +++ b/drivers/gpu/drm/xe/xe_module.c
 @@ -41,9 +41,11 @@ module_param_named(svm_notifier_size, xe_modparam.svm_notifier_size, uint, 0600)
@@ -27,8 +30,7 @@ index cc58ddd..bdeccc1 100644
                  "[default=" __stringify(XE_DEFAULT_PIN_VRAM_PERCENT) "]");
 +#endif
  
- module_param_named_unsafe(force_execlist, xe_modparam.force_execlist, bool, 0444);
- MODULE_PARM_DESC(force_execlist, "Force Execlist submission");
+ #if IS_ENABLED(CONFIG_DRM_XE_DISPLAY)
+ module_param_named(probe_display, xe_modparam.probe_display, bool, 0444);
 -- 
 2.43.0
-

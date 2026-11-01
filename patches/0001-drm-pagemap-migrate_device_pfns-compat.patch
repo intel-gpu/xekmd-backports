@@ -3,16 +3,19 @@ From: Varun Gupta <varun.gupta1@intel.com>
 Date: Tue, 26 May 2026 11:52:40 +0530
 Subject: drm/pagemap: Gate shrinker eviction when migrate_device_pfns unavailable
 
+v1: Rebase to v7.3 kernel [Raju]
+
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/gpu/drm/drm_pagemap.c | 6 +++++-
- 1 file changed, 5 insertions(+), 1 deletion(-)
+ drivers/gpu/drm/drm_pagemap.c | 5 +++++
+ 1 file changed, 5 insertions(+)
 
 diff --git a/drivers/gpu/drm/drm_pagemap.c b/drivers/gpu/drm/drm_pagemap.c
-index 53f8fcf..0f7e68a 100644
+index 059c471..acff8dd 100644
 --- a/drivers/gpu/drm/drm_pagemap.c
 +++ b/drivers/gpu/drm/drm_pagemap.c
-@@ -981,10 +981,14 @@ retry:
+@@ -1349,9 +1349,14 @@ retry:
  	if (err)
  		goto err_free;
  
@@ -23,11 +26,9 @@ index 53f8fcf..0f7e68a 100644
  	err = migrate_device_pfns(src, npages);
  	if (err)
  		goto err_free;
--
 +#endif
- 	err = drm_pagemap_migrate_populate_ram_pfn(NULL, NULL, npages, &mpages,
- 						   src, dst, 0);
- 	if (err || !mpages)
+ 
+ 	drm_pagemap_skip_retired_pages(src, npages);
+ 
 -- 
 2.43.0
-

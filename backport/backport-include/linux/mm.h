@@ -38,6 +38,7 @@ extern int access_remote_vm(struct mm_struct *mm, unsigned long addr,
 #define folio_alloc(gfp, order) ((struct folio *)alloc_pages((gfp), (order)))
 #define folio_order(folio) compound_order((struct page *)(folio))
 #define folio_trylock(folio) trylock_page((struct page *)(folio))
+#define folio_next_index(folio) (((struct page *)(folio))->index + 1)
 #define vma_alloc_folio(gfp, order, vma, addr, hugepage) \
         ((struct folio *)((order) == 0 ? \
                 alloc_page_vma((gfp), (vma), (addr)) : \

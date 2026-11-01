@@ -4,6 +4,27 @@
 
 #include_next <linux/mm.h>
 
+#ifdef BPM_VMA_END_PGOFF_NOT_PRESENT
+static inline pgoff_t vma_end_pgoff(const struct vm_area_struct *vma)
+{
+	return vma->vm_pgoff + ((vma->vm_end - vma->vm_start) >> PAGE_SHIFT);
+}
+#endif
+
+#ifdef BPM_VMA_IS_COW_MAPPING_NOT_PRESENT
+static inline bool vma_is_cow_mapping(const struct vm_area_struct *vma)
+{
+	return is_cow_mapping(vma->vm_flags);
+}
+#endif
+
+#ifdef BPM_VMA_GET_PAGE_PROT_NOT_PRESENT
+static inline pgprot_t vma_get_page_prot(const struct vm_area_struct *vma)
+{
+	return vm_get_page_prot(vma->vm_flags);
+}
+#endif
+
 #ifdef BPM_ACCESS_REMOTE_VM_NOT_PRESENT
 extern int access_remote_vm(struct mm_struct *mm, unsigned long addr,
         void *buf, int len, unsigned int gup_flags);

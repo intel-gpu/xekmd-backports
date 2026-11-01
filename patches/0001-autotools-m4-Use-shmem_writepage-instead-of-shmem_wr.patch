@@ -8,38 +8,52 @@ Hence observing shmem_writeout api missing error against 6.6 LTS.
 To fix this error, call writepage function pointer which calls
 shmem_writepage() api when shmem_writeout() api is not present.
 
+v1: Rebase to v7.3 kernel [Raju]
+
 Reference:
 	84798514db50 mm: Remove swap_writepage() and shmem_writepage()
 
 Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/gpu/drm/ttm/ttm_backup.c | 12 ++++++++++++
- 1 file changed, 12 insertions(+)
+ drivers/gpu/drm/ttm/ttm_backup.c | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/ttm/ttm_backup.c b/drivers/gpu/drm/ttm/ttm_backup.c
-index 32530c7..ea34053 100644
+index 0c2d53a..048db6b 100644
 --- a/drivers/gpu/drm/ttm/ttm_backup.c
 +++ b/drivers/gpu/drm/ttm/ttm_backup.c
-@@ -115,7 +115,19 @@ ttm_backup_backup_page(struct file *backup, struct page *page,
- 	if (writeback && !folio_mapped(to_folio) &&
- 	    folio_clear_dirty_for_io(to_folio)) {
- 		folio_set_reclaim(to_folio);
-+#ifdef BPM_SHMEM_WRITEOUT_NOT_PRESENT
-+		struct writeback_control wbc = {
-+			.sync_mode = WB_SYNC_NONE,
-+			.nr_to_write = SWAP_CLUSTER_MAX,
-+			.range_start = 0,
-+			.range_end = LLONG_MAX,
-+			.for_reclaim = 1,
-+		};
+@@ -7,6 +7,7 @@
+ 
+ #include <linux/export.h>
+ #include <linux/swap.h>
++#include <linux/writeback.h>
+ 
+ #include "ttm_pool_internal.h"
+ 
+@@ -160,7 +161,22 @@ ttm_backup_backup_folio(struct file *backup, struct folio *folio,
+ 		if (writeback && !folio_mapped(to_folio) &&
+ 		    folio_clear_dirty_for_io(to_folio)) {
+ 			folio_set_reclaim(to_folio);
+-		ret = shmem_write_folio(to_folio);
++#if defined(BPM_SHMEM_WRITE_FOLIO_NOT_PRESENT) && \
++	defined(BPM_SHMEM_WRITEOUT_NOT_PRESENT)
++			struct writeback_control wbc = {
++				.sync_mode = WB_SYNC_NONE,
++				.nr_to_write = SWAP_CLUSTER_MAX,
++				.range_start = 0,
++				.range_end = LLONG_MAX,
++				.for_reclaim = 1,
++			};
 +
-+		ret = mapping->a_ops->writepage(folio_file_page(to_folio, idx), &wbc);
++			ret = mapping->a_ops->writepage(folio_page(to_folio, 0), &wbc);
++#elif defined(BPM_SHMEM_WRITE_FOLIO_NOT_PRESENT)
++			ret = shmem_writeout(to_folio, NULL, NULL);
 +#else
- 		ret = shmem_writeout(to_folio, NULL, NULL);
++			ret = shmem_write_folio(to_folio);
 +#endif
- 		if (!folio_test_writeback(to_folio))
- 			folio_clear_reclaim(to_folio);
- 		/*
+ 			if (!folio_test_writeback(to_folio))
+ 				folio_clear_reclaim(to_folio);
+ 			if (ret == AOP_WRITEPAGE_ACTIVATE)
 -- 
 2.43.0
-

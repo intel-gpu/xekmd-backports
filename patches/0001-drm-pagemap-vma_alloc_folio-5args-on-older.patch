@@ -4,23 +4,41 @@ Subject: drm/pagemap: vma_alloc_folio 5th-arg on older kernels
 
 v6.6 vma_alloc_folio() takes a 5th 'hugepage' bool. v7.0 dropped it.
 
+v1: Rebase to v7.3 kernel [Raju]
+
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/gpu/drm/drm_pagemap.c | 4 ++++
- 1 file changed, 4 insertions(+)
+ drivers/gpu/drm/drm_pagemap.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
 
 diff --git a/drivers/gpu/drm/drm_pagemap.c b/drivers/gpu/drm/drm_pagemap.c
+index acff8dd..2b300c1 100644
 --- a/drivers/gpu/drm/drm_pagemap.c
 +++ b/drivers/gpu/drm/drm_pagemap.c
-@@ -729,5 +729,9 @@ static int drm_pagemap_migrate_populate_ram_pfn(struct vm_area_struct *vas,
- 		/* TODO: Support fallback to single pages if THP allocation fails */
+@@ -966,7 +966,11 @@ static int drm_pagemap_migrate_populate_ram_pfn(struct vm_area_struct *vas,
+ 			gfp |= __GFP_NOWARN;
+ 
  		if (vas)
 +#ifdef BPM_VMA_ALLOC_FOLIO_4ARGS_NOT_PRESENT
-+			folio = vma_alloc_folio(GFP_HIGHUSER, order, vas, addr, false);
++			folio = vma_alloc_folio(gfp, order, vas, addr, false);
 +#else
- 			folio = vma_alloc_folio(GFP_HIGHUSER, order, vas, addr);
+ 			folio = vma_alloc_folio(gfp, order, vas, addr);
 +#endif
  		else
- 			folio = folio_alloc(GFP_HIGHUSER, order);
+ 			folio = folio_alloc(gfp, order);
+ 
+@@ -984,7 +988,11 @@ static int drm_pagemap_migrate_populate_ram_pfn(struct vm_area_struct *vas,
+ 			gfp &= ~__GFP_NOWARN;
+ 			for (j = 0; j < nr && i < npages; j++, i++, addr += PAGE_SIZE) {
+ 				folio = vas ?
++#ifdef BPM_VMA_ALLOC_FOLIO_4ARGS_NOT_PRESENT
++					vma_alloc_folio(gfp, 0, vas, addr, false) :
++#else
+ 					vma_alloc_folio(gfp, 0, vas, addr) :
++#endif
+ 					folio_alloc(gfp, 0);
+ 				if (!folio)
+ 					goto free_pages;
 -- 
 2.34.1

@@ -244,5 +244,7 @@ dnl # Macros to check for header availability
 	dnl # v5.19-6a99099fe1d6 drm/display: Move HDCP helpers into display-helper module
 	AC_KERNEL_CHECK_HEADERS([drm/display/drm_hdcp.h])
 
+	AC_DRM_DRIVER_GEM_GPUVA_PRESENT
+
 	AC_KERNEL_WAIT
 ])

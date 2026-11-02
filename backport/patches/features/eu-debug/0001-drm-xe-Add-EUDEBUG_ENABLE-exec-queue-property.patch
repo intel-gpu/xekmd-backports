@@ -155,9 +155,7 @@ diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_ex
 index 972fd77eb..14de1b828 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-@@ -150,6 +150,13 @@ struct xe_exec_queue {
- 	/** @ban_reason: Bitmask of ban reasons (DRM_XE_EXEC_QUEUE_BAN_REASON_*) */
- 	atomic_t ban_reason;
+@@ -153,4 +153,11 @@ struct xe_exec_queue {
  
 +	/**
 +	 * @eudebug_flags: immutable eudebug flags for this exec queue.
@@ -205,4 +203,3 @@ index 13a104261..9d5be46e8 100644
  
 -- 
 2.43.0
-

@@ -1,0 +1,186 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Thu, 6 Aug 2026 11:51:55 -0700
+Subject: [PATCH] drm/xe: Add num_pf_work modparam
+
+Add a module parameter to control the number of page-fault work threads,
+making it easy to experiment with how different numbers of work threads
+impact performance.
+
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
+Link: https://patch.msgid.link/20260806185202.3922432-6-matthew.brost@intel.com
+(cherry-picked from commit b56f37907ae7169de58209917b6cc4e259436829 linux-next)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_defaults.h     |  1 +
+ drivers/gpu/drm/xe/xe_device.c       | 14 ++++++++++++--
+ drivers/gpu/drm/xe/xe_device_types.h | 11 ++++-------
+ drivers/gpu/drm/xe/xe_module.c       |  4 ++++
+ drivers/gpu/drm/xe/xe_module.h       |  1 +
+ drivers/gpu/drm/xe/xe_pagefault.c    |  8 ++++----
+ drivers/gpu/drm/xe/xe_vm.c           |  3 ++-
+ 7 files changed, 28 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_defaults.h b/drivers/gpu/drm/xe/xe_defaults.h
+index c8ae1d5f3..0884224ef 100644
+--- a/drivers/gpu/drm/xe/xe_defaults.h
++++ b/drivers/gpu/drm/xe/xe_defaults.h
+@@ -22,5 +22,6 @@
+ #define XE_DEFAULT_WEDGED_MODE			XE_WEDGED_MODE_UPON_CRITICAL_ERROR
+ #define XE_DEFAULT_WEDGED_MODE_STR		"upon-critical-error"
+ #define XE_DEFAULT_SVM_NOTIFIER_SIZE		512
++#define XE_DEFAULT_NUM_PF_WORK			2
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index d71483248..373fe4e80 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -519,6 +519,17 @@ struct xe_device *xe_device_create(struct pci_dev *pdev)
+ }
+ ALLOW_ERROR_INJECTION(xe_device_create, ERRNO); /* See xe_pci_probe() */
+ 
++static void xe_device_parse_modparam(struct xe_device *xe)
++{
++	xe->atomic_svm_timeslice_ms = 5;
++	xe->min_run_period_lr_ms = 5;
++	xe->info.num_pf_work = xe_modparam.num_pf_work;
++	if (xe->info.num_pf_work < 1)
++		xe->info.num_pf_work = 1;
++	else if (xe->info.num_pf_work > XE_PAGEFAULT_WORK_MAX)
++		xe->info.num_pf_work = XE_PAGEFAULT_WORK_MAX;
++}
++
+ /**
+  * xe_device_init_early() - Initialize a new &xe_device instance
+  * @xe: the &xe_device to initialize
+@@ -545,8 +556,7 @@ int xe_device_init_early(struct xe_device *xe)
+ 	if (err)
+ 		return err;
+ 
+-	xe->atomic_svm_timeslice_ms = 5;
+-	xe->min_run_period_lr_ms = 5;
++	xe_device_parse_modparam(xe);
+ 
+ 	err = xe_irq_init(xe);
+ 	if (err)
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index fe1fc13f3..eb2e137c7 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -142,6 +142,8 @@ struct xe_device {
+ 		u8 revid;
+ 		/** @info.step: stepping information for each IP */
+ 		struct xe_step_info step;
++		/** @info.num_pf_work: Number of page fault work thread */
++		int num_pf_work;
+ 		/** @info.dma_mask_size: DMA address bits */
+ 		u8 dma_mask_size;
+ 		/** @info.vram_flags: Vram flags */
+@@ -339,14 +341,9 @@ struct xe_device {
+ 		struct workqueue_struct *pagefault_wq;
+ 		/** @usm.prefetch_wq: threaded prefetch work queue, unbound */
+ 		struct workqueue_struct *prefetch_wq;
+-		/*
+-		 * We pick 4 here because, in the current implementation, it
+-		 * yields the best bandwidth utilization of the kernel paging
+-		 * engine.
+-		 */
+-#define XE_PAGEFAULT_WORK_COUNT	4
++#define XE_PAGEFAULT_WORK_MAX	8
+ 		/** @usm.pf_workers: Page fault workers */
+-		struct xe_pagefault_work pf_workers[XE_PAGEFAULT_WORK_COUNT];
++		struct xe_pagefault_work pf_workers[XE_PAGEFAULT_WORK_MAX];
+ 		/** @usm.pf_queue: Page fault queue */
+ 		struct xe_pagefault_queue pf_queue;
+ #if IS_ENABLED(CONFIG_DRM_XE_PAGEMAP)
+diff --git a/drivers/gpu/drm/xe/xe_module.c b/drivers/gpu/drm/xe/xe_module.c
+index 848d65265..4bc28dfc1 100644
+--- a/drivers/gpu/drm/xe/xe_module.c
++++ b/drivers/gpu/drm/xe/xe_module.c
+@@ -29,6 +29,7 @@ struct xe_modparam xe_modparam = {
+ 	.max_vfs =		XE_DEFAULT_MAX_VFS,
+ #endif
+ 	.wedged_mode =		XE_DEFAULT_WEDGED_MODE,
++	.num_pf_work =		XE_DEFAULT_NUM_PF_WORK,
+ 	.svm_notifier_size =	XE_DEFAULT_SVM_NOTIFIER_SIZE,
+ 	/* the rest are 0 by default */
+ };
+@@ -81,6 +82,9 @@ MODULE_PARM_DESC(wedged_mode,
+ 		 "Module's default policy for the wedged mode (0=never, 1=upon-critical-error, 2=upon-any-hang-no-reset "
+ 		 "[default=" XE_DEFAULT_WEDGED_MODE_STR "])");
+ 
++module_param_named(num_pf_work, xe_modparam.num_pf_work, uint, 0600);
++MODULE_PARM_DESC(num_pf_work, "Number of page fault work threads, default=2, min=1, max=8");
++
+ static int xe_check_nomodeset(void)
+ {
+ 	if (drm_firmware_drivers_only())
+diff --git a/drivers/gpu/drm/xe/xe_module.h b/drivers/gpu/drm/xe/xe_module.h
+index a0eb7db07..6272d9e41 100644
+--- a/drivers/gpu/drm/xe/xe_module.h
++++ b/drivers/gpu/drm/xe/xe_module.h
+@@ -23,6 +23,7 @@ struct xe_modparam {
+ 	unsigned int max_vfs;
+ #endif
+ 	unsigned int wedged_mode;
++	unsigned int num_pf_work;
+ 	u32 svm_notifier_size;
+ };
+ 
+diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
+index 89fca1f04..9d1c02207 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_pagefault.c
+@@ -407,13 +407,13 @@ int xe_pagefault_init(struct xe_device *xe)
+ 
+ 	xe->usm.pagefault_wq = alloc_workqueue("xe_page_fault_work_queue",
+ 					       WQ_UNBOUND | WQ_HIGHPRI,
+-					       XE_PAGEFAULT_WORK_COUNT);
++					       xe->info.num_pf_work);
+ 	if (!xe->usm.pagefault_wq)
+ 		return -ENOMEM;
+ 
+ 	xe->usm.prefetch_wq = alloc_workqueue("xe_prefetch_work_queue",
+ 					      WQ_UNBOUND,
+-					      XE_PAGEFAULT_WORK_COUNT);
++					      xe->info.num_pf_work);
+ 	if (!xe->usm.prefetch_wq) {
+ 		err = -ENOMEM;
+ 		goto err_pagefault_wq;
+@@ -423,7 +423,7 @@ int xe_pagefault_init(struct xe_device *xe)
+ 	if (err)
+ 		goto err_out;
+ 
+-	for (i = 0; i < XE_PAGEFAULT_WORK_COUNT; ++i) {
++	for (i = 0; i < xe->info.num_pf_work; ++i) {
+ 		struct xe_pagefault_work *pf_work = xe->usm.pf_workers + i;
+ 
+ 		pf_work->xe = xe;
+@@ -491,7 +491,7 @@ static int xe_pagefault_work_index(struct xe_device *xe)
+ {
+ 	lockdep_assert_held(&xe->usm.pf_queue.lock);
+ 
+-	return xe->usm.current_pf_work++ % XE_PAGEFAULT_WORK_COUNT;
++	return xe->usm.current_pf_work++ % xe->info.num_pf_work;
+ }
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index 4f8bc64fd..130924d33 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -3277,7 +3277,8 @@ static int prefetch_ranges(struct xe_vm *vm, struct xe_vma_ops *vops,
+ 	skip_threads =  op->prefetch_range.ranges_count == 1 ||
+ 		(!dpagemap && !(vops->flags &
+ 				XE_VMA_OPS_FLAG_HAS_SVM_VALID_RANGE)) ||
+-		!(vops->flags & XE_VMA_OPS_FLAG_DOWNGRADE_LOCK);
++		!(vops->flags & XE_VMA_OPS_FLAG_DOWNGRADE_LOCK) ||
++		vm->xe->info.num_pf_work == 1;
+ 	thread = skip_threads ? &stack_thread : NULL;
+ 
+ 	if (!skip_threads) {
+-- 
+2.43.0
+

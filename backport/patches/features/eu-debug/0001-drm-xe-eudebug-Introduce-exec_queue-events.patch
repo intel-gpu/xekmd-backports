@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Fri, 27 Jan 2023 00:15:09 +0100
-Subject: drm/xe/eudebug: Introduce exec_queue events
+Subject: [PATCH] drm/xe/eudebug: Introduce exec_queue events
 
 Inform debugger about creation and destruction of exec_queues.
 
@@ -20,8 +20,8 @@ Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 07b6f4cb541d6fd34c63a991c87454c65c6c34a5 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+(cherry-picked from commit 7944d692f2c81e469ad424a5f6792024315d1966 eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c       | 189 +++++++++++++++++++++++++-
  drivers/gpu/drm/xe/xe_eudebug.h       |   7 +
@@ -293,10 +293,10 @@ index 5928a39a0..c1fdfc288 100644
  
  #endif /* _XE_EUDEBUG_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index be94e4b9a..c1ac938c0 100644
+index 6f5034780..71d8e58a3 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
-@@ -51,7 +51,9 @@ struct xe_eudebug_resource {
+@@ -52,7 +52,9 @@ struct xe_eudebug_resource {
  
  #define XE_EUDEBUG_RES_TYPE_CLIENT	0
  #define XE_EUDEBUG_RES_TYPE_VM		1
@@ -307,7 +307,7 @@ index be94e4b9a..c1ac938c0 100644
  
  /**
   * struct xe_eudebug_resources - eudebug resources for all types
-@@ -175,4 +177,31 @@ struct xe_eudebug_event_vm {
+@@ -176,4 +178,31 @@ struct xe_eudebug_event_vm {
  	u64 vm_handle;
  };
  
@@ -340,7 +340,7 @@ index be94e4b9a..c1ac938c0 100644
 +
  #endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 071b8c41d..49f569bb3 100644
+index 94b97448a..d5cf98577 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -29,6 +29,7 @@
@@ -351,7 +351,7 @@ index 071b8c41d..49f569bb3 100644
  
  /**
   * DOC: Execution Queue
-@@ -1420,6 +1421,8 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
+@@ -1493,6 +1494,8 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
  
  	args->exec_queue_id = id;
  
@@ -360,7 +360,7 @@ index 071b8c41d..49f569bb3 100644
  	return 0;
  
  del_hw_engine_group:
-@@ -1618,6 +1621,7 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
+@@ -1708,6 +1711,7 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
  		xe_hw_engine_group_del_exec_queue(q->hwe->hw_engine_group, q);
  
  	xe_exec_queue_kill(q);

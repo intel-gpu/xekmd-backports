@@ -1,8 +1,8 @@
 #!/bin/sh
 
 # Limit nproc value to be not more than 64 to avoid build machine hangs
-NP=`nproc`
-NPC=$(( $NP > 64 ? 64 : $NP-1 ))
+NP=`nproc 2>/dev/null || echo 1`
+NPC=$(( NP > 64 ? 64 : NP ))
 
 HEADERS="/lib/modules/`uname -r`/build"
 ACTION="compile"

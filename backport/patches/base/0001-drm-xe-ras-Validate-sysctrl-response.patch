@@ -13,14 +13,39 @@ Signed-off-by: Riana Tauro <riana.tauro@intel.com>
 (backported from commit 948eee331bef0c5245bd3c44a6ed99401b8bcca7 linux-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
- drivers/gpu/drm/xe/xe_ras.c | 12 ++++++++++++
- 1 file changed, 12 insertions(+)
+ drivers/gpu/drm/xe/xe_ras.c | 30 ++++++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
-index bd5a20630..bc2877d12 100644
+index d98ff9453..93e45ef49 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
-@@ -417,6 +417,9 @@ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
+@@ -156,6 +156,24 @@ static inline const char *comp_to_str(u8 component)
+ 	return xe_ras_components[component];
+ }
+ 
++static bool ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter)
++{
++	u8 severity = counter->common.severity;
++	u8 component = counter->common.component;
++
++	if (!in_range(severity, XE_RAS_SEV_NOT_SUPPORTED + 1, XE_RAS_SEV_MAX - 1)) {
++		xe_err(xe, "sysctrl: unexpected severity %u\n", severity);
++		return false;
++	}
++
++	if (!in_range(component, XE_RAS_COMP_NOT_SUPPORTED + 1, XE_RAS_COMP_MAX - 1)) {
++		xe_err(xe, "sysctrl: unexpected component %u\n", component);
++		return false;
++	}
++
++	return true;
++}
++
+ static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
+ {
+ 	struct pci_dev *vsp;
+@@ -327,6 +345,9 @@ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
  		severity = errors[id].common.severity;
  		component = errors[id].common.component;
  
@@ -29,8 +54,8 @@ index bd5a20630..bc2877d12 100644
 +
  		xe_warn(xe, "[RAS]: %s %s detected\n",
  			comp_to_str(component), sev_to_str(severity));
- 
-@@ -455,6 +458,9 @@ static int get_counter(struct xe_device *xe, struct xe_ras_error_class *counter,
+ 	}
+@@ -358,6 +379,9 @@ static int get_counter(struct xe_device *xe, struct xe_ras_error_class *counter,
  		return -EIO;
  	}
  
@@ -40,7 +65,7 @@ index bd5a20630..bc2877d12 100644
  	common = &response.counter.common;
  	*value = response.value;
  
-@@ -528,6 +534,9 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+@@ -422,6 +446,9 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
  			component = arr->counter.common.component;
  			severity = arr->counter.common.severity;
  
@@ -50,7 +75,7 @@ index bd5a20630..bc2877d12 100644
  			xe_info(xe, "[RAS]: %s %s detected\n", comp_to_str(component),
  				sev_to_str(severity));
  
-@@ -644,6 +653,9 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
+@@ -532,6 +559,9 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
  
  	counter = &response.counter;
  

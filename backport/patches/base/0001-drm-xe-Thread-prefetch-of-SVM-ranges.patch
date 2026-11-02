@@ -72,8 +72,8 @@ index 66aadb938..1e4561470 100644
  			if (!(pf.consumer.access_type & XE_PAGEFAULT_ACCESS_PREFETCH)) {
 +				xe_pagefault_save_to_vm(gt_to_xe(pf.gt), &pf);
  				xe_pagefault_print(&pf);
- 				xe_log_err_info(pf.gt, PAGEFAULT, err, "Unsuccessful response\n");
- 			} else {
+ 				xe_gt_info(pf.gt, "Fault response: Unsuccessful %pe\n",
+ 					   ERR_PTR(err));
 @@ -327,7 +327,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  		pf.producer.ops->ack_fault(&pf, err);
  

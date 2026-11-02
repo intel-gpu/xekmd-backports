@@ -109,9 +109,7 @@ diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
 index 0cb04cc27..9a9f698c8 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
-@@ -192,6 +192,11 @@ static inline void xe_device_set_in_reset(struct xe_device *xe)
- 	atomic_set(&xe->in_reset, 1);
- }
+@@ -194,4 +194,9 @@
  
 +static inline bool xe_device_eudebug_uses_guc(struct xe_device *xe)
 +{
@@ -1101,4 +1099,3 @@ index 40cb2b446..e60639b81 100644
  #endif
 -- 
 2.43.0
-

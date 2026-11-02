@@ -14,42 +14,17 @@ Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (backported from commit 5a2b1a5fb42946ad04cdb5fdd764588f2e2e13dd linux-next)
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/gpu/drm/xe/xe_ras.c                   | 104 ++++++++++++++++++
+ drivers/gpu/drm/xe/xe_ras.c                   |  86 ++++++++++++++++++
  drivers/gpu/drm/xe/xe_ras.h                   |   2 +
  drivers/gpu/drm/xe/xe_ras_types.h             |  50 +++++++++
  drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h |   4 +
- 4 files changed, 160 insertions(+)
+ 4 files changed, 142 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
 index 0e73e770c..0e3de8c87 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
-@@ -200,6 +200,24 @@ static inline const char *comp_to_str(u8 component)
- 	return xe_ras_components[component];
- }
- 
-+static bool ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter)
-+{
-+	u8 severity = counter->common.severity;
-+	u8 component = counter->common.component;
-+
-+	if (!in_range(severity, XE_RAS_SEV_NOT_SUPPORTED + 1, XE_RAS_SEV_MAX - 1)) {
-+		xe_err(xe, "sysctrl: unexpected severity %u\n", severity);
-+		return false;
-+	}
-+
-+	if (!in_range(component, XE_RAS_COMP_NOT_SUPPORTED + 1, XE_RAS_COMP_MAX - 1)) {
-+		xe_err(xe, "sysctrl: unexpected component %u\n", component);
-+		return false;
-+	}
-+
-+	return true;
-+}
-+
- static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
- {
- 	struct pci_dev *vsp;
-@@ -632,6 +650,92 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
+@@ -632,6 +632,92 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
  	return 0;
  }
  
@@ -240,4 +215,3 @@ index d0341538a..66e7cbcc3 100644
  	XE_SYSCTRL_CMD_SET_HEALTH		= 0x0C,
 -- 
 2.34.1
-

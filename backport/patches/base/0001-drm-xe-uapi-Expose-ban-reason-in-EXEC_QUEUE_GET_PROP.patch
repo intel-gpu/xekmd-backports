@@ -64,16 +64,16 @@ diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_ex
 index 95f75d61a647..836f88fc0faa 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-@@ -148,6 +148,9 @@ struct xe_exec_queue {
+@@ -145,6 +145,9 @@ struct xe_exec_queue {
+ 	/**
+ 	 * @flags: flags for this exec queue, should statically setup aside from ban
+ 	 * bit
  	 */
  	unsigned long flags;
- 
++
 +	/** @ban_reason: Bitmask of ban reasons (DRM_XE_EXEC_QUEUE_BAN_REASON_*) */
 +	atomic_t ban_reason;
-+
- 	union {
- 		/** @multi_gt_list: list head for VM bind engines if multi-GT */
- 		struct list_head multi_gt_list;
+ 
 @@ -335,5 +338,5 @@ struct xe_exec_queue_ops {
  	 */
  	void (*resume)(struct xe_exec_queue *q);

@@ -12,14 +12,23 @@ Reviewed-by: Riana Tauro <riana.tauro@intel.com>
 (backported from https://patchwork.freedesktop.org/patch/749205/?series=173001&rev=1)
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
- drivers/gpu/drm/xe/xe_hw_error.c   | 10 +++++-----
+ drivers/gpu/drm/xe/xe_hw_error.c   | 13 ++++++-------
  drivers/gpu/drm/xe/xe_tile_types.h |  4 ++--
- 2 files changed, 7 insertions(+), 7 deletions(-)
+ 2 files changed, 8 insertions(+), 9 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
-index 5f2abc9485ff..df6275c3d316 100644
+index 5f2abc9485ff..4446a9ea74e9 100644
 --- a/drivers/gpu/drm/xe/xe_hw_error.c
 +++ b/drivers/gpu/drm/xe/xe_hw_error.c
+@@ -137,7 +137,7 @@ static const char * const pvc_master_local_fatal_err_reg[] = {
+ 	[6]		= "Base Die MDFI T2C",
+ 	[7]		= "Undefined",
+ 	[8]		= "Invalid CSC PSF Command Parity",
+-	[9]		= "Invalid CSC PSF Unexpected Completion",
++[9]		= "Invalid CSC PSF Unexpected Completion",
+ 	[10]		= "Invalid CSC PSF Unsupported Request",
+ 	[11]		= "Invalid PCIe PSF Command Parity",
+ 	[12]		= "PCIe PSF Unexpected Completion",
 @@ -165,9 +165,9 @@ static_assert(ARRAY_SIZE(pvc_master_local_nonfatal_err_reg) == XE_RAS_REG_SIZE);
  						 pvc_master_local_fatal_err_reg : \
  						 pvc_master_local_nonfatal_err_reg)
@@ -30,18 +39,19 @@ index 5f2abc9485ff..df6275c3d316 100644
 -	struct xe_tile *tile = container_of(work, typeof(*tile), csc_hw_error_work);
 +	struct xe_tile *tile = container_of(work, typeof(*tile), hw_error_work);
  	struct xe_device *xe = tile_to_xe(tile);
- 	int ret;
  
-@@ -205,7 +205,7 @@ static void csc_hw_error_handler(struct xe_tile *tile, const enum hardware_error
+ 	xe_survivability_mode_runtime_enable(xe);
+@@ -201,8 +201,7 @@ static void csc_hw_error_handler(struct xe_tile *tile, const enum hardware_error
+ 					    "HEC FW %s %s reported, bit[%d] is set\n",
  					     hec_uncorrected_fw_errors[err_bit], severity_str,
  					     err_bit);
- 
+-
 -			schedule_work(&tile->csc_hw_error_work);
 +			schedule_work(&tile->hw_error_work);
  		}
  	}
  
-@@ -514,7 +514,7 @@ void xe_hw_error_irq_handler(struct xe_tile *tile, const u32 master_ctl)
+@@ -511,7 +510,7 @@ void xe_hw_error_irq_handler(struct xe_tile *tile, const u32 master_ctl)
  	enum hardware_error hw_err;
  
  	if (xe_fault_csc_hw_error())
@@ -50,7 +60,7 @@ index 5f2abc9485ff..df6275c3d316 100644
  
  	for (hw_err = 0; hw_err < HARDWARE_ERROR_MAX; hw_err++) {
  		if (master_ctl & ERROR_IRQ(hw_err))
-@@ -552,7 +552,7 @@ void xe_hw_error_init(struct xe_device *xe)
+@@ -549,7 +548,7 @@ void xe_hw_error_init(struct xe_device *xe)
  	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe))
  		return;
  
@@ -74,3 +84,6 @@ index 0048100ccb72..bc6940b08841 100644
  
  	/** @pcode: tile's PCODE */
  	struct {
+-- 
+2.43.0
+

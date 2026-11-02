@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Michael J. Ruhl" <michael.j.ruhl@intel.com>
 Date: Wed, 16 Sep 2026 13:11:57 -0700
-Subject: [Temp] drm/xe/vsec: Update PMT internal access
+Subject: [TEMP] drm/xe/vsec: Update PMT internal access
 
 Current PMT internal access assumes BMG devices.
 
@@ -13,7 +13,7 @@ Reviewed-by: Karthik Poosa <karthik.poosa@intel.com>
 Signed-off-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
 (backported from https://patchwork.freedesktop.org/series/160717/#rev12)
 Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
-
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
 ---
  drivers/gpu/drm/xe/xe_debugfs.c | 26 ++++++++++++++------------
  drivers/gpu/drm/xe/xe_hwmon.c   | 10 ++++++++--
@@ -21,7 +21,7 @@ Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
  3 files changed, 29 insertions(+), 16 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index 1741118f7..578f124d0 100644
+index 958fb7176..c56f0e4a9 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
 @@ -5,6 +5,7 @@
@@ -32,15 +32,15 @@ index 1741118f7..578f124d0 100644
  #include <linux/bits.h>
  #include <linux/debugfs.h>
  #include <linux/fault-inject.h>
-@@ -19,7 +20,6 @@
- #include "xe_gt_debugfs.h"
+@@ -21,7 +22,6 @@
  #include "xe_gt_printk.h"
  #include "xe_guc_ads.h"
+ #include "xe_hw_engine.h"
 -#include "xe_mmio.h"
+ #include "xe_pagefault.h"
  #include "xe_pcode.h"
  #include "xe_pm.h"
- #include "xe_psmi.h"
-@@ -94,15 +94,20 @@ static void xe_fault_inject_debugfs_register(struct xe_device *xe,
+@@ -146,15 +146,20 @@ static void xe_fault_inject_debugfs_register(struct xe_device *xe,
  	}
  }
  
@@ -66,7 +66,7 @@ index 1741118f7..578f124d0 100644
  	if (ret != sizeof(residency)) {
  		drm_warn(&xe->drm, "%s counter failed to read, ret %d\n", name, ret);
  		return;
-@@ -200,13 +205,12 @@ static int pcode_info(struct seq_file *m, void *data)
+@@ -293,13 +298,12 @@ static int pcode_info(struct seq_file *m, void *data)
  static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
  {
  	struct xe_device *xe;
@@ -81,7 +81,7 @@ index 1741118f7..578f124d0 100644
  	static const struct {
  		u32 offset;
  		const char *name;
-@@ -220,7 +224,7 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
+@@ -313,7 +317,7 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
  	};
  
  	for (int i = 0; i < ARRAY_SIZE(residencies); i++)
@@ -90,7 +90,7 @@ index 1741118f7..578f124d0 100644
  
  	return 0;
  }
-@@ -228,13 +232,11 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
+@@ -321,13 +325,11 @@ static int dgfx_pkg_residencies_show(struct seq_file *m, void *data)
  static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
  {
  	struct xe_device *xe;
@@ -104,7 +104,7 @@ index 1741118f7..578f124d0 100644
  
  	static const struct {
  		u32 offset;
-@@ -246,7 +248,7 @@ static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
+@@ -339,7 +341,7 @@ static int dgfx_pcie_link_residencies_show(struct seq_file *m, void *data)
  	};
  
  	for (int i = 0; i < ARRAY_SIZE(residencies); i++)
@@ -114,10 +114,10 @@ index 1741118f7..578f124d0 100644
  	return 0;
  }
 diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
-index 73718ff76..a496bc889 100644
+index 547c468a2..4d6509238 100644
 --- a/drivers/gpu/drm/xe/xe_hwmon.c
 +++ b/drivers/gpu/drm/xe/xe_hwmon.c
-@@ -521,9 +521,15 @@ xe_hwmon_energy_get(struct xe_hwmon *hwmon, int channel, long *energy)
+@@ -517,9 +517,15 @@ xe_hwmon_energy_get(struct xe_hwmon *hwmon, int channel, long *energy)
  
  	if (hwmon->xe->info.platform == XE_BATTLEMAGE) {
  		u64 pmt_val;
@@ -136,10 +136,10 @@ index 73718ff76..a496bc889 100644
  		if (ret != sizeof(pmt_val)) {
  			drm_warn(&hwmon->xe->drm, "energy read from pmt failed, ret %d\n", ret);
 diff --git a/drivers/gpu/drm/xe/xe_pcode.c b/drivers/gpu/drm/xe/xe_pcode.c
-index 101d12af4..ad5a74c29 100644
+index 622d35242..3ce8ddfaf 100644
 --- a/drivers/gpu/drm/xe/xe_pcode.c
 +++ b/drivers/gpu/drm/xe/xe_pcode.c
-@@ -364,11 +364,16 @@ ALLOW_ERROR_INJECTION(xe_pcode_probe_early, ERRNO); /* See xe_pci_probe */
+@@ -366,11 +366,16 @@ ALLOW_ERROR_INJECTION(xe_pcode_probe_early, ERRNO); /* See xe_pci_probe */
  int xe_get_pcode_version(struct xe_device *xe, struct xe_pcode_version *version)
  {
  	int ret = 0;

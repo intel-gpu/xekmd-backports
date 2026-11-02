@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Riana Tauro <riana.tauro@intel.com>
 Date: Mon, 28 Sep 2026 11:48:36 +0530
-Subject: [TEMP]: drm/xe/xe_ras: Track offlined pages by firmware to
- avoid duplicates
+Subject: [TEMP] drm/xe/xe_ras: Track offlined pages by firmware to avoid
+ duplicates
 
 A memory scrubber can report multiple errors at the same address. Track
 pages already successfully offlined by the firmware so that subsequent
@@ -13,6 +13,7 @@ Signed-off-by: Riana Tauro <riana.tauro@intel.com>
 Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 (backported from https://patchwork.freedesktop.org/series/172710/#rev3)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
 ---
  drivers/gpu/drm/xe/xe_device.c    |  4 ++-
  drivers/gpu/drm/xe/xe_ras.c       | 44 ++++++++++++++++++++++++++++---
@@ -21,10 +22,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  4 files changed, 47 insertions(+), 6 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 411dcd54c..38c348480 100644
+index 950bdbe98faf..f02451405281 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -974,7 +974,9 @@ int xe_device_probe(struct xe_device *xe)
+@@ -1031,7 +1031,9 @@ int xe_device_probe(struct xe_device *xe)
  	if (err)
  		return err;
  
@@ -36,7 +37,7 @@ index 411dcd54c..38c348480 100644
  	/*
  	 * Now that GT is initialized (TTM in particular),
 diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
-index 09e561613..d4a8a4da3 100644
+index dbe187c06857..2e46fd95a1f8 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
 @@ -23,6 +23,9 @@
@@ -165,7 +166,7 @@ index 09e561613..d4a8a4da3 100644
 +	return devm_add_action_or_reset(xe->drm.dev, ras_fini, xe);
  }
 diff --git a/drivers/gpu/drm/xe/xe_ras.h b/drivers/gpu/drm/xe/xe_ras.h
-index f30c83504..87cb7e842 100644
+index f30c83504c9d..87cb7e8421cb 100644
 --- a/drivers/gpu/drm/xe/xe_ras.h
 +++ b/drivers/gpu/drm/xe/xe_ras.h
 @@ -19,7 +19,7 @@ int xe_ras_get_counter(struct xe_device *xe, u8 severity, u8 component, u32 *val
@@ -178,7 +179,7 @@ index f30c83504..87cb7e842 100644
  bool xe_ras_get_disable_page_offline(struct xe_device *xe);
  u32 xe_ras_get_max_pages(struct xe_device *xe);
 diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
-index 1b41053cf..d596f0969 100644
+index e6106c799225..906b15f6266d 100644
 --- a/drivers/gpu/drm/xe/xe_ras_types.h
 +++ b/drivers/gpu/drm/xe/xe_ras_types.h
 @@ -7,6 +7,7 @@
@@ -189,7 +190,7 @@ index 1b41053cf..d596f0969 100644
  
  #define XE_RAS_NUM_COUNTERS			16
  #define XE_RAS_NUM_ERROR_ARR			3
-@@ -537,6 +538,8 @@ struct xe_ras_state {
+@@ -246,6 +247,8 @@ struct xe_ras_state {
  	bool disable_page_offline;
  	/** @max_pages: Total number of pages that can be stored by firmware */
  	u32 max_pages;
@@ -197,7 +198,7 @@ index 1b41053cf..d596f0969 100644
 +	struct xarray offlined_pages;
  };
  
- #endif
+ /**
 -- 
 2.43.0
 

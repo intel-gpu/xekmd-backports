@@ -25,10 +25,13 @@ Reference:
 	888bd8322dfc
 	s390/pci: Introduce pdev->non_mappable_bars and replace VFIO_PCI_MMAP
 
+v1: Rebase to v7.3 kernel [Raju]
+
 Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/vfio/pci/vfio_pci_core.c | 4 ++++
- 1 file changed, 4 insertions(+)
+ drivers/vfio/pci/vfio_pci_core.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
 
 diff --git a/drivers/vfio/pci/vfio_pci_core.c b/drivers/vfio/pci/vfio_pci_core.c
 index 0cfcd47..6fa10fb 100644
@@ -46,6 +49,17 @@ index 0cfcd47..6fa10fb 100644
  			goto no_mmap;
  
  		if (!(res->flags & IORESOURCE_MEM))
+@@ -554,7 +558,11 @@ static void vfio_pci_core_map_bars(struct vfio_pci_core_device *vdev)
+ 
+ 		vdev->barmap[bar] = IOMEM_ERR_PTR(-ENODEV);
+ 
++#ifdef BPM_NON_MAPPABLE_BARS_NOT_PRESENT
++		if (!IS_ENABLED(CONFIG_VFIO_PCI_MMAP))
++#else
+ 		if (pdev->non_mappable_bars)
++#endif
+ 			continue;
+ 
+ 		if (!pci_resource_len(pdev, i))
 -- 
 2.43.0
-

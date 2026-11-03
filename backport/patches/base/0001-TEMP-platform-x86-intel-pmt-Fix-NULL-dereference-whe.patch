@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "David E. Box" <david.e.box@linux.intel.com>
+Date: Thu, 1 Oct 2026 15:03:46 -0700
+Subject: [PATCH] [TEMP]: platform/x86/intel/pmt: Fix NULL dereference when
+ reading crashlog data
+
+Commit 353042d54d82 ("platform/x86/intel/vsec: Switch exported helpers from
+pci_dev to device") changed intel_pmt_read() to pass entry->ep->dev to
+pmt_telem_read_mmio() in place of entry->pcidev. entry->ep is only
+allocated by the telemetry namespace's pmt_add_endpoint() hook. Crashlog
+entries never get one, so any read() of a crashlog sysfs data file
+dereferences a NULL pointer.
+
+Use the intel_vsec_device parent device instead. The PMT class device is a
+child of the auxiliary device, so derive it the same way
+intel_pmt_attr_visible() does. This is the same device telemetry stored in
+ep->dev, so behavior for telemetry and any read_telem() callback is
+unchanged.
+
+Fixes: 353042d54d82 ("platform/x86/intel/vsec: Switch exported helpers from pci_dev to device")
+Cc: stable@vger.kernel.org
+Assisted-by: LLM
+Signed-off-by: David E. Box <david.e.box@linux.intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/patch/757598/?series=175385&rev=1)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/platform/x86/intel/pmt/class.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/platform/x86/intel/pmt/class.c b/drivers/platform/x86/intel/pmt/class.c
+index 984250fff..afd67ba30 100644
+--- a/drivers/platform/x86/intel/pmt/class.c
++++ b/drivers/platform/x86/intel/pmt/class.c
+@@ -90,6 +90,8 @@ intel_pmt_read(struct file *filp, struct kobject *kobj,
+ 	struct intel_pmt_entry *entry = container_of(attr,
+ 						     struct intel_pmt_entry,
+ 						     pmt_bin_attr);
++	struct device *dev = kobj_to_dev(kobj);
++	struct intel_vsec_device *ivdev = auxdev_to_ivdev(to_auxiliary_dev(dev->parent));
+ 
+ 	if (off < 0)
+ 		return -EINVAL;
+@@ -100,7 +102,7 @@ intel_pmt_read(struct file *filp, struct kobject *kobj,
+ 	if (count > entry->size - off)
+ 		count = entry->size - off;
+ 
+-	count = pmt_telem_read_mmio(entry->dev, entry->cb, entry->header.guid, buf,
++	count = pmt_telem_read_mmio(ivdev->dev, entry->cb, entry->header.guid, buf,
+ 				    entry->base, off, count);
+ 
+ 	return count;
+-- 
+2.43.0
+

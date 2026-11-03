@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Date: Wed, 28 Aug 2024 14:12:38 +0200
-Subject: drm/xe/eudebug/ptl: Add RCU_DEBUG_1 register support
- for xe3
+Subject: [PATCH] drm/xe/eudebug/ptl: Add RCU_DEBUG_1 register support for xe3
 
 Format of Register_RenderControlUnitDebug1 is different from
 previous gens. Adjust it so it matches PTL/xe3 format.
@@ -11,17 +10,17 @@ Acked-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Signed-off-by: Dominik Grzegorzek <dominik.grzegorzek@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit bffb950b1b47f0039aa71d9b54365acaf679b3af drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+(cherry-picked from commit c3c4799c56a0213ae59ee1aa000b01aea90a2785 eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_eudebug.c | 13 +++++++++++++
  1 file changed, 13 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index eddcbfb4e..3dcdc9857 100644
+index d9f069b61..2bf20cfa4 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
-@@ -1464,6 +1464,17 @@ static u32 engine_status_xe2(const struct xe_hw_engine * const hwe,
+@@ -1481,6 +1481,17 @@ static u32 engine_status_xe2(const struct xe_hw_engine * const hwe,
  	return (rcu_debug1 >> shift) & RCU_DEBUG_1_ENGINE_STATUS;
  }
  
@@ -39,7 +38,7 @@ index eddcbfb4e..3dcdc9857 100644
  static u32 engine_status(const struct xe_hw_engine * const hwe,
  			 u32 rcu_debug1)
  {
-@@ -1473,6 +1484,8 @@ static u32 engine_status(const struct xe_hw_engine * const hwe,
+@@ -1490,6 +1501,8 @@ static u32 engine_status(const struct xe_hw_engine * const hwe,
  		status = engine_status_xe1(hwe, rcu_debug1);
  	else if (GRAPHICS_VER(gt_to_xe(hwe->gt)) < 30)
  		status = engine_status_xe2(hwe, rcu_debug1);

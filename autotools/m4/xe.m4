@@ -245,6 +245,7 @@ dnl # Macros to check for header availability
 	AC_KERNEL_CHECK_HEADERS([drm/display/drm_hdcp.h])
 
 	AC_DRM_DRIVER_GEM_GPUVA_PRESENT
+	AC_LINEAR_PAGE_DELTA_NOT_PRESENT
 
 	AC_KERNEL_WAIT
 ])

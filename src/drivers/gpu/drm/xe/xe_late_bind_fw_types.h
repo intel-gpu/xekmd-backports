@@ -44,6 +44,8 @@ struct xe_late_bind_fw {
 	struct work_struct work;
 	/** @version: late binding blob manifest version */
 	struct gsc_version version;
+	/** @sdk_api_version: late binding blob manifest SDK API version */
+	u16 sdk_api_version;
 };
 
 /**

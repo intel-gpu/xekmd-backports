@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Raag Jadav <raag.jadav@intel.com>
+Date: Thu, 22 Oct 2026 10:42:27 +0530
+Subject: [PATCH] drm/xe/hw_error: Guard csc_hw_error_work() with runtime PM
+
+xe_device_declare_wedged() callers are expected to hold a runtime PM
+reference. Fix it.
+
+Fixes: a7df563b45b0 ("drm/xe/xe_hw_error: Handle CSC Firmware reported Hardware errors")
+Signed-off-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Riana Tauro <riana.tauro@intel.com>
+Link: https://patch.msgid.link/20261022051303.282805-4-raag.jadav@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+Assisted-by: GNAI:gpt-5.3-codex
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+(cherry-picked from commit fc8d229d76102489b6f56538a818c285a87db1e9 linux-next)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hw_error.c | 16 +++++++++++++++-
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
+index 5f2abc9485ff..7d62f1b6a916 100644
+--- a/drivers/gpu/drm/xe/xe_hw_error.c
++++ b/drivers/gpu/drm/xe/xe_hw_error.c
+@@ -14,6 +14,8 @@
+ #include "xe_drm_ras.h"
+ #include "xe_hw_error.h"
+ #include "xe_mmio.h"
++#include "xe_pm.h"
++#include "xe_ras.h"
+ #include "xe_survivability_mode.h"
+ 
+ #define GT_HW_ERROR_MAX_ERR_BITS		16
+@@ -164,11 +166,23 @@ static_assert(ARRAY_SIZE(pvc_master_local_nonfatal_err_reg) == XE_RAS_REG_SIZE);
+ #define PVC_MASTER_LOCAL_REG_INFO(hw_err)	((hw_err == HARDWARE_ERROR_FATAL) ? \
+ 						 pvc_master_local_fatal_err_reg : \
+ 						 pvc_master_local_nonfatal_err_reg)
+-
+ static void csc_hw_error_work(struct work_struct *work)
+ {
+ 	struct xe_tile *tile = container_of(work, typeof(*tile), csc_hw_error_work);
+ 	struct xe_device *xe = tile_to_xe(tile);
++	int ret;
++
++	guard(xe_pm_runtime)(xe);
++
++	if (xe->info.has_sysctrl) {
++		ret = xe_ras_process_errors(xe);
++		if (ret) {
++			xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_BUS_RESET);
++			xe_device_declare_wedged(xe);
++		}
++
++		return;
++	}
+ 
+ 	xe_survivability_mode_runtime_enable(xe);
+ }
+-- 
+2.43.0
+

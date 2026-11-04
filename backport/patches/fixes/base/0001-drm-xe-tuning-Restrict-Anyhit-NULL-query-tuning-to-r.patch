@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nitin Gote <nitin.r.gote@intel.com>
+Date: Mon, 12 Oct 2026 22:49:04 +0530
+Subject: [PATCH] drm/xe/tuning: Restrict Anyhit NULL-query tuning to render
+ engines
+
+The "Disable NULL query for Anyhit Shader" tuning uses
+xe_rtp_match_first_render_or_compute to program RT_CTRL once per GT.
+On a GT with no render (RCS) engine, that match falls back to a
+compute (CCS) engine instead, so the tuning is still written even
+though RT_CTRL's ray-tracing logic has no hardware behind it there.
+
+A CRI compute-only GT hits exactly this path, causing
+igt@xe_debugfs@check-gt-reg-sr to report a save-restore mismatch:
+
+  Mismatch on 0xe530, expected 0x400 got 0x0
+
+Restrict the rule to ENGINE_CLASS(RENDER) so it only applies where
+ray-tracing hardware is actually present. Every other in-tree platform
+in this version range (BMG, LNL, PTL, NVL) always has a render engine,
+which xe_rtp_match_first_render_or_compute already resolves ahead of
+any compute engine, so this is a no-op for them.
+
+Assisted-by: LLM
+Cc: Matt Roper <matthew.d.roper@intel.com>
+Signed-off-by: Nitin Gote <nitin.r.gote@intel.com>
+Fixes: 8d8431298f69 ("drm/xe/xe3: Disable null query for anyhit shader")
+Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
+Link: https://patch.msgid.link/20261012171901.19508-6-nitin.r.gote@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+(cherry-picked from commit 65e2e108e466a2def170797a6d1b4b7849cec3a1 linux-next)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_tuning.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_tuning.c b/drivers/gpu/drm/xe/xe_tuning.c
+index ea1e56667e22..38c9077fd5a7 100644
+--- a/drivers/gpu/drm/xe/xe_tuning.c
++++ b/drivers/gpu/drm/xe/xe_tuning.c
+@@ -120,7 +120,7 @@ static const struct xe_rtp_table_sr engine_tunings = XE_RTP_TABLE_SR(
+ 	},
+ 	{ XE_RTP_NAME("Tuning: Disable NULL query for Anyhit Shader"),
+ 	  XE_RTP_RULES(GRAPHICS_VERSION_RANGE(2000, XE_RTP_END_VERSION_UNDEFINED),
+-		       FUNC(xe_rtp_match_first_render_or_compute)),
++		       ENGINE_CLASS(RENDER)),
+ 	  XE_RTP_ACTIONS(SET(RT_CTRL, DIS_NULL_QUERY))
+ 	},
+ 	{ XE_RTP_NAME("Tuning: disable HW reporting of ctx switch to GHWSP"),
+-- 
+2.43.0
+

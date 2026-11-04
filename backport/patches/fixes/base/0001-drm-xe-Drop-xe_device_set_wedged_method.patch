@@ -1,0 +1,265 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Raag Jadav <raag.jadav@intel.com>
+Date: Thu, 22 Oct 2026 10:42:26 +0530
+Subject: [PATCH] drm/xe: Drop xe_device_set_wedged_method()
+
+Commit 60439ac3f235 ("drm/xe: Add a helper function to set recovery
+method") introduced xe_device_set_wedged_method() helper to allow setting
+preferred recovery method before wedging the device, but also introduced
+a flaw where the previously set method can be overwritten by concurrent
+racing wedge call. This can result in unintended recovery method being
+sent to userspace and possibly failed recovery.
+
+Drop xe_device_set_wedged_method() entirely and pass the recovery method
+as part of xe_device_declare_wedged() argument, which places the preferred
+recovery method on the stack and avoids this issue.
+
+Fixes: 60439ac3f235 ("drm/xe: Add a helper function to set recovery method")
+Signed-off-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20261022051303.282805-3-raag.jadav@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+Assisted-by: GNAI:gpt-5.3-codex
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+(cherry-picked from commit 972234baa32845afe458fc547434c250035b5466 linux-next)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_amc.c                |  7 ++++--
+ drivers/gpu/drm/xe/xe_device.c             | 27 ++++------------------
+ drivers/gpu/drm/xe/xe_device.h             |  3 +--
+ drivers/gpu/drm/xe/xe_gsc.c                |  3 ++-
+ drivers/gpu/drm/xe/xe_gt.c                 |  3 ++-
+ drivers/gpu/drm/xe/xe_gt_sriov_vf.c        |  2 +-
+ drivers/gpu/drm/xe/xe_guc_submit.c         |  5 ++--
+ drivers/gpu/drm/xe/xe_mert.c               |  6 +++--
+ drivers/gpu/drm/xe/xe_pci_error.c          |  2 +-
+ drivers/gpu/drm/xe/xe_ras.c                |  3 +--
+ drivers/gpu/drm/xe/xe_survivability_mode.c |  3 +--
+ 11 files changed, 26 insertions(+), 38 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_amc.c b/drivers/gpu/drm/xe/xe_amc.c
+index edd50bf8261e..1d1a089dedab 100644
+--- a/drivers/gpu/drm/xe/xe_amc.c
++++ b/drivers/gpu/drm/xe/xe_amc.c
+@@ -159,8 +159,11 @@ static void xe_amc_work(struct work_struct *work)
+ 	case AMC_ALERT_OOB_REQUEST:
+ 	case AMC_ALERT_OOB_RESET:
+ 	case AMC_ALERT_CATERR:
+-		dev_warn(amc->i2c->drm_dev, "AMC Alert: %s\n", amc_alert[alert_reason]);
+-		xe_device_declare_wedged(i2c_client_to_xe_device(client));
++dev_warn(amc->i2c->drm_dev,
++			 "AMC Alert: %s (%u)\n", amc_alert[alert_reason], alert_reason);
++		amc->alert_reason = alert_reason;
++		xe_device_declare_wedged(i2c_client_to_xe_device(client),
++					 DRM_WEDGE_RECOVERY_REBIND | DRM_WEDGE_RECOVERY_BUS_RESET);
+ 		break;
+ 	default:
+ 		dev_warn(amc->i2c->drm_dev, "unknown AMC alert: %d\n", alert_reason);
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index efc76d3204bf..ce15369cb0aa 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -1441,29 +1441,16 @@ u64 xe_device_uncanonicalize_addr(struct xe_device *xe, u64 address)
+  *   firmware and restore device to normal operation.
+  */
+ 
+-/**
+- * xe_device_set_wedged_method - Set wedged recovery method
+- * @xe: xe device instance
+- * @method: recovery method to set
+- *
+- * Set wedged recovery method to be sent in drm wedged uevent.
+- */
+-void xe_device_set_wedged_method(struct xe_device *xe, unsigned long method)
+-{
+-	xe->wedged.method = method;
+-}
+-
+ #define WEDGED_URL	"https://docs.kernel.org/gpu/drm-uapi.html#device-wedging"
+ #define XE_BUG_URL	"https://gitlab.freedesktop.org/drm/xe/kernel/issues/new"
+ 
+ /**
+  * xe_device_declare_wedged - Declare device wedged
+  * @xe: xe device instance
++ * @method: method(s) to be used for recovery
+  *
+  * This is a final state that can only be cleared with the recovery method
+- * specified in the drm wedged uevent. The method can be set using
+- * xe_device_set_wedged_method before declaring the device as wedged. If no method
+- * is set, reprobe (unbind/re-bind) will be sent by default.
++ * specified in the drm wedged uevent.
+  *
+  * In this state every IOCTL will be blocked so the GT cannot be used.
+  * In general it will be called upon any critical error such as gt reset
+@@ -1474,7 +1461,7 @@ void xe_device_set_wedged_method(struct xe_device *xe, unsigned long method)
+  * snapshot capture. In this mode, GT reset won't be attempted so the state of
+  * the issue is preserved for further debugging.
+  */
+-void xe_device_declare_wedged(struct xe_device *xe)
++void xe_device_declare_wedged(struct xe_device *xe, unsigned long method)
+ {
+ 	struct xe_gt *gt;
+ 	u8 id;
+@@ -1505,14 +1492,10 @@ void xe_device_declare_wedged(struct xe_device *xe)
+ 		 * it available to the user for debugging.
+ 		 */
+ 		if (xe->wedged.mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET)
+-			xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_NONE);
+-		/* If no wedge recovery method is set, use default */
+-		else if (!xe->wedged.method)
+-			xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_REBIND |
+-						    DRM_WEDGE_RECOVERY_BUS_RESET);
++			method = DRM_WEDGE_RECOVERY_NONE;
+ 
+ 		/* Notify userspace of wedged device */
+-		drm_dev_wedged_event(&xe->drm, xe->wedged.method, NULL);
++		drm_dev_wedged_event(&xe->drm, method, NULL);
+ 	}
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
+index 9e264ad477d7..249560fb29ea 100644
+--- a/drivers/gpu/drm/xe/xe_device.h
++++ b/drivers/gpu/drm/xe/xe_device.h
+@@ -259,8 +259,7 @@ static inline bool xe_debug_page_size_mode_is_mixed(struct xe_device *xe)
+ }
+ #endif
+ 
+-void xe_device_set_wedged_method(struct xe_device *xe, unsigned long method);
+-void xe_device_declare_wedged(struct xe_device *xe);
++void xe_device_declare_wedged(struct xe_device *xe, unsigned long method);
+ int xe_device_validate_wedged_mode(struct xe_device *xe, unsigned int mode);
+ const char *xe_wedged_mode_to_string(enum xe_wedged_mode mode);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_gsc.c b/drivers/gpu/drm/xe/xe_gsc.c
+index 524ac56bdcc7..2bbe0f20ff8d 100644
+--- a/drivers/gpu/drm/xe/xe_gsc.c
++++ b/drivers/gpu/drm/xe/xe_gsc.c
+@@ -340,7 +340,8 @@ static int gsc_er_complete(struct xe_gt *gt)
+ 		 * declare the device as wedged.
+ 		 */
+ 		xe_gt_err(gt, "GSC ER timed out!\n");
+-		xe_device_declare_wedged(gt_to_xe(gt));
++		xe_device_declare_wedged(gt_to_xe(gt),
++					 DRM_WEDGE_RECOVERY_REBIND | DRM_WEDGE_RECOVERY_BUS_RESET);
+ 		return -EIO;
+ 	}
+ 
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index ead06c882740..65f42d5c9f48 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -1005,7 +1005,8 @@ static void gt_reset_worker(struct work_struct *w)
+ 
+ err_fail:
+ 	xe_log_err_fatal(gt, GT, err, "reset failed\n");
+-	xe_device_declare_wedged(gt_to_xe(gt));
++	xe_device_declare_wedged(gt_to_xe(gt),
++				 DRM_WEDGE_RECOVERY_REBIND | DRM_WEDGE_RECOVERY_BUS_RESET);
+ err_pm_put:
+ 	xe_pm_runtime_put(gt_to_xe(gt));
+ }
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+index 37899fcf5b22..28ec83bb8100 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
+@@ -1462,7 +1462,7 @@ static void vf_post_migration_recovery(struct xe_gt *gt)
+ fail:
+ 	vf_post_migration_abort(gt);
+ 	xe_gt_sriov_err(gt, "migration recovery failed (%pe)\n", ERR_PTR(err));
+-	xe_device_declare_wedged(xe);
++	xe_device_declare_wedged(xe, DRM_WEDGE_RECOVERY_REBIND | DRM_WEDGE_RECOVERY_BUS_RESET);
+ 	return;
+ 
+ queue:
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index 0591a6cd8145..e8f19661555d 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -1360,7 +1360,7 @@ static bool guc_submit_hint_wedged(struct xe_guc *guc)
+ 	if (xe_device_wedged(xe))
+ 		return true;
+ 
+-	xe_device_declare_wedged(xe);
++	xe_device_declare_wedged(xe, DRM_WEDGE_RECOVERY_REBIND | DRM_WEDGE_RECOVERY_BUS_RESET);
+ 
+ 	return true;
+ }
+@@ -1693,7 +1693,8 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+ 	}
+ 
+ 	if (wedge_device)
+-		xe_device_declare_wedged(gt_to_xe(q->gt));
++		xe_device_declare_wedged(gt_to_xe(q->gt),
++					 DRM_WEDGE_RECOVERY_REBIND | DRM_WEDGE_RECOVERY_BUS_RESET);
+ 
+ 	/*
+ 	 * We want the job added back to the pending list so it gets freed; this
+diff --git a/drivers/gpu/drm/xe/xe_mert.c b/drivers/gpu/drm/xe/xe_mert.c
+index f637df95418b..821e0ec26d75 100644
+--- a/drivers/gpu/drm/xe/xe_mert.c
++++ b/drivers/gpu/drm/xe/xe_mert.c
+@@ -74,7 +74,8 @@ static void mert_handle_cat_error(struct xe_device *xe)
+ 		break;
+ 	case CATERR_UNMAPPED_GGTT:
+ 		xe_sriov_err(xe, "MERT: CAT_ERR: Access to an unmapped GGTT!\n");
+-		xe_device_declare_wedged(xe);
++		xe_device_declare_wedged(xe,
++					 DRM_WEDGE_RECOVERY_REBIND | DRM_WEDGE_RECOVERY_BUS_RESET);
+ 		break;
+ 	case CATERR_LMTT_FAULT:
+ 		xe_sriov_dbg(xe, "MERT: CAT_ERR: VF%u LMTT fault!\n", vfid);
+@@ -82,7 +83,8 @@ static void mert_handle_cat_error(struct xe_device *xe)
+ 		break;
+ 	default:
+ 		xe_sriov_err(xe, "MERT: Unexpected CAT_ERR code=%#x!\n", code);
+-		xe_device_declare_wedged(xe);
++		xe_device_declare_wedged(xe,
++					 DRM_WEDGE_RECOVERY_REBIND | DRM_WEDGE_RECOVERY_BUS_RESET);
+ 		break;
+ 	}
+ }
+diff --git a/drivers/gpu/drm/xe/xe_pci_error.c b/drivers/gpu/drm/xe/xe_pci_error.c
+index b7ac33965150..8c7e8f24c276 100644
+--- a/drivers/gpu/drm/xe/xe_pci_error.c
++++ b/drivers/gpu/drm/xe/xe_pci_error.c
+@@ -87,7 +87,7 @@ static pci_ers_result_t xe_pci_error_mmio_enabled(struct pci_dev *pdev)
+ 
+ 	/* User wants to debug the error, prevent reset */
+ 	if (xe->wedged.mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET) {
+-		xe_device_declare_wedged(xe);
++		xe_device_declare_wedged(xe, DRM_WEDGE_RECOVERY_NONE);
+ 		return PCI_ERS_RESULT_DISCONNECT;
+ 	}
+ 
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 32df9c274017..994fd544085c 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -321,8 +321,7 @@ static u8 handle_core_compute_errors(struct xe_ras_error_array *arr)
+ 
+ static void punit_error_handler(struct xe_device *xe)
+ {
+-	xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_COLD_RESET);
+-	xe_device_declare_wedged(xe);
++	xe_device_declare_wedged(xe, DRM_WEDGE_RECOVERY_COLD_RESET);
+ }
+ 
+ static u8 handle_soc_internal_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
+diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
+index 305367a03282..a2575efb9449 100644
+--- a/drivers/gpu/drm/xe/xe_survivability_mode.c
++++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
+@@ -446,8 +446,7 @@ void xe_survivability_mode_runtime_enable(struct xe_device *xe)
+ 	survivability->type = XE_SURVIVABILITY_TYPE_RUNTIME;
+ 	dev_err(&pdev->dev, "Runtime Survivability mode enabled\n");
+ 
+-	xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_VENDOR);
+-	xe_device_declare_wedged(xe);
++	xe_device_declare_wedged(xe, DRM_WEDGE_RECOVERY_VENDOR);
+ 	dev_err(&pdev->dev, "Firmware flash required, Please refer to the userspace documentation for more details!\n");
+ }
+ 
+-- 
+2.43.0
+

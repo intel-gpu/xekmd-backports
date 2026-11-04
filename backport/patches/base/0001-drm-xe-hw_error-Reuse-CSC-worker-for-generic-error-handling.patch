@@ -17,10 +17,10 @@ Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
  2 files changed, 8 insertions(+), 9 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
-index 5f2abc9485ff..4446a9ea74e9 100644
+index 7d62f1b6a916..8b6c88f1c7be 100644
 --- a/drivers/gpu/drm/xe/xe_hw_error.c
 +++ b/drivers/gpu/drm/xe/xe_hw_error.c
-@@ -137,7 +137,7 @@ static const char * const pvc_master_local_fatal_err_reg[] = {
+@@ -139,7 +139,7 @@ static const char * const pvc_master_local_fatal_err_reg[] = {
  	[6]		= "Base Die MDFI T2C",
  	[7]		= "Undefined",
  	[8]		= "Invalid CSC PSF Command Parity",
@@ -29,19 +29,19 @@ index 5f2abc9485ff..4446a9ea74e9 100644
  	[10]		= "Invalid CSC PSF Unsupported Request",
  	[11]		= "Invalid PCIe PSF Command Parity",
  	[12]		= "PCIe PSF Unexpected Completion",
-@@ -165,9 +165,9 @@ static_assert(ARRAY_SIZE(pvc_master_local_nonfatal_err_reg) == XE_RAS_REG_SIZE);
+@@ -166,9 +166,9 @@ static_assert(ARRAY_SIZE(pvc_master_local_nonfatal_err_reg) == XE_RAS_REG_SIZE);
+ #define PVC_MASTER_LOCAL_REG_INFO(hw_err)	((hw_err == HARDWARE_ERROR_FATAL) ? \
  						 pvc_master_local_fatal_err_reg : \
  						 pvc_master_local_nonfatal_err_reg)
- 
 -static void csc_hw_error_work(struct work_struct *work)
 +static void hw_error_work(struct work_struct *work)
  {
 -	struct xe_tile *tile = container_of(work, typeof(*tile), csc_hw_error_work);
 +	struct xe_tile *tile = container_of(work, typeof(*tile), hw_error_work);
  	struct xe_device *xe = tile_to_xe(tile);
+ 	int ret;
  
- 	xe_survivability_mode_runtime_enable(xe);
-@@ -201,8 +201,7 @@ static void csc_hw_error_handler(struct xe_tile *tile, const enum hardware_error
+@@ -215,8 +215,7 @@ static void csc_hw_error_handler(struct xe_tile *tile, const enum hardware_error
  					    "HEC FW %s %s reported, bit[%d] is set\n",
  					     hec_uncorrected_fw_errors[err_bit], severity_str,
  					     err_bit);
@@ -51,7 +51,7 @@ index 5f2abc9485ff..4446a9ea74e9 100644
  		}
  	}
  
-@@ -511,7 +510,7 @@ void xe_hw_error_irq_handler(struct xe_tile *tile, const u32 master_ctl)
+@@ -525,7 +524,7 @@ void xe_hw_error_irq_handler(struct xe_tile *tile, const u32 master_ctl)
  	enum hardware_error hw_err;
  
  	if (xe_fault_csc_hw_error())
@@ -60,7 +60,7 @@ index 5f2abc9485ff..4446a9ea74e9 100644
  
  	for (hw_err = 0; hw_err < HARDWARE_ERROR_MAX; hw_err++) {
  		if (master_ctl & ERROR_IRQ(hw_err))
-@@ -549,7 +548,7 @@ void xe_hw_error_init(struct xe_device *xe)
+@@ -563,7 +562,7 @@ void xe_hw_error_init(struct xe_device *xe)
  	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe))
  		return;
  
@@ -70,10 +70,10 @@ index 5f2abc9485ff..4446a9ea74e9 100644
  	process_hw_errors(xe);
  }
 diff --git a/drivers/gpu/drm/xe/xe_tile_types.h b/drivers/gpu/drm/xe/xe_tile_types.h
-index 0048100ccb72..bc6940b08841 100644
+index e1368c04846a..3dc011f111a4 100644
 --- a/drivers/gpu/drm/xe/xe_tile_types.h
 +++ b/drivers/gpu/drm/xe/xe_tile_types.h
-@@ -114,8 +114,8 @@ struct xe_tile {
+@@ -118,8 +118,8 @@ struct xe_tile {
  	/** @memirq: Memory Based Interrupts. */
  	struct xe_memirq memirq;
  

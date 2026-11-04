@@ -18,11 +18,11 @@ Suggested-by: Michał Winiarski <michal.winiarski@intel.com>
 Signed-off-by: Marcin Bernatowicz <marcin.bernatowicz@linux.intel.com>
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
- drivers/gpu/drm/xe/xe_pci_sriov.c | 98 +++++++++++++++++++++++++++----
- 1 file changed, 85 insertions(+), 13 deletions(-)
+ drivers/gpu/drm/xe/xe_pci_sriov.c | 94 ++++++++++++++++++++++++++-----
+ 1 file changed, 81 insertions(+), 13 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pci_sriov.c b/drivers/gpu/drm/xe/xe_pci_sriov.c
-index 5d41efbec..e8e3daa46 100644
+index ff4cc6f2e9da..6a7ebca10e1d 100644
 --- a/drivers/gpu/drm/xe/xe_pci_sriov.c
 +++ b/drivers/gpu/drm/xe/xe_pci_sriov.c
 @@ -59,7 +59,7 @@ static void pf_link_vfs(struct xe_device *xe, int num_vfs)
@@ -34,7 +34,7 @@ index 5d41efbec..e8e3daa46 100644
  		/* unlikely and harmless, continue with other VFs */
  		if (!link)
  			xe_sriov_notice(xe, "Failed linking VF%u\n", n);
-@@ -82,32 +82,104 @@ static void pf_engine_activity_stats(struct xe_device *xe, unsigned int num_vfs,
+@@ -82,32 +82,100 @@ static void pf_engine_activity_stats(struct xe_device *xe, unsigned int num_vfs,
  	}
  }
  
@@ -47,10 +47,6 @@ index 5d41efbec..e8e3daa46 100644
 +#define PCI_EXT_CAP_ID_VF_REBAR 0x24 /* VF Resizable BAR */
 +#endif
 +
-+static inline resource_size_t pci_rebar_size_to_bytes(int size)
-+{
-+	return 1ULL << (size + ilog2((resource_size_t)SZ_1M));
-+}
 +
 +/*
 + * The real 'struct pci_sriov' is PCI-core internal (drivers/pci/pci.h).

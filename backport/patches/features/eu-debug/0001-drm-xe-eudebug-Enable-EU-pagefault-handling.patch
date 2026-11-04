@@ -70,10 +70,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  10 files changed, 319 insertions(+), 20 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index e261fd915..42bde484f 100644
+index 8d92420cb66f..9c321af4f0fc 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -660,6 +660,9 @@ struct xe_device {
+@@ -637,6 +637,9 @@ struct xe_device {
  
  		/** @eudebug.attention_scan: attention scan worker */
  		struct delayed_work attention_scan;
@@ -84,7 +84,7 @@ index e261fd915..42bde484f 100644
  #endif
  
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index d9cf00d97..66ac30fef 100644
+index 048afd4ffdf1..f1c956e12006 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -2427,6 +2427,14 @@ void xe_eudebug_init(struct xe_device *xe)
@@ -103,7 +103,7 @@ index d9cf00d97..66ac30fef 100644
  	if (ret)
  		drm_warn(&xe->drm, "eudebug sysfs init failed: %d, debugger unavailable\n", ret);
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_pagefault.c b/drivers/gpu/drm/xe/xe_eudebug_pagefault.c
-index 9db368541..4a2b68fc6 100644
+index 9db368541f3d..4a2b68fc6824 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug_pagefault.c
 @@ -17,6 +17,7 @@
@@ -215,7 +215,7 @@ index 9db368541..4a2b68fc6 100644
  		INIT_LIST_HEAD(&epf->link);
  		goto out_set_epf;
  	}
-@@ -342,7 +386,18 @@ out_set_epf:
+@@ -342,7 +386,18 @@ xe_eudebug_pagefault_start(struct xe_vm *vm, struct xe_pagefault *pf)
  	epf->fault.type_level = pf->consumer.fault_type_level;
  	epf->fault.access_type = pf->consumer.access_type;
  
@@ -360,7 +360,7 @@ index 9db368541..4a2b68fc6 100644
  {
  	struct xe_exec_queue *q;
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_pagefault.h b/drivers/gpu/drm/xe/xe_eudebug_pagefault.h
-index 424bb9679..ce7eca30d 100644
+index 424bb9679fda..ce7eca30d7a8 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_pagefault.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_pagefault.h
 @@ -8,18 +8,23 @@
@@ -425,7 +425,7 @@ index 424bb9679..ce7eca30d 100644
  
  #endif /* _XE_EUDEBUG_PAGEFAULT_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
-index 61fc3342f..b4e6bc12d 100644
+index 61fc3342ff4a..b4e6bc12d553 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
 @@ -496,6 +496,11 @@ struct xe_eudebug_pagefault {
@@ -441,7 +441,7 @@ index 61fc3342f..b4e6bc12d 100644
  
  #endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index 478e04703..a25c863a1 100644
+index 65f42d5c9f48..02967120f938 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -24,6 +24,7 @@
@@ -452,23 +452,22 @@ index 478e04703..a25c863a1 100644
  #include "xe_exec_queue.h"
  #include "xe_execlist.h"
  #include "xe_force_wake.h"
-@@ -723,6 +724,7 @@ int xe_gt_init(struct xe_gt *gt)
- 	int i;
+@@ -546,6 +547,7 @@ int xe_gt_init_early(struct xe_gt *gt)
+ 	xe_pat_init(gt);
  
  	INIT_WORK(&gt->reset.worker, gt_reset_worker);
 +	xe_eudebug_pagefault_gt_init(gt);
- 
- 	for (i = 0; i < XE_ENGINE_CLASS_MAX; ++i) {
- 		gt->ring_ops[i] = xe_ring_ops_get(gt, i);
+ 	INIT_WORK(&gt->wedge.worker, gt_wedge_worker);
+ 	return 0;
+ }
 diff --git a/drivers/gpu/drm/xe/xe_gt_types.h b/drivers/gpu/drm/xe/xe_gt_types.h
-index 628911346..28158c9e9 100644
+index c00a7c171f80..c87903ad506e 100644
 --- a/drivers/gpu/drm/xe/xe_gt_types.h
 +++ b/drivers/gpu/drm/xe/xe_gt_types.h
-@@ -419,6 +419,18 @@ struct xe_gt {
- 
+@@ -426,6 +426,18 @@ struct xe_gt {
  	/** @eu_stall: EU stall counters subsystem per gt info */
  	struct xe_eu_stall_gt *eu_stall;
-+
+ 
 +#if IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)
 +	/**
 +	 * @eudebug: Worker to finalize eudebug pagefault on gt reset.
@@ -480,11 +479,12 @@ index 628911346..28158c9e9 100644
 +		struct work_struct gt_reset_work;
 +	} eudebug;
 +#endif
++
+ 	/** @initialized: GT is initialized */
+ 	bool initialized;
  };
- 
- #endif
 diff --git a/drivers/gpu/drm/xe/xe_guc_pagefault.c b/drivers/gpu/drm/xe/xe_guc_pagefault.c
-index e65e4962a..c4d75c489 100644
+index e65e4962a26c..c4d75c489a02 100644
 --- a/drivers/gpu/drm/xe/xe_guc_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_guc_pagefault.c
 @@ -11,12 +11,13 @@
@@ -529,7 +529,7 @@ index e65e4962a..c4d75c489 100644
  
  static void xe_guc_pagefault_print(struct xe_pagefault *pf,
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index ba6c3f381..b0b6aa58e 100644
+index ba6c3f381de8..b0b6aa58e0d7 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
 @@ -10,6 +10,7 @@
@@ -679,7 +679,7 @@ index ba6c3f381..b0b6aa58e 100644
  		xe_assert(xe, pf->consumer.alloc_state ==
  			  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
  		xe_assert(xe, pf == pf_work->cache.pf);
-@@ -692,7 +783,7 @@ ack_fault:
+@@ -692,7 +783,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  
  			spin_unlock_irq(&pf_queue->lock);
  		}
@@ -697,7 +697,7 @@ index ba6c3f381..b0b6aa58e 100644
  
  /*
 diff --git a/drivers/gpu/drm/xe/xe_pagefault_types.h b/drivers/gpu/drm/xe/xe_pagefault_types.h
-index 96b382ba8..8b9da5da4 100644
+index 96b382ba834a..8b9da5da4e8f 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault_types.h
 +++ b/drivers/gpu/drm/xe/xe_pagefault_types.h
 @@ -136,10 +136,12 @@ struct xe_pagefault_ops {

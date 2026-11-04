@@ -49,18 +49,18 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  7 files changed, 28 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_lrc_layout.h b/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
-index 9cf18eac6..51a3463c8 100644
+index 3f9cb9216a8f..6ba6d8890fb2 100644
 --- a/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
 +++ b/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
-@@ -45,4 +45,6 @@
- #define INDIRECT_CTX_RING_START_UDW	(0x08 + 1)
- #define INDIRECT_CTX_RING_CTL		(0x0a + 1)
+@@ -48,4 +48,6 @@
+ #define CTX_INDIRECT_CTX_OFFSET_MASK	REG_GENMASK(15, 6)
+ #define CTX_INDIRECT_CTX_OFFSET_DEFAULT	REG_FIELD_PREP(CTX_INDIRECT_CTX_OFFSET_MASK, 0xd)
  
 +#define SUP_TRANS_CATERR		BIT(24)
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_pagefault.c b/drivers/gpu/drm/xe/xe_eudebug_pagefault.c
-index 4a2b68fc6..06bfa2dd2 100644
+index 4a2b68fc6824..06bfa2dd20ef 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug_pagefault.c
 @@ -278,6 +278,9 @@ xe_eudebug_pagefault_start(struct xe_vm *vm, struct xe_vma *vma,
@@ -74,7 +74,7 @@ index 4a2b68fc6..06bfa2dd2 100644
  		return -EOPNOTSUPP;
  
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index e43ff90e1..c3ab112da 100644
+index 1c2ff3842bc3..b8705369a06c 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -415,9 +415,13 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
@@ -115,7 +115,7 @@ index e43ff90e1..c3ab112da 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index 14de1b828..1a815b050 100644
+index 4a3473d09261..374de67aee3f 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
 @@ -154,7 +154,8 @@ struct xe_exec_queue {
@@ -129,7 +129,7 @@ index 14de1b828..1a815b050 100644
  
  	union {
 diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
-index e72b76945..328887bf6 100644
+index 6619ac2d43c4..c03fcc422012 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.c
 +++ b/drivers/gpu/drm/xe/xe_lrc.c
 @@ -1616,6 +1616,7 @@ static int xe_lrc_ctx_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe, struct
@@ -155,7 +155,7 @@ index e72b76945..328887bf6 100644
  	if (GRAPHICS_VER(xe) >= 20 && hwe->class == XE_ENGINE_CLASS_RENDER)
  		xe_lrc_set_gpgpu_preemption_level(lrc, gt);
 diff --git a/drivers/gpu/drm/xe/xe_lrc.h b/drivers/gpu/drm/xe/xe_lrc.h
-index 7be5e3da8..b065f41a5 100644
+index 7be5e3da8bc8..b065f41a5494 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.h
 +++ b/drivers/gpu/drm/xe/xe_lrc.h
 @@ -60,6 +60,8 @@ struct xe_lrc_snapshot {
@@ -168,7 +168,7 @@ index 7be5e3da8..b065f41a5 100644
  struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
  			     void *replay_state, u32 ring_size, u16 msix_vec, u32 flags);
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 3b8ee9b21..e2a08e3f4 100644
+index 3b8ee9b21eb7..e2a08e3f4e55 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -1466,6 +1466,7 @@ struct drm_xe_exec_queue_create {

@@ -15,11 +15,11 @@ Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
 (backported from https://patchwork.freedesktop.org/series/174898/#rev3)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
- drivers/gpu/drm/xe/xe_hwmon.c | 19 ++++++++++++++++---
- 1 file changed, 16 insertions(+), 3 deletions(-)
+ drivers/gpu/drm/xe/xe_hwmon.c | 64 +++++++++++++++--------------------
+ 1 file changed, 28 insertions(+), 36 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
-index 48ff9750d..d8f5a4f25 100644
+index 18964819fae3..675bb97b0855 100644
 --- a/drivers/gpu/drm/xe/xe_hwmon.c
 +++ b/drivers/gpu/drm/xe/xe_hwmon.c
 @@ -114,6 +114,10 @@ enum sensor_attr_power {
@@ -33,15 +33,115 @@ index 48ff9750d..d8f5a4f25 100644
  /* Mailbox sentinel reported for an unavailable temperature sensor */
  #define TEMP_MBX_INVALID	0xFF
  
-@@ -974,10 +978,19 @@ static int mbx_temp_decode(u8 value)
- static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+@@ -160,17 +164,13 @@ struct xe_hwmon_thermal_info {
+ 	u8 vram_count;
+ 	/** @available: temperature sensor availability cached at registration */
+ 	bool available[CHANNEL_MAX];
+-/** @vram_count: exclusive upper bound for VRAM temperature channel indices */
+-	u8 vram_count;
+-	/** @available: temperature sensor availability cached at registration */
+-	bool available[CHANNEL_MAX];
+ 	/** @msu_mask: VRAM subsystem enable mask read from MMIO */
+ 	u32 msu_mask;
+ 	union {
+ 		/** @value: per-sensor raw mailbox temperature; bit7=sign, bits6:0=magnitude */
+ 		u8 value[U8_MAX + 1];
+-		/** @dword: sensor values as dwords, u32-aligned for pcode reads */
+-		u32 dword[DIV_ROUND_UP(U8_MAX + 1, sizeof(u32))];
++		/** @dword: sensor values as little-endian dwords, u32-aligned for pcode reads */
++		__le32 dword[DIV_ROUND_UP(U8_MAX + 1, sizeof(u32))];
+ 	};
+ 	/** @vram_label: vram label names, dynamically allocated based on vram_count */
+ 	char (*vram_label)[MAX_LABEL_SIZE];
+@@ -262,7 +262,7 @@ static int xe_hwmon_pcode_rmw_power_limit(struct xe_hwmon *hwmon, u32 attr, u8 c
+ 						  (channel == CHANNEL_CARD) ?
+ 						  READ_PSYSGPU_POWER_LIMIT :
+ 						  READ_PACKAGE_POWER_LIMIT,
+-prepare_power_limit_param2(hwmon, channel)),
++						  prepare_power_limit_param2(hwmon, channel)),
+ 			    &val0, &val1);
+ 	if (ret) {
+ 		drm_err(&hwmon->xe->drm, "read failed ch %d val0 0x%08x, val1 0x%08x, ret %d\n",
+@@ -475,10 +475,12 @@ static int xe_hwmon_power_max_write(struct xe_hwmon *hwmon, u32 attr, int channe
+ 		if (hwmon->xe->info.has_mbx_power_limits) {
+ 			drm_dbg(&hwmon->xe->drm, "disabling %s on channel %d\n",
+ 				PWR_ATTR_TO_STR(attr), channel);
+-ret = xe_hwmon_pcode_rmw_power_limit(hwmon, attr, channel, PWR_LIM_EN, 0);
++			ret = xe_hwmon_pcode_rmw_power_limit(hwmon, attr, channel, PWR_LIM_EN, 0);
++			if (ret)
++				goto unlock;
++			ret = xe_hwmon_pcode_read_power_limit(hwmon, attr, channel, &reg_val);
+ 			if (ret)
+ 				goto unlock;
+-			xe_hwmon_pcode_read_power_limit(hwmon, attr, channel, &reg_val);
+ 		} else {
+ 			reg_val = xe_mmio_rmw32(mmio, rapl_limit, PWR_LIM_EN, 0);
+ 			reg_val = xe_mmio_read32(mmio, rapl_limit);
+@@ -774,11 +776,11 @@ xe_hwmon_power_max_interval_store(struct device *dev, struct device_attribute *a
+ 
+ 	mutex_lock(&hwmon->hwmon_lock);
+ 
+-ret = count;
++	ret = count;
+ 	if (hwmon->xe->info.has_mbx_power_limits) {
+-		if (xe_hwmon_pcode_rmw_power_limit(hwmon, power_attr, channel, PWR_LIM_TIME, rxy))
+-			count = -EIO;
+-	} else {
++		ret = xe_hwmon_pcode_rmw_power_limit(hwmon, power_attr, channel, PWR_LIM_TIME, rxy);
++		if (!ret)
++			ret = count;
+ 	} else {
+ 		r = xe_mmio_rmw32(mmio, xe_hwmon_get_reg(hwmon, REG_PKG_RAPL_LIMIT, channel),
+ 				  PWR_LIM_TIME, rxy);
+@@ -949,7 +951,7 @@ static const struct hwmon_channel_info * const hwmon_info[] = {
+ static int xe_hwmon_pcode_read_thermal_info(struct xe_hwmon *hwmon)
  {
  	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
--	int ret, i, count = 0;
-+	int ret, i, start, end, count = 0;
- 	s32 average = 0;
+-struct xe_mmio *mmio = xe_root_tile_mmio(hwmon->xe);
++	struct xe_mmio *mmio = xe_root_tile_mmio(hwmon->xe);
+ 	u32 config = 0, data0 = 0, data1 = 0;
+ 	int ret;
  
--	for (i = 0; i < DIV_ROUND_UP(hwmon->temp.count, sizeof(u32)); i++) {
+@@ -979,8 +981,9 @@ struct xe_mmio *mmio = xe_root_tile_mmio(hwmon->xe);
+ 	if (ret)
+ 		return ret;
+ 
+-drm_dbg(&hwmon->xe->drm, "thermal info read val 0x%08x val1 0x%08x\n",
+-		hwmon->temp.data[0], hwmon->temp.data[1]);
++	drm_dbg(&hwmon->xe->drm, "thermal info read val 0x%x val1 0x%x\n", data0, data1);
++	hwmon->temp.data[0] = cpu_to_le32(data0);
++	hwmon->temp.data[1] = cpu_to_le32(data1);
+ 
+ 	ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_CONFIG, 0),
+ 			    &config, NULL);
+@@ -1018,32 +1021,21 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ {
+ 	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
+ 	int ret, i, count = 0;
+-	u32 *dword = (u32 *)hwmon->temp.value;
+ 	s32 average = 0;
+ 	int start, end;
+ 
+-guard(mutex)(&hwmon->hwmon_lock);
+-
+-for (i = 0; i < DIV_ROUND_UP(hwmon->temp.count, sizeof(u32)); i++) {
+-	ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_DATA, i),
+-			    &hwmon->temp.dword[i], NULL);
+-	if (ret)
+-		return ret;
+-	drm_dbg(&hwmon->xe->drm, "thermal data for group %d val 0x%x\n", i,
+-		hwmon->temp.dword[i]);
+-}
++	guard(mutex)(&hwmon->hwmon_lock);
+ 
+-/* CRI relocated the memory controller temperatures to READ_THERMAL_DATA bytes 16..19. */
+-if (hwmon->xe->info.platform >= XE_CRESCENTISLAND) {
+-	start = CRI_TEMP_INDEX_MCTRL;
+-	end = CRI_TEMP_INDEX_MCTRL + CRI_TEMP_MCTRL_COUNT;
+-} else {
+-	start = TEMP_INDEX_MCTRL;
+-	end = hwmon->temp.count - 1;
+-}
 +	/* CRI relocated the memory controller temperatures to READ_THERMAL_DATA bytes 16..19. */
 +	if (hwmon->xe->info.platform >= XE_CRESCENTISLAND) {
 +		start = CRI_TEMP_INDEX_MCTRL;
@@ -49,21 +149,13 @@ index 48ff9750d..d8f5a4f25 100644
 +	} else {
 +		start = TEMP_INDEX_MCTRL;
 +		end = hwmon->temp.count - 1;
-+	}
-+
-+	for (i = start / sizeof(u32); i < DIV_ROUND_UP(end, sizeof(u32)); i++) {
- 		ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_DATA, i),
- 				    &hwmon->temp.dword[i], NULL);
- 		if (ret)
-@@ -986,7 +999,7 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
- 			hwmon->temp.dword[i]);
  	}
  
--	for (i = TEMP_INDEX_MCTRL; i < hwmon->temp.count - 1; i++) {
-+	for (i = start; i < end; i++) {
- 		if (!mbx_temp_valid(hwmon, hwmon->temp.value[i]))
- 			continue;
- 		average += mbx_temp_decode(hwmon->temp.value[i]);
+-for (i = 0; i < DIV_ROUND_UP(hwmon->temp.count, sizeof(u32)); i++) {
++	for (i = 0; i < DIV_ROUND_UP(hwmon->temp.count, sizeof(u32)); i++) {
+ 		u32 data = 0;
+ 
+ 		ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_DATA, i),
 -- 
 2.43.0
 

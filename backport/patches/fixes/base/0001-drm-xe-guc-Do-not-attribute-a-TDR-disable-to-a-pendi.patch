@@ -1,0 +1,130 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jagmeet Randhawa <jagmeet.randhawa@intel.com>
+Date: Tue, 20 Oct 2026 19:07:05 +0000
+Subject: [PATCH] drm/xe/guc: Do not attribute a TDR disable to a pending
+ suspend
+
+handle_sched_done() treats any SCHED_DONE with runnable_state 0 as the
+completion of a suspend whenever q->guc->suspend_pending is set. That is
+not sufficient to tell apart the two producers of a scheduling disable.
+
+When a queue is suspended, __guc_exec_queue_suspend() sets
+suspend_pending and queues a SUSPEND message. If a job times out before
+that message runs, guc_exec_queue_timedout_job() stops submission, which
+traps the message, bans the queue and issues a disable of its own via
+disable_scheduling(). When the GuC acknowledges that disable,
+suspend_pending is still set, so handle_sched_done() misattributes the
+reply to the trapped SUSPEND message.
+
+This signals the suspend fence for a queue that was never suspended,
+tripping the exec_queue_suspended() assert in suspend_fence_signal(), and
+skips the wake_up_all() the TDR is waiting on, so the TDR stalls for its
+full 5s timeout and then triggers an unnecessary GT reset.
+
+The suspend path marks the queue suspended before disabling scheduling,
+and a trapped SUSPEND message never does, so exec_queue_suspended()
+distinguishes the two cases. Use it to qualify the attribution, the same
+way the VF migration replay path already does. The trapped message is not
+lost: it completes the suspend once submission restarts at the end of the
+TDR.
+
+While here, wake guc->ct.wq after clearing pending_disable rather than
+before, so a waiter observes the updated state on its first re-check, and
+wake unconditionally since the suspend and destroy paths have waiters too.
+
+v2: Rebase onto drm-xe-next. The suspend_pending check moved under
+    sched->msg_lock in commit cf4171a20d13 ("drm/xe/guc: Fix race
+    around q->guc->suspend_pending access"), so the
+    exec_queue_suspended() qualification is folded into that locked
+    snapshot rather than reinstating an unlocked check. No functional
+    change from v1.
+
+Fixes: dd08ebf6c352 ("drm/xe: Introduce a new DRM driver for Intel GPUs")
+Signed-off-by: Jagmeet Randhawa <jagmeet.randhawa@intel.com>
+Reviewed-by: Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20261020190705.20127-1-jagmeet.randhawa@intel.com
+Assisted-by: GNAI:gpt-5.3-codex
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+(cherry-picked from commit 3ecbac2365b9b0d3b9dfdbf2d92d5ec767e85591 linux-next)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_submit.c | 54 +++++++++++++++++++-----------
+ 1 file changed, 35 insertions(+), 19 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index e8f19661555d..2ce73cb507e6 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -3136,33 +3136,49 @@ static void handle_sched_done(struct xe_guc *guc, struct xe_exec_queue *q,
+ 		smp_wmb();
+ 		wake_up_all(&guc->ct.wq);
+ 	} else {
++		bool was_pending;
++
+ 		xe_gt_assert(guc_to_gt(guc), runnable_state == 0);
+ 		xe_gt_assert(guc_to_gt(guc), exec_queue_pending_disable(q));
+ 
+-		if (q->guc->suspend_pending) {
++		/*
++		 * A TDR stops the scheduler, which can trap a queued SUSPEND
++		 * message, and then issues a disable of its own. suspend_pending
++		 * is still set in that case, so only attribute this SCHED_DONE
++		 * to a suspend if the SUSPEND message actually ran, i.e. it
++		 * marked the queue suspended before disabling scheduling. The
++		 * trapped message completes the suspend once submission
++		 * restarts.
++		 */
++		xe_sched_msg_lock(&q->guc->sched);
++		was_pending = q->guc->suspend_pending && exec_queue_suspended(q);
++		if (was_pending) {
+ 			clear_exec_queue_pending_disable(q);
+ 			suspend_fence_signal(q);
+ 		} else {
+-			if (exec_queue_banned(q)) {
+-				smp_wmb();
+-				wake_up_all(&guc->ct.wq);
+-			}
+-			if (exec_queue_destroyed(q)) {
+-				/*
+-				 * Make sure to clear the pending_disable only
+-				 * after sampling the destroyed state. We want
+-				 * to ensure we don't trigger the unregister too
+-				 * early with something intending to only
+-				 * disable scheduling. The caller doing the
+-				 * destroy must wait for an ongoing
+-				 * pending_disable before marking as destroyed.
+-				 */
+-				clear_exec_queue_pending_disable(q);
++			/*
++			 * Make sure to clear the pending_disable only after
++			 * sampling the destroyed state. We want to ensure we
++			 * don't trigger the unregister too early with something
++			 * intending to only disable scheduling. The caller
++			 * doing the destroy must wait for an ongoing
++			 * pending_disable before marking as destroyed.
++			 */
++			bool destroyed = exec_queue_destroyed(q);
++
++			clear_exec_queue_pending_disable(q);
++			if (destroyed)
+ 				deregister_exec_queue(guc, q);
+-			} else {
+-				clear_exec_queue_pending_disable(q);
+-			}
+ 		}
++		xe_sched_msg_unlock(&q->guc->sched);
++
++		/*
++		 * Wake after pending_disable is cleared, not before, so waiters
++		 * such as the TDR see the updated state on the first re-check.
++		 */
++		smp_wmb();
++		wake_up_all(&guc->ct.wq);
++
+ 	}
+ }
+ 
+-- 
+2.43.0
+

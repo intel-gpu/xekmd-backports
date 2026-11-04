@@ -22,13 +22,13 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_pcode_regs.h |   1 +
  drivers/gpu/drm/xe/xe_device_types.h    |   2 +
- drivers/gpu/drm/xe/xe_hwmon.c           | 164 +++++++++++++++++++++---
+ drivers/gpu/drm/xe/xe_hwmon.c           | 162 +++++++++++++++++++++---
  drivers/gpu/drm/xe/xe_pci.c             |   2 +
  drivers/gpu/drm/xe/xe_pci_types.h       |   1 +
- 5 files changed, 154 insertions(+), 16 deletions(-)
+ 5 files changed, 151 insertions(+), 17 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_pcode_regs.h b/drivers/gpu/drm/xe/regs/xe_pcode_regs.h
-index a969661f0..d9e4847dd 100644
+index a969661f0c95..d9e4847dd68e 100644
 --- a/drivers/gpu/drm/xe/regs/xe_pcode_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_pcode_regs.h
 @@ -28,6 +28,7 @@
@@ -40,10 +40,10 @@ index a969661f0..d9e4847dd 100644
  #define CRI_VRAM_TEMPERATURE			XE_REG(0x138348)
  #define CRI_PLATFORM_ENERGY_STATUS		XE_REG(0x138458)
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index ee8fb4191..2497e739d 100644
+index ce45e677a98f..9bb6c199cbc0 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -182,6 +182,8 @@ struct xe_device {
+@@ -183,6 +183,8 @@ struct xe_device {
  		u8 has_drm_ras:1;
  		/** @info.has_fan_control: Device supports fan control */
  		u8 has_fan_control:1;
@@ -53,7 +53,7 @@ index ee8fb4191..2497e739d 100644
  		u8 has_flat_ccs:1;
  		/** @info.has_gsc_nvm: Device has gsc non-volatile memory */
 diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
-index 80eac8120..ea2caa1d2 100644
+index ddb683dc3828..4cdf0f6d1a06 100644
 --- a/drivers/gpu/drm/xe/xe_hwmon.c
 +++ b/drivers/gpu/drm/xe/xe_hwmon.c
 @@ -39,7 +39,11 @@ enum xe_hwmon_reg_operation {
@@ -77,9 +77,9 @@ index 80eac8120..ea2caa1d2 100644
  	CHANNEL_VRAM_N_MAX = CHANNEL_VRAM_N + MAX_VRAM_CHANNELS - 1,
  	CHANNEL_MAX,
  };
-@@ -149,18 +154,22 @@ struct xe_hwmon_thermal_info {
- 		/** @data: temperature limits in dwords */
- 		u32 data[DIV_ROUND_UP(TEMP_LIMIT_MAX, sizeof(u32))];
+@@ -149,8 +154,10 @@ struct xe_hwmon_thermal_info {
+ 		/** @data: temperature limits as little-endian dwords */
+ 		__le32 data[DIV_ROUND_UP(TEMP_LIMIT_MAX, sizeof(u32))];
  	};
 -	/** @count: no of temperature sensors available for the platform */
 +	/** @count: temperature sensors count from READ_THERMAL_CONFIG */
@@ -88,22 +88,8 @@ index 80eac8120..ea2caa1d2 100644
 +	u8 vram_count;
  	/** @available: temperature sensor availability cached at registration */
  	bool available[CHANNEL_MAX];
-+	/** @msu_mask: VRAM subsystem enable mask read from MMIO */
-+	u32 msu_mask;
- 	union {
- 		/** @value: per-sensor raw mailbox temperature; bit7=sign, bits6:0=magnitude */
- 		u8 value[U8_MAX + 1];
- 		/** @dword: sensor values as dwords, u32-aligned for pcode reads */
- 		u32 dword[DIV_ROUND_UP(U8_MAX + 1, sizeof(u32))];
- 	};
--	/** @vram_label: vram label names */
--	char vram_label[MAX_VRAM_CHANNELS][MAX_LABEL_SIZE];
-+	/** @vram_label: vram label names, dynamically allocated based on vram_count */
-+	char (*vram_label)[MAX_LABEL_SIZE];
- };
- 
- /**
-@@ -274,6 +283,14 @@ static int xe_hwmon_pcode_rmw_power_limit(const struct xe_hwmon *hwmon, u32 attr
+ /** @vram_count: exclusive upper bound for VRAM temperature channel indices */
+@@ -307,6 +314,14 @@ static int xe_hwmon_pcode_set_default_power_limits(struct xe_hwmon *hwmon)
  	return ret;
  }
  
@@ -118,7 +104,7 @@ index 80eac8120..ea2caa1d2 100644
  static struct xe_reg xe_hwmon_get_reg(struct xe_hwmon *hwmon, enum xe_hwmon_reg hwmon_reg,
  				      int channel)
  {
-@@ -286,14 +303,16 @@ static struct xe_reg xe_hwmon_get_reg(struct xe_hwmon *hwmon, enum xe_hwmon_reg
+@@ -319,14 +334,16 @@ static struct xe_reg xe_hwmon_get_reg(struct xe_hwmon *hwmon, enum xe_hwmon_reg
  				return CRI_PACKAGE_TEMPERATURE;
  			else if (channel == CHANNEL_VRAM)
  				return CRI_VRAM_TEMPERATURE;
@@ -137,7 +123,7 @@ index 80eac8120..ea2caa1d2 100644
  				return BMG_VRAM_TEMPERATURE_N(channel - CHANNEL_VRAM_N);
  		} else if (xe->info.platform == XE_DG2) {
  			if (channel == CHANNEL_PKG)
-@@ -809,6 +828,70 @@ static const struct hwmon_channel_info * const hwmon_info[] = {
+@@ -854,6 +871,70 @@ static const struct hwmon_channel_info * const hwmon_info[] = {
  			   HWMON_T_CRIT | HWMON_T_EMERGENCY | HWMON_T_INPUT | HWMON_T_LABEL,
  			   HWMON_T_CRIT | HWMON_T_EMERGENCY | HWMON_T_INPUT | HWMON_T_LABEL,
  			   HWMON_T_CRIT | HWMON_T_EMERGENCY | HWMON_T_INPUT | HWMON_T_LABEL,
@@ -208,12 +194,12 @@ index 80eac8120..ea2caa1d2 100644
  			   HWMON_T_CRIT | HWMON_T_EMERGENCY | HWMON_T_INPUT | HWMON_T_LABEL),
  	HWMON_CHANNEL_INFO(power, HWMON_P_MAX | HWMON_P_RATED_MAX | HWMON_P_LABEL | HWMON_P_CRIT |
  			   HWMON_P_CAP,
-@@ -823,15 +906,37 @@ static const struct hwmon_channel_info * const hwmon_info[] = {
- static int xe_hwmon_pcode_read_thermal_info(struct xe_hwmon *hwmon)
+@@ -869,17 +950,37 @@ static int xe_hwmon_pcode_read_thermal_info(struct xe_hwmon *hwmon)
  {
  	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
-+	struct xe_mmio *mmio = xe_root_tile_mmio(hwmon->xe);
- 	u32 config = 0;
+ struct xe_mmio *mmio = xe_root_tile_mmio(hwmon->xe);
+-u32 config = 0, data0 = 0, data1 = 0;
++	u32 config = 0, data0 = 0, data1 = 0;
  	int ret;
  
 +	/*
@@ -238,16 +224,19 @@ index 80eac8120..ea2caa1d2 100644
 +	}
 +
  	ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_LIMITS, 0),
- 			    &hwmon->temp.data[0], &hwmon->temp.data[1]);
+ 			    &data0, &data1);
  	if (ret)
  		return ret;
  
--	drm_dbg(&hwmon->xe->drm, "thermal info read val 0x%x val1 0x%x\n",
-+	drm_dbg(&hwmon->xe->drm, "thermal info read val 0x%08x val1 0x%08x\n",
- 		hwmon->temp.data[0], hwmon->temp.data[1]);
+-drm_dbg(&hwmon->xe->drm, "thermal info read val 0x%x val1 0x%x\n", data0, data1);
+-	hwmon->temp.data[0] = cpu_to_le32(data0);
+-	hwmon->temp.data[1] = cpu_to_le32(data1);
++drm_dbg(&hwmon->xe->drm, "thermal info read val 0x%08x val1 0x%08x\n",
++		hwmon->temp.data[0], hwmon->temp.data[1]);
  
  	ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_CONFIG, 0),
-@@ -1036,6 +1141,14 @@ static bool xe_hwmon_temp_probe(struct xe_hwmon *hwmon, int channel)
+ 			    &config, NULL);
+@@ -1108,6 +1209,14 @@ static bool xe_hwmon_temp_probe(struct xe_hwmon *hwmon, int channel)
  		if (!xe_reg_is_valid(reg))
  			return false;
  
@@ -262,7 +251,7 @@ index 80eac8120..ea2caa1d2 100644
  		reg_val = xe_mmio_read32(mmio, reg);
  		if (!mmio_temp_valid(hwmon, reg_val)) {
  			drm_dbg(&hwmon->xe->drm,
-@@ -1053,20 +1166,31 @@ static bool xe_hwmon_temp_probe(struct xe_hwmon *hwmon, int channel)
+@@ -1125,20 +1234,31 @@ static bool xe_hwmon_temp_probe(struct xe_hwmon *hwmon, int channel)
  	}
  }
  
@@ -297,7 +286,7 @@ index 80eac8120..ea2caa1d2 100644
  }
  
  static umode_t
-@@ -1562,8 +1686,10 @@ static int xe_hwmon_read_label(struct device *dev,
+@@ -1633,8 +1753,10 @@ static int xe_hwmon_read_label(struct device *dev,
  			*str = "mctrl";
  		else if (channel == CHANNEL_PCIE)
  			*str = "pcie";
@@ -309,7 +298,7 @@ index 80eac8120..ea2caa1d2 100644
  		return 0;
  	case hwmon_power:
  	case hwmon_energy:
-@@ -1591,7 +1717,7 @@ static const struct hwmon_chip_info hwmon_chip_info = {
+@@ -1662,7 +1784,7 @@ static const struct hwmon_chip_info hwmon_chip_info = {
  	.info = hwmon_info,
  };
  
@@ -318,7 +307,7 @@ index 80eac8120..ea2caa1d2 100644
  xe_hwmon_get_preregistration_info(struct xe_hwmon *hwmon)
  {
  	struct xe_mmio *mmio = xe_root_tile_mmio(hwmon->xe);
-@@ -1659,7 +1785,7 @@ xe_hwmon_get_preregistration_info(struct xe_hwmon *hwmon)
+@@ -1719,7 +1841,7 @@ xe_hwmon_get_preregistration_info(struct xe_hwmon *hwmon)
  		if (xe_hwmon_is_visible(hwmon, hwmon_fan, hwmon_fan_input, channel))
  			xe_hwmon_fan_input_read(hwmon, channel, &fan_speed);
  
@@ -327,7 +316,7 @@ index 80eac8120..ea2caa1d2 100644
  }
  
  int xe_hwmon_register(struct xe_device *xe)
-@@ -1688,7 +1814,9 @@ int xe_hwmon_register(struct xe_device *xe)
+@@ -1748,7 +1870,9 @@ int xe_hwmon_register(struct xe_device *xe)
  	hwmon->xe = xe;
  	xe->hwmon = hwmon;
  
@@ -338,7 +327,7 @@ index 80eac8120..ea2caa1d2 100644
  
  	drm_dbg(&xe->drm, "Register xe hwmon interface\n");
  
-@@ -1698,10 +1826,14 @@ int xe_hwmon_register(struct xe_device *xe)
+@@ -1758,10 +1882,14 @@ int xe_hwmon_register(struct xe_device *xe)
  								hwmon_groups);
  	if (IS_ERR(hwmon->hwmon_dev)) {
  		drm_err(&xe->drm, "Failed to register xe hwmon (%pe)\n", hwmon->hwmon_dev);
@@ -356,10 +345,10 @@ index 80eac8120..ea2caa1d2 100644
  }
  MODULE_IMPORT_NS("INTEL_PMT_TELEMETRY");
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index a4a355798..7c1f0dbca 100644
+index 1748a7c537d6..5bc323e219af 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -415,6 +415,7 @@ static const struct xe_device_desc bmg_desc = {
+@@ -416,6 +416,7 @@ static const struct xe_device_desc bmg_desc = {
  	.dma_mask_size = 46,
  	.has_display = true,
  	.has_fan_control = true,
@@ -367,7 +356,7 @@ index a4a355798..7c1f0dbca 100644
  	.has_flat_ccs = 1,
  	.has_mbx_power_limits = true,
  	.has_mbx_thermal_info = true,
-@@ -779,6 +780,7 @@ static int xe_info_init_early(struct xe_device *xe,
+@@ -798,6 +799,7 @@ static int xe_info_init_early(struct xe_device *xe,
  	xe->info.has_device_uid = desc->has_device_uid;
  	xe->info.has_drm_ras = desc->has_drm_ras;
  	xe->info.has_fan_control = desc->has_fan_control;
@@ -376,7 +365,7 @@ index a4a355798..7c1f0dbca 100644
  	xe->info.has_flat_ccs = desc->has_flat_ccs;
  	xe->info.has_mbx_power_limits = desc->has_mbx_power_limits;
 diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
-index 3b8d70119..ddb27c9d0 100644
+index f0fb01ba165e..aef9e84075fa 100644
 --- a/drivers/gpu/drm/xe/xe_pci_types.h
 +++ b/drivers/gpu/drm/xe/xe_pci_types.h
 @@ -44,6 +44,7 @@ struct xe_device_desc {

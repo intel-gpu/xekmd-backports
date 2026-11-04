@@ -1,0 +1,96 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Date: Tue, 13 Oct 2026 15:24:20 +0000
+Subject: [PATCH] drm/xe/gt: Disable GT reset worker before engine teardown
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+During tear-down process, a reset queued from Guc timeout handler can
+still access hwe after hwe is freed. Register a separate devm
+action that disables and drains the reset worker, so it runs before
+any engine is torn down.
+
+Fixes: 09c452d1171f ("drm/xe/gt: Synchronize GT reset with device unbind")
+Signed-off-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Cc: Balasubramani Vivekanandan <balasubramani.vivekanandan@intel.com>
+Assisted-by: LLM
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20261013152417.3189567-8-satyanarayana.k.v.p@intel.com
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+(cherry-picked from commit 861590f69994e41c9ef1b65db8e9ba433f1d1c1c linux-next)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt.c | 29 ++++++++++++++++++++++-------
+ 1 file changed, 22 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index 118772f796f2..33f02a8ae3d2 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -632,8 +632,21 @@ static int gt_init_with_gt_forcewake(struct xe_gt *gt)
+ 	return 0;
+ }
+ 
++static void gt_reset_worker_disable(void *arg)
++{
++	struct xe_gt *gt = arg;
++
++	if (disable_work_sync(&gt->reset.worker))
++		/*
++		 * If gt_reset_worker was halted from executing, take care of
++		 * releasing the rpm reference here.
++		 */
++		xe_pm_runtime_put(gt_to_xe(gt));
++}
++
+ static int gt_init_with_all_forcewake(struct xe_gt *gt)
+ {
++	struct xe_device *xe = gt_to_xe(gt);
+ 	int err;
+ 
+ 	CLASS(xe_force_wake, fw_ref)(gt_to_fw(gt), XE_FORCEWAKE_ALL);
+@@ -700,6 +713,11 @@ static int gt_init_with_all_forcewake(struct xe_gt *gt)
+ 	if (IS_SRIOV_PF(gt_to_xe(gt)))
+ 		xe_gt_sriov_pf_init_hw(gt);
+ 
++	/* Last action registered here so devres drains resets before teardown */
++	err = devm_add_action_or_reset(xe->drm.dev, gt_reset_worker_disable, gt);
++	if (err)
++		return err;
++
+ 	return 0;
+ }
+ 
+@@ -708,12 +726,7 @@ static void xe_gt_fini(void *arg)
+ 	struct xe_gt *gt = arg;
+ 	int i;
+ 
+-	if (disable_work_sync(&gt->reset.worker))
+-		/*
+-		 * If gt_reset_worker was halted from executing, take care of
+-		 * releasing the rpm reference here.
+-		 */
+-		xe_pm_runtime_put(gt_to_xe(gt));
++	gt_reset_worker_disable(gt);
+ 
+ 	for (i = 0; i < XE_ENGINE_CLASS_MAX; ++i)
+ 		xe_hw_fence_irq_finish(&gt->fence_irq[i]);
+@@ -761,8 +774,10 @@ int xe_gt_init(struct xe_gt *gt)
+ 	xe_force_wake_init_engines(gt, gt_to_fw(gt));
+ 
+ 	err = gt_init_with_all_forcewake(gt);
+-	if (err)
++	if (err) {
++		gt_reset_worker_disable(gt);
+ 		return err;
++	}
+ 
+ 	xe_gt_record_user_engines(gt);
+ 
+-- 
+2.43.0
+

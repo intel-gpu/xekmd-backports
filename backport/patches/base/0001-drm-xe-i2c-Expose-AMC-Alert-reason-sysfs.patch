@@ -16,14 +16,14 @@ Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
 ---
- .../ABI/testing/sysfs-driver-intel-xe-amc     | 25 ++++++
- drivers/gpu/drm/xe/xe_amc.c                   | 80 ++++++++++++++++---
- 2 files changed, 94 insertions(+), 11 deletions(-)
+ .../ABI/testing/sysfs-driver-intel-xe-amc     | 25 +++++++
+ drivers/gpu/drm/xe/xe_amc.c                   | 68 ++++++++++++++++---
+ 2 files changed, 85 insertions(+), 8 deletions(-)
  create mode 100644 Documentation/ABI/testing/sysfs-driver-intel-xe-amc
 
 diff --git a/Documentation/ABI/testing/sysfs-driver-intel-xe-amc b/Documentation/ABI/testing/sysfs-driver-intel-xe-amc
 new file mode 100644
-index 0000000..3bae78d
+index 000000000000..3bae78d1e0d9
 --- /dev/null
 +++ b/Documentation/ABI/testing/sysfs-driver-intel-xe-amc
 @@ -0,0 +1,25 @@
@@ -53,7 +53,7 @@ index 0000000..3bae78d
 +			oob_reset
 +			catastrophic
 diff --git a/drivers/gpu/drm/xe/xe_amc.c b/drivers/gpu/drm/xe/xe_amc.c
-index edd50bf..16e4e9d 100644
+index 1d1a089dedab..20b46aed158f 100644
 --- a/drivers/gpu/drm/xe/xe_amc.c
 +++ b/drivers/gpu/drm/xe/xe_amc.c
 @@ -18,6 +18,7 @@
@@ -136,27 +136,17 @@ index edd50bf..16e4e9d 100644
  static void xe_amc_work(struct work_struct *work)
  {
  	const struct amc_request *request = &amc_get_alert_reason;
-@@ -155,15 +196,22 @@ static void xe_amc_work(struct work_struct *work)
- 
- 	switch (alert_reason) {
- 	case AMC_ALERT_FW_DOWNLOAD:
--	case AMC_ALERT_THERMAL_TRIP:
-+case AMC_ALERT_THERMAL_TRIP:
+@@ -159,14 +200,15 @@ static void xe_amc_work(struct work_struct *work)
  	case AMC_ALERT_OOB_REQUEST:
  	case AMC_ALERT_OOB_RESET:
--	case AMC_ALERT_CATERR:
--		dev_warn(amc->i2c->drm_dev, "AMC Alert: %s\n", amc_alert[alert_reason]);
--		xe_device_declare_wedged(i2c_client_to_xe_device(client));
-+	case AMC_ALERT_CATERR: {
-+		struct xe_device *xe = i2c_client_to_xe_device(client);
-+
+ 	case AMC_ALERT_CATERR:
+-dev_warn(amc->i2c->drm_dev,
 +		dev_warn(amc->i2c->drm_dev,
-+			 "AMC Alert: %s (%u)\n", amc_alert[alert_reason], alert_reason);
-+		amc->alert_reason = alert_reason;
-+		xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_VENDOR);
-+		xe_device_declare_wedged(xe);
+ 			 "AMC Alert: %s (%u)\n", amc_alert[alert_reason], alert_reason);
+ 		amc->alert_reason = alert_reason;
+ 		xe_device_declare_wedged(i2c_client_to_xe_device(client),
+ 					 DRM_WEDGE_RECOVERY_REBIND | DRM_WEDGE_RECOVERY_BUS_RESET);
  		break;
-+	}
  	default:
 -		dev_warn(amc->i2c->drm_dev, "unknown AMC alert: %d\n", alert_reason);
 +		amc->alert_reason = AMC_ALERT_UNKNOWN;
@@ -164,7 +154,7 @@ index edd50bf..16e4e9d 100644
  		break;
  	}
  }
-@@ -176,6 +224,7 @@ void xe_amc_handle_alert(struct xe_i2c *i2c)
+@@ -179,6 +221,7 @@ void xe_amc_handle_alert(struct xe_i2c *i2c)
  int xe_amc_init(struct xe_i2c *i2c)
  {
  	struct xe_amc *amc;
@@ -172,7 +162,7 @@ index edd50bf..16e4e9d 100644
  
  	amc = kzalloc_obj(*amc);
  	if (!amc)
-@@ -185,13 +234,22 @@ int xe_amc_init(struct xe_i2c *i2c)
+@@ -188,13 +231,22 @@ int xe_amc_init(struct xe_i2c *i2c)
  	i2c->amc = amc;
  	amc->i2c = i2c;
  

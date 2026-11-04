@@ -1,0 +1,72 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Date: Tue, 13 Oct 2026 15:24:19 +0000
+Subject: [PATCH] drm/xe/guc: Protect timeout handling from device unplug
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The GuC scheduler timeout callback accesses device and GT state while
+handling a timed-out job. Guard the callback with drm_dev_enter() and
+drm_dev_exit() so device unplug waits for in-flight timeout handling.
+If unplug has already started, mark the job with -ENODEV and return it
+to the scheduler for cleanup.
+
+Fixes: 6eb2aad402cc ("drm/xe: Move hw_engine_fini to devm managed")
+Signed-off-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Assisted-by: LLM
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20261013152417.3189567-7-satyanarayana.k.v.p@intel.com
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+(cherry-picked from commit 3e9a95f3df5b0f9de163c5ee4e4e287750ef9655 linux-next)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_submit.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index ec6b1e6a468b..223b047d3f6e 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -1569,6 +1569,7 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+ 	int err = -ETIME;
+ 	pid_t pid = -1;
+ 	bool wedged = false, wedge_device = false, skip_timeout_check;
++	int idx;
+ 
+ 	xe_gt_assert(guc_to_gt(guc), !exec_queue_destroyed(q));
+ 
+@@ -1584,6 +1585,11 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+ 	    vf_recovery(guc))
+ 		return DRM_GPU_SCHED_STAT_NO_HANG;
+ 
++	if (!drm_dev_enter(&xe->drm, &idx)) {
++		xe_sched_job_set_error(job, -ENODEV);
++		return DRM_GPU_SCHED_STAT_NO_HANG;
++	}
++
+ 	/* Kill the run_job entry point */
+ 	if (xe_exec_queue_is_multi_queue(q))
+ 		xe_guc_exec_queue_group_stop(q);
+@@ -1756,6 +1762,7 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+ 	 * We want the job added back to the pending list so it gets freed; this
+ 	 * is what DRM_GPU_SCHED_STAT_NO_HANG does.
+ 	 */
++	drm_dev_exit(idx);
+ 	return DRM_GPU_SCHED_STAT_NO_HANG;
+ 
+ rearm:
+@@ -1769,6 +1776,7 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+ 	else
+ 		xe_sched_submission_start(sched);
+ handle_vf_resume:
++	drm_dev_exit(idx);
+ 	return DRM_GPU_SCHED_STAT_NO_HANG;
+ }
+ 
+-- 
+2.43.0
+

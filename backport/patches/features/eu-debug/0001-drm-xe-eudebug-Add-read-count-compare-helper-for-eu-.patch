@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Date: Mon, 11 Nov 2024 12:34:59 +0200
-Subject: drm/xe/eudebug: Add read/count/compare helper for eu
+Subject: [PATCH] drm/xe/eudebug: Add read/count/compare helper for eu
  attention
 
 Add xe_eu_attentions structure to capture and store eu attention bits.
@@ -12,26 +12,64 @@ have changed on a state between eu attentions.
 Signed-off-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
-(backported from commit 091a0aa0321f8d3b0b2fdec6c5d7cd8157b73d53 drm-tip-eudebug)
-Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+(cherry-picked from commit 79ad04780c1e8c47b5102d0f7802aa09bddb31f3 eudebug-v3-xe3p-prelim)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
- drivers/gpu/drm/xe/xe_gt_debug.c | 64 ++++++++++++++++++++++++++++++++
- drivers/gpu/drm/xe/xe_gt_debug.h |  6 +++
- 2 files changed, 70 insertions(+)
+ drivers/gpu/drm/xe/xe_eudebug.c        |  1 +
+ drivers/gpu/drm/xe/xe_eudebug_types.h  |  2 +
+ drivers/gpu/drm/xe/xe_gt_debug.c       | 92 ++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_gt_debug.h       | 19 +++---
+ drivers/gpu/drm/xe/xe_gt_debug_types.h | 22 ++++++
+ 5 files changed, 125 insertions(+), 11 deletions(-)
+ create mode 100644 drivers/gpu/drm/xe/xe_gt_debug_types.h
 
+diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
+index 2bf20cfa4..8ca631415 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug.c
++++ b/drivers/gpu/drm/xe/xe_eudebug.c
+@@ -30,6 +30,7 @@
+ #include "xe_force_wake.h"
+ #include "xe_gt.h"
+ #include "xe_gt_debug.h"
++#include "xe_gt_debug_types.h"
+ #include "xe_gt_mcr.h"
+ #include "xe_guc_exec_queue_types.h"
+ #include "xe_hw_engine.h"
+diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/xe_eudebug_types.h
+index d64da2342..4735eae82 100644
+--- a/drivers/gpu/drm/xe/xe_eudebug_types.h
++++ b/drivers/gpu/drm/xe/xe_eudebug_types.h
+@@ -17,6 +17,8 @@
+ #include <linux/xarray.h>
+ 
+ #include <uapi/drm/xe_drm.h>
++#include "xe_gt_debug.h"
++#include "xe_gt_debug_types.h"
+ 
+ struct xe_device;
+ struct task_struct;
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.c b/drivers/gpu/drm/xe/xe_gt_debug.c
-index 314eef673..8386a527a 100644
+index 314eef673..fbc984e23 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug.c
 +++ b/drivers/gpu/drm/xe/xe_gt_debug.c
-@@ -3,6 +3,7 @@
+@@ -3,12 +3,16 @@
   * Copyright © 2023 Intel Corporation
   */
  
 +#include <linux/delay.h>
++#include <linux/string.h>
++
  #include "regs/xe_gt_regs.h"
  #include "xe_device.h"
  #include "xe_force_wake.h"
-@@ -177,3 +178,66 @@ int xe_gt_eu_threads_needing_attention(struct xe_gt *gt)
+ #include "xe_gt.h"
+ #include "xe_gt_topology.h"
+ #include "xe_gt_debug.h"
++#include "xe_gt_debug_types.h"
+ #include "xe_gt_mcr.h"
+ #include "xe_pm.h"
+ #include "xe_macros.h"
+@@ -177,3 +181,91 @@ int xe_gt_eu_threads_needing_attention(struct xe_gt *gt)
  
  	return err < 0 ? 0 : err;
  }
@@ -39,80 +77,155 @@ index 314eef673..8386a527a 100644
 +static inline unsigned int
 +xe_eu_attentions_count(const struct xe_eu_attentions *a)
 +{
-+	return bitmap_weight((void *)a->att, a->size * BITS_PER_BYTE);
++	return memweight(a->att, a->size);
 +}
 +
-+void xe_gt_eu_attentions_read(struct xe_gt *gt,
-+			      struct xe_eu_attentions *a,
-+			      const unsigned int settle_time_ms)
++int xe_gt_eu_attentions_read(struct xe_gt *gt,
++			     struct xe_eu_attentions *a,
++			     const unsigned int settle_time_ms)
 +{
-+	unsigned int prev = 0;
-+	ktime_t end, now;
++	unsigned int attn = 0, prev = 0;
++	ktime_t end, hard_end, now;
++	int ret;
 +
 +	now = ktime_get_raw();
++
++	/*
++	 * Wait one settle period for the picture to stop moving, restarting
++	 * it below on every change. There is no point starting out with a
++	 * longer window in the hope that something turns up: on a gt where
++	 * nothing raises attention, every sample reads zero and waiting ten
++	 * periods returns exactly what waiting one would have, having swept
++	 * the attention registers of every dss a few thousand times to get
++	 * there.
++	 */
 +	end = ktime_add_ms(now, settle_time_ms);
 +
-+	a->ts = 0;
++	/*
++	 * The grace period restarts on any change in the count, so a count
++	 * that keeps churning could push @end out for as long as it churns.
++	 * Cap the whole thing at what used to be the starting window.
++	 */
++	hard_end = ktime_add_ms(now, settle_time_ms * 10);
++
 +	a->size = min_t(int,
 +			xe_gt_eu_attention_bitmap_size(gt),
 +			sizeof(a->att));
 +
 +	do {
-+		unsigned int attn;
++		/*
++		 * Report the failure rather than leaving @att holding
++		 * whatever it held before. A caller that relayed it with
++		 * @size still set would be telling the debugger that no
++		 * thread raised attention, which is not something we know.
++		 */
++		ret = xe_gt_eu_attention_bitmap(gt, a->att, a->size);
++		if (ret < 0) {
++			a->size = 0;
++			return ret;
++		}
 +
-+		xe_gt_eu_attention_bitmap(gt, a->att, a->size);
++		if (!settle_time_ms)
++			break;
++
 +		attn = xe_eu_attentions_count(a);
 +
 +		now = ktime_get_raw();
 +
-+		if (a->ts == 0)
-+			a->ts = now;
-+		else if (attn && attn != prev)
-+			a->ts = now;
++		/*
++		 * Any change means the picture is still moving, so give it
++		 * another settle period to stop. Growth alone is not the
++		 * test: threads leaving attention are just as much a sign
++		 * that this is not a stable snapshot yet.
++		 */
++		if (attn != prev) {
++			prev = attn;
++			end = ktime_add_ms(now, settle_time_ms);
++			if (ktime_after(end, hard_end))
++				end = hard_end;
++		}
 +
-+		prev = attn;
-+
-+		if (settle_time_ms)
-+			udelay(5);
++		/*
++		 * Sleeping rather than spinning: every caller is in process
++		 * context holding a mutex, and the loop below runs for the
++		 * whole settle window rather than exiting early.
++		 */
++		usleep_range(15, 30);
 +
 +		/*
 +		 * XXX We are gathering data for production SIP to find
 +		 * the upper limit of settle time. For now, we wait full
 +		 * timeout value regardless.
 +		 */
-+	} while (ktime_before(now, end));
-+}
++	} while ((attn < a->size * 8) && ktime_before(now, end));
 +
-+unsigned int xe_eu_attentions_xor_count(const struct xe_eu_attentions *a,
-+					const struct xe_eu_attentions *b)
-+{
-+	unsigned int count = 0;
-+	unsigned int i;
-+
-+	if (XE_WARN_ON(a->size != b->size))
-+		return -EINVAL;
-+
-+	for (i = 0; i < a->size; i++)
-+		if (a->att[i] ^ b->att[i])
-+			count++;
-+
-+	return count;
++	return 0;
 +}
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.h b/drivers/gpu/drm/xe/xe_gt_debug.h
-index f882770e1..aba36bc5f 100644
+index f882770e1..689fb6481 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug.h
 +++ b/drivers/gpu/drm/xe/xe_gt_debug.h
-@@ -38,4 +38,10 @@ int xe_gt_eu_attention_bitmap_size(struct xe_gt *gt);
+@@ -9,19 +9,10 @@
+ #include <linux/bits.h>
+ #include <linux/math.h>
+ 
++struct xe_eu_attentions;
+ struct xe_gt;
+ 
+-#define XE_GT_ATTENTION_TIMEOUT_MS 100
+-#define XE_GT_EU_ATT_ROWS 2u
+-
+-struct xe_eu_attentions {
+-#define XE_MAX_EUS 1024
+-#define XE_MAX_THREADS 10
+-
+-	u8 att[DIV_ROUND_UP(XE_MAX_EUS * XE_MAX_THREADS, BITS_PER_BYTE)];
+-	unsigned int size;
+-	ktime_t ts;
+-};
++#define XE_GT_ATTENTION_TIMEOUT_MS 150
+ 
+ unsigned int xe_gt_eu_att_regs(struct xe_gt *gt);
+ 
+@@ -38,4 +29,10 @@ int xe_gt_eu_attention_bitmap_size(struct xe_gt *gt);
  int xe_gt_eu_attention_bitmap(struct xe_gt *gt, u8 *bits,
  			      unsigned int bitmap_size);
  
-+void xe_gt_eu_attentions_read(struct xe_gt *gt,
++int xe_gt_eu_attentions_read(struct xe_gt *gt,
 +			      struct xe_eu_attentions *a,
 +			      const unsigned int settle_time_ms);
 +
 +unsigned int xe_eu_attentions_xor_count(const struct xe_eu_attentions *a,
 +					const struct xe_eu_attentions *b);
  #endif
+diff --git a/drivers/gpu/drm/xe/xe_gt_debug_types.h b/drivers/gpu/drm/xe/xe_gt_debug_types.h
+new file mode 100644
+index 000000000..f24eed15c
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_gt_debug_types.h
+@@ -0,0 +1,22 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2025 Intel Corporation
++ */
++
++#ifndef __XE_GT_DEBUG_TYPES_
++#define __XE_GT_DEBUG_TYPES_
++
++#include <linux/types.h>
++
++#define XE_GT_EU_ATT_ROWS 2u
++#define XE_GT_EU_ATT_MAX_THREADS 16
++#define XE_GT_EU_MAX_NUM  1024
++
++struct xe_eu_attentions {
++	u8 att[XE_GT_EU_MAX_NUM *
++	       XE_GT_EU_ATT_ROWS *
++	       XE_GT_EU_ATT_MAX_THREADS/8];
++	unsigned int size;
++};
++
++#endif
 -- 
 2.43.0
 

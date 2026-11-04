@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Arvind Yadav <arvind.yadav@intel.com>
+Date: Thu, 15 Oct 2026 21:56:39 +0530
+Subject: [PATCH] drm/xe: Rebind BOs evicted before the first LR queue
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+A VM bind can evict BOs before the first LR exec queue is added.
+There is no preempt fence to trigger at that point.
+
+When the queue is added later, its new preempt fence is not triggered.
+The exec IOCTL does not validate or rebind BOs in preempt fence mode,
+and the rebind worker skips that work because no preempt fence is
+waiting. The first exec can then use stale mappings.
+
+Trigger the new preempt fence in xe_vm_add_compute_exec_queue() when
+the VM has evicted BOs or pending rebinds. This keeps the queue
+suspended until the rebind worker validates the BOs and restores
+their mappings.
+
+Fixes: dd08ebf6c352 ("drm/xe: Introduce a new DRM driver for Intel GPUs")
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Cc: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Arvind Yadav <arvind.yadav@intel.com>
+Link: https://patch.msgid.link/20261015162639.3528278-1-arvind.yadav@intel.com
+Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+(cherry-picked from commit 928ee5d4fb1f211aa361524801c15b54603fae52 linux-next)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vm.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index ea702c3d1cd4..5e512bdb9231 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -272,8 +272,15 @@ int xe_vm_add_compute_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
+ 	 * Check to see if a preemption on VM is in flight or userptr
+ 	 * invalidation, if so trigger this preempt fence to sync state with
+ 	 * other preempt fences on the VM.
++	 *
++	 * Also trigger it if eviction or rebinding is pending. BOs evicted
++	 * before the first exec queue was added had no preempt fence to
++	 * trigger. Suspend this queue until the rebind worker restores
++	 * the mappings.
+ 	 */
+-	wait = __xe_vm_userptr_needs_repin(vm) || preempt_fences_waiting(vm);
++	wait = __xe_vm_userptr_needs_repin(vm) || preempt_fences_waiting(vm) ||
++		!list_empty(&vm->gpuvm.evict.list) ||
++		!list_empty(&vm->rebind_list);
+ 	if (wait)
+ 		dma_fence_enable_signaling(pfence);
+ 
+-- 
+2.43.0
+

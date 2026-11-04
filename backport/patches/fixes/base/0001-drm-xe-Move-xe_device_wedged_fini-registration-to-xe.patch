@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Raag Jadav <raag.jadav@intel.com>
+Date: Thu, 22 Oct 2026 10:42:28 +0530
+Subject: [PATCH] drm/xe: Move xe_device_wedged_fini() registration to
+ xe_device_probe_early()
+
+The device can be declared wedged while processing boot-time hardware
+errors, which can result in PM reference leak if driver probe fails
+before xe_device_wedged_fini() is registered.
+
+Early register the required cleanup action and fix this.
+
+Fixes: a7df563b45b0 ("drm/xe/xe_hw_error: Handle CSC Firmware reported Hardware errors")
+Signed-off-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20261022051303.282805-5-raag.jadav@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit 6599a0eb0990cde96c4e66a4e1e2ae1b172e85d2 linux-next)
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 83dad6d2a376..67055c3b0991 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -801,6 +801,8 @@ static int xe_device_vram_alloc(struct xe_device *xe)
+ 	return 0;
+ }
+ 
++static void xe_device_wedged_fini(struct drm_device *drm, void *arg);
++
+ /**
+  * xe_device_probe_early: Device early probe
+  * @xe: xe device instance
+@@ -870,6 +872,10 @@ int xe_device_probe_early(struct xe_device *xe)
+ 	if (err)
+ 		return err;
+ 
++	err = drmm_add_action_or_reset(&xe->drm, xe_device_wedged_fini, xe);
++	if (err)
++		return err;
++
+ 	return 0;
+ }
+ ALLOW_ERROR_INJECTION(xe_device_probe_early, ERRNO); /* See xe_pci_probe() */
+@@ -1197,10 +1203,6 @@ int xe_device_probe(struct xe_device *xe)
+ 
+ 	detect_preproduction_hw(xe);
+ 
+-	err = drmm_add_action_or_reset(&xe->drm, xe_device_wedged_fini, xe);
+-	if (err)
+-		goto err_unregister_display;
+-
+ 	/*
+ 	 * Process and log any errors detected by hardware. Possible results can
+ 	 * include declaring the device as wedged, which must be done only after
+-- 
+2.43.0
+

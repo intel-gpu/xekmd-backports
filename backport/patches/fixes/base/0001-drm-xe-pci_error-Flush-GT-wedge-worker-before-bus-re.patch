@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Raag Jadav <raag.jadav@intel.com>
+Date: Thu, 22 Oct 2026 10:42:30 +0530
+Subject: [PATCH] drm/xe/pci_error: Flush GT wedge worker before bus reset
+
+With GT wedging now done async, make sure the wedge worker is flushed to
+avoid side-effects during PCI bus reset.
+
+Fixes: 13b9555ffb03 ("drm/xe/xe_pci_error: Implement PCI error recovery callbacks")
+Signed-off-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20261022051303.282805-7-raag.jadav@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit 0dbc1d0762bc89649aeaea98a63f6e5f786ea1b8 linux-next)
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci_error.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci_error.c b/drivers/gpu/drm/xe/xe_pci_error.c
+index 8c7e8f24c276..8e512bbf2034 100644
+--- a/drivers/gpu/drm/xe/xe_pci_error.c
++++ b/drivers/gpu/drm/xe/xe_pci_error.c
+@@ -31,8 +31,10 @@ static void prepare_device_for_reset(struct pci_dev *pdev)
+ 
+ 	xe_device_set_in_reset(xe);
+ 
+-	for_each_gt(gt, xe, id)
++	for_each_gt(gt, xe, id) {
+ 		xe_gt_declare_wedged(gt);
++		flush_work(&gt->wedge.worker);
++	}
+ 
+ 	pci_disable_device(pdev);
+ }
+-- 
+2.43.0
+

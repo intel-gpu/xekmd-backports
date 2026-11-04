@@ -12,25 +12,17 @@ Signed-off-by: Riana Tauro <riana.tauro@intel.com>
 (backported from https://patchwork.freedesktop.org/patch/749204/?series=173001&rev=1)
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
- drivers/gpu/drm/xe/xe_hw_error.c | 39 ++++++++++++++++++++++++++++----
- 1 file changed, 34 insertions(+), 5 deletions(-)
+ drivers/gpu/drm/xe/xe_hw_error.c | 23 +++++++++++++++++++----
+ 1 file changed, 19 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
-index 34f5e1f86b09..e32078d81c34 100644
+index 521af0566168..dfc4cb6ba845 100644
 --- a/drivers/gpu/drm/xe/xe_hw_error.c
 +++ b/drivers/gpu/drm/xe/xe_hw_error.c
-@@ -14,6 +14,7 @@
- #include "xe_drm_ras.h"
- #include "xe_hw_error.h"
- #include "xe_mmio.h"
-+#include "xe_ras.h"
- #include "xe_survivability_mode.h"
- 
- #define GT_HW_ERROR_MAX_ERR_BITS		16
-@@ -165,12 +166,37 @@ static_assert(ARRAY_SIZE(pvc_master_local_nonfatal_err_reg) == XE_RAS_REG_SIZE);
+@@ -166,6 +166,20 @@ static_assert(ARRAY_SIZE(pvc_master_local_nonfatal_err_reg) == XE_RAS_REG_SIZE);
+ #define PVC_MASTER_LOCAL_REG_INFO(hw_err)	((hw_err == HARDWARE_ERROR_FATAL) ? \
  						 pvc_master_local_fatal_err_reg : \
  						 pvc_master_local_nonfatal_err_reg)
- 
 +static const char *hw_err_to_str(const enum hardware_error hw_err)
 +{
 +	switch (hw_err) {
@@ -48,25 +40,7 @@ index 34f5e1f86b09..e32078d81c34 100644
  static void hw_error_work(struct work_struct *work)
  {
  	struct xe_tile *tile = container_of(work, typeof(*tile), hw_error_work);
- 	struct xe_device *xe = tile_to_xe(tile);
-+	int ret;
-+
-+	if (xe->info.has_sysctrl) {
-+		ret = xe_ras_process_errors(xe);
-+		if (ret) {
-+			xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_BUS_RESET);
-+			xe_device_declare_wedged(xe);
-+		}
-+
-+		return;
-+	}
- 
--	xe_survivability_mode_runtime_enable(xe);
-+	xe_survivability_mode_runtime_enable(xe);
- }
- 
- static void csc_hw_error_handler(struct xe_tile *tile, const enum hardware_error hw_err)
-@@ -430,12 +458,13 @@ static void hw_error_source_handler(struct xe_tile *tile, const enum hardware_er
+@@ -444,12 +458,13 @@ static void hw_error_source_handler(struct xe_tile *tile, const enum hardware_er
  		return;
  
  	/*

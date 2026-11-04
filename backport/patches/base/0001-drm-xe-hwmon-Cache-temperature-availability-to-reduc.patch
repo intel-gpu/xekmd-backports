@@ -21,7 +21,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  1 file changed, 26 insertions(+), 13 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
-index 672f7cb69..e5085f267 100644
+index 61ca49b00ebe..4c9ec08aee4c 100644
 --- a/drivers/gpu/drm/xe/xe_hwmon.c
 +++ b/drivers/gpu/drm/xe/xe_hwmon.c
 @@ -151,6 +151,8 @@ struct xe_hwmon_thermal_info {
@@ -30,10 +30,10 @@ index 672f7cb69..e5085f267 100644
  	u8 count;
 +	/** @available: temperature sensor availability cached at registration */
 +	bool available[CHANNEL_MAX];
- 	union {
- 		/** @value: per-sensor raw mailbox temperature; bit7=sign, bits6:0=magnitude */
- 		u8 value[U8_MAX + 1];
-@@ -1013,7 +1015,7 @@ static void xe_hwmon_get_voltage(struct xe_hwmon *hwmon, int channel, long *valu
+ /** @vram_count: exclusive upper bound for VRAM temperature channel indices */
+ 	u8 vram_count;
+ 	/** @available: temperature sensor availability cached at registration */
+@@ -1085,7 +1087,7 @@ static void xe_hwmon_get_voltage(struct xe_hwmon *hwmon, int channel, long *valu
  	*value = DIV_ROUND_CLOSEST(REG_FIELD_GET(VOLTAGE_MASK, reg_val) * 2500, SF_VOLTAGE);
  }
  
@@ -42,7 +42,7 @@ index 672f7cb69..e5085f267 100644
  {
  	struct xe_mmio *mmio = xe_root_tile_mmio(hwmon->xe);
  	struct xe_reg reg;
-@@ -1034,10 +1036,6 @@ static bool is_temp_available(struct xe_hwmon *hwmon, int channel)
+@@ -1106,10 +1108,6 @@ static bool is_temp_available(struct xe_hwmon *hwmon, int channel)
  			return false;
  		}
  
@@ -53,7 +53,7 @@ index 672f7cb69..e5085f267 100644
  		return true;
  	case CHANNEL_MCTRL:
  		return hwmon->temp.count && !get_mc_temp(hwmon, NULL);
-@@ -1048,6 +1046,22 @@ static bool is_temp_available(struct xe_hwmon *hwmon, int channel)
+@@ -1120,6 +1118,22 @@ static bool is_temp_available(struct xe_hwmon *hwmon, int channel)
  	}
  }
  
@@ -76,7 +76,7 @@ index 672f7cb69..e5085f267 100644
  static umode_t
  xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
  {
-@@ -1057,11 +1071,11 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
+@@ -1129,11 +1143,11 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
  		case CHANNEL_PKG:
  		case CHANNEL_MCTRL:
  		case CHANNEL_PCIE:
@@ -90,7 +90,7 @@ index 672f7cb69..e5085f267 100644
  				hwmon->temp.limit[TEMP_LIMIT_MEM_SHUTDOWN]) ? 0444 : 0;
  		default:
  			return 0;
-@@ -1071,11 +1085,11 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
+@@ -1143,11 +1157,11 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
  		case CHANNEL_PKG:
  		case CHANNEL_MCTRL:
  		case CHANNEL_PCIE:
@@ -104,7 +104,7 @@ index 672f7cb69..e5085f267 100644
  				hwmon->temp.limit[TEMP_LIMIT_MEM_CRIT]) ? 0444 : 0;
  		default:
  			return 0;
-@@ -1083,7 +1097,7 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
+@@ -1155,7 +1169,7 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
  	case hwmon_temp_max:
  		switch (channel) {
  		case CHANNEL_PKG:
@@ -113,7 +113,7 @@ index 672f7cb69..e5085f267 100644
  				hwmon->temp.limit[TEMP_LIMIT_PKG_MAX]) ? 0444 : 0;
  		default:
  			return 0;
-@@ -1096,7 +1110,7 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
+@@ -1168,7 +1182,7 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
  		case CHANNEL_MCTRL:
  		case CHANNEL_PCIE:
  		case CHANNEL_VRAM_N...CHANNEL_VRAM_N_MAX:
@@ -122,7 +122,7 @@ index 672f7cb69..e5085f267 100644
  		default:
  			return 0;
  		}
-@@ -1638,8 +1652,7 @@ xe_hwmon_get_preregistration_info(struct xe_hwmon *hwmon)
+@@ -1698,8 +1712,7 @@ xe_hwmon_get_preregistration_info(struct xe_hwmon *hwmon)
  		if (xe_hwmon_is_visible(hwmon, hwmon_fan, hwmon_fan_input, channel))
  			xe_hwmon_fan_input_read(hwmon, channel, &fan_speed);
  

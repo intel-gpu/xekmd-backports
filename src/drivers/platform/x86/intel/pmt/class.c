@@ -97,6 +97,8 @@ intel_pmt_read(struct file *filp, struct kobject *kobj,
 	struct intel_pmt_entry *entry = container_of(attr,
 						     struct intel_pmt_entry,
 						     pmt_bin_attr);
+	struct device *dev = kobj_to_dev(kobj);
+	struct intel_vsec_device *ivdev = auxdev_to_ivdev(to_auxiliary_dev(dev->parent));
 
 	if (off < 0)
 		return -EINVAL;
@@ -107,7 +109,7 @@ intel_pmt_read(struct file *filp, struct kobject *kobj,
 	if (count > entry->size - off)
 		count = entry->size - off;
 
-	count = pmt_telem_read_mmio(entry->dev, entry->cb, entry->header.guid, buf,
+	count = pmt_telem_read_mmio(ivdev->dev, entry->cb, entry->header.guid, buf,
 				    entry->base, off, count);
 
 	return count;

@@ -17,13 +17,12 @@
 #include "xe_pcode.h"
 #include "xe_pcode_api.h"
 #include "xe_pm.h"
+#include "xe_sysctrl.h"
 
 /*
- * Current firmware name format: xe/ocode_8086_<devid>.bin
- * TODO: Once System Controller support ocode compatibility version
- *	 check via mailbox, add the <comp_ver> suffix to the filename.
+ * TODO: Add MODULE_FIRMWARE() for xe/cri_ocode_<ver>.bin once the
+ *       Ocode firmware binary is available upstream.
  */
-MODULE_FIRMWARE("xe/ocode_8086_674c.bin");
 
 /*
  * The component should load quite quickly in most cases, but it could take
@@ -113,6 +112,7 @@ static int parse_cpd_header(struct xe_late_bind_fw *lb_fw,
 	manifest = data + offset;
 
 	lb_fw->version = manifest->fw_version;
+	lb_fw->sdk_api_version = manifest->ocode_data.sdk_api_version;
 
 	return 0;
 }
@@ -188,8 +188,10 @@ static const char *xe_late_bind_parse_status(uint32_t status)
 		return "Invalid Payload";
 	case INTEL_LB_STATUS_TIMEOUT:
 		return "Timeout";
+	case INTEL_LB_STATUS_BUFFER_TOO_SMALL:
+		return "Buffer too small";
 	case INTEL_LB_STATUS_INTERNAL_ERROR:
-	return "Internal Error";
+		return "Internal Error";
 	case INTEL_LB_STATUS_INVALID_FPT_TABLE:
 		return "Invalid FPT Table";
 	case INTEL_LB_STATUS_SIGNED_PAYLOAD_VERIFICATION_ERROR:
@@ -214,8 +216,6 @@ static const char *xe_late_bind_parse_status(uint32_t status)
 		return "Invalid Command";
 	case INTEL_LB_STATUS_INVALID_HECI_HEADER:
 		return "Invalid HECI Header";
-	case INTEL_LB_STATUS_IP_ERROR_START:
-		return "IP Error Start";
 	default:
 		return "Unknown error";
 	}
@@ -306,7 +306,7 @@ out:
 	xe_pm_runtime_put(xe);
 }
 
-static int xe_late_bind_fw_load(struct xe_late_bind *late_bind)
+static void xe_late_bind_fw_load(struct xe_late_bind *late_bind)
 {
 	struct xe_device *xe = late_bind_to_xe(late_bind);
 	struct xe_late_bind_fw *lbfw;
@@ -319,7 +319,6 @@ static int xe_late_bind_fw_load(struct xe_late_bind *late_bind)
 			queue_work(late_bind->wq, &lbfw->work);
 		}
 	}
-	return 0;
 }
 
 static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
@@ -329,7 +328,8 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
 	struct xe_late_bind_fw *lb_fw;
 	const struct firmware *fw;
 	u32 num_fans;
-	int ret = 0;
+	u16 sdk_ver = 0;
+	int ret;
 
 	if (fw_id >= XE_LB_FW_MAX_ID)
 		return -EINVAL;
@@ -352,14 +352,19 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
 	}
 
 	if (lb_fw->type == INTEL_LB_TYPE_OCODE) {
-		/*
-		 * TODO: Fetch ocode compatibility version via System Controller mailbox
-		 *       and include it in file name xe/ocode_8086_<devid>_<comp_ver>.bin.
-		 */
-		snprintf(lb_fw->blob_path, sizeof(lb_fw->blob_path), "xe/%s_8086_%04x.bin",
-			 fw_id_to_name[lb_fw->id], pdev->device);
+		/* Get SDK API version */
+		ret = xe_sysctrl_sdk_api_version(xe, &sdk_ver);
+		if (ret) {
+			drm_warn(&xe->drm, "Failed to get OCODE SDK API version: %pe\n",
+				 ERR_PTR(ret));
+			return 0;
+		}
+
+		snprintf(lb_fw->blob_path, sizeof(lb_fw->blob_path),
+			 "xe/cri_ocode_%u.bin", sdk_ver);
 	} else {
-		snprintf(lb_fw->blob_path, sizeof(lb_fw->blob_path), "xe/%s_8086_%04x_%04x_%04x.bin",
+		snprintf(lb_fw->blob_path, sizeof(lb_fw->blob_path),
+			 "xe/%s_8086_%04x_%04x_%04x.bin",
 			 fw_id_to_name[lb_fw->id], pdev->device,
 			 pdev->subsystem_vendor, pdev->subsystem_device);
 	}
@@ -376,6 +381,13 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
 	if (ret)
 		goto release_fw;
 
+	if (lb_fw->type == INTEL_LB_TYPE_OCODE && lb_fw->sdk_api_version != sdk_ver) {
+		drm_warn(&xe->drm, "%s late binding fw: SDK API version mismatch %u != %u\n",
+			 fw_id_to_name[lb_fw->id], lb_fw->sdk_api_version, sdk_ver);
+		ret = 0;
+		goto release_fw;
+	}
+
 	lb_fw->payload_size = fw->size;
 	lb_fw->payload = drmm_kzalloc(&xe->drm, lb_fw->payload_size, GFP_KERNEL);
 	if (!lb_fw->payload) {
@@ -388,10 +400,9 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
 		 lb_fw->version.major, lb_fw->version.minor,
 		 lb_fw->version.hotfix, lb_fw->version.build);
 
-	/*
-	* TODO: Verify compatibility version in manifest header against the version
-	*       returned by the system controller.
-	*/
+	if (lb_fw->type == INTEL_LB_TYPE_OCODE)
+		drm_info(&xe->drm, "%s firmware SDK API version %u\n",
+			 fw_id_to_name[lb_fw->id], lb_fw->sdk_api_version);
 
 	memcpy((void *)lb_fw->payload, fw->data, lb_fw->payload_size);
 	INIT_WORK(&lb_fw->work, xe_late_bind_work);
@@ -466,23 +477,38 @@ static void xe_late_bind_remove(void *arg)
 	}
 }
 
+static bool late_bind_mei_enabled(struct xe_device *xe)
+{
+	if (!IS_ENABLED(CPTCFG_INTEL_MEI_LB))
+		return false;
+
+	/* MEI exposed as xe auxiliary device */
+	if (xe->info.has_heci_cscfi)
+		return IS_ENABLED(CPTCFG_INTEL_MEI_GSC);
+
+	/* Standalone MEI PCI function */
+	return IS_ENABLED(CPTCFG_INTEL_MEI_CSC);
+}
+
+/**
+ * xe_late_bind_pm_suspend() - Wait for pending late binding fw loads
+ * @late_bind: pointer to late bind structure.
+ */
 void xe_late_bind_pm_suspend(struct xe_late_bind *late_bind)
 {
 	if (!late_bind->component_added)
 		return;
 
-	if (late_bind->disable)
-		return;
-
 	wait_for_worker_completion(late_bind);
 }
 
+/**
+ * xe_late_bind_pm_resume() - Reload late binding fw after resume
+ * @late_bind: pointer to late bind structure.
+ */
 void xe_late_bind_pm_resume(struct xe_late_bind *late_bind)
 {
-	if (!late_bind->component_added)
-		return;
-
-	if (late_bind->disable)
+	if (!late_bind->component_added || late_bind->disable)
 		return;
 
 	xe_late_bind_fw_load(late_bind);
@@ -502,7 +528,7 @@ int xe_late_bind_init(struct xe_late_bind *late_bind)
 	if (!xe->info.late_bind_mask)
 		return 0;
 
-	if (!IS_ENABLED(CPTCFG_INTEL_MEI_LB) || !IS_ENABLED(CPTCFG_INTEL_MEI_GSC)) {
+	if (!late_bind_mei_enabled(xe)) {
 		drm_info(&xe->drm, "Can't init xe mei late bind missing mei component\n");
 		return 0;
 	}
@@ -524,5 +550,7 @@ int xe_late_bind_init(struct xe_late_bind *late_bind)
 	if (err)
 		return err;
 
-	return xe_late_bind_fw_load(late_bind);
+	xe_late_bind_fw_load(late_bind);
+
+	return 0;
 }

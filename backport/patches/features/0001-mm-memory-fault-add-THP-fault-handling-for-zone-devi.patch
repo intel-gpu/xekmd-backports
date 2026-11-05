@@ -1,0 +1,142 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Balbir Singh <balbirs@nvidia.com>
+Date: Wed, 1 Oct 2025 16:56:59 +1000
+Subject: mm/memory/fault: add THP fault handling for zone device
+ private pages
+
+Implement CPU fault handling for zone device THP entries through
+do_huge_pmd_device_private(), enabling transparent migration of
+device-private large pages back to system memory on CPU access.
+
+When the CPU accesses a zone device THP entry, the fault handler calls the
+device driver's migrate_to_ram() callback to migrate the entire large page
+back to system memory.
+
+Link: https://lkml.kernel.org/r/20251001065707.920170-9-balbirs@nvidia.com
+Signed-off-by: Balbir Singh <balbirs@nvidia.com>
+Cc: David Hildenbrand <david@redhat.com>
+Cc: Zi Yan <ziy@nvidia.com>
+Cc: Joshua Hahn <joshua.hahnjy@gmail.com>
+Cc: Rakie Kim <rakie.kim@sk.com>
+Cc: Byungchul Park <byungchul@sk.com>
+Cc: Gregory Price <gourry@gourry.net>
+Cc: Ying Huang <ying.huang@linux.alibaba.com>
+Cc: Alistair Popple <apopple@nvidia.com>
+Cc: Oscar Salvador <osalvador@suse.de>
+Cc: Lorenzo Stoakes <lorenzo.stoakes@oracle.com>
+Cc: Baolin Wang <baolin.wang@linux.alibaba.com>
+Cc: "Liam R. Howlett" <Liam.Howlett@oracle.com>
+Cc: Nico Pache <npache@redhat.com>
+Cc: Ryan Roberts <ryan.roberts@arm.com>
+Cc: Dev Jain <dev.jain@arm.com>
+Cc: Barry Song <baohua@kernel.org>
+Cc: Lyude Paul <lyude@redhat.com>
+Cc: Danilo Krummrich <dakr@kernel.org>
+Cc: David Airlie <airlied@gmail.com>
+Cc: Simona Vetter <simona@ffwll.ch>
+Cc: Ralph Campbell <rcampbell@nvidia.com>
+Cc: Mika Penttilä <mpenttil@redhat.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Francois Dugast <francois.dugast@intel.com>
+Signed-off-by: Andrew Morton <akpm@linux-foundation.org>
+(backported from commit 4964099163d0524a769d039ffa886bb4515136d0 drm-xe-next)
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ include/linux/huge_mm.h |  7 +++++++
+ mm/huge_memory.c        | 38 ++++++++++++++++++++++++++++++++++++++
+ mm/memory.c             |  5 +++--
+ 3 files changed, 48 insertions(+), 2 deletions(-)
+
+diff --git a/include/linux/huge_mm.h b/include/linux/huge_mm.h
+index fc789c0ac..4c0a0087f 100644
+--- a/include/linux/huge_mm.h
++++ b/include/linux/huge_mm.h
+@@ -243,6 +243,8 @@ struct page *follow_devmap_pud(struct vm_area_struct *vma, unsigned long addr,
+ 
+ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf);
+ 
++vm_fault_t do_huge_pmd_device_private(struct vm_fault *vmf);
++
+ extern struct page *huge_zero_page;
+ extern unsigned long huge_zero_pfn;
+ 
+@@ -369,6 +371,11 @@ static inline vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
+ 	return 0;
+ }
+ 
++static inline vm_fault_t do_huge_pmd_device_private(struct vm_fault *vmf)
++{
++	return 0;
++}
++
+ static inline bool is_huge_zero_page(struct page *page)
+ {
+ 	return false;
+diff --git a/mm/huge_memory.c b/mm/huge_memory.c
+index fef74f173..2c3f799f2 100644
+--- a/mm/huge_memory.c
++++ b/mm/huge_memory.c
+@@ -714,6 +714,44 @@ static vm_fault_t __do_huge_pmd_anonymous_page(struct vm_fault *vmf,
+ 
+ }
+ 
++vm_fault_t do_huge_pmd_device_private(struct vm_fault *vmf)
++{
++	struct vm_area_struct *vma = vmf->vma;
++	vm_fault_t ret = 0;
++	spinlock_t *ptl;
++	swp_entry_t swp_entry;
++	struct page *page;
++	struct folio *folio;
++
++	if (vmf->flags & FAULT_FLAG_VMA_LOCK) {
++		vma_end_read(vma);
++		return VM_FAULT_RETRY;
++	}
++
++	ptl = pmd_lock(vma->vm_mm, vmf->pmd);
++	if (unlikely(!pmd_same(*vmf->pmd, vmf->orig_pmd))) {
++		spin_unlock(ptl);
++		return 0;
++	}
++
++	swp_entry = pmd_to_swp_entry(vmf->orig_pmd);
++	page = pfn_swap_entry_to_page(swp_entry);
++	folio = page_folio(page);
++	vmf->page = page;
++	vmf->pte = NULL;
++	if (folio_trylock(folio)) {
++		folio_get(folio);
++		spin_unlock(ptl);
++		ret = page->pgmap->ops->migrate_to_ram(vmf);
++		folio_unlock(folio);
++		folio_put(folio);
++	} else {
++		spin_unlock(ptl);
++	}
++
++	return ret;
++}
++
+ /*
+  * always: directly stall for all thp allocations
+  * defer: wake kswapd and fail if not immediately available
+diff --git a/mm/memory.c b/mm/memory.c
+index 795b3b9b4..22c90c140 100644
+--- a/mm/memory.c
++++ b/mm/memory.c
+@@ -5168,8 +5168,9 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
+ 		vmf.orig_pmd = pmdp_get_lockless(vmf.pmd);
+ 
+ 		if (unlikely(is_swap_pmd(vmf.orig_pmd))) {
+-			VM_BUG_ON(thp_migration_supported() &&
+-					  !is_pmd_migration_entry(vmf.orig_pmd));
++			if (is_pmd_device_private_entry(vmf.orig_pmd))
++				return do_huge_pmd_device_private(&vmf);
++
+ 			if (is_pmd_migration_entry(vmf.orig_pmd))
+ 				pmd_migration_entry_wait(mm, vmf.pmd);
+ 			return 0;
+-- 
+2.43.0
+

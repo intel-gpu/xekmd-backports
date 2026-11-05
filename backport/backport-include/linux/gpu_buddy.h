@@ -3,8 +3,16 @@
 #ifndef _BACKPORT_LINUX_GPU_BUDDY_H_
 #define _BACKPORT_LINUX_GPU_BUDDY_H_
 
-#if defined(HAVE_LINUX_GPU_BUDDY_H_AVAILABLE) || defined(CPTCFG_BUILD_XE_DRM_BUDDY)
+#if defined(HAVE_LINUX_GPU_BUDDY_H_AVAILABLE) || defined(CPTCFG_BUILD_XE_DRM_BUDDY) || \
+	!defined(BPM_LINUX_GPU_BUDDY_NOT_PRESENT)
 #include_next <linux/gpu_buddy.h>
+
+#if defined(BPM_GPU_BUDDY_ALLOCATED_ADDR_TO_BLOCK_NOT_PRESENT) && \
+	!defined(CPTCFG_BUILD_XE_DRM_BUDDY)
+struct gpu_buddy_block *
+backport_gpu_buddy_allocated_addr_to_block(struct gpu_buddy *mm, u64 addr);
+#define gpu_buddy_allocated_addr_to_block backport_gpu_buddy_allocated_addr_to_block
+#endif
 #else
 #include <drm/drm_buddy.h>
 #include <linux/log2.h>

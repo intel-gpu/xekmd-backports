@@ -1,0 +1,257 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Balbir Singh <balbirs@nvidia.com>
+Date: Wed, 1 Oct 2025 16:56:53 +1000
+Subject: mm/zone_device: rename page_free callback to folio_free
+
+Change page_free to folio_free to make the folio support for
+zone device-private more consistent. The PCI P2PDMA callback
+has also been updated and changed to folio_free() as a result.
+
+For drivers that do not support folios (yet), the folio is
+converted back into page via &folio->page and the page is used
+as is, in the current callback implementation.
+
+Link: https://lkml.kernel.org/r/20251001065707.920170-3-balbirs@nvidia.com
+Signed-off-by: Balbir Singh <balbirs@nvidia.com>
+Cc: David Hildenbrand <david@redhat.com>
+Cc: Zi Yan <ziy@nvidia.com>
+Cc: Joshua Hahn <joshua.hahnjy@gmail.com>
+Cc: Rakie Kim <rakie.kim@sk.com>
+Cc: Byungchul Park <byungchul@sk.com>
+Cc: Gregory Price <gourry@gourry.net>
+Cc: Ying Huang <ying.huang@linux.alibaba.com>
+Cc: Alistair Popple <apopple@nvidia.com>
+Cc: Oscar Salvador <osalvador@suse.de>
+Cc: Lorenzo Stoakes <lorenzo.stoakes@oracle.com>
+Cc: Baolin Wang <baolin.wang@linux.alibaba.com>
+Cc: "Liam R. Howlett" <Liam.Howlett@oracle.com>
+Cc: Nico Pache <npache@redhat.com>
+Cc: Ryan Roberts <ryan.roberts@arm.com>
+Cc: Dev Jain <dev.jain@arm.com>
+Cc: Barry Song <baohua@kernel.org>
+Cc: Lyude Paul <lyude@redhat.com>
+Cc: Danilo Krummrich <dakr@kernel.org>
+Cc: David Airlie <airlied@gmail.com>
+Cc: Simona Vetter <simona@ffwll.ch>
+Cc: Ralph Campbell <rcampbell@nvidia.com>
+Cc: Mika Penttilä <mpenttil@redhat.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Francois Dugast <francois.dugast@intel.com>
+Cc: Madhavan Srinivasan <maddy@linux.ibm.com>
+Cc: Christophe Leroy <christophe.leroy@csgroup.eu>
+Cc: Felix Kuehling <Felix.Kuehling@amd.com>
+Cc: Alex Deucher <alexander.deucher@amd.com>
+Cc: "Christian König" <christian.koenig@amd.com>
+Signed-off-by: Andrew Morton <akpm@linux-foundation.org>
+(backported from commit 3a5a06554566fcc9f7de7327cfc365ed384d396c drm-xe-next)
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ Documentation/mm/memory-model.rst        |  2 +-
+ arch/powerpc/kvm/book3s_hv_uvmem.c       |  5 +++--
+ drivers/gpu/drm/amd/amdkfd/kfd_migrate.c |  5 +++--
+ drivers/gpu/drm/nouveau/nouveau_dmem.c   |  5 +++--
+ drivers/pci/p2pdma.c                     |  5 +++--
+ include/linux/memremap.h                 |  6 +++---
+ lib/test_hmm.c                           |  5 +++--
+ mm/memremap.c                            | 12 ++++++------
+ 8 files changed, 25 insertions(+), 20 deletions(-)
+
+diff --git a/Documentation/mm/memory-model.rst b/Documentation/mm/memory-model.rst
+index 5f3eafbbc..795712203 100644
+--- a/Documentation/mm/memory-model.rst
++++ b/Documentation/mm/memory-model.rst
+@@ -165,7 +165,7 @@ The users of `ZONE_DEVICE` are:
+ * pmem: Map platform persistent memory to be used as a direct-I/O target
+   via DAX mappings.
+ 
+-* hmm: Extend `ZONE_DEVICE` with `->page_fault()` and `->page_free()`
++* hmm: Extend `ZONE_DEVICE` with `->page_fault()` and `->folio_free()`
+   event callbacks to allow a device-driver to coordinate memory management
+   events related to device-memory, typically GPU memory. See
+   Documentation/mm/hmm.rst.
+diff --git a/arch/powerpc/kvm/book3s_hv_uvmem.c b/arch/powerpc/kvm/book3s_hv_uvmem.c
+index 90833b5e6..5202ca7e6 100644
+--- a/arch/powerpc/kvm/book3s_hv_uvmem.c
++++ b/arch/powerpc/kvm/book3s_hv_uvmem.c
+@@ -1015,8 +1015,9 @@ static vm_fault_t kvmppc_uvmem_migrate_to_ram(struct vm_fault *vmf)
+  * to a normal PFN during H_SVM_PAGE_OUT.
+  * Gets called with kvm->arch.uvmem_lock held.
+  */
+-static void kvmppc_uvmem_page_free(struct page *page)
++static void kvmppc_uvmem_folio_free(struct folio *folio)
+ {
++	struct page *page = &folio->page;
+ 	unsigned long pfn = page_to_pfn(page) -
+ 			(kvmppc_uvmem_pgmap.range.start >> PAGE_SHIFT);
+ 	struct kvmppc_uvmem_page_pvt *pvt;
+@@ -1035,7 +1036,7 @@ static void kvmppc_uvmem_page_free(struct page *page)
+ }
+ 
+ static const struct dev_pagemap_ops kvmppc_uvmem_ops = {
+-	.page_free = kvmppc_uvmem_page_free,
++	.folio_free = kvmppc_uvmem_folio_free,
+ 	.migrate_to_ram	= kvmppc_uvmem_migrate_to_ram,
+ };
+ 
+diff --git a/drivers/gpu/drm/amd/amdkfd/kfd_migrate.c b/drivers/gpu/drm/amd/amdkfd/kfd_migrate.c
+index 0bb3f80eb..0229c80d3 100644
+--- a/drivers/gpu/drm/amd/amdkfd/kfd_migrate.c
++++ b/drivers/gpu/drm/amd/amdkfd/kfd_migrate.c
+@@ -566,8 +566,9 @@ svm_migrate_ram_to_vram(struct svm_range *prange, uint32_t best_loc,
+ 	return r < 0 ? r : 0;
+ }
+ 
+-static void svm_migrate_page_free(struct page *page)
++static void svm_migrate_folio_free(struct folio *folio)
+ {
++	struct page *page = &folio->page;
+ 	struct svm_range_bo *svm_bo = page->zone_device_data;
+ 
+ 	if (svm_bo) {
+@@ -999,7 +1000,7 @@ static vm_fault_t svm_migrate_to_ram(struct vm_fault *vmf)
+ }
+ 
+ static const struct dev_pagemap_ops svm_migrate_pgmap_ops = {
+-	.page_free		= svm_migrate_page_free,
++	.folio_free		= svm_migrate_folio_free,
+ 	.migrate_to_ram		= svm_migrate_to_ram,
+ };
+ 
+diff --git a/drivers/gpu/drm/nouveau/nouveau_dmem.c b/drivers/gpu/drm/nouveau/nouveau_dmem.c
+index b2b9b4a90..4f0b7565a 100644
+--- a/drivers/gpu/drm/nouveau/nouveau_dmem.c
++++ b/drivers/gpu/drm/nouveau/nouveau_dmem.c
+@@ -107,8 +107,9 @@ unsigned long nouveau_dmem_page_addr(struct page *page)
+ 	return chunk->bo->offset + off;
+ }
+ 
+-static void nouveau_dmem_page_free(struct page *page)
++static void nouveau_dmem_folio_free(struct folio *folio)
+ {
++	struct page *page = &folio->page;
+ 	struct nouveau_dmem_chunk *chunk = nouveau_page_to_chunk(page);
+ 	struct nouveau_dmem *dmem = chunk->drm->dmem;
+ 
+@@ -219,7 +220,7 @@ static vm_fault_t nouveau_dmem_migrate_to_ram(struct vm_fault *vmf)
+ }
+ 
+ static const struct dev_pagemap_ops nouveau_dmem_pagemap_ops = {
+-	.page_free		= nouveau_dmem_page_free,
++	.folio_free		= nouveau_dmem_folio_free,
+ 	.migrate_to_ram		= nouveau_dmem_migrate_to_ram,
+ };
+ 
+diff --git a/drivers/pci/p2pdma.c b/drivers/pci/p2pdma.c
+index f97ac18a8..bd2c073f1 100644
+--- a/drivers/pci/p2pdma.c
++++ b/drivers/pci/p2pdma.c
+@@ -192,8 +192,9 @@ static const struct attribute_group p2pmem_group = {
+ 	.name = "p2pmem",
+ };
+ 
+-static void p2pdma_page_free(struct page *page)
++static void p2pdma_folio_free(struct folio *folio)
+ {
++	struct page *page = &folio->page;
+ 	struct pci_p2pdma_pagemap *pgmap = to_p2p_pgmap(page->pgmap);
+ 	/* safe to dereference while a reference is held to the percpu ref */
+ 	struct pci_p2pdma *p2pdma =
+@@ -206,7 +207,7 @@ static void p2pdma_page_free(struct page *page)
+ }
+ 
+ static const struct dev_pagemap_ops p2pdma_pgmap_ops = {
+-	.page_free = p2pdma_page_free,
++	.folio_free = p2pdma_folio_free,
+ };
+ 
+ static void pci_p2pdma_release(void *data)
+diff --git a/include/linux/memremap.h b/include/linux/memremap.h
+index 34d39c565..69a72da6b 100644
+--- a/include/linux/memremap.h
++++ b/include/linux/memremap.h
+@@ -76,11 +76,11 @@ enum memory_type {
+ 
+ struct dev_pagemap_ops {
+ 	/*
+-	 * Called once the page refcount reaches 0.  The reference count will be
++	 * Called once the folio refcount reaches 0.  The reference count will be
+ 	 * reset to one by the core code after the method is called to prepare
+-	 * for handing out the page again.
++	 * for handing out the folio again.
+ 	 */
+-	void (*page_free)(struct page *page);
++	void (*folio_free)(struct folio *folio);
+ 
+ 	/*
+ 	 * Used for private (un-addressable) device memory only.  Must migrate
+diff --git a/lib/test_hmm.c b/lib/test_hmm.c
+index 9796c2ee6..d156fa3d6 100644
+--- a/lib/test_hmm.c
++++ b/lib/test_hmm.c
+@@ -1411,8 +1411,9 @@ static const struct file_operations dmirror_fops = {
+ 	.owner		= THIS_MODULE,
+ };
+ 
+-static void dmirror_devmem_free(struct page *page)
++static void dmirror_devmem_free(struct folio *folio)
+ {
++	struct page *page = &folio->page;
+ 	struct page *rpage = BACKING_PAGE(page);
+ 	struct dmirror_device *mdevice;
+ 
+@@ -1475,7 +1476,7 @@ static vm_fault_t dmirror_devmem_fault(struct vm_fault *vmf)
+ }
+ 
+ static const struct dev_pagemap_ops dmirror_devmem_ops = {
+-	.page_free	= dmirror_devmem_free,
++	.folio_free	= dmirror_devmem_free,
+ 	.migrate_to_ram	= dmirror_devmem_fault,
+ };
+ 
+diff --git a/mm/memremap.c b/mm/memremap.c
+index 77efb46a1..a52cde410 100644
+--- a/mm/memremap.c
++++ b/mm/memremap.c
+@@ -311,8 +311,8 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
+ 			WARN(1, "Missing migrate_to_ram method\n");
+ 			return ERR_PTR(-EINVAL);
+ 		}
+-		if (!pgmap->ops->page_free) {
+-			WARN(1, "Missing page_free method\n");
++		if (!pgmap->ops->folio_free) {
++			WARN(1, "Missing folio_free method\n");
+ 			return ERR_PTR(-EINVAL);
+ 		}
+ 		if (!pgmap->owner) {
+@@ -321,8 +321,8 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
+ 		}
+ 		break;
+ 	case MEMORY_DEVICE_COHERENT:
+-		if (!pgmap->ops->page_free) {
+-			WARN(1, "Missing page_free method\n");
++		if (!pgmap->ops->folio_free) {
++			WARN(1, "Missing folio_free method\n");
+ 			return ERR_PTR(-EINVAL);
+ 		}
+ 		if (!pgmap->owner) {
+@@ -474,7 +474,7 @@ void free_zone_device_page(struct page *page)
+ 	unsigned long nr = folio_nr_pages(folio);
+ 	int i;
+ 
+-	if (WARN_ON_ONCE(!page->pgmap->ops || !page->pgmap->ops->page_free))
++	if (WARN_ON_ONCE(!page->pgmap->ops || !page->pgmap->ops->folio_free))
+ 		return;
+ 
+ 	mem_cgroup_uncharge(folio);
+@@ -508,7 +508,7 @@ void free_zone_device_page(struct page *page)
+ 	 * to clear page->mapping.
+ 	 */
+ 	page->mapping = NULL;
+-	page->pgmap->ops->page_free(page);
++	page->pgmap->ops->folio_free(folio);
+ 
+ 	if (page->pgmap->type != MEMORY_DEVICE_PRIVATE &&
+ 	    page->pgmap->type != MEMORY_DEVICE_COHERENT)
+-- 
+2.43.0
+

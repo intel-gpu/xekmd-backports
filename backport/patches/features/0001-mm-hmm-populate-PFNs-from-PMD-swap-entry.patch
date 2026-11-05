@@ -1,0 +1,133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Thu, 29 Oct 2026 11:57:09 +0530
+Subject: mm/hmm: populate PFNs from PMD swap entry
+
+Once support for THP migration of zone device pages is enabled, device
+private swap entries will be found during the walk not only for PTEs but
+also for PMDs.
+
+Therefore, it is necessary to extend to PMDs the special handling which is
+already in place for PTEs when device private pages are owned by the
+caller: instead of faulting or skipping the range, the correct behavior is
+to use the swap entry to populate HMM PFNs.
+
+This change is a prerequisite to make use of device-private THP in drivers
+using drivers/gpu/drm/drm_pagemap, such as xe.
+
+Even though subsequent PFNs can be inferred when handling large order
+PFNs, the PFN list is still fully populated because this is currently
+expected by HMM users.  In case this changes in the future, that is all
+HMM users support a sparsely populated PFN list, the for() loop can be
+made to skip remaining PFNs for the current order.  A quick test shows the
+loop takes about 10 ns, roughly 20 times faster than without this
+optimization.
+
+Link: https://lkml.kernel.org/r/20250908091052.612303-1-francois.dugast@intel.com
+Signed-off-by: Francois Dugast <francois.dugast@intel.com>
+Cc: Jason Gunthorpe <jgg@nvidia.com>
+Cc: Leon Romanovsky <leonro@nvidia.com>
+Cc: Zi Yan <ziy@nvidia.com>
+Cc: Alistair Popple <apopple@nvidia.com>
+Cc: Balbir Singh <balbirs@nvidia.com>
+Cc: David Airlie <airlied@gmail.com>
+Cc: Christian König <christian.koenig@amd.com>
+Cc: Mika Penttilä <mpenttil@redhat.com>
+Cc: Thomas Hellstrom <thomas.hellstrom@linux.intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Andrew Morton <akpm@linux-foundation.org>
+(backported from commit 10b9feee2d0dc81c44f7a9e69e7a894e33f8c4a1 drm-xe-next)
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ mm/hmm.c | 68 +++++++++++++++++++++++++++++++++++++++++++++++++++-----
+ 1 file changed, 63 insertions(+), 5 deletions(-)
+
+diff --git a/mm/hmm.c b/mm/hmm.c
+index a36e1b404..16fc117f1 100644
+--- a/mm/hmm.c
++++ b/mm/hmm.c
+@@ -317,6 +317,66 @@ static int hmm_vma_handle_pte(struct mm_walk *walk, unsigned long addr,
+ 	return hmm_vma_fault(addr, end, required_fault, walk);
+ }
+ 
++#ifdef CONFIG_ARCH_ENABLE_THP_MIGRATION
++static int hmm_vma_handle_absent_pmd(struct mm_walk *walk, unsigned long start,
++				     unsigned long end, unsigned long *hmm_pfns,
++				     pmd_t pmd)
++{
++	struct hmm_vma_walk *hmm_vma_walk = walk->private;
++	struct hmm_range *range = hmm_vma_walk->range;
++	unsigned long npages = (end - start) >> PAGE_SHIFT;
++	unsigned long addr = start;
++	swp_entry_t entry = pmd_to_swp_entry(pmd);
++	unsigned int required_fault;
++
++	if (is_device_private_entry(entry) &&
++	    pfn_swap_entry_to_page(entry)->pgmap->owner ==
++	    range->dev_private_owner) {
++		unsigned long cpu_flags = HMM_PFN_VALID |
++			hmm_pfn_flags_order(PMD_SHIFT - PAGE_SHIFT);
++		unsigned long pfn = swp_offset_pfn(entry);
++		unsigned long i;
++
++		if (is_writable_device_private_entry(entry))
++			cpu_flags |= HMM_PFN_WRITE;
++
++		/*
++		 * Fully populate the PFN list though subsequent PFNs could be
++		 * inferred, because drivers which are not yet aware of large
++		 * folios probably do not support sparsely populated PFN lists.
++		 */
++		for (i = 0; addr < end; addr += PAGE_SIZE, i++, pfn++)
++			hmm_pfns[i] = pfn | cpu_flags;
++
++		return 0;
++	}
++
++	required_fault = hmm_range_need_fault(hmm_vma_walk, hmm_pfns,
++					      npages, 0);
++	if (required_fault) {
++		if (is_device_private_entry(entry))
++			return hmm_vma_fault(addr, end, required_fault, walk);
++		else
++			return -EFAULT;
++	}
++
++	return hmm_pfns_fill(start, end, range, HMM_PFN_ERROR);
++}
++#else
++static int hmm_vma_handle_absent_pmd(struct mm_walk *walk, unsigned long start,
++				     unsigned long end, unsigned long *hmm_pfns,
++				     pmd_t pmd)
++{
++	struct hmm_vma_walk *hmm_vma_walk = walk->private;
++	struct hmm_range *range = hmm_vma_walk->range;
++	unsigned long npages = (end - start) >> PAGE_SHIFT;
++
++	if (hmm_range_need_fault(hmm_vma_walk, hmm_pfns, npages, 0))
++		return -EFAULT;
++	return hmm_pfns_fill(start, end, range, HMM_PFN_ERROR);
++}
++#endif  /* CONFIG_ARCH_ENABLE_THP_MIGRATION */
++
+ static int hmm_vma_walk_pmd(pmd_t *pmdp,
+ 			    unsigned long start,
+ 			    unsigned long end,
+@@ -345,11 +405,9 @@ static int hmm_vma_walk_pmd(pmd_t *pmdp,
+ 		return hmm_pfns_fill(start, end, range, 0);
+ 	}
+ 
+-	if (!pmd_present(pmd)) {
+-		if (hmm_range_need_fault(hmm_vma_walk, hmm_pfns, npages, 0))
+-			return -EFAULT;
+-		return hmm_pfns_fill(start, end, range, HMM_PFN_ERROR);
+-	}
++	if (!pmd_present(pmd))
++		return hmm_vma_handle_absent_pmd(walk, start, end, hmm_pfns,
++						 pmd);
+ 
+ 	if (pmd_devmap(pmd) || pmd_trans_huge(pmd)) {
+ 		/*
+-- 
+2.43.0
+

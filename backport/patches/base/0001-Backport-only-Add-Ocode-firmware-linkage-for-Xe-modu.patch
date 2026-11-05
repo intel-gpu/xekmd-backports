@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+Date: Thu, 5 Nov 2026 20:06:24 +0530
+Subject: [PATCH] Backport-only: Add Ocode firmware linkage for Xe module
+
+Add Ocode firmware info for xe module. This will help add Ocode into
+initramfs during creation using metadata info.
+
+Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
+---
+ drivers/gpu/drm/xe/xe_late_bind_fw.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+index 355d7c841..610dfc8ae 100644
+--- a/drivers/gpu/drm/xe/xe_late_bind_fw.c
++++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+@@ -24,6 +24,8 @@
+  *       Ocode firmware binary is available upstream.
+  */
+ 
++MODULE_FIRMWARE("xe/cri_ocode_27.bin");
++
+ /*
+  * The component should load quite quickly in most cases, but it could take
+  * a bit. Using a very big timeout just to cover the worst case scenario
+-- 
+2.43.0
+

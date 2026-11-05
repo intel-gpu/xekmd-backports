@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Badal Nilawar <badal.nilawar@intel.com>
 Date: Mon, 2 Nov 2026 22:55:33 +0530
-Subject: [PATCH] drm/xe/xe_late_bind_fw: Enable late binding support for
- CRI
+Subject: [PATCH] drm/xe/xe_late_bind_fw: Enable late binding support for CRI
 
 Enable late binding support for CRI.
 
@@ -10,12 +9,16 @@ V2:
   - Add CONFIG_INTEL_MEI_CSC check (Sashiko)
   - Check only has_heci_cscfi (Daniele)
 
+Bv1:
+  - move late_bind_mask from nvlp_desc to cri_desc (Pravalika)
+
 Cc: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Link: https://patch.msgid.link/20261102172527.2794537-13-badal.nilawar@intel.com
 Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
 (backported from commit d7bc407b38090e908d2b63560bd3c5c44185e56f linux-next)
 Signed-off-by: Pravalika Gurram pravalika.gurram@intel.com
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_late_bind_fw.c | 15 ++++++++++++++-
  drivers/gpu/drm/xe/xe_pci.c          |  2 ++
@@ -55,18 +58,18 @@ index c4f81fb1d..f32d245e3 100644
  		return 0;
  	}
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index e0e2a43d3..49e14a342 100644
+index e0e2a43d3..9a747e9bf 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -497,6 +497,8 @@ static const struct xe_device_desc nvlp_desc = {
- 	.has_flat_ccs = 1,
- 	.has_page_reclaim_hw_assist = true,
- 	.has_pre_prod_wa = true,
+@@ -483,6 +483,8 @@ static const struct xe_device_desc cri_desc = {
+ 	.has_soc_remapper_telem = true,
+ 	.has_sriov = true,
+ 	.has_sysctrl = true,
 +	.late_bind_mask = BIT(XE_LB_FW_FAN_CONTROL) |
 +			  BIT(XE_LB_FW_OCODE),
  	.max_gt_per_tile = 2,
  	MULTI_LRC_MASK,
- 	.require_force_probe = true,
+ 	.va_bits = 57,
 -- 
 2.43.0
 

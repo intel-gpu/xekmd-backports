@@ -1,0 +1,153 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Balbir Singh <balbirs@nvidia.com>
+Date: Wed, 1 Oct 2025 16:56:57 +1000
+Subject: mm/migrate_device: handle partially mapped folios
+ during collection
+
+Extend migrate_vma_collect_pmd() to handle partially mapped large folios
+that require splitting before migration can proceed.
+
+During PTE walk in the collection phase, if a large folio is only
+partially mapped in the migration range, it must be split to ensure the
+folio is correctly migrated.
+
+  Link: https://lkml.kernel.org/r/20251120230825.181072-1-matthew.brost@intel.com
+Link: https://lkml.kernel.org/r/20251001065707.920170-7-balbirs@nvidia.com
+Signed-off-by: Balbir Singh <balbirs@nvidia.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Cc: David Hildenbrand <david@redhat.com>
+Cc: Zi Yan <ziy@nvidia.com>
+Cc: Joshua Hahn <joshua.hahnjy@gmail.com>
+Cc: Rakie Kim <rakie.kim@sk.com>
+Cc: Byungchul Park <byungchul@sk.com>
+Cc: Gregory Price <gourry@gourry.net>
+Cc: Ying Huang <ying.huang@linux.alibaba.com>
+Cc: Alistair Popple <apopple@nvidia.com>
+Cc: Oscar Salvador <osalvador@suse.de>
+Cc: Lorenzo Stoakes <lorenzo.stoakes@oracle.com>
+Cc: Baolin Wang <baolin.wang@linux.alibaba.com>
+Cc: "Liam R. Howlett" <Liam.Howlett@oracle.com>
+Cc: Nico Pache <npache@redhat.com>
+Cc: Ryan Roberts <ryan.roberts@arm.com>
+Cc: Dev Jain <dev.jain@arm.com>
+Cc: Barry Song <baohua@kernel.org>
+Cc: Lyude Paul <lyude@redhat.com>
+Cc: Danilo Krummrich <dakr@kernel.org>
+Cc: David Airlie <airlied@gmail.com>
+Cc: Simona Vetter <simona@ffwll.ch>
+Cc: Ralph Campbell <rcampbell@nvidia.com>
+Cc: Mika Penttilä <mpenttil@redhat.com>
+Cc: Francois Dugast <francois.dugast@intel.com>
+Signed-off-by: Andrew Morton <akpm@linux-foundation.org>
+(backported from commit 022a12deda53c983755c08e073a3c028a6850a23 linux)
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ mm/migrate_device.c | 71 ++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 70 insertions(+), 1 deletion(-)
+
+diff --git a/mm/migrate_device.c b/mm/migrate_device.c
+index a644def79..5c607d32a 100644
+--- a/mm/migrate_device.c
++++ b/mm/migrate_device.c
+@@ -54,6 +54,55 @@ static int migrate_vma_collect_hole(unsigned long start,
+ 	return 0;
+ }
+ 
++/**
++ * migrate_vma_split_folio() - Helper function to split a THP folio
++ * @folio: the folio to split
++ * @fault_page: struct page associated with the fault if any
++ *
++ * Returns 0 on success
++ */
++static int migrate_vma_split_folio(struct folio *folio,
++				   struct page *fault_page)
++{
++	int ret;
++	struct folio *fault_folio = fault_page ? page_folio(fault_page) : NULL;
++	struct folio *new_fault_folio = NULL;
++
++	if (folio != fault_folio) {
++		folio_get(folio);
++		folio_lock(folio);
++	}
++
++	ret = split_folio(folio);
++	if (ret) {
++		if (folio != fault_folio) {
++			folio_unlock(folio);
++			folio_put(folio);
++		}
++		return ret;
++	}
++
++	new_fault_folio = fault_page ? page_folio(fault_page) : NULL;
++
++	/*
++	 * Ensure the lock is held on the correct
++	 * folio after the split
++	 */
++	if (!new_fault_folio) {
++		folio_unlock(folio);
++		folio_put(folio);
++	} else if (folio != new_fault_folio) {
++		if (new_fault_folio != fault_folio) {
++			folio_get(new_fault_folio);
++			folio_lock(new_fault_folio);
++		}
++		folio_unlock(folio);
++		folio_put(folio);
++	}
++
++	return 0;
++}
++
+ static int migrate_vma_collect_pmd(pmd_t *pmdp,
+ 				   unsigned long start,
+ 				   unsigned long end,
+@@ -106,14 +155,16 @@ static int migrate_vma_collect_pmd(pmd_t *pmdp,
+ 		}
+ 	}
+ 
+-	ptep = pte_offset_map_lock(mm, pmdp, addr, &ptl);
++	ptep = pte_offset_map_lock(mm, pmdp, start, &ptl);
+ 	if (!ptep)
+ 		goto again;
+ 	arch_enter_lazy_mmu_mode();
++	ptep += (addr - start) / PAGE_SIZE;
+ 
+ 	for (; addr < end; addr += PAGE_SIZE, ptep++) {
+ 		unsigned long mpfn = 0, pfn;
+ 		struct page *page;
++		struct folio *folio;
+ 		swp_entry_t entry;
+ 		pte_t pte;
+ 
+@@ -163,6 +214,24 @@ static int migrate_vma_collect_pmd(pmd_t *pmdp,
+ 			    (!(migrate->flags & MIGRATE_VMA_SELECT_DEVICE_COHERENT) ||
+ 			     page->pgmap->owner != migrate->pgmap_owner))
+ 				goto next;
++			folio = page ? page_folio(page) : NULL;
++			if (folio && folio_test_large(folio)) {
++				int ret;
++
++				arch_leave_lazy_mmu_mode();
++				pte_unmap_unlock(ptep, ptl);
++				ret = migrate_vma_split_folio(folio,
++							  migrate->fault_page);
++
++				if (ret) {
++					if (unmapped)
++						flush_tlb_range(walk->vma, start, end);
++
++					return migrate_vma_collect_skip(addr, end, walk);
++				}
++
++				goto again;
++			}
+ 			mpfn = migrate_pfn(pfn) | MIGRATE_PFN_MIGRATE;
+ 			mpfn |= pte_write(pte) ? MIGRATE_PFN_WRITE : 0;
+ 		}
+-- 
+2.43.0
+

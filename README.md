@@ -13,6 +13,17 @@ Below are list of patches to enable the features , based on feature requirement 
 | PCIe – RAS AER Error handling | PCI | [PCI: Update saved_config_space upon resource assignment](https://lore.kernel.org/all/febc3f354e0c1f5a9f5b3ee9ffddaa44caccf651.1776268054.git.lukas@wunner.de/) | v7.1 | [0001-PCI-Update-saved_config_space-upon-resource-assignme.patch](backport/patches/base/0001-PCI-Update-saved_config_space-upon-resource-assignme.patch) |
 | SVM | MM | [mm/migrate: Add migrate_device_pfns](https://patchwork.freedesktop.org/patch/msgid/20250306012657.3505757-3-matthew.brost@intel.com) | v6.15 | [0001-mm-migrate-Add-migrate_device_pfns.patch](backport/patches/base/0001-mm-migrate-Add-migrate_device_pfns.patch) |
 | SVM | MM | [mm/migrate: Trylock device page in do_swap_page](https://patchwork.freedesktop.org/patch/msgid/20250306012657.3505757-4-matthew.brost@intel.com) | v6.15 | [0001-mm-migrate-Trylock-device-page-in-do_swap_page.patch](backport/patches/base/0001-mm-migrate-Trylock-device-page-in-do_swap_page.patch) |
+| THP | MM | [mm/zone_device: support large zone device private folios](https://lkml.kernel.org/r/20251001065707.920170-2-balbirs@nvidia.com) | v6.19 | [0001-mm-zone_device-support-large-zone-device-private-fol.patch](backport/patches/features/0001-mm-zone_device-support-large-zone-device-private-fol.patch) |
+| THP | MM | [mm/zone_device: rename page_free callback to folio_free](https://lkml.kernel.org/r/20251001065707.920170-3-balbirs@nvidia.com) | v6.19 | [0001-mm-zone_device-rename-page_free-callback-to-folio_fr.patch](backport/patches/features/0001-mm-zone_device-rename-page_free-callback-to-folio_fr.patch) |
+| THP | MM | [mm/huge_memory: add device-private THP support to PMD operations](https://lkml.kernel.org/r/20251001065707.920170-4-balbirs@nvidia.com) | v6.19 | [0001-mm-huge_memory-add-device-private-THP-support-to-PMD.patch](backport/patches/features/0001-mm-huge_memory-add-device-private-THP-support-to-PMD.patch) |
+| THP | MM | [mm/rmap: extend rmap and migration support device-private entries](https://lkml.kernel.org/r/20251001065707.920170-5-balbirs@nvidia.com) | v6.19 | [0001-mm-rmap-extend-rmap-and-migration-support-device-pri.patch](backport/patches/features/0001-mm-rmap-extend-rmap-and-migration-support-device-pri.patch) |
+| THP | MM | [mm/huge_memory: implement device-private THP splitting](https://lkml.kernel.org/r/20251001065707.920170-6-balbirs@nvidia.com) | v6.19 | [0001-mm-huge_memory-implement-device-private-THP-splittin.patch](backport/patches/features/0001-mm-huge_memory-implement-device-private-THP-splittin.patch) |
+| THP | MM | [mm/migrate_device: handle partially mapped folios during collection](https://lkml.kernel.org/r/20251001065707.920170-7-balbirs@nvidia.com) | v6.19 | [0001-mm-migrate_device-handle-partially-mapped-folios-dur.patch](backport/patches/features/0001-mm-migrate_device-handle-partially-mapped-folios-dur.patch) |
+| THP | MM | [mm/migrate_device: implement THP migration of zone device pages](https://lkml.kernel.org/r/20251001065707.920170-8-balbirs@nvidia.com) | v6.19 | [0001-mm-migrate_device-implement-THP-migration-of-zone-de.patch](backport/patches/features/0001-mm-migrate_device-implement-THP-migration-of-zone-de.patch) |
+| THP | MM | [mm/memory/fault: add THP fault handling for zone device private pages](https://lkml.kernel.org/r/20251001065707.920170-9-balbirs@nvidia.com) | v6.19 | [0001-mm-memory-fault-add-THP-fault-handling-for-zone-devi.patch](backport/patches/features/0001-mm-memory-fault-add-THP-fault-handling-for-zone-devi.patch) |
+| THP | MM | [mm/memremap: add driver callback support for folio splitting](https://lkml.kernel.org/r/20251001065707.920170-11-balbirs@nvidia.com) | v6.19 | [0001-mm-memremap-add-driver-callback-support-for-folio-sp.patch](backport/patches/features/0001-mm-memremap-add-driver-callback-support-for-folio-sp.patch) |
+| THP | MM | [mm/migrate_device: add THP splitting during migration](https://lkml.kernel.org/r/20251001065707.920170-12-balbirs@nvidia.com) | v6.19 | [0001-mm-migrate_device-add-THP-splitting-during-migration.patch](backport/patches/features/0001-mm-migrate_device-add-THP-splitting-during-migration.patch) |
+| THP | MM | [mm/hmm: populate PFNs from PMD swap entry](https://lkml.kernel.org/r/20250908091052.612303-1-francois.dugast@intel.com) | v6.18 | [0001-mm-hmm-populate-PFNs-from-PMD-swap-entry.patch](backport/patches/features/0001-mm-hmm-populate-PFNs-from-PMD-swap-entry.patch) |
 | I2C – SMBUS/AMC | i2c-designware | [i2c: designware: Use accessors to DW_IC_INTR_MASK register](https://patchwork.ozlabs.org/project/linux-i2c/patch/20240131141653.2689260-4-jarkko.nikula@linux.intel.com/) | v6.9 | [0001-i2c-designware-Use-accessors-to-DW_IC_INTR_MASK-regi.patch](backport/patches/base/0001-i2c-designware-Use-accessors-to-DW_IC_INTR_MASK-regi.patch) |
 | I2C – SMBUS/AMC | i2c-designware | [i2c: designware: Implement generic polling mode code](https://patchwork.ozlabs.org/project/linux-i2c/patch/20240131141653.2689260-8-jarkko.nikula@linux.intel.com/) | v6.9 | [0001-i2c-designware-Implement-generic-polling-mode-code.patch](backport/patches/base/0001-i2c-designware-Implement-generic-polling-mode-code.patch) |
 | I2C – SMBUS/AMC | i2c-designware | [i2c: designware: Use polling by default when there is no IRQ resource](https://lore.kernel.org/r/20250701122252.2590230-2-heikki.krogerus@linux.intel.com) | v6.17 | [0001-i2c-designware-Use-polling-by-default-when-there-is-.patch](backport/patches/base/0001-i2c-designware-Use-polling-by-default-when-there-is-.patch) |
@@ -20,13 +31,13 @@ Below are list of patches to enable the features , based on feature requirement 
 
 # Patch Integration
 
-Apply patches to your Linux kernel v6.6 LTS tree based on the features you require from the table above. All patches are available in the `backport/patches/base/` directory and listed in the `series` file.
+Apply patches to your Linux kernel v6.6 LTS tree based on the features you require from the table above. Patches are available under the `backport/patches/base/` and `backport/patches/features/` directories and listed in the `series` file.
 
 To apply specific patches:
 
 ```bash
 cd <your-kernel-tree>
-git am /path/to/xekmd-backports/backport/patches/base/<patch-name>.patch
+git am /path/to/xekmd-backports/backport/patches/<base|features>/<patch-name>.patch
 ```
 
 To apply all patches:
@@ -35,7 +46,7 @@ Follow the order from [series](series) file:
 
 ```bash
 cd <your-kernel-tree>
-git am /path/to/xekmd-backports/backport/patches/base/<patch-name>.patch
+git am /path/to/xekmd-backports/backport/patches/<base|features>/<patch-name>.patch
 ```
 
 **Note:** This branch is regularly updated to track the latest Linux kernel v6.6 LTS releases, ensuring compatibility and stability.

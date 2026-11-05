@@ -1,0 +1,83 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Date: Thu, 29 Oct 2026 14:21:30 +0200
+Subject: drm/xe/tests: Keep bounce buffered accesses short in access_memory
+ test
+
+Without MEM_COPY, the unaligned accesses go through a cacheline sized
+bounce buffer, one job per 64 bytes. On ATS-M each of the unaligned
+reads over the 512K bo takes 10-15s and the case 75s, tripping the hung
+task detector.
+
+The bounce loop only differs in its first and last iteration, so cap
+those accesses to 16K on platforms without MEM_COPY. Platforms with
+MEM_COPY keep the full length.
+
+Closes: https://gitlab.freedesktop.org/drm/xe/kernel/-/work_items/9663
+Cc: Matthew Auld <matthew.auld@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Link: https://patch.msgid.link/20261029122130.2795549-3-mika.kuoppala@linux.intel.com
+(cherry-picked from commit b2e8bb1abfe60ba9ebc924d9822ab0be71d3ae37 drm-xe-next)
+Signed-off-by: Jan Maslak <jan.maslak@intel.com>
+---
+ drivers/gpu/drm/xe/tests/xe_migrate.c | 19 ++++++++++++++++---
+ 1 file changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/tests/xe_migrate.c b/drivers/gpu/drm/xe/tests/xe_migrate.c
+index 57c5de5032d2..56c49d8507d7 100644
+--- a/drivers/gpu/drm/xe/tests/xe_migrate.c
++++ b/drivers/gpu/drm/xe/tests/xe_migrate.c
+@@ -776,6 +776,7 @@ static void xe_validate_ccs_kunit(struct kunit *test)
+ #define ACCESS_MEM_BO_SIZE		SZ_512K
+ #define ACCESS_MEM_NUM_CELLS		(ACCESS_MEM_BO_SIZE / sizeof(u32))
+ #define ACCESS_MEM_UNALIGNED_OFFSET	0x215ee
++#define ACCESS_MEM_BOUNCE_LEN		SZ_16K
+ 
+ /*
+  * Verify byte-by-byte that data read from the BO matches expected cell pattern.
+@@ -848,12 +849,22 @@ static bool verify_access_memory_read(struct kunit *test, u8 *buf,
+ 	return true;
+ }
+ 
++/* Bounce buffering without MEM_COPY is slow, keep those accesses short */
++static u32 access_memory_test_len(struct xe_migrate *m, u32 len)
++{
++	if (!tile_to_xe(m->tile)->info.has_mem_copy_instr)
++		return min(len, ACCESS_MEM_BOUNCE_LEN);
++
++	return len;
++}
++
+ static void access_memory_test_unaligned_bo_offset(struct kunit *test,
+ 						   struct xe_migrate *m,
+ 						   struct xe_bo *bo, u8 *buf,
+ 						   u32 unaligned_offset)
+ {
+-	u32 partial_size = ACCESS_MEM_BO_SIZE - unaligned_offset;
++	u32 partial_size = access_memory_test_len(m, ACCESS_MEM_BO_SIZE -
++						     unaligned_offset);
+ 	int ret;
+ 
+ 	memset(buf, 0, ACCESS_MEM_BO_SIZE);
+@@ -880,7 +891,8 @@ static void access_memory_test_unaligned_dst(struct kunit *test,
+ 					     struct xe_bo *bo, u8 *buf,
+ 					     u32 unaligned_offset)
+ {
+-	u32 partial_size = ACCESS_MEM_BO_SIZE - unaligned_offset;
++	u32 partial_size = access_memory_test_len(m, ACCESS_MEM_BO_SIZE -
++						     unaligned_offset);
+ 	int ret;
+ 
+ 	memset(buf, 0, ACCESS_MEM_BO_SIZE);
+@@ -908,7 +920,8 @@ static void access_memory_test_unaligned_dst_aligned_size(struct kunit *test,
+ 							  u8 *buf,
+ 							  u32 unaligned_offset)
+ {
+-	u32 partial_size = round_down(ACCESS_MEM_BO_SIZE - unaligned_offset, 4);
++	u32 partial_size = round_down(access_memory_test_len(m, ACCESS_MEM_BO_SIZE -
++								unaligned_offset), 4);
+ 	int ret;
+ 
+ 	memset(buf, 0, ACCESS_MEM_BO_SIZE);

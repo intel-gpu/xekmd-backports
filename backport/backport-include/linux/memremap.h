@@ -30,9 +30,9 @@ static inline void folio_set_zone_device_data(struct folio *folio, void *data)
 
 #ifdef BPM_ZONE_DEVICE_PAGE_INIT_3ARGS_NOT_PRESENT
 #ifndef BPM_ZONE_DEVICE_PAGE_INIT_2ARGS_NOT_PRESENT
-/* Has 2-arg signature */
+/* Has 2-arg signature: (page, order) */
 #define zone_device_page_init(page, pgmap, order) \
-	zone_device_page_init(page, pgmap)
+	zone_device_page_init(page, order)
 #elif !defined(BPM_ZONE_DEVICE_PAGE_INIT_1ARG_NOT_PRESENT)
 /* Has 1-arg signature */
 #define zone_device_page_init(page, pgmap, order) \
@@ -41,6 +41,14 @@ static inline void folio_set_zone_device_data(struct folio *folio, void *data)
 #undef zone_device_page_init
 #define zone_device_page_init(page, pgmap, order) \
         do { } while (0)
+#endif
+#endif
+
+#ifdef BPM_ZONE_DEVICE_FOLIO_INIT_3ARGS_NOT_PRESENT
+#ifndef BPM_ZONE_DEVICE_FOLIO_INIT_2ARGS_NOT_PRESENT
+/* Kernel has 2-arg zone_device_folio_init(folio, order); driver calls 3-arg */
+#define zone_device_folio_init(folio, pgmap, order) \
+	zone_device_folio_init(folio, order)
 #endif
 #endif
 

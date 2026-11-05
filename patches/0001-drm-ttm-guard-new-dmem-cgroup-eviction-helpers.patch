@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Date: Thu, 5 Nov 2026 12:23:39 +0530
+Subject: [PATCH] drm/ttm: guard new dmem cgroup eviction helpers
+
+Keep the legacy eviction policy when the target does not export the newer
+dmem protection queries or common ancestor helper. Preserve the existing
+state_evict_valuable check and allow the legacy low-protection retry.
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/ttm/ttm_bo.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/drivers/gpu/drm/ttm/ttm_bo.c b/drivers/gpu/drm/ttm/ttm_bo.c
+--- a/drivers/gpu/drm/ttm/ttm_bo.c
++++ b/drivers/gpu/drm/ttm/ttm_bo.c
+@@ -579,11 +579,17 @@ static int ttm_bo_alloc_at_place(struct ttm_buffer_object *bo,
+ 	 * 'min' protections.
+ 	 */
+ 	if (!alloc_state->in_evict) {
++#ifndef BPM_DMEM_CGROUP_PROTECTION_NOT_EXPORTED
+ 		may_evict |= dmem_cgroup_below_min(NULL, alloc_state->charge_pool);
++#endif
+ 		alloc_state->may_try_low = may_evict;
+ 
++#ifndef BPM_DMEM_CGROUP_PROTECTION_NOT_EXPORTED
+ 		may_evict |= dmem_cgroup_below_low(NULL, alloc_state->charge_pool);
++#else
++		alloc_state->may_try_low = true;
++#endif
+ 	}
+ 
+ 	ret = ttm_resource_alloc(bo, place, res, alloc_state->charge_pool);
+ 	if (ret) {
+@@ -658,11 +664,13 @@ static s64 ttm_bo_evict_cb(struct ttm_lru_walk *walk,
+ 	 * calculation cannot distinguish direct siblings from unrelated subtrees and the
+ 	 * calculated protection ends up wrong.
+ 	 */
++#ifndef BPM_DMEM_CGROUP_ANCESTOR_NOT_EXPORTED
+ 	if (!limit_pool) {
+ 		ancestor = dmem_cgroup_get_common_ancestor(bo->resource->css,
+ 							   evict_walk->alloc_state->charge_pool);
+ 		limit_pool = ancestor;
+ 	}
++#endif
+ 
+ 	evict_valuable = dmem_cgroup_state_evict_valuable(limit_pool, bo->resource->css,
+ 							  evict_walk->try_low,
+-- 
+2.43.0

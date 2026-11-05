@@ -246,6 +246,7 @@ dnl # Macros to check for header availability
 
 	AC_DRM_DRIVER_GEM_GPUVA_PRESENT
 	AC_LINEAR_PAGE_DELTA_NOT_PRESENT
+	AC_DMEM_CGROUP_COMPAT
 
 	AC_KERNEL_WAIT
 ])

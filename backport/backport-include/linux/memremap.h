@@ -16,6 +16,16 @@ static inline void *folio_zone_device_data(const struct folio *folio)
 	return folio->page.zone_device_data;
 #endif
 }
+
+static inline void folio_set_zone_device_data(struct folio *folio, void *data)
+{
+#ifdef BPM_FOLIO_PUT_NOT_PRESENT
+	((struct page *)folio)->zone_device_data = data;
+#else
+	VM_WARN_ON_FOLIO(!folio_is_device_private(folio), folio);
+	folio->page.zone_device_data = data;
+#endif
+}
 #endif /* BPM_FOLIO_ZONE_DEVICE_DATA_NOT_PRESENT */
 
 #ifdef BPM_ZONE_DEVICE_PAGE_INIT_3ARGS_NOT_PRESENT

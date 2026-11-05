@@ -97,12 +97,6 @@ def base_kernel_head(kerneldir, kernel_tag, git_revision=None):
     if not kernel_tag.startswith('xe-'):
         return kernel_head[:9]
 
-    if git.status(tree=kerneldir):
-        raise ValueError(
-            'Generated kernel tree has uncommitted changes; commit them before '
-            'generating the backport so BASE_KERNEL_HEAD identifies the tree.'
-        )
-
     try:
         baseline_tag = subprocess.check_output(
             ['git', 'describe', '--tags', '--match', 'xe-*', '--abbrev=0', 'HEAD'],

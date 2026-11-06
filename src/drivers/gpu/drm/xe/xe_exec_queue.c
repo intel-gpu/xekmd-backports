@@ -156,7 +156,14 @@ static void __xe_exec_queue_free(struct xe_exec_queue *q)
 
 	if (q->vm) {
 		xe_vm_remove_exec_queue(q->vm, q);
+		if (q->vm->xef)
+			xe_vm_remove_close_queue(q->vm);
 		xe_vm_put(q->vm);
+	}
+
+	if (q->user_vm) {
+		xe_vm_remove_close_queue(q->user_vm);
+		xe_vm_put(q->user_vm);
 	}
 
 	if (q->xef)
@@ -252,8 +259,12 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
 		}
 	}
 
-	if (vm)
+	if (vm) {
 		q->vm = xe_vm_get(vm);
+		/* vm->xef stays unchanged until final VM destruction. */
+		if (vm->xef)
+			xe_vm_add_close_queue(vm);
+	}
 
 	if (extensions) {
 		/*
@@ -626,8 +637,10 @@ struct xe_exec_queue *xe_exec_queue_create_bind(struct xe_device *xe,
 			return ERR_PTR(err);
 		}
 
-		if (user_vm)
+		if (user_vm) {
 			q->user_vm = xe_vm_get(user_vm);
+			xe_vm_add_close_queue(user_vm);
+		}
 	}
 
 	return q;
@@ -664,11 +677,6 @@ void xe_exec_queue_destroy(struct kref *ref)
 		list_for_each_entry_safe(eq, next, &q->multi_gt_list,
 					 multi_gt_link)
 			xe_exec_queue_put(eq);
-	}
-
-	if (q->user_vm) {
-		xe_vm_put(q->user_vm);
-		q->user_vm = NULL;
 	}
 
 	q->ops->destroy(q);

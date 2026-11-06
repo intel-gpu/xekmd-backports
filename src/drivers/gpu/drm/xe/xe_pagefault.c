@@ -196,7 +196,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf,
 	 */
 	down_write(&vm->lock);
 
-	if (xe_vm_is_closed(vm)) {
+	if (xe_vm_is_closed_or_banned(vm)) {
 		err = -ENOENT;
 		destroy_eudbg_pf = true;
 		goto unlock_vm;

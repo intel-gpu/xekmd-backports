@@ -24,6 +24,8 @@
  *       Ocode firmware binary is available upstream.
  */
 
+MODULE_FIRMWARE("xe/cri_ocode_27.bin");
+
 /*
  * The component should load quite quickly in most cases, but it could take
  * a bit. Using a very big timeout just to cover the worst case scenario

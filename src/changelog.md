@@ -8,6 +8,11 @@ This page summarizes the major features in each release of backported kernel mod
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.1.4.71_260728.53` | | | |
+| | oot-backport/main | [`62ffcb3f4`](<https://github.com/intel-gpu/xekmd-backports/commit/62ffcb3f4ce70bb18a57c9017e656eed81082359>) | gentree: Allow uncommitted changes in generated kernel trees |
+| | ML v3 | [`0625fb1c3`](<https://patchwork.freedesktop.org/series/177598/#rev3>) | drm/xe/pf: Fix VF probe failure on multi-GT platforms |
+| | ML | [`1111150b8`](<https://patch.msgid.link/20261106034804.2005214-2-varun.gupta@intel.com>) | drm/xe/guc: Demote uncorrectable local error log on CRI |
+| |  | `44ca0ae4a` | Add ocode firmware linkage for Xe Module |
 | `xebr_v7.1.4.68_260728.52` | | | |
 | | oot-backport/main | [`4e6e5aa5f`](<https://github.com/intel-gpu/xekmd-backports/commit/4e6e5aa5f654aaea8a43be46d2b7188ee7db44f2>) | gentree: Derive release tag from backport kernel and latest xeb tag |
 | | oot-backport/main | [`64139971b`](<https://github.com/intel-gpu/xekmd-backports/commit/64139971bb2014e9829614c2c37d5bb53bd8360a>) | auto-tag: generate xeb tags from kernel-backport head with stream-aware revisioning |

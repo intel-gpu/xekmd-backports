@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Date: Fri, 6 Nov 2026 09:54:04 +0000
+Subject: [PATCH] [TEMP] drm/xe/pf: Use multicast writes for early-generation
+ LMTT config
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The LMEM_CFG register on pre-Xe2 platforms is a MCR register. Use a
+multicast write to program the LMTT directory pointer across all
+instances.
+
+Signed-off-by: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
+Suggested-by: Matt Roper <matthew.d.roper@intel.com>
+Cc: Piotr Piórkowski <piotr.piorkowski@intel.com>
+Cc: Michał Winiarski <michal.winiarski@intel.com>
+Cc: Stuart Summers <stuart.summers@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/177598/#rev3)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_gt_regs.h | 2 +-
+ drivers/gpu/drm/xe/xe_lmtt.c         | 8 +-------
+ 2 files changed, 2 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+index cc9ba77fa..93439938b 100644
+--- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+@@ -495,7 +495,7 @@
+ #define   INVALIDATION_BROADCAST_MODE_DIS	REG_BIT(12)
+ #define   GLOBAL_INVALIDATION_MODE		REG_BIT(2)
+ 
+-#define LMEM_CFG				XE_REG(0xcf58)
++#define LMEM_CFG_MCR				XE_REG_MCR(0xcf58)
+ #define   LMEM_EN				REG_BIT(31)
+ #define   LMTT_DIR_PTR				REG_GENMASK(30, 0) /* in multiples of 64KB */
+ 
+diff --git a/drivers/gpu/drm/xe/xe_lmtt.c b/drivers/gpu/drm/xe/xe_lmtt.c
+index 8a5a43493..466b37610 100644
+--- a/drivers/gpu/drm/xe/xe_lmtt.c
++++ b/drivers/gpu/drm/xe/xe_lmtt.c
+@@ -219,14 +219,8 @@ static void lmtt_setup_dir_ptr_gt(struct xe_gt *gt, u32 config)
+ 	struct xe_reg reg;
+ 	u32 val_read;
+ 
+-	if (GRAPHICS_VER(xe) < 20) {
+-		reg = LMEM_CFG;
+-		xe_mmio_write32(&gt->mmio, reg, config);
+-		return;
+-	}
+-
+ 	if (xe_gt_is_main_type(gt)) {
+-		reg_mcr = XE2_LMEM_CFG_MCR;
++		reg_mcr = GRAPHICS_VER(xe) < 20 ? LMEM_CFG_MCR : XE2_LMEM_CFG_MCR;
+ 		xe_gt_mcr_multicast_write(gt, reg_mcr, config);
+ 		val_read = xe_gt_mcr_unicast_read_any(gt, reg_mcr);
+ 		xe_gt_assert_msg(gt, val_read == config, "LMEM_CFG_MCR: %#x != %#x\n",
+-- 
+2.43.0
+

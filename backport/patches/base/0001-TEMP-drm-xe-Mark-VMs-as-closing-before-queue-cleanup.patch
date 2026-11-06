@@ -1,0 +1,165 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Arvind Yadav <arvind.yadav@intel.com>
+Date: Wed, 28 Oct 2026 17:51:24 +0530
+Subject: [PATCH] [TEMP] drm/xe: Mark VMs as closing before queue cleanup
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Queue cleanup is asynchronous. New VM work can therefore race with file
+close or VM destroy while cleanup is starting.
+
+Add a closing state and set it before starting queue cleanup. Treat a
+closing VM as unavailable for new exec, bind, rebind and page-fault work.
+
+Keep vm->size valid while the VM is closing so SVM invalidation can still
+drain existing mappings.
+
+Also reject page faults on banned VMs, which cannot resume execution.
+
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Cc: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Assisted-by: LLM
+Signed-off-by: Arvind Yadav <arvind.yadav@intel.com>
+Tested-by: Sanjay Yadav <sanjay.kumar.yadav@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/174252/#rev2)
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c    |  4 ++++
+ drivers/gpu/drm/xe/xe_pagefault.c |  2 +-
+ drivers/gpu/drm/xe/xe_svm.c       |  3 ++-
+ drivers/gpu/drm/xe/xe_vm.c        | 18 +++++++++++++++++-
+ drivers/gpu/drm/xe/xe_vm.h        |  9 ++++++++-
+ drivers/gpu/drm/xe/xe_vm_types.h  |  1 +
+ 6 files changed, 33 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 12f257b6a..6416939e3 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -173,6 +173,10 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+ 
+ 	guard(xe_pm_runtime)(xe);
+ 
++	/* Block new VM work before starting asynchronous queue teardown. */
++	xa_for_each(&xef->vm.xa, idx, vm)
++		xe_vm_close_start(vm);
++
+ 	/*
+ 	 * No need for exec_queue.lock here as there is no contention for it
+ 	 * when FD is closing as IOCTLs presumably can't be modifying the
+diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
+index 43d210d80..fbcad98ec 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_pagefault.c
+@@ -191,7 +191,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
+ 	 */
+ 	down_write(&vm->lock);
+ 
+-	if (xe_vm_is_closed(vm)) {
++	if (xe_vm_is_closed_or_banned(vm)) {
+ 		err = -ENOENT;
+ 		goto unlock_vm;
+ 	}
+diff --git a/drivers/gpu/drm/xe/xe_svm.c b/drivers/gpu/drm/xe/xe_svm.c
+index 1c0df523a..ea5bf9d32 100644
+--- a/drivers/gpu/drm/xe/xe_svm.c
++++ b/drivers/gpu/drm/xe/xe_svm.c
+@@ -209,7 +209,8 @@ xe_svm_range_notifier_event_end(struct xe_vm *vm, struct drm_gpusvm_range *r,
+ 	xe_svm_assert_in_notifier(vm);
+ 
+ 	drm_gpusvm_range_unmap_pages(&vm->svm.gpusvm, r, &ctx);
+-	if (!xe_vm_is_closed(vm) && mmu_range->event == MMU_NOTIFY_UNMAP)
++	if (!xe_vm_is_closed(vm) && !xe_vm_is_closing(vm) &&
++	    mmu_range->event == MMU_NOTIFY_UNMAP)
+ 		xe_svm_garbage_collector_add_range(vm, to_xe_range(r),
+ 						   mmu_range);
+ }
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index 87eb6ac16..1358e6c2b 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -1869,6 +1869,20 @@ static void xe_vm_close(struct xe_vm *vm)
+ 		drm_dev_exit(idx);
+ }
+ 
++void xe_vm_close_start(struct xe_vm *vm)
++{
++	down_write(&vm->lock);
++	if (xe_vm_in_fault_mode(vm))
++		xe_svm_notifier_lock(vm);
++
++	/* Keep size valid so SVM invalidation still performs its full drain. */
++	vm->flags |= XE_VM_FLAG_CLOSING;
++
++	if (xe_vm_in_fault_mode(vm))
++		xe_svm_notifier_unlock(vm);
++	up_write(&vm->lock);
++}
++
+ void xe_vm_close_and_put(struct xe_vm *vm)
+ {
+ 	LIST_HEAD(contested);
+@@ -2170,8 +2184,10 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
+ 		xa_erase(&xef->vm.xa, args->vm_id);
+ 	mutex_unlock(&xef->vm.lock);
+ 
+-	if (!err)
++	if (!err) {
++		xe_vm_close_start(vm);
+ 		xe_vm_close_and_put(vm);
++	}
+ 
+ 	return err;
+ }
+diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
+index c5b900f38..70456ffe2 100644
+--- a/drivers/gpu/drm/xe/xe_vm.h
++++ b/drivers/gpu/drm/xe/xe_vm.h
+@@ -59,6 +59,11 @@ static inline bool xe_vm_is_closed(struct xe_vm *vm)
+ 	return !vm->size;
+ }
+ 
++static inline bool xe_vm_is_closing(struct xe_vm *vm)
++{
++	return vm->flags & XE_VM_FLAG_CLOSING;
++}
++
+ static inline bool xe_vm_is_banned(struct xe_vm *vm)
+ {
+ 	return vm->flags & XE_VM_FLAG_BANNED;
+@@ -67,7 +72,8 @@ static inline bool xe_vm_is_banned(struct xe_vm *vm)
+ static inline bool xe_vm_is_closed_or_banned(struct xe_vm *vm)
+ {
+ 	lockdep_assert_held(&vm->lock);
+-	return xe_vm_is_closed(vm) || xe_vm_is_banned(vm);
++	return xe_vm_is_closed(vm) || xe_vm_is_banned(vm) ||
++		xe_vm_is_closing(vm);
+ }
+ 
+ struct xe_vma *
+@@ -214,6 +220,7 @@ int xe_vm_get_property_ioctl(struct drm_device *dev, void *data,
+ 			     struct drm_file *file);
+ 
+ void xe_vm_close_and_put(struct xe_vm *vm);
++void xe_vm_close_start(struct xe_vm *vm);
+ 
+ static inline bool xe_vm_in_fault_mode(struct xe_vm *vm)
+ {
+diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
+index a94827d7f..2268a1ca3 100644
+--- a/drivers/gpu/drm/xe/xe_vm_types.h
++++ b/drivers/gpu/drm/xe/xe_vm_types.h
+@@ -264,6 +264,7 @@ struct xe_vm {
+ #define XE_VM_FLAG_SET_TILE_ID(tile)	FIELD_PREP(GENMASK(7, 6), (tile)->id)
+ #define XE_VM_FLAG_GSC			BIT(8)
+ #define XE_VM_FLAG_NO_VM_OVERCOMMIT     BIT(9)
++#define XE_VM_FLAG_CLOSING		BIT(10)
+ 	unsigned long flags;
+ 
+ 	/**
+-- 
+2.43.0
+

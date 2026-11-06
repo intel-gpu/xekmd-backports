@@ -14,6 +14,7 @@
 #include <linux/kref.h>
 #include <linux/mmu_notifier.h>
 #include <linux/scatterlist.h>
+#include <linux/wait.h>
 
 #include "xe_device_types.h"
 #include "xe_pt_types.h"
@@ -279,6 +280,7 @@ struct xe_vm {
 #define XE_VM_FLAG_SET_TILE_ID(tile)	FIELD_PREP(GENMASK(7, 6), (tile)->id)
 #define XE_VM_FLAG_GSC			BIT(8)
 #define XE_VM_FLAG_NO_VM_OVERCOMMIT     BIT(9)
+#define XE_VM_FLAG_CLOSING		BIT(10)
 	unsigned long flags;
 
 	/**
@@ -305,6 +307,20 @@ struct xe_vm {
 	 * to sleep.
 	 */
 	struct work_struct destroy_work;
+
+	/** @close: State used to defer VM teardown until exec queues are gone. */
+	struct {
+		/** @close.num_exec_queues: Queues which can access this VM. */
+		atomic_t num_exec_queues;
+		/** @close.wq: Waitqueue for exec queue teardown. */
+		wait_queue_head_t wq;
+		/** @close.lock: Protects deferred and work scheduling. */
+		spinlock_t lock;
+		/** @close.deferred: VM close is waiting for queue teardown. */
+		bool deferred;
+		/** @close.work: Completes a deferred VM close. */
+		struct work_struct work;
+	} close;
 
 	/**
 	 * @rftree: range fence tree to track updates to page table structure.

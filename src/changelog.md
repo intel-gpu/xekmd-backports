@@ -8,6 +8,11 @@ This page summarizes the major features in each release of backported kernel mod
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.1.4.72_260728.53` | | | |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/patch/763783/?series=174252&rev=2>) | &#91;TEMP&#93; drm/xe: Hold a device reference across deferred VM destruction |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/patch/763784/?series=174252&rev=2>) | &#91;TEMP&#93;: drm/xe: Disable scheduling early on FD close to avoid CAT error cascade |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/patch/763790/?series=174252&rev=2>) | &#91;TEMP&#93; drm/xe: Mark VMs as closing before queue cleanup |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/patch/763789/?series=174252&rev=2>) | &#91;TEMP&#93; drm/xe: Defer VM teardown until exec queue cleanup completes |
 | `xebr_v7.1.4.71_260728.53` | | | |
 | | oot-backport/main | [`62ffcb3f4`](<https://github.com/intel-gpu/xekmd-backports/commit/62ffcb3f4ce70bb18a57c9017e656eed81082359>) | gentree: Allow uncommitted changes in generated kernel trees |
 | | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/177598/#rev3>) | &#91;TEMP&#93; drm/xe/pf: Program LMTT directory pointer from each GT's init path |

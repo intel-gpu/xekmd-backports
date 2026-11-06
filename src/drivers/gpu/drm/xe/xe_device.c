@@ -8,6 +8,7 @@
 #include <linux/aperture.h>
 #include <linux/delay.h>
 #include <linux/fault-inject.h>
+#include <linux/jiffies.h>
 #include <linux/units.h>
 
 #include <drm/drm_atomic_helper.h>
@@ -174,11 +175,17 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
 	struct xe_file *xef = file->driver_priv;
 	struct xe_vm *vm;
 	struct xe_exec_queue *q;
+	bool close_deferred = false;
+	unsigned long deadline;
 	unsigned long idx;
 
 	guard(xe_pm_runtime)(xe);
 
 	prelim_xe_eudebug_file_close(xef);
+
+	/* Block new VM work before starting asynchronous queue teardown. */
+	xa_for_each(&xef->vm.xa, idx, vm)
+		xe_vm_close_start(vm);
 
 	/*
 	 * No need for exec_queue.lock here as there is no contention for it
@@ -197,8 +204,23 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
 		xe_exec_queue_put(q);
 	}
 
+	/* Start all bind queue teardown before spending the shared wait budget. */
 	xa_for_each(&xef->vm.xa, idx, vm)
-		xe_vm_close_and_put(vm);
+		xe_vm_kill_bind_queues(vm);
+
+	deadline = jiffies + HZ * 5;
+	xa_for_each(&xef->vm.xa, idx, vm) {
+		unsigned long now = jiffies;
+		unsigned long timeout =
+			time_before(now, deadline) ? deadline - now : 0;
+
+		close_deferred |=
+			xe_vm_close_and_put_deferred(vm, timeout);
+	}
+
+	if (close_deferred)
+		drm_dbg(&xe->drm,
+			"VM teardown deferred while exec queues are being stopped\n");
 
 	xe_file_put(xef);
 }

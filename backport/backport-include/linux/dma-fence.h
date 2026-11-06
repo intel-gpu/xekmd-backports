@@ -4,6 +4,10 @@
 
 #include_next <linux/dma-fence.h>
 
+#ifdef BPM_DMA_FENCE_ENABLE_SIGNALING_NOT_PRESENT
+#define dma_fence_enable_signaling dma_fence_enable_sw_signaling
+#endif
+
 #ifdef BPM_DMA_FENCE_SET_DEADLINE_NOT_PRESENT
 static inline void dma_fence_set_deadline(struct dma_fence *fence,
 					  ktime_t deadline)

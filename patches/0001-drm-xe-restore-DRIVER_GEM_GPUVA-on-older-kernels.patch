@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Date: Mon, 2 Nov 2026 11:47:13 +0530
+Subject: [PATCH] drm/xe: restore DRIVER_GEM_GPUVA on older kernels
+
+Older DRM cores initialize GEM GPUVA lists only when DRIVER_GEM_GPUVA is
+enabled. Restore the flag for both Xe driver variants when the target
+kernel provides it.
+
+Reference:
+    21fcb222f0d1e1c9f5b04c09e9fb3408e13a0264
+    drm: Remove DRIVER_GEM_GPUVA feature flag
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -447,5 +447,8 @@
+ static const struct drm_driver regular_driver = {
+ 	.driver_features =
++#ifdef BPM_DRM_DRIVER_GEM_GPUVA_PRESENT
++	    DRIVER_GEM_GPUVA |
++#endif
+ 	    XE_DISPLAY_DRIVER_FEATURES |
+ 	    DRIVER_GEM |
+ 	    DRIVER_RENDER | DRIVER_SYNCOBJ |
+@@ -487,5 +490,8 @@
+ static const struct drm_driver admin_only_driver = {
+ 	.driver_features =
++#ifdef BPM_DRM_DRIVER_GEM_GPUVA_PRESENT
++	    DRIVER_GEM_GPUVA |
++#endif
+ 	    DRIVER_GEM | DRIVER_RENDER,
+ 	.open = xe_file_open,
+ 	.postclose = xe_file_close,
+-- 
+2.43.0

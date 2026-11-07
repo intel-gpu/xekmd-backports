@@ -8,6 +8,10 @@ You can create Dynamic Kernel Module Support (DKMS) as well as pre-compiled out-
 
 We are using [backport project](https://backports.wiki.kernel.org/index.php/Main_Page) to generate out-of-tree Xe kernel module source codes.
 
+## Changelog
+
+See [changelog.md](changelog.md) for release history and included changes.
+
 ## Prerequisite
 We have dependencies on the following packages
 ### Ubuntu Supported OS Kernel/Distribution

@@ -1,10 +1,41 @@
-This page summarizes the major features in each release of backported kernel module source code for Xe drivers and provides links to additional information.
+This page summarizes the major features and changes included in each Xe KMD Backport release and provides links to additional information.
 
-## 🗝️ Legend & Conventions
-- Patchwork: Tracks submitted patches or series which are part of Mailing List (ML). With their respective revisions, such as v1 or v4.
-- linux-next: Links to the commit merged into the linux-next integration tree.
-- xe-next (drm-xe-next): Links to the commit merged into the Xe driver integration tree.
-- oot-backport: Uses the SHA and commit link from oot-backport/main.
+## Release Versioning
+
+Each DKMS release tag identifies the Xe KMD Backport and OOT-backport source versions used to build the release.
+
+### Format
+
+`xebr_v<Xe KMD Backport version>_<OOT-backport version>`
+
+### Example
+
+| Release tag | Xe KMD Backport version | OOT-backport version |
+|---|---|---|
+| `xebr_v7.1.4.72_260728.53` | `v7.1.4.72` | `260728.53` |
+
+### Interpretation
+
+| Component | Example | Branch | Description |
+|---|---|---|---|
+| Release prefix | `xebr` | `release/main` | Identifies the Xe KMD Backport release. |
+| Xe KMD Backport version | `v7.1.4.72` | `kernel-backport/main` | Identifies the Xe KMD Backport source version used for the release. |
+| OOT-backport version | `260728.53` | `oot-backport/main` | Identifies the backport compatibility-layer version containing patches required to adapt upstream Xe driver code to supported older target kernels. |
+
+This format provides direct traceability to the Xe KMD Backport and OOT-backport source versions included in each DKMS release.
+
+## Patch Sources
+
+| Source | What it represents |
+|---|---|
+| **Patchwork / Mailing List (ML)** | Upstream-submitted patches or series not yet merged, typically required for new feature enablement or critical fixes. Patchwork tracks revisions such as v1, v2, v4, etc. |
+| **drm-tip-eudebug** | EU Debug feature patches under development and not yet merged into the Xe integration tree. |
+| **xe-next (drm-xe-next)** | Patches merged into the Xe driver integration tree, but not necessarily available in linux-next yet. |
+| **linux-next** | Patches merged into the Linux next integration tree, representing a later stage of upstream integration. |
+| **oot-backport** | Backport compatibility-layer patches required to adapt upstream Xe driver code to supported older target kernels. |
+| **Backport-only change** | Changes developed specifically for the backport environment with no corresponding upstream ML/Patchwork reference. |
+
+## Patch List
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|

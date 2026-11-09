@@ -470,6 +470,8 @@ int ttm_bo_move_accel_cleanup(struct ttm_buffer_object *bo,
 			      struct ttm_resource *new_mem);
 void ttm_bo_move_sync_cleanup(struct ttm_buffer_object *bo,
 			      struct ttm_resource *new_mem);
+void ttm_bo_move_null_drop_tt(struct ttm_buffer_object *bo,
+			      struct ttm_resource *new_mem);
 int ttm_bo_pipeline_gutting(struct ttm_buffer_object *bo);
 pgprot_t ttm_io_prot(struct ttm_buffer_object *bo, struct ttm_resource *res,
 		     pgprot_t tmp);

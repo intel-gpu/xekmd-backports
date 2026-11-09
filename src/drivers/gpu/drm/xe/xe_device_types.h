@@ -307,6 +307,12 @@ struct xe_device {
 		struct xe_vram_region *vram;
 		/** @mem.sys_mgr: system TTM manager */
 		struct ttm_resource_manager sys_mgr;
+		/**
+		 * @mem.sys_mgr_charged: bytes charged against the @mem.sys_mgr
+		 * budget. Excludes imported dma-bufs (e.g. peer-GPU VRAM mapped
+		 * for P2P), which consume no local system memory.
+		 */
+		atomic64_t sys_mgr_charged;
 		/** @mem.sys_mgr: system memory shrinker. */
 		struct xe_shrinker *shrinker;
 	} mem;

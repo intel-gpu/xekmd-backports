@@ -16,8 +16,14 @@
 
 struct xe_ttm_sys_node {
 	struct ttm_buffer_object *tbo;
+	bool charged;
 	struct ttm_range_mgr_node base;
 };
+
+static atomic64_t *to_charged_usage(struct ttm_resource_manager *man)
+{
+	return &container_of(man, struct xe_device, mem.sys_mgr)->mem.sys_mgr_charged;
+}
 
 static inline struct xe_ttm_sys_node *
 to_xe_ttm_sys_node(struct ttm_resource *res)
@@ -40,10 +46,21 @@ static int xe_ttm_sys_mgr_new(struct ttm_resource_manager *man,
 	node->tbo = tbo;
 	ttm_resource_init(tbo, place, &node->base.base);
 
-	if (!(place->flags & TTM_PL_FLAG_TEMPORARY) &&
-	    ttm_resource_manager_usage(man) > (man->size << PAGE_SHIFT)) {
-		r = -ENOSPC;
-		goto err_fini;
+	/*
+	 * Imported dma-bufs are backed by the exporter (possibly peer VRAM),
+	 * so don't charge them against the local system memory budget.
+	 */
+	if (tbo->type != ttm_bo_type_sg) {
+		u64 size = node->base.base.size;
+		u64 usage = atomic64_add_return(size, to_charged_usage(man));
+
+		if (!(place->flags & TTM_PL_FLAG_TEMPORARY) &&
+		    usage > (man->size << PAGE_SHIFT)) {
+			atomic64_sub(size, to_charged_usage(man));
+			r = -ENOSPC;
+			goto err_fini;
+		}
+		node->charged = true;
 	}
 
 	node->base.mm_nodes[0].start = 0;
@@ -65,6 +82,8 @@ static void xe_ttm_sys_mgr_del(struct ttm_resource_manager *man,
 {
 	struct xe_ttm_sys_node *node = to_xe_ttm_sys_node(res);
 
+	if (node->charged)
+		atomic64_sub(res->size, to_charged_usage(man));
 	ttm_resource_fini(man, res);
 	kfree(node);
 }
@@ -116,4 +135,15 @@ int xe_ttm_sys_mgr_init(struct xe_device *xe)
 	ttm_set_driver_manager(&xe->ttm, XE_PL_TT, man);
 	ttm_resource_manager_set_used(man, true);
 	return drmm_add_action_or_reset(&xe->drm, xe_ttm_sys_mgr_fini, xe);
+}
+
+/**
+ * xe_ttm_sys_mgr_usage() - System memory charged against the TT budget
+ * @xe: The xe device.
+ *
+ * Return: Bytes of system memory in use, excluding imported dma-bufs.
+ */
+u64 xe_ttm_sys_mgr_usage(struct xe_device *xe)
+{
+	return atomic64_read(&xe->mem.sys_mgr_charged);
 }

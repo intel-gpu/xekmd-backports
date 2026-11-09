@@ -11,6 +11,7 @@
 
 #include <drm/drm_device.h>
 #include <drm/drm_prime.h>
+#include <drm/drm_vma_manager.h>
 #include <drm/ttm/ttm_tt.h>
 
 #include "tests/xe_test.h"
@@ -324,6 +325,14 @@ xe_dma_buf_create_obj(struct drm_device *dev, struct dma_buf *dma_buf)
 		}
 	}
 	drm_gem_object_put(dummy_obj);
+
+	/*
+	 * CPU faults on imported BOs are rejected, so there is no point in
+	 * consuming fake mmap offset space for them.
+	 */
+	if (!ret)
+		drm_vma_offset_remove(bo->ttm.bdev->vma_manager,
+				      &bo->ttm.base.vma_node);
 
 	return ret ? ERR_PTR(ret) : &bo->ttm.base;
 }

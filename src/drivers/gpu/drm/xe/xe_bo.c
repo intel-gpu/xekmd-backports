@@ -1031,7 +1031,7 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 	}
 
 	if ((move_lacks_source && !needs_clear)) {
-		ttm_bo_move_null(ttm_bo, new_mem);
+		ttm_bo_move_null_drop_tt(ttm_bo, new_mem);
 		goto out;
 	}
 
@@ -1159,7 +1159,7 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 						new_mem);
 		if (ret) {
 			dma_fence_wait(fence, false);
-			ttm_bo_move_null(ttm_bo, new_mem);
+			ttm_bo_move_null_drop_tt(ttm_bo, new_mem);
 			ret = 0;
 		}
 	} else {
@@ -1170,7 +1170,7 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 		 */
 		dma_resv_add_fence(ttm_bo->base.resv, fence,
 				   DMA_RESV_USAGE_KERNEL);
-		ttm_bo_move_null(ttm_bo, new_mem);
+		ttm_bo_move_null_drop_tt(ttm_bo, new_mem);
 	}
 
 	/*
@@ -3796,6 +3796,12 @@ int xe_gem_mmap_offset_ioctl(struct drm_device *dev, void *data,
 	gem_obj = drm_gem_object_lookup(file, args->handle);
 	if (XE_IOCTL_DBG(xe, !gem_obj))
 		return -ENOENT;
+
+	/* Imported dma-bufs have no mmap offset since CPU access is rejected. */
+	if (XE_IOCTL_DBG(xe, !drm_vma_node_size(&gem_obj->vma_node))) {
+		xe_bo_put(gem_to_xe_bo(gem_obj));
+		return -EINVAL;
+	}
 
 	/* The mmap offset was set up at BO allocation time. */
 	args->offset = drm_vma_node_offset_addr(&gem_obj->vma_node);

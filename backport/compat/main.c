@@ -15,6 +15,10 @@ MODULE_LICENSE("GPL");
 #error "You need a CPTCFG_BASE_KERNEL_HEAD"
 #endif
 
+#ifndef CPTCFG_BASE_KERNEL_TAG
+#error "You need a CPTCFG_BASE_KERNEL_TAG"
+#endif
+
 #ifndef CPTCFG_BACKPORTS_RELEASE_TAG
 #error "You need a CPTCFG_BACKPORTS_RELEASE_TAG"
 #endif
@@ -56,7 +60,7 @@ EXPORT_SYMBOL_GPL(backport_dependency_symbol);
 
 static int __init backport_init(void)
 {
-	printk(KERN_INFO "COMPAT: Backport init, Module is backported from " CPTCFG_BACKPORTS_RELEASE_TAG " against Kernel " CPTCFG_TARGET_KERNEL_NAME " \n");
+	printk(KERN_INFO "COMPAT: Backported from " CPTCFG_BASE_KERNEL_TAG " and oot-module version " CPTCFG_BACKPORTS_RELEASE_TAG "\n");
 
         return 0;
 }

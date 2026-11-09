@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Mon, 9 Nov 2026 20:06:24 +0530
+Subject: [TEMP] drm/ttm, drm/xe: Drop the ttm_tt on null moves to VRAM
+
+A BO created with DRM_XE_GEM_CREATE_FLAG_DEFER_BACKING starts in system
+placement with an unpopulated ttm_tt. Its initial move to VRAM has no
+source data and uses ttm_bo_move_null(), which unlike
+ttm_bo_move_accel_cleanup() leaves bo->ttm attached. If the VRAM BO is
+later exported, ttm_bo_setup_export() populates that stale ttm_tt,
+pinning unused, unshrinkable host pages equal to the BO size and
+potentially exhausting host RAM.
+
+Add ttm_bo_move_null_drop_tt() to destroy the ttm_tt when moving to a
+manager that doesn't use one, and use it in xe_bo_move().
+
+Fixes: 91494dee1091 ("xe: populate buffers before exporting them.")
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/patch/767377/?series=178045&rev=1)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/ttm/ttm_bo_util.c | 20 ++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_bo.c        |  6 +++---
+ include/drm/ttm/ttm_bo.h          |  2 ++
+ 3 files changed, 25 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/ttm/ttm_bo_util.c b/drivers/gpu/drm/ttm/ttm_bo_util.c
+index f9458a4d5a09..0ab52be3a5f7 100644
+--- a/drivers/gpu/drm/ttm/ttm_bo_util.c
++++ b/drivers/gpu/drm/ttm/ttm_bo_util.c
+@@ -756,6 +756,26 @@ void ttm_bo_move_sync_cleanup(struct ttm_buffer_object *bo,
+ }
+ EXPORT_SYMBOL(ttm_bo_move_sync_cleanup);
+ 
++/**
++ * ttm_bo_move_null_drop_tt - assign memory without moving data, dropping the TT
++ * @bo: The buffer object.
++ * @new_mem: The memory to be assigned.
++ *
++ * Like ttm_bo_move_null(), but if the memory manager of @new_mem doesn't use
++ * a struct ttm_tt, also destroy @bo's ttm_tt, mimicking what
++ * ttm_bo_move_accel_cleanup() does. The caller must hold the bo's
++ * reservation, and the ttm_tt must not hold data that needs to be preserved.
++ */
++void ttm_bo_move_null_drop_tt(struct ttm_buffer_object *bo,
++			      struct ttm_resource *new_mem)
++{
++	if (!ttm_manager_type(bo->bdev, new_mem->mem_type)->use_tt)
++		ttm_bo_tt_destroy(bo);
++
++	ttm_bo_move_null(bo, new_mem);
++}
++EXPORT_SYMBOL(ttm_bo_move_null_drop_tt);
++
+ /**
+  * ttm_bo_pipeline_gutting - purge the contents of a bo
+  * @bo: The buffer object
+diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
+index 0181f73ef66d..6628db44951f 100644
+--- a/drivers/gpu/drm/xe/xe_bo.c
++++ b/drivers/gpu/drm/xe/xe_bo.c
+@@ -1178,7 +1178,7 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
+ 	}
+ 
+ 	if ((move_lacks_source && !needs_clear)) {
+-		ttm_bo_move_null(ttm_bo, new_mem);
++		ttm_bo_move_null_drop_tt(ttm_bo, new_mem);
+ 		goto out;
+ 	}
+ 
+@@ -1313,7 +1313,7 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
+ 						new_mem);
+ 		if (ret) {
+ 			dma_fence_wait(fence, false);
+-			ttm_bo_move_null(ttm_bo, new_mem);
++			ttm_bo_move_null_drop_tt(ttm_bo, new_mem);
+ 			ret = 0;
+ 		}
+ 	} else {
+@@ -1324,7 +1324,7 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
+ 		 */
+ 		dma_resv_add_fence(ttm_bo->base.resv, fence,
+ 				   DMA_RESV_USAGE_KERNEL);
+-		ttm_bo_move_null(ttm_bo, new_mem);
++		ttm_bo_move_null_drop_tt(ttm_bo, new_mem);
+ 	}
+ 
+ 	/*
+diff --git a/include/drm/ttm/ttm_bo.h b/include/drm/ttm/ttm_bo.h
+index 32791c4db2a9..123ef68bd849 100644
+--- a/include/drm/ttm/ttm_bo.h
++++ b/include/drm/ttm/ttm_bo.h
+@@ -480,6 +480,8 @@ int ttm_bo_move_accel_cleanup(struct ttm_buffer_object *bo,
+ 			      struct ttm_resource *new_mem);
+ void ttm_bo_move_sync_cleanup(struct ttm_buffer_object *bo,
+ 			      struct ttm_resource *new_mem);
++void ttm_bo_move_null_drop_tt(struct ttm_buffer_object *bo,
++			      struct ttm_resource *new_mem);
+ int ttm_bo_pipeline_gutting(struct ttm_buffer_object *bo);
+ pgprot_t ttm_io_prot(struct ttm_buffer_object *bo, struct ttm_resource *res,
+ 		     pgprot_t tmp);

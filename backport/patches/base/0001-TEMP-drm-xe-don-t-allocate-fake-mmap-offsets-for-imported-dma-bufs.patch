@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Mon, 9 Nov 2026 20:06:24 +0530
+Subject: [TEMP] drm/xe: don't allocate fake mmap offsets for imported dma-bufs
+
+ttm_bo_init_reserved() allocates a fake mmap offset (drm_vma_offset
+node) for ttm_bo_type_sg BOs, even though xe rejects CPU faults on
+imported dma-bufs. Since the offset space is limited to 1 TiB per
+device on 64-bit, heavy P2P dma-buf importing on multi-GPU systems can
+exhaust it and cause imports to fail with -ENOSPC.
+
+Remove the vma_node once an imported BO is created and reject BOs
+without one in xe_gem_mmap_offset_ioctl().
+
+Fixes: dd08ebf6c352 ("drm/xe: Introduce a new DRM driver for Intel GPUs")
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/patch/767375/?series=178045&rev=1)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_bo.c      | 6 ++++++
+ drivers/gpu/drm/xe/xe_dma_buf.c | 9 +++++++++
+ 2 files changed, 15 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
+index 42a6aa1a2e4a..0181f73ef66d 100644
+--- a/drivers/gpu/drm/xe/xe_bo.c
++++ b/drivers/gpu/drm/xe/xe_bo.c
+@@ -3851,6 +3851,12 @@ int xe_gem_mmap_offset_ioctl(struct drm_device *dev, void *data,
+ 	if (XE_IOCTL_DBG(xe, !gem_obj))
+ 		return -ENOENT;
+ 
++	/* Imported dma-bufs have no mmap offset since CPU access is rejected. */
++	if (XE_IOCTL_DBG(xe, !drm_vma_node_size(&gem_obj->vma_node))) {
++		xe_bo_put(gem_to_xe_bo(gem_obj));
++		return -EINVAL;
++	}
++
+ 	/* The mmap offset was set up at BO allocation time. */
+ 	args->offset = drm_vma_node_offset_addr(&gem_obj->vma_node);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_dma_buf.c b/drivers/gpu/drm/xe/xe_dma_buf.c
+index 5bf13dc4b61d..17a8663a68de 100644
+--- a/drivers/gpu/drm/xe/xe_dma_buf.c
++++ b/drivers/gpu/drm/xe/xe_dma_buf.c
+@@ -12,6 +12,7 @@
+ 
+ #include <drm/drm_device.h>
+ #include <drm/drm_prime.h>
++#include <drm/drm_vma_manager.h>
+ #include <drm/ttm/ttm_tt.h>
+ 
+ #include "tests/xe_test.h"
+@@ -353,6 +354,14 @@ xe_dma_buf_create_obj(struct drm_device *dev, struct dma_buf *dma_buf)
+ 	}
+ 	drm_gem_object_put(dummy_obj);
+ 
++	/*
++	 * CPU faults on imported BOs are rejected, so there is no point in
++	 * consuming fake mmap offset space for them.
++	 */
++	if (!ret)
++		drm_vma_offset_remove(bo->ttm.bdev->vma_manager,
++				      &bo->ttm.base.vma_node);
++
+ 	return ret ? ERR_PTR(ret) : &bo->ttm.base;
+ }
+ 

@@ -753,6 +753,26 @@ void ttm_bo_move_sync_cleanup(struct ttm_buffer_object *bo,
 EXPORT_SYMBOL(ttm_bo_move_sync_cleanup);
 
 /**
+ * ttm_bo_move_null_drop_tt - assign memory without moving data, dropping the TT
+ * @bo: The buffer object.
+ * @new_mem: The memory to be assigned.
+ *
+ * Like ttm_bo_move_null(), but if the memory manager of @new_mem doesn't use
+ * a struct ttm_tt, also destroy @bo's ttm_tt, mimicking what
+ * ttm_bo_move_accel_cleanup() does. The caller must hold the bo's
+ * reservation, and the ttm_tt must not hold data that needs to be preserved.
+ */
+void ttm_bo_move_null_drop_tt(struct ttm_buffer_object *bo,
+			      struct ttm_resource *new_mem)
+{
+	if (!ttm_manager_type(bo->bdev, new_mem->mem_type)->use_tt)
+		ttm_bo_tt_destroy(bo);
+
+	ttm_bo_move_null(bo, new_mem);
+}
+EXPORT_SYMBOL(ttm_bo_move_null_drop_tt);
+
+/**
  * ttm_bo_pipeline_gutting - purge the contents of a bo
  * @bo: The buffer object
  *

@@ -39,6 +39,10 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.1.4.73_260728.53` | | | |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/767377/?series=178045&rev=1>) | &#91;TEMP&#93; drm/ttm, drm/xe: Drop the ttm_tt on null moves to VRAM |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/767376/?series=178045&rev=1>) | &#91;TEMP&#93; drm/xe: Exclude imported dma-buf BOs from the TT budget |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/767375/?series=178045&rev=1>) | &#91;TEMP&#93; drm/xe: don't allocate fake mmap offsets for imported dma-bufs |
 | `xebr_v7.1.4.72_260728.53` | | | |
 | | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/patch/763783/?series=174252&rev=2>) | &#91;TEMP&#93; drm/xe: Hold a device reference across deferred VM destruction |
 | | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/patch/763784/?series=174252&rev=2>) | &#91;TEMP&#93;: drm/xe: Disable scheduling early on FD close to avoid CAT error cascade |

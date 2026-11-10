@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Queue testing
         run: |
-          curl -X POST ${{ secrets.SERVER_URL }} \
+          curl --fail -X POST ${{ secrets.SERVER_URL }} \
             --user "${{ secrets.USER }}:${{ secrets.TOKEN }}" \
             --data-urlencode "TARGET_COMMIT=${{ github.event.pull_request.head.sha }}" \
             --data-urlencode "PR_NUMBER=${{ github.event.pull_request.number }}" \

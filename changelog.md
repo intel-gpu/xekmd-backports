@@ -39,6 +39,10 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.1.4.74_260728.53` | | | |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/757598/?series=175385&rev=1>) | Revert &#91;TEMP&#93;: platform/x86/intel/pmt: Fix NULL dereference when reading crashlog data |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/762356/?series=176683&rev=1>) | Revert &#91;TEMP&#93;: platform/x86/intel/pmt: Notify userspace when crashlogs complete |
+| | linux-next | [`3678e39c6`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3678e39c6aaeb9aa380c7357b24f7d55955543f8>) | Revert platform/x86/intel/vsec: Fix inverted walk_header() test in get_features() |
 | `xebr_v7.1.4.73_260728.53` | | | |
 | | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/767377/?series=178045&rev=1>) | &#91;TEMP&#93; drm/ttm, drm/xe: Drop the ttm_tt on null moves to VRAM |
 | | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/767376/?series=178045&rev=1>) | &#91;TEMP&#93; drm/xe: Exclude imported dma-buf BOs from the TT budget |

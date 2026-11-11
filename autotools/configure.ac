@@ -9,7 +9,7 @@ AC_SUBST([DOLLAR_SIGN],[$])
 AC_CONFIG_AUX_DIR([src])
 AC_CONFIG_HEADERS([src/backport-include/backport/backport_auto.h])
 
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([foreign])
 
 AC_PROG_CC
 

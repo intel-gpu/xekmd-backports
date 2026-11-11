@@ -929,7 +929,6 @@ def process(kerneldir, copy_list_file, git_revision=None,
         'Makefile.am',
         'Makefile',
         'NEWS',
-        'README.md',
         'debian/',
         'compile.sh',
     ]]
@@ -960,6 +959,7 @@ def process(kerneldir, copy_list_file, git_revision=None,
     
     copy_files(os.path.join(source_dir, 'backport'), backport_files, bpid.target_dir)
     copy_files(source_dir, [('README', 'README')], bpid.target_dir)
+    copy_files(source_dir, [('README', 'README')], bpid.project_dir)
 
     git_debug_init(args)
 

@@ -7,7 +7,8 @@ AC_DEFUN([AC_MIGRATE_VMA_SELECT_COMPOUND_NOT_PRESENT], [
                 AC_KERNEL_TRY_COMPILE([
                         #include <linux/migrate.h>
                 ],[
-                        int test = MIGRATE_VMA_SELECT_COMPOUND;
+                        (void)(MIGRATE_VMA_SELECT_COMPOUND);
+                        (void)(MIGRATE_PFN_COMPOUND);
                 ],[
                 ],[
                         AC_DEFINE(BPM_MIGRATE_VMA_SELECT_COMPOUND_NOT_PRESENT, 1,

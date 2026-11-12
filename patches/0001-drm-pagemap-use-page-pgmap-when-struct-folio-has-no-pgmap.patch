@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Thu, 5 Nov 2026 12:00:00 +0530
+Subject: drm/pagemap: use page->pgmap when struct folio has no pgmap
+
+On kernels without page_pgmap(), struct folio does not carry a direct
+pgmap pointer. When folios are split, preserve pgmap by copying from
+the head page field.
+
+This keeps folio split metadata propagation correct on backported-THP
+bases where folio_split exists but folio->pgmap does not.
+
+Reference:
+	82ba975e4c43
+	mm: allow compound zone device pages
+
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+---
+ drivers/gpu/drm/drm_pagemap.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/drm_pagemap.c b/drivers/gpu/drm/drm_pagemap.c
+index 5b362f2..2ce35d1 100644
+--- a/drivers/gpu/drm/drm_pagemap.c
++++ b/drivers/gpu/drm/drm_pagemap.c
+@@ -1302,7 +1302,15 @@ static void drm_pagemap_folio_split(struct folio *orig_folio, struct folio *new_
+ 	if (!new_folio)
+ 		return;
+ 
++#ifdef BPM_PAGE_PGMAP_NOT_PRESENT
++	/*
++	 * struct folio has no pgmap on kernels without page_pgmap();
++	 * use the head page's.
++	 */
++	new_folio->page.pgmap = orig_folio->page.pgmap;
++#else
+ 	new_folio->pgmap = orig_folio->pgmap;
++#endif
+ 	zdd = folio_zone_device_data(orig_folio);
+ 	folio_set_zone_device_data(new_folio, drm_pagemap_zdd_get(zdd));
+ }
+--
+2.43.0

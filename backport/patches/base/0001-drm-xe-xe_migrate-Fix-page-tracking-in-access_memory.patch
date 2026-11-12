@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Christoph Manszewski <christoph.manszewski@intel.com>
+Date: Wed, 14 Oct 2026 16:27:03 +0200
+Subject: drm/xe/xe_migrate: Fix page tracking in access_memory
+
+xe_migrate_access_memory() advances the pagemap cursor based on the
+current page in the CPU buffer.
+
+Include the initial page offset when recalculating current_page so
+subsequent iterations continue to index the mapped pages correctly.
+
+Signed-off-by: Christoph Manszewski <christoph.manszewski@intel.com>
+Signed-off-by: Jan Maslak <jan.maslak@intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Link: https://patch.msgid.link/20261014142706.598490-2-jan.maslak@intel.com
+(cherry-picked from commit f5b5384f4108e18746c9ae75583bf56c0452ca5f drm-xe-next)
+---
+ drivers/gpu/drm/xe/xe_migrate.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index fffb3eb6c76e..3711d4542ad3 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -2563,7 +2563,7 @@ int xe_migrate_access_memory(struct xe_migrate *m, struct xe_bo *bo,
+ 
+ 		buf += current_bytes;
+ 		offset += current_bytes;
+-		current_page = (int)(buf - orig_buf) / PAGE_SIZE;
++		current_page = (int)(buf - orig_buf + page_offset) / PAGE_SIZE;
+ 		bytes_left -= current_bytes;
+ 		if (bytes_left)
+ 			xe_res_next(&cursor, current_bytes);

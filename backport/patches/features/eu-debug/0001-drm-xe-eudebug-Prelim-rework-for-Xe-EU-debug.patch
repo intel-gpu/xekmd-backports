@@ -12,47 +12,47 @@ Signed-off-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 (backported from commit db21511dc05e90b6ecafa2ab21cc9f37a0731c65 eudebug-v3-xe3p-prelim)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
- drivers/gpu/drm/xe/Kconfig                         |   2 +-
- drivers/gpu/drm/xe/Makefile                        |   8 +-
- .../gpu/drm/xe/{ => prelim}/xe_debug_metadata.c    |  58 +--
- drivers/gpu/drm/xe/prelim/xe_debug_metadata.h      | 108 +++++
- .../drm/xe/{ => prelim}/xe_debug_metadata_types.h  |   2 +-
- drivers/gpu/drm/xe/{ => prelim}/xe_eudebug.c       | 490 ++++++++++-----------
- drivers/gpu/drm/xe/prelim/xe_eudebug.h             | 149 +++++++
- .../gpu/drm/xe/{ => prelim}/xe_eudebug_pagefault.c | 134 +++---
- drivers/gpu/drm/xe/prelim/xe_eudebug_pagefault.h   | 108 +++++
- drivers/gpu/drm/xe/{ => prelim}/xe_eudebug_types.h |  14 +-
- drivers/gpu/drm/xe/{ => prelim}/xe_gt_debug.c      |  50 +--
- drivers/gpu/drm/xe/prelim/xe_gt_debug.h            |  45 ++
- drivers/gpu/drm/xe/tests/{ => prelim}/xe_eudebug.c |   4 +-
- drivers/gpu/drm/xe/tests/xe_live_test_mod.c        |   2 +-
- drivers/gpu/drm/xe/xe_debug_metadata.h             | 106 -----
- drivers/gpu/drm/xe/xe_device.c                     |  16 +-
- drivers/gpu/drm/xe/xe_device.h                     |  10 +-
- drivers/gpu/drm/xe/xe_device_types.h               |   8 +-
- drivers/gpu/drm/xe/xe_eudebug.h                    | 151 -------
- drivers/gpu/drm/xe/xe_eudebug_pagefault.h          | 108 -----
- drivers/gpu/drm/xe/xe_exec_queue.c                 |  22 +-
- drivers/gpu/drm/xe/xe_exec_queue_types.h           |   2 +-
- drivers/gpu/drm/xe/xe_gt.c                         |  14 +-
- drivers/gpu/drm/xe/xe_gt_debug.h                   |  45 --
- drivers/gpu/drm/xe/xe_gt_debug_types.h             |   2 +-
- drivers/gpu/drm/xe/xe_guc_ads.c                    |   2 +-
- drivers/gpu/drm/xe/xe_guc_ct.c                     |   4 +-
- drivers/gpu/drm/xe/xe_guc_pagefault.c              |  10 +-
- drivers/gpu/drm/xe/xe_guc_submit.c                 |   2 +-
- drivers/gpu/drm/xe/xe_pagefault.c                  |  20 +-
- drivers/gpu/drm/xe/xe_sync.c                       |   4 +-
- drivers/gpu/drm/xe/xe_sync_types.h                 |   2 +-
- drivers/gpu/drm/xe/xe_vm.c                         |  42 +-
- drivers/gpu/drm/xe/xe_vm_types.h                   |   4 +-
- include/uapi/drm/xe_drm.h                          |  93 ----
- include/uapi/drm/xe_drm_eudebug.h                  | 306 -------------
- include/uapi/drm/xe_drm_prelim.h                   | 346 +++++++++++++++
+ drivers/gpu/drm/xe/Kconfig                    |   2 +-
+ drivers/gpu/drm/xe/Makefile                   |   8 +-
+ .../drm/xe/{ => prelim}/xe_debug_metadata.c   |  58 +--
+ drivers/gpu/drm/xe/prelim/xe_debug_metadata.h | 108 ++++
+ .../xe/{ => prelim}/xe_debug_metadata_types.h |   2 +-
+ drivers/gpu/drm/xe/{ => prelim}/xe_eudebug.c  | 490 +++++++++---------
+ drivers/gpu/drm/xe/prelim/xe_eudebug.h        | 149 ++++++
+ .../xe/{ => prelim}/xe_eudebug_pagefault.c    | 134 ++---
+ .../gpu/drm/xe/prelim/xe_eudebug_pagefault.h  | 108 ++++
+ .../drm/xe/{ => prelim}/xe_eudebug_types.h    |  14 +-
+ drivers/gpu/drm/xe/{ => prelim}/xe_gt_debug.c |  50 +-
+ drivers/gpu/drm/xe/prelim/xe_gt_debug.h       |  45 ++
+ .../drm/xe/tests/{ => prelim}/xe_eudebug.c    |   4 +-
+ drivers/gpu/drm/xe/tests/xe_live_test_mod.c   |   2 +-
+ drivers/gpu/drm/xe/xe_debug_metadata.h        | 106 ----
+ drivers/gpu/drm/xe/xe_device.c                |  16 +-
+ drivers/gpu/drm/xe/xe_device.h                |  10 +-
+ drivers/gpu/drm/xe/xe_device_types.h          |   8 +-
+ drivers/gpu/drm/xe/xe_eudebug.h               | 151 ------
+ drivers/gpu/drm/xe/xe_eudebug_pagefault.h     | 108 ----
+ drivers/gpu/drm/xe/xe_exec_queue.c            |  22 +-
+ drivers/gpu/drm/xe/xe_exec_queue_types.h      |   2 +-
+ drivers/gpu/drm/xe/xe_gt.c                    |  14 +-
+ drivers/gpu/drm/xe/xe_gt_debug.h              |  45 --
+ drivers/gpu/drm/xe/xe_gt_debug_types.h        |   2 +-
+ drivers/gpu/drm/xe/xe_guc_ads.c               |   2 +-
+ drivers/gpu/drm/xe/xe_guc_ct.c                |   4 +-
+ drivers/gpu/drm/xe/xe_guc_pagefault.c         |  10 +-
+ drivers/gpu/drm/xe/xe_guc_submit.c            |   2 +-
+ drivers/gpu/drm/xe/xe_pagefault.c             |  20 +-
+ drivers/gpu/drm/xe/xe_sync.c                  |   4 +-
+ drivers/gpu/drm/xe/xe_sync_types.h            |   2 +-
+ drivers/gpu/drm/xe/xe_vm.c                    |  42 +-
+ drivers/gpu/drm/xe/xe_vm_types.h              |   4 +-
+ include/uapi/drm/xe_drm.h                     |  93 ----
+ include/uapi/drm/xe_drm_eudebug.h             | 306 -----------
+ include/uapi/drm/xe_drm_prelim.h              | 346 +++++++++++++
  37 files changed, 1220 insertions(+), 1273 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/Kconfig b/drivers/gpu/drm/xe/Kconfig
-index 78d467366..714ff3cad 100644
+index 78d4673665b4..714ff3cad6fa 100644
 --- a/drivers/gpu/drm/xe/Kconfig
 +++ b/drivers/gpu/drm/xe/Kconfig
 @@ -129,7 +129,7 @@ config DRM_XE_FORCE_PROBE
@@ -65,7 +65,7 @@ index 78d467366..714ff3cad 100644
  	depends on DRM_XE
  	default y
 diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
-index b313f0bed..acbb65cc8 100644
+index 057fd9b1ce90..554c32371381 100644
 --- a/drivers/gpu/drm/xe/Makefile
 +++ b/drivers/gpu/drm/xe/Makefile
 @@ -58,7 +58,7 @@ xe-y += xe_bb.o \
@@ -77,7 +77,7 @@ index b313f0bed..acbb65cc8 100644
  	xe_gt_mcr.o \
  	xe_gt_sysfs.o \
  	xe_gt_throttle.o \
-@@ -159,9 +159,9 @@ xe-y += xe_bb.o \
+@@ -158,9 +158,9 @@ xe-y += xe_bb.o \
  xe-$(CONFIG_I2C)	+= xe_i2c.o \
  			   xe_amc.o
  
@@ -94,7 +94,7 @@ diff --git a/drivers/gpu/drm/xe/xe_debug_metadata.c b/drivers/gpu/drm/xe/prelim/
 similarity index 74%
 rename from drivers/gpu/drm/xe/xe_debug_metadata.c
 rename to drivers/gpu/drm/xe/prelim/xe_debug_metadata.c
-index 23419e24a..3b7e1f859 100644
+index 23419e24ae04..3b7e1f85900c 100644
 --- a/drivers/gpu/drm/xe/xe_debug_metadata.c
 +++ b/drivers/gpu/drm/xe/prelim/xe_debug_metadata.c
 @@ -2,14 +2,14 @@
@@ -296,7 +296,7 @@ index 23419e24a..3b7e1f859 100644
  }
 diff --git a/drivers/gpu/drm/xe/prelim/xe_debug_metadata.h b/drivers/gpu/drm/xe/prelim/xe_debug_metadata.h
 new file mode 100644
-index 000000000..56e8d36a4
+index 000000000000..56e8d36a4163
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/prelim/xe_debug_metadata.h
 @@ -0,0 +1,108 @@
@@ -412,7 +412,7 @@ diff --git a/drivers/gpu/drm/xe/xe_debug_metadata_types.h b/drivers/gpu/drm/xe/p
 similarity index 92%
 rename from drivers/gpu/drm/xe/xe_debug_metadata_types.h
 rename to drivers/gpu/drm/xe/prelim/xe_debug_metadata_types.h
-index 624852920..7d3db6a00 100644
+index 624852920f58..7d3db6a004ff 100644
 --- a/drivers/gpu/drm/xe/xe_debug_metadata_types.h
 +++ b/drivers/gpu/drm/xe/prelim/xe_debug_metadata_types.h
 @@ -8,7 +8,7 @@
@@ -428,7 +428,7 @@ diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/prelim/xe_eude
 similarity index 86%
 rename from drivers/gpu/drm/xe/xe_eudebug.c
 rename to drivers/gpu/drm/xe/prelim/xe_eudebug.c
-index 0dc013185..dd1207ca7 100644
+index 0dc013185847..dd1207ca7772 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.c
 @@ -22,16 +22,16 @@
@@ -2069,7 +2069,7 @@ index 0dc013185..dd1207ca7 100644
  #endif
 diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug.h b/drivers/gpu/drm/xe/prelim/xe_eudebug.h
 new file mode 100644
-index 000000000..b1baadb9a
+index 000000000000..b1baadb9a802
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/prelim/xe_eudebug.h
 @@ -0,0 +1,149 @@
@@ -2226,7 +2226,7 @@ diff --git a/drivers/gpu/drm/xe/xe_eudebug_pagefault.c b/drivers/gpu/drm/xe/prel
 similarity index 85%
 rename from drivers/gpu/drm/xe/xe_eudebug_pagefault.c
 rename to drivers/gpu/drm/xe/prelim/xe_eudebug_pagefault.c
-index 06bfa2dd2..3f3e4bc1f 100644
+index 06bfa2dd20ef..3f3e4bc1f134 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_pagefault.c
 +++ b/drivers/gpu/drm/xe/prelim/xe_eudebug_pagefault.c
 @@ -3,17 +3,17 @@
@@ -2704,7 +2704,7 @@ index 06bfa2dd2..3f3e4bc1f 100644
  	return ret;
 diff --git a/drivers/gpu/drm/xe/prelim/xe_eudebug_pagefault.h b/drivers/gpu/drm/xe/prelim/xe_eudebug_pagefault.h
 new file mode 100644
-index 000000000..368e2abc7
+index 000000000000..368e2abc7f0f
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/prelim/xe_eudebug_pagefault.h
 @@ -0,0 +1,108 @@
@@ -2820,7 +2820,7 @@ diff --git a/drivers/gpu/drm/xe/xe_eudebug_types.h b/drivers/gpu/drm/xe/prelim/x
 similarity index 97%
 rename from drivers/gpu/drm/xe/xe_eudebug_types.h
 rename to drivers/gpu/drm/xe/prelim/xe_eudebug_types.h
-index 5b01da92b..aca420b46 100644
+index 5b01da92b12c..aca420b46036 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug_types.h
 +++ b/drivers/gpu/drm/xe/prelim/xe_eudebug_types.h
 @@ -17,7 +17,7 @@
@@ -2878,7 +2878,7 @@ diff --git a/drivers/gpu/drm/xe/xe_gt_debug.c b/drivers/gpu/drm/xe/prelim/xe_gt_
 similarity index 86%
 rename from drivers/gpu/drm/xe/xe_gt_debug.c
 rename to drivers/gpu/drm/xe/prelim/xe_gt_debug.c
-index aaac87da4..4a9054289 100644
+index aaac87da4f48..4a9054289077 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug.c
 +++ b/drivers/gpu/drm/xe/prelim/xe_gt_debug.c
 @@ -9,11 +9,11 @@
@@ -3076,7 +3076,7 @@ index aaac87da4..4a9054289 100644
  
 diff --git a/drivers/gpu/drm/xe/prelim/xe_gt_debug.h b/drivers/gpu/drm/xe/prelim/xe_gt_debug.h
 new file mode 100644
-index 000000000..745ef8506
+index 000000000000..745ef85066b0
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/prelim/xe_gt_debug.h
 @@ -0,0 +1,45 @@
@@ -3129,7 +3129,7 @@ diff --git a/drivers/gpu/drm/xe/tests/xe_eudebug.c b/drivers/gpu/drm/xe/tests/pr
 similarity index 98%
 rename from drivers/gpu/drm/xe/tests/xe_eudebug.c
 rename to drivers/gpu/drm/xe/tests/prelim/xe_eudebug.c
-index 2b39f72d7..37450e4b6 100644
+index 2b39f72d745d..37450e4b6b3b 100644
 --- a/drivers/gpu/drm/xe/tests/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/tests/prelim/xe_eudebug.c
 @@ -155,10 +155,10 @@ static int toggle_reg_value(struct xe_device *xe)
@@ -3146,7 +3146,7 @@ index 2b39f72d7..37450e4b6 100644
  
  	return 0;
 diff --git a/drivers/gpu/drm/xe/tests/xe_live_test_mod.c b/drivers/gpu/drm/xe/tests/xe_live_test_mod.c
-index 6d92aee38..fd6e31a62 100644
+index 6d92aee38509..fd6e31a627b5 100644
 --- a/drivers/gpu/drm/xe/tests/xe_live_test_mod.c
 +++ b/drivers/gpu/drm/xe/tests/xe_live_test_mod.c
 @@ -25,7 +25,7 @@ kunit_test_suite(xe_guc_g2g_test_suite);
@@ -3160,7 +3160,7 @@ index 6d92aee38..fd6e31a62 100644
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_debug_metadata.h b/drivers/gpu/drm/xe/xe_debug_metadata.h
 deleted file mode 100644
-index 65d66153a..000000000
+index 65d66153a0b2..000000000000
 --- a/drivers/gpu/drm/xe/xe_debug_metadata.h
 +++ /dev/null
 @@ -1,106 +0,0 @@
@@ -3271,7 +3271,7 @@ index 65d66153a..000000000
 -
 -#endif
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 36cc5cbb4..aebd3bc87 100644
+index e6a77a8fa479..6051d762a225 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -30,11 +30,11 @@
@@ -3306,7 +3306,7 @@ index 36cc5cbb4..aebd3bc87 100644
  
  	/*
  	 * No need for exec_queue.lock here as there is no contention for it
-@@ -237,10 +237,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
+@@ -232,10 +232,10 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
  			  DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_VM_GET_PROPERTY, xe_vm_get_property_ioctl,
  			  DRM_RENDER_ALLOW),
@@ -3320,7 +3320,7 @@ index 36cc5cbb4..aebd3bc87 100644
  			  DRM_RENDER_ALLOW),
  };
  
-@@ -831,7 +831,7 @@ int xe_device_probe_early(struct xe_device *xe)
+@@ -837,7 +837,7 @@ int xe_device_probe_early(struct xe_device *xe)
  	if (IS_SRIOV_VF(xe))
  		vf_update_device_info(xe);
  
@@ -3330,10 +3330,10 @@ index 36cc5cbb4..aebd3bc87 100644
  	/*
  	 * Check for pcode uncore_init status to confirm if the SoC
 diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
-index 9a9f698c8..0ef1cf3e0 100644
+index 3d5b88328e24..6717841c4887 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
-@@ -298,7 +298,7 @@ static inline bool xe_device_is_admin_only(const struct xe_device *xe)
+@@ -301,7 +301,7 @@ static inline bool xe_device_is_admin_only(const struct xe_device *xe)
  #define LNL_FLUSH_WORK(wrk__) \
  	flush_work(wrk__)
  
@@ -3342,7 +3342,7 @@ index 9a9f698c8..0ef1cf3e0 100644
  static inline int xe_eudebug_needs_lock(const unsigned int cmd)
  {
  	const unsigned int xe_cmd = DRM_IOCTL_NR(cmd) - DRM_COMMAND_BASE;
-@@ -309,9 +309,9 @@ static inline int xe_eudebug_needs_lock(const unsigned int cmd)
+@@ -312,9 +312,9 @@ static inline int xe_eudebug_needs_lock(const unsigned int cmd)
  	case DRM_XE_VM_BIND:
  	case DRM_XE_EXEC_QUEUE_CREATE:
  	case DRM_XE_EXEC_QUEUE_DESTROY:
@@ -3355,7 +3355,7 @@ index 9a9f698c8..0ef1cf3e0 100644
  		return 1;
  	}
  
-@@ -331,6 +331,6 @@ static inline void xe_eudebug_discovery_unlock(struct xe_device *xe, unsigned in
+@@ -334,6 +334,6 @@ static inline void xe_eudebug_discovery_unlock(struct xe_device *xe, unsigned in
  #else
  static inline void xe_eudebug_discovery_lock(struct xe_device *xe, unsigned int cmd) { }
  static inline void xe_eudebug_discovery_unlock(struct xe_device *xe, unsigned int cmd) { }
@@ -3364,10 +3364,10 @@ index 9a9f698c8..0ef1cf3e0 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 583de073d..8e7d8a859 100644
+index 4a9fb0920ef0..5afdbea6780b 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -15,7 +15,7 @@
+@@ -14,7 +14,7 @@
  
  #include "xe_devcoredump_types.h"
  #include "xe_drm_ras_types.h"
@@ -3376,7 +3376,7 @@ index 583de073d..8e7d8a859 100644
  #include "xe_heci_gsc.h"
  #include "xe_late_bind_fw_types.h"
  #include "xe_oa_types.h"
-@@ -328,7 +328,7 @@ struct xe_device {
+@@ -317,7 +317,7 @@ struct xe_device {
  		struct workqueue_struct *wq;
  	} sriov;
  
@@ -3385,7 +3385,7 @@ index 583de073d..8e7d8a859 100644
  	/** @clients: eudebug clients info */
  	struct {
  		/** @clients.lock: Protects client list */
-@@ -638,7 +638,7 @@ struct xe_device {
+@@ -615,7 +615,7 @@ struct xe_device {
  	atomic_t g2g_test_count;
  #endif
  
@@ -3394,7 +3394,7 @@ index 583de073d..8e7d8a859 100644
  	/** @eudebug: connection list and globals for device */
  	struct {
  		/** @eudebug.lock: protects the list of connections */
-@@ -743,7 +743,7 @@ struct xe_file {
+@@ -720,7 +720,7 @@ struct xe_file {
  	/** @refcount: ref count of this xe file */
  	struct kref refcount;
  
@@ -3405,7 +3405,7 @@ index 583de073d..8e7d8a859 100644
  		/**
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.h b/drivers/gpu/drm/xe/xe_eudebug.h
 deleted file mode 100644
-index 8c4322687..000000000
+index 8c43226873f9..000000000000
 --- a/drivers/gpu/drm/xe/xe_eudebug.h
 +++ /dev/null
 @@ -1,151 +0,0 @@
@@ -3562,7 +3562,7 @@ index 8c4322687..000000000
 -#endif /* _XE_EUDEBUG_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_pagefault.h b/drivers/gpu/drm/xe/xe_eudebug_pagefault.h
 deleted file mode 100644
-index ce7eca30d..000000000
+index ce7eca30d7a8..000000000000
 --- a/drivers/gpu/drm/xe/xe_eudebug_pagefault.h
 +++ /dev/null
 @@ -1,108 +0,0 @@
@@ -3675,7 +3675,7 @@ index ce7eca30d..000000000
 -
 -#endif /* _XE_EUDEBUG_PAGEFAULT_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index c3ab112da..5aed3cfc1 100644
+index b8705369a06c..229ba35451f7 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -30,7 +30,7 @@
@@ -3754,7 +3754,7 @@ index c3ab112da..5aed3cfc1 100644
  
  	return 0;
  
-@@ -1769,7 +1769,7 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
+@@ -1756,7 +1756,7 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
  		xe_hw_engine_group_del_exec_queue(q->hwe->hw_engine_group, q);
  
  	xe_exec_queue_kill(q);
@@ -3764,7 +3764,7 @@ index c3ab112da..5aed3cfc1 100644
  	trace_xe_exec_queue_close(q);
  	xe_exec_queue_put(q);
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index 1a815b050..94d9eced0 100644
+index 374de67aee3f..e998a6e6d7a1 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
 @@ -152,7 +152,7 @@ struct xe_exec_queue {
@@ -3777,7 +3777,7 @@ index 1a815b050..94d9eced0 100644
  #define EXEC_QUEUE_EUDEBUG_FLAG_ENABLE			BIT(0)
  #define EXEC_QUEUE_EUDEBUG_FLAG_PAGEFAULT_ENABLE	BIT(1)
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index ded61f09f..118772f79 100644
+index a75443ac2e1a..4b1b5d1e38a9 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -24,9 +24,9 @@
@@ -3801,16 +3801,23 @@ index ded61f09f..118772f79 100644
  #include "xe_guc_exec_queue_types.h"
  #include "xe_guc_pc.h"
  #include "xe_guc_rc.h"
-@@ -727,7 +727,7 @@ int xe_gt_init(struct xe_gt *gt)
- 	int i;
+@@ -550,7 +550,6 @@ int xe_gt_init_early(struct xe_gt *gt)
+ 	xe_pat_init(gt);
  
  	INIT_WORK(&gt->reset.worker, gt_reset_worker);
 -	xe_eudebug_pagefault_gt_init(gt);
+ 	INIT_WORK(&gt->wedge.worker, gt_wedge_worker);
+ 	return 0;
+ }
+@@ -748,6 +747,7 @@ int xe_gt_init(struct xe_gt *gt)
+ 	int err;
+ 	int i;
+ 
 +	prelim_xe_eudebug_pagefault_gt_init(gt);
  
  	for (i = 0; i < XE_ENGINE_CLASS_MAX; ++i) {
  		gt->ring_ops[i] = xe_ring_ops_get(gt, i);
-@@ -742,7 +742,7 @@ int xe_gt_init(struct xe_gt *gt)
+@@ -762,7 +762,7 @@ int xe_gt_init(struct xe_gt *gt)
  	if (err)
  		return err;
  
@@ -3819,7 +3826,7 @@ index ded61f09f..118772f79 100644
  	if (err)
  		return err;
  
-@@ -870,7 +870,7 @@ static int do_gt_reset(struct xe_gt *gt)
+@@ -894,7 +894,7 @@ static int do_gt_reset(struct xe_gt *gt)
  
  	xe_gsc_wa_14015076503(gt, true);
  
@@ -3828,7 +3835,7 @@ index ded61f09f..118772f79 100644
  		do_render_reset(gt);
  
  	xe_mmio_write32(&gt->mmio, GDRST, GRDOM_FULL);
-@@ -999,7 +999,7 @@ static void gt_reset_worker(struct work_struct *w)
+@@ -1023,7 +1023,7 @@ static void gt_reset_worker(struct work_struct *w)
  	xe_guc_rc_disable(&gt->uc.guc);
  	xe_uc_stop_prepare(&gt->uc);
  	xe_pagefault_reset(gt_to_xe(gt), gt);
@@ -3839,7 +3846,7 @@ index ded61f09f..118772f79 100644
  
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug.h b/drivers/gpu/drm/xe/xe_gt_debug.h
 deleted file mode 100644
-index aa57fcbc3..000000000
+index aa57fcbc3932..000000000000
 --- a/drivers/gpu/drm/xe/xe_gt_debug.h
 +++ /dev/null
 @@ -1,45 +0,0 @@
@@ -3889,7 +3896,7 @@ index aa57fcbc3..000000000
 -
 -#endif
 diff --git a/drivers/gpu/drm/xe/xe_gt_debug_types.h b/drivers/gpu/drm/xe/xe_gt_debug_types.h
-index f24eed15c..3c8656b3b 100644
+index f24eed15cf7c..3c8656b3be53 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debug_types.h
 +++ b/drivers/gpu/drm/xe/xe_gt_debug_types.h
 @@ -12,7 +12,7 @@
@@ -3902,7 +3909,7 @@ index f24eed15c..3c8656b3b 100644
  	       XE_GT_EU_ATT_ROWS *
  	       XE_GT_EU_ATT_MAX_THREADS/8];
 diff --git a/drivers/gpu/drm/xe/xe_guc_ads.c b/drivers/gpu/drm/xe/xe_guc_ads.c
-index 652ea0c3c..f275e484c 100644
+index 652ea0c3c475..f275e484c2e2 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ads.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ads.c
 @@ -402,7 +402,7 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
@@ -3915,7 +3922,7 @@ index 652ea0c3c..f275e484c 100644
  		if (xe_guc_has_debug_contexts(&gt->uc.guc)) {
  			guc_waklv_enable(ads, NULL, 0, &offset, &remain,
 diff --git a/drivers/gpu/drm/xe/xe_guc_ct.c b/drivers/gpu/drm/xe/xe_guc_ct.c
-index 40083d260..4d7c772aa 100644
+index 40083d2608eb..4d7c772aa204 100644
 --- a/drivers/gpu/drm/xe/xe_guc_ct.c
 +++ b/drivers/gpu/drm/xe/xe_guc_ct.c
 @@ -21,7 +21,7 @@
@@ -3937,7 +3944,7 @@ index 40083d260..4d7c772aa 100644
  	case XE_GUC_ACTION_GUC2PF_RELAY_FROM_VF:
  		ret = xe_guc_relay_process_guc2pf(&guc->relay, hxg, hxg_len);
 diff --git a/drivers/gpu/drm/xe/xe_guc_pagefault.c b/drivers/gpu/drm/xe/xe_guc_pagefault.c
-index c4d75c489..b86619025 100644
+index c4d75c489a02..b86619025923 100644
 --- a/drivers/gpu/drm/xe/xe_guc_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_guc_pagefault.c
 @@ -11,13 +11,13 @@
@@ -3981,7 +3988,7 @@ index c4d75c489..b86619025 100644
  
  static void xe_guc_pagefault_print(struct xe_pagefault *pf,
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 04c8863ab..ec6b1e6a4 100644
+index b969a26803a8..d5cdf4189395 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
 @@ -21,7 +21,7 @@
@@ -3994,7 +4001,7 @@ index 04c8863ab..ec6b1e6a4 100644
  #include "xe_force_wake.h"
  #include "xe_gpu_scheduler.h"
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index b0b6aa58e..6e19407e0 100644
+index b0b6aa58e0d7..6e19407e0208 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
 @@ -10,7 +10,7 @@
@@ -4084,7 +4091,7 @@ index b0b6aa58e..6e19407e0 100644
  
  /*
 diff --git a/drivers/gpu/drm/xe/xe_sync.c b/drivers/gpu/drm/xe/xe_sync.c
-index 8709467dc..e20205d69 100644
+index 8709467dc480..e20205d6967e 100644
 --- a/drivers/gpu/drm/xe/xe_sync.c
 +++ b/drivers/gpu/drm/xe/xe_sync.c
 @@ -15,7 +15,7 @@
@@ -4106,7 +4113,7 @@ index 8709467dc..e20205d69 100644
  		xe_sync_ufence_signal(ufence);
  
 diff --git a/drivers/gpu/drm/xe/xe_sync_types.h b/drivers/gpu/drm/xe/xe_sync_types.h
-index 33a93a0fa..be9fc77ad 100644
+index 33a93a0faa72..be9fc77add85 100644
 --- a/drivers/gpu/drm/xe/xe_sync_types.h
 +++ b/drivers/gpu/drm/xe/xe_sync_types.h
 @@ -21,7 +21,7 @@ struct xe_user_fence {
@@ -4119,7 +4126,7 @@ index 33a93a0fa..be9fc77ad 100644
  		spinlock_t lock;
  		struct xe_eudebug *debugger;
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 494df9eee..c0e5a16bc 100644
+index a25e6f49b349..f1a912ada7c2 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -24,10 +24,10 @@
@@ -4135,7 +4142,7 @@ index 494df9eee..c0e5a16bc 100644
  #include "xe_exec_queue.h"
  #include "xe_gt.h"
  #include "xe_migrate.h"
-@@ -1245,7 +1245,7 @@ static struct xe_vma *xe_vma_create(struct xe_vm *vm,
+@@ -1252,7 +1252,7 @@ static struct xe_vma *xe_vma_create(struct xe_vm *vm,
  			vma->gpuva.gem.obj = &bo->ttm.base;
  	}
  
@@ -4144,7 +4151,7 @@ index 494df9eee..c0e5a16bc 100644
  	INIT_LIST_HEAD(&vma->combined_links.rebind);
  
  	INIT_LIST_HEAD(&vma->gpuva.gem.entry);
-@@ -1345,7 +1345,7 @@ static void xe_vma_destroy_late(struct xe_vma *vma)
+@@ -1352,7 +1352,7 @@ static void xe_vma_destroy_late(struct xe_vma *vma)
  	}
  
  	mutex_destroy(&vma->fault_lock);
@@ -4153,7 +4160,7 @@ index 494df9eee..c0e5a16bc 100644
  	xe_vma_free(vma);
  }
  
-@@ -1872,7 +1872,7 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags, struct xe_file *xef)
+@@ -1879,7 +1879,7 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags, struct xe_file *xef)
  	for_each_tile(tile, xe, id)
  		xe_range_fence_tree_init(&vm->rftree[id]);
  
@@ -4162,7 +4169,7 @@ index 494df9eee..c0e5a16bc 100644
  
  	vm->pt_ops = &xelp_pt_ops;
  
-@@ -2183,7 +2183,7 @@ static void vm_destroy_work_func(struct work_struct *w)
+@@ -2190,7 +2190,7 @@ static void vm_destroy_work_func(struct work_struct *w)
  	struct xe_tile *tile;
  	u8 id;
  
@@ -4171,7 +4178,7 @@ index 494df9eee..c0e5a16bc 100644
  
  	/* xe_vm_close_and_put was not called? */
  	xe_assert(xe, !vm->size);
-@@ -2327,7 +2327,7 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
+@@ -2334,7 +2334,7 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
  
  	args->vm_id = id;
  
@@ -4180,7 +4187,7 @@ index 494df9eee..c0e5a16bc 100644
  
  	return 0;
  
-@@ -2361,7 +2361,7 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
+@@ -2368,7 +2368,7 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
  	mutex_unlock(&xef->vm.lock);
  
  	if (!err) {
@@ -4189,7 +4196,7 @@ index 494df9eee..c0e5a16bc 100644
  		xe_vm_close_and_put(vm);
  	}
  
-@@ -2692,7 +2692,7 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
+@@ -2699,7 +2699,7 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
  			op->map.invalidate_on_bind =
  				__xe_vm_needs_clear_scratch_pages(vm, flags);
  
@@ -4198,7 +4205,7 @@ index 494df9eee..c0e5a16bc 100644
  		} else if (__op->op == DRM_GPUVA_OP_PREFETCH) {
  			struct xe_vma *vma = gpuva_to_vma(op->base.prefetch.va);
  			struct xe_tile *tile;
-@@ -3034,7 +3034,7 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
+@@ -3041,7 +3041,7 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
  			if (IS_ERR(vma))
  				return PTR_ERR(vma);
  
@@ -4207,7 +4214,7 @@ index 494df9eee..c0e5a16bc 100644
  
  			op->map.vma = vma;
  			if (((op->map.immediate || !xe_vm_in_fault_mode(vm)) &&
-@@ -3078,7 +3078,7 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
+@@ -3085,7 +3085,7 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
  				if (IS_ERR(vma))
  					return PTR_ERR(vma);
  
@@ -4216,7 +4223,7 @@ index 494df9eee..c0e5a16bc 100644
  
  				op->remap.prev = vma;
  
-@@ -3111,11 +3111,11 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
+@@ -3118,11 +3118,11 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
  					return PTR_ERR(vma);
  
  				if (op->base.remap.prev) {
@@ -4230,7 +4237,7 @@ index 494df9eee..c0e5a16bc 100644
  				}
  
  				op->remap.next = vma;
-@@ -3197,7 +3197,7 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
+@@ -3204,7 +3204,7 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
  		xe_vm_assert_write_mode_or_garbage_collector(vm);
  
  		if (op->map.vma) {
@@ -4239,7 +4246,7 @@ index 494df9eee..c0e5a16bc 100644
  			xe_vm_prep_vma_destroy(vm, op->map.vma, post_commit);
  			xe_vma_destroy_unlocked(op->map.vma);
  		}
-@@ -3727,7 +3727,7 @@ typedef int (*xe_vm_bind_op_user_extension_fn)(struct xe_device *xe,
+@@ -3734,7 +3734,7 @@ typedef int (*xe_vm_bind_op_user_extension_fn)(struct xe_device *xe,
  					       u32 operation, u64 extension);
  
  static const xe_vm_bind_op_user_extension_fn vm_bind_op_extension_funcs[] = {
@@ -4248,7 +4255,7 @@ index 494df9eee..c0e5a16bc 100644
  };
  
  #define MAX_USER_EXTENSIONS	16
-@@ -3924,7 +3924,7 @@ static void vm_bind_ioctl_ops_fini(struct xe_vm *vm, struct xe_vma_ops *vops,
+@@ -3931,7 +3931,7 @@ static void vm_bind_ioctl_ops_fini(struct xe_vm *vm, struct xe_vma_ops *vops,
  				       fence);
  	}
  
@@ -4257,7 +4264,7 @@ index 494df9eee..c0e5a16bc 100644
  
  	if (ufence)
  		xe_sync_ufence_put(ufence);
-@@ -4409,7 +4409,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -4416,7 +4416,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		goto free_syncs;
  	}
  
@@ -4266,7 +4273,7 @@ index 494df9eee..c0e5a16bc 100644
  
  	xe_vma_ops_init(&vops, vm, q, syncs, num_syncs);
  	if (args->num_binds > 1)
-@@ -4442,7 +4442,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -4449,7 +4449,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  		if (err)
  			goto unwind_ops;
  
@@ -4275,7 +4282,7 @@ index 494df9eee..c0e5a16bc 100644
  
  #ifdef TEST_VM_OPS_ERROR
  		if (flags & FORCE_OP_ERROR) {
-@@ -4481,7 +4481,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+@@ -4488,7 +4488,7 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  
  unwind_ops:
  	if (err)
@@ -4284,7 +4291,7 @@ index 494df9eee..c0e5a16bc 100644
  
  	if (err && err != -ENODATA)
  		vm_bind_ioctl_ops_unwind(vm, ops, args->num_binds);
-@@ -5183,7 +5183,7 @@ static int xe_vm_alloc_vma(struct xe_vm *vm,
+@@ -5190,7 +5190,7 @@ static int xe_vm_alloc_vma(struct xe_vm *vm,
  			if (__op->op == DRM_GPUVA_OP_MAP) {
  				op->map.vma_flags |= vma_flags & XE_VMA_CREATE_MASK;
  				op->map.pat_index = default_pat;
@@ -4293,7 +4300,7 @@ index 494df9eee..c0e5a16bc 100644
  			}
  		} else {
  			if (__op->op == DRM_GPUVA_OP_REMAP) {
-@@ -5204,7 +5204,7 @@ static int xe_vm_alloc_vma(struct xe_vm *vm,
+@@ -5211,7 +5211,7 @@ static int xe_vm_alloc_vma(struct xe_vm *vm,
  				 * unmapping.
  				 */
  				op->map.vma_flags |= vma_flags & XE_VMA_CREATE_MASK;
@@ -4303,7 +4310,7 @@ index 494df9eee..c0e5a16bc 100644
  		}
  		print_op(vm->xe, __op);
 diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
-index 52540b036..e1eddf18b 100644
+index 52540b036b37..e1eddf18b494 100644
 --- a/drivers/gpu/drm/xe/xe_vm_types.h
 +++ b/drivers/gpu/drm/xe/xe_vm_types.h
 @@ -109,7 +109,7 @@ struct xe_vma_mem_attr {
@@ -4325,7 +4332,7 @@ index 52540b036..e1eddf18b 100644
  		/** @lock: Lock for eudebug_bind members */
  		spinlock_t lock;
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 9381472c5..4744039e4 100644
+index 9381472c50eb..4744039e455d 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -110,9 +110,6 @@ extern "C" {
@@ -4465,7 +4472,7 @@ index 9381472c5..4744039e4 100644
  #if defined(__cplusplus)
 diff --git a/include/uapi/drm/xe_drm_eudebug.h b/include/uapi/drm/xe_drm_eudebug.h
 deleted file mode 100644
-index 5f8448d83..000000000
+index 5f8448d83bff..000000000000
 --- a/include/uapi/drm/xe_drm_eudebug.h
 +++ /dev/null
 @@ -1,306 +0,0 @@
@@ -4776,7 +4783,7 @@ index 5f8448d83..000000000
 -
 -#endif /* _UAPI_XE_DRM_EUDEBUG_H_ */
 diff --git a/include/uapi/drm/xe_drm_prelim.h b/include/uapi/drm/xe_drm_prelim.h
-index 31cfbdcb5..7f55cbc4d 100644
+index 31cfbdcb5d03..7f55cbc4d025 100644
 --- a/include/uapi/drm/xe_drm_prelim.h
 +++ b/include/uapi/drm/xe_drm_prelim.h
 @@ -88,4 +88,350 @@

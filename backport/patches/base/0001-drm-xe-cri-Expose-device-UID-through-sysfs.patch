@@ -23,7 +23,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 
 diff --git a/Documentation/ABI/testing/sysfs-driver-intel-xe-gpu b/Documentation/ABI/testing/sysfs-driver-intel-xe-gpu
 new file mode 100644
-index 000000000..36182bbb1
+index 0000000000000..36182bbb1b54d
 --- /dev/null
 +++ b/Documentation/ABI/testing/sysfs-driver-intel-xe-gpu
 @@ -0,0 +1,10 @@
@@ -38,7 +38,7 @@ index 000000000..36182bbb1
 +		This sysfs file is present only on Intel Xe platforms that
 +		provide a device UID. It is available to all users.
 diff --git a/drivers/gpu/drm/xe/regs/xe_regs.h b/drivers/gpu/drm/xe/regs/xe_regs.h
-index ef4746b7b..437485b5a 100644
+index ef4746b7b5d34..437485b5a0af9 100644
 --- a/drivers/gpu/drm/xe/regs/xe_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_regs.h
 @@ -30,6 +30,8 @@
@@ -51,10 +51,10 @@ index ef4746b7b..437485b5a 100644
  #define   GMS_MASK				REG_GENMASK(15, 8)
  #define   GGMS_MASK				REG_GENMASK(7, 6)
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 238aa0772..5eb8a86c1 100644
+index 6051d762a2252..0d711108f7432 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -724,6 +724,7 @@ static void vf_update_device_info(struct xe_device *xe)
+@@ -779,6 +779,7 @@ static void vf_update_device_info(struct xe_device *xe)
  	xe->info.skip_guc_pc = 1;
  	xe->info.skip_pcode = 1;
  	xe->info.has_drm_ras = false;
@@ -62,18 +62,18 @@ index 238aa0772..5eb8a86c1 100644
  }
  
  static int xe_device_vram_alloc(struct xe_device *xe)
-@@ -928,6 +929,9 @@ int xe_device_probe(struct xe_device *xe)
+@@ -1002,6 +1003,9 @@ int xe_device_probe(struct xe_device *xe)
  	int err;
  	u8 id;
  
 +	if (xe->info.has_device_uid)
 +		xe->device_uid = xe_mmio_read64_2x32(xe_root_tile_mmio(xe), CRI_DEVICE_UID);
 +
- 	xe_pat_init_early(xe);
- 
- 	err = xe_sriov_init(xe);
+ 	err = xe_pat_init_early(xe);
+ 	if (err)
+ 		return err;
 diff --git a/drivers/gpu/drm/xe/xe_device_sysfs.c b/drivers/gpu/drm/xe/xe_device_sysfs.c
-index a73e0e957..657742c22 100644
+index a73e0e957cb0b..657742c22d90b 100644
 --- a/drivers/gpu/drm/xe/xe_device_sysfs.c
 +++ b/drivers/gpu/drm/xe/xe_device_sysfs.c
 @@ -8,6 +8,7 @@
@@ -133,10 +133,10 @@ index a73e0e957..657742c22 100644
  	return 0;
  }
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 588ee168b..d6381b9cd 100644
+index 5afdbea6780b6..2f0adad4b1e32 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -173,6 +173,8 @@ struct xe_device {
+@@ -174,6 +174,8 @@ struct xe_device {
  		u8 has_cached_pt:1;
  		/** @info.has_device_atomics_on_smem: Supports device atomics on SMEM */
  		u8 has_device_atomics_on_smem:1;
@@ -145,7 +145,7 @@ index 588ee168b..d6381b9cd 100644
  		/** @info.has_drm_ras: Device supports drm_ras (Reliability, Availability, Serviceability) */
  		u8 has_drm_ras:1;
  		/** @info.has_fan_control: Device supports fan control */
-@@ -259,6 +261,9 @@ struct xe_device {
+@@ -258,6 +260,9 @@ struct xe_device {
  		bool oob_initialized;
  	} wa_active;
  
@@ -156,10 +156,10 @@ index 588ee168b..d6381b9cd 100644
  	struct xe_survivability survivability;
  
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index aab0f6369..312504c10 100644
+index 19b418e2f0cc0..a83f5abc64178 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -470,6 +470,7 @@ static const struct xe_device_desc cri_desc = {
+@@ -471,6 +471,7 @@ static const struct xe_device_desc cri_desc = {
  	PLATFORM(CRESCENTISLAND),
  	.dma_mask_size = 52,
  	.has_display = false,
@@ -167,7 +167,7 @@ index aab0f6369..312504c10 100644
  	.has_drm_ras = true,
  	.has_flat_ccs = false,
  	.has_gsc_nvm = 1,
-@@ -773,6 +774,7 @@ static int xe_info_init_early(struct xe_device *xe,
+@@ -791,6 +792,7 @@ static int xe_info_init_early(struct xe_device *xe,
  
  	xe->info.is_dgfx = desc->is_dgfx;
  	xe->info.has_cached_pt = desc->has_cached_pt;
@@ -176,7 +176,7 @@ index aab0f6369..312504c10 100644
  	xe->info.has_fan_control = desc->has_fan_control;
  	/* runtime fusing may force flat_ccs to disabled later */
 diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
-index 9765a731e..0ff05b0e2 100644
+index fed509ff601e4..fe327323a0be6 100644
 --- a/drivers/gpu/drm/xe/xe_pci_types.h
 +++ b/drivers/gpu/drm/xe/xe_pci_types.h
 @@ -40,6 +40,7 @@ struct xe_device_desc {

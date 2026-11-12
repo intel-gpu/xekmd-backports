@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Thu, 15 Oct 2026 11:34:16 +0100
+Subject: [PATCH] drm/xe/madvise: use already clamped pat_index
+
+Pass the nospec-clamped pat_index to check_pat_args_are_sane() instead
+of the raw args->pat_index.val, and fold into the preceding
+DRM_XE_MEM_RANGE_ATTR_PAT block.
+
+Assisted-by: LLM
+Reported-by: Sashiko <sashiko-bot@kernel.org>
+Closes: https://sashiko.dev/#/message/sashiko-outbox-172627%40kernel.org
+Fixes: 016ccdb674b8 ("drm/xe/uapi: Reject coh_none PAT index for CPU cached memory in madvise")
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Cc: Alan Previn <alan.previn.teres.alexis@intel.com>
+Cc: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Cc: <stable@vger.kernel.org> # v7.2+
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Link: https://patch.msgid.link/20261015103415.442931-2-matthew.auld@intel.com
+(cherry-picked from commit 3be1bd59ced603d2e6a6ba9a4fe274308cea9965 linux-next)
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vm_madvise.c | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_vm_madvise.c b/drivers/gpu/drm/xe/xe_vm_madvise.c
+index 0474768a38aa..00d59e5a8345 100644
+--- a/drivers/gpu/drm/xe/xe_vm_madvise.c
++++ b/drivers/gpu/drm/xe/xe_vm_madvise.c
+@@ -659,11 +659,8 @@ int xe_vm_madvise_ioctl(struct drm_device *dev, void *data, struct drm_file *fil
+ 			err = -EINVAL;
+ 			goto free_vmas;
+ 		}
+-	}
+ 
+-	if (args->type == DRM_XE_MEM_RANGE_ATTR_PAT) {
+-		if (!check_pat_args_are_sane(xe, &madvise_range,
+-					     args->pat_index.val)) {
++		if (!check_pat_args_are_sane(xe, &madvise_range, pat_index)) {
+ 			err = -EINVAL;
+ 			goto free_vmas;
+ 		}
+-- 
+2.43.0
+

@@ -1,0 +1,98 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Date: Mon, 12 Oct 2026 17:55:16 +0530
+Subject: [PATCH] drm/xe/pat: Return error from xe_pat_init_early() on unknown
+ platform
+
+xe_pat_init_early() currently only logs an error when the platform's
+graphics version doesn't match any known PAT table, but continues
+probing with an uninitialized pat.ops. This can lead to a NULL
+pointer dereference later when pat.ops is used.
+
+Change xe_pat_init_early() to return an int and propagate -ENODATA
+to xe_device_probe() so the driver fails to load cleanly instead of
+continuing in a broken state.
+
+Fixes: 152d7f2db978 ("drm/xe/pat: Handle unicast vs MCR PAT registers")
+Signed-off-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20261012122522.2307625-8-dnyaneshwar.bhadane@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+Assisted-by: GNAI:gpt-5.3-codex
+(cherry-picked from commit e952337c3dbccf600ddae3bb1d38e996172ac8f8 linux-next)
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c |  4 +++-
+ drivers/gpu/drm/xe/xe_pat.c    | 11 ++++++++++-
+ drivers/gpu/drm/xe/xe_pat.h    |  4 +++-
+ 3 files changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 8583b2e9ecf4..b7f78d45dee1 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -960,7 +960,9 @@ int xe_device_probe(struct xe_device *xe)
+ 	int err;
+ 	u8 id;
+ 
+-	xe_pat_init_early(xe);
++	err = xe_pat_init_early(xe);
++	if (err)
++		return err;
+ 
+ 	err = xe_sriov_init(xe);
+ 	if (err)
+diff --git a/drivers/gpu/drm/xe/xe_pat.c b/drivers/gpu/drm/xe/xe_pat.c
+index a5fe1beec652..0ac64a6a3098 100644
+--- a/drivers/gpu/drm/xe/xe_pat.c
++++ b/drivers/gpu/drm/xe/xe_pat.c
+@@ -590,7 +590,13 @@ static const struct xe_pat_ops xe3p_xpc_pat_ops = {
+ 	.entry_dump = xe3p_xpc_pat_entry_dump,
+ };
+ 
+-void xe_pat_init_early(struct xe_device *xe)
++/**
++ * xe_pat_init_early() - Init early pat table operation.
++ * @xe: the &xe_device
++ *
++ * Return: 0 on success or a negative error code on failure.
++ */
++int xe_pat_init_early(struct xe_device *xe)
+ {
+ 	xe->pat.idx[XE_CACHE_WB_COMPRESSION] = XE_PAT_INVALID_IDX;
+ 	xe->pat.idx[XE_CACHE_NONE_COMPRESSION] = XE_PAT_INVALID_IDX;
+@@ -688,12 +694,15 @@ void xe_pat_init_early(struct xe_device *xe)
+ 		 */
+ 		drm_err(&xe->drm, "Missing PAT table for platform with graphics version %d.%02d!\n",
+ 			GRAPHICS_VER(xe), GRAPHICS_VERx100(xe) % 100);
++		return -ENODATA;
+ 	}
+ 
++	xe_assert(xe, xe->pat.ops);
+ 	xe_assert(xe, xe->pat.ops->dump);
+ 	xe_assert(xe, xe->pat.ops->program_graphics);
+ 	xe_assert(xe, MEDIA_VER(xe) < 13 || xe->pat.ops->program_media);
+ 	xe_assert(xe, GRAPHICS_VER(xe) < 20 || xe->pat.ops->entry_dump);
++	return 0;
+ }
+ 
+ void xe_pat_init(struct xe_gt *gt)
+diff --git a/drivers/gpu/drm/xe/xe_pat.h b/drivers/gpu/drm/xe/xe_pat.h
+index 7060f66e1d63..6398c3ab4805 100644
+--- a/drivers/gpu/drm/xe/xe_pat.h
++++ b/drivers/gpu/drm/xe/xe_pat.h
+@@ -42,8 +42,10 @@ struct xe_pat_table_entry {
+ /**
+  * xe_pat_init_early - SW initialization, setting up data based on device
+  * @xe: xe device
++ *
++ * Return: 0 on success or a negative error code on failure.
+  */
+-void xe_pat_init_early(struct xe_device *xe);
++int xe_pat_init_early(struct xe_device *xe);
+ 
+ /**
+  * xe_pat_init - Program HW PAT table
+-- 
+2.43.0
+

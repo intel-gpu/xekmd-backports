@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Arvind Yadav <arvind.yadav@intel.com>
+Date: Tue, 27 Oct 2026 14:29:52 +0530
+Subject: [PATCH] drm/xe/svm: Preserve default PAT index when resetting VMA
+ attributes
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+xe_vma_set_default_attributes() replaces the VMA attributes with a
+default structure. It sets pat_index to the saved default PAT index,
+but leaves default_pat_index zero.
+
+When the saved default is non-zero, the two fields no longer match.
+xe_vma_has_default_mem_attrs() then reports that the reset VMA has
+non-default attributes, triggering a warning in xe_vm_alloc_vma()
+during SVM garbage collection. A later reset also uses the incorrect
+zero value.
+
+Preserve default_pat_index when restoring the default attributes.
+
+Fixes: 4a938d3886d6 ("drm/xe: Merge adjacent default-attribute VMAs during garbage collection")
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Cc: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Signed-off-by: Arvind Yadav <arvind.yadav@intel.com>
+Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20261027085952.2882874-1-arvind.yadav@intel.com
+(cherry-picked from commit ce155027427a0c76be173f19f911b414d9d686bc drm-xe-next)
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+---
+ drivers/gpu/drm/xe/xe_svm.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_svm.c b/drivers/gpu/drm/xe/xe_svm.c
+index f5f083ed8f1a..dd69ff5b8bcf 100644
+--- a/drivers/gpu/drm/xe/xe_svm.c
++++ b/drivers/gpu/drm/xe/xe_svm.c
+@@ -345,6 +345,7 @@ static void xe_vma_set_default_attributes(struct xe_vma *vma)
+ 	struct xe_vma_mem_attr default_attr = {
+ 		.preferred_loc.devmem_fd = DRM_XE_PREFERRED_LOC_DEFAULT_DEVICE,
+ 		.preferred_loc.migration_policy = DRM_XE_MIGRATE_ALL_PAGES,
++		.default_pat_index = vma->attr.default_pat_index,
+ 		.pat_index = vma->attr.default_pat_index,
+ 		.atomic_access = DRM_XE_ATOMIC_UNDEFINED,
+ 		.purgeable_state = XE_MADV_PURGEABLE_WILLNEED,
+-- 
+2.43.0
+

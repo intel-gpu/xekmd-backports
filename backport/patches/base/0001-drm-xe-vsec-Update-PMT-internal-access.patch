@@ -21,7 +21,7 @@ Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
  3 files changed, 29 insertions(+), 16 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index 958fb7176..c56f0e4a9 100644
+index 958fb717640a..c56f0e4a9b90 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
 @@ -5,6 +5,7 @@
@@ -114,10 +114,10 @@ index 958fb7176..c56f0e4a9 100644
  	return 0;
  }
 diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
-index 547c468a2..4d6509238 100644
+index d4655a07829d..e8a301f04426 100644
 --- a/drivers/gpu/drm/xe/xe_hwmon.c
 +++ b/drivers/gpu/drm/xe/xe_hwmon.c
-@@ -517,9 +517,15 @@ xe_hwmon_energy_get(struct xe_hwmon *hwmon, int channel, long *energy)
+@@ -566,9 +566,15 @@ xe_hwmon_energy_get(struct xe_hwmon *hwmon, int channel, long *energy)
  
  	if (hwmon->xe->info.platform == XE_BATTLEMAGE) {
  		u64 pmt_val;
@@ -129,14 +129,14 @@ index 547c468a2..4d6509238 100644
 +		if (ret) {
 +			drm_warn(&hwmon->xe->drm, "PMT device is not available: %d\n", ret);
 +			*energy = 0;
-+			return;
++			return ret;
 +		}
 +		ret = xe_pmt_telem_read(hwmon->xe->drm.dev, guid,
  					&pmt_val, BMG_ENERGY_STATUS_PMT_OFFSET,	sizeof(pmt_val));
  		if (ret != sizeof(pmt_val)) {
  			drm_warn(&hwmon->xe->drm, "energy read from pmt failed, ret %d\n", ret);
 diff --git a/drivers/gpu/drm/xe/xe_pcode.c b/drivers/gpu/drm/xe/xe_pcode.c
-index 622d35242..3ce8ddfaf 100644
+index 622d35242435..3ce8ddfafcaa 100644
 --- a/drivers/gpu/drm/xe/xe_pcode.c
 +++ b/drivers/gpu/drm/xe/xe_pcode.c
 @@ -366,11 +366,16 @@ ALLOW_ERROR_INJECTION(xe_pcode_probe_early, ERRNO); /* See xe_pci_probe */

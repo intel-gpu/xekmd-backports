@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Daniel Charles <daniel.charles@intel.com>
+Date: Mon, 2 Nov 2026 18:14:17 -0800
+Subject: [PATCH] drm/xe/pm: Apply tile workarounds after PCODE initialization
+
+Tile workarounds program SoC registers through MMIO. Wait for PCODE
+initialization to complete before applying them during system resume,
+since MMIO access may be blocked until SoC initialization completes.
+
+Also apply tile workarounds after PCODE initialization on D3cold runtime
+resume, so their register settings are restored after power loss. Keep
+both paths ordered before early GT resume.
+
+Fixes: 0d0534750f9d ("drm/xe/wa: Apply tile workarounds at probe/resume")
+Signed-off-by: Daniel Charles <daniel.charles@intel.com>
+Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
+Link: https://patch.msgid.link/20261103021418.654723-2-daniel.charles@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+Assisted-by: GNAI:gpt-5.3-codex
+(cherry-picked from commit 641ffb2132839242e49a158d2aea579a75fa2e8e drm-xe-next)
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pm.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
+index 7083e5cc2e0f..0a595f575e83 100644
+--- a/drivers/gpu/drm/xe/xe_pm.c
++++ b/drivers/gpu/drm/xe/xe_pm.c
+@@ -239,13 +239,13 @@ int xe_pm_resume(struct xe_device *xe)
+ 	drm_dbg(&xe->drm, "Resuming device\n");
+ 	trace_xe_pm_resume(xe, __builtin_return_address(0));
+ 
+-	for_each_tile(tile, xe, id)
+-		xe_wa_apply_tile_workarounds(tile);
+-
+ 	err = xe_pcode_ready(xe, true);
+ 	if (err)
+ 		return err;
+ 
++	for_each_tile(tile, xe, id)
++		xe_wa_apply_tile_workarounds(tile);
++
+ 	for_each_gt(gt, xe, id)
+ 		xe_gt_idle_disable_c6(gt);
+ 
+@@ -674,6 +674,7 @@ int xe_pm_runtime_suspend(struct xe_device *xe)
+  */
+ int xe_pm_runtime_resume(struct xe_device *xe)
+ {
++	struct xe_tile *tile;
+ 	struct xe_gt *gt;
+ 	u8 id;
+ 	int err = 0;
+@@ -689,6 +690,9 @@ int xe_pm_runtime_resume(struct xe_device *xe)
+ 		if (err)
+ 			goto out;
+ 
++		for_each_tile(tile, xe, id)
++			xe_wa_apply_tile_workarounds(tile);
++
+ 		for_each_gt(gt, xe, id)
+ 			xe_gt_idle_disable_c6(gt);
+ 
+-- 
+2.43.0
+

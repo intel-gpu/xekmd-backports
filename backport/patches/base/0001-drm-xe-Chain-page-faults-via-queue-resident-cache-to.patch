@@ -43,12 +43,12 @@ Link: https://patch.msgid.link/20260806185202.3922432-9-matthew.brost@intel.com
 (backported from commit f2b4b3f81466291bde7553c097350f9e08ec59ca linux-next)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
- drivers/gpu/drm/xe/xe_pagefault.c       | 435 +++++++++++++++++++++---
+ drivers/gpu/drm/xe/xe_pagefault.c       | 437 +++++++++++++++++++++---
  drivers/gpu/drm/xe/xe_pagefault.h       |  71 ++++
  drivers/gpu/drm/xe/xe_pagefault_types.h |  81 +++--
  drivers/gpu/drm/xe/xe_svm.c             |  16 +-
  drivers/gpu/drm/xe/xe_svm.h             |   9 +-
- 5 files changed, 527 insertions(+), 85 deletions(-)
+ 5 files changed, 528 insertions(+), 86 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
 index ecad76dcb..4d7427d6b 100644
@@ -417,7 +417,7 @@ index ecad76dcb..4d7427d6b 100644
  
  	/*
  	 * A live VM holds a PM reference, but a torn-down VM does not.
-@@ -312,27 +584,73 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -312,28 +584,74 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  #define USM_QUEUE_MAX_RUNTIME_MS      20
  	threshold = jiffies + msecs_to_jiffies(USM_QUEUE_MAX_RUNTIME_MS);
  
@@ -443,12 +443,14 @@ index ecad76dcb..4d7427d6b 100644
 -			if (!(pf.consumer.access_type & XE_PAGEFAULT_ACCESS_PREFETCH)) {
 -				xe_pagefault_save_to_vm(gt_to_xe(pf.gt), &pf);
 -				xe_pagefault_print(&pf);
--				xe_log_err_info(pf.gt, PAGEFAULT, err, "Unsuccessful response\n");
+-				xe_gt_info(pf.gt, "Fault response: Unsuccessful %pe\n",
+-					   ERR_PTR(err));
 +			if (!(pf->consumer.access_type & XE_PAGEFAULT_ACCESS_PREFETCH)) {
 +				xe_pagefault_save_to_vm(gt_to_xe(gt), pf);
 +				xe_pagefault_cache_start_invalidate(cache_start);
 +				xe_pagefault_print(pf);
-+				xe_log_err_info(pf->gt, PAGEFAULT, err, "Unsuccessful response\n");
++				xe_gt_info(pf->gt, "Fault response: Unsuccessful %pe\n",
++					   ERR_PTR(err));
  			} else {
 -				xe_gt_stats_incr(pf.gt, XE_GT_STATS_ID_INVALID_PREFETCH_PAGEFAULT_COUNT, 1);
 -				xe_gt_dbg(pf.gt, "Prefetch Fault response: Unsuccessful %pe\n",
@@ -504,7 +506,7 @@ index ecad76dcb..4d7427d6b 100644
  
  		if (time_after(jiffies, threshold)) {
  			queue_work(xe->usm.pagefault_wq, w);
-@@ -341,10 +659,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -342,10 +660,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  	}
  #undef USM_QUEUE_MAX_RUNTIME_MS
  
@@ -517,7 +519,7 @@ index ecad76dcb..4d7427d6b 100644
  }
  
  static int xe_pagefault_queue_init(struct xe_device *xe,
-@@ -440,6 +756,7 @@ int xe_pagefault_init(struct xe_device *xe)
+@@ -441,6 +757,7 @@ int xe_pagefault_init(struct xe_device *xe)
  
  		pf_work->xe = xe;
  		pf_work->id = i;
@@ -525,7 +527,7 @@ index ecad76dcb..4d7427d6b 100644
  		INIT_WORK(&pf_work->work, xe_pagefault_queue_work);
  	}
  
-@@ -463,15 +780,23 @@ static void xe_pagefault_queue_reset(struct xe_device *xe, struct xe_gt *gt,
+@@ -464,15 +781,23 @@ static void xe_pagefault_queue_reset(struct xe_device *xe, struct xe_gt *gt,
  
  	/* Squash all pending faults on the GT */
  
@@ -555,7 +557,7 @@ index ecad76dcb..4d7427d6b 100644
  }
  
  /**
-@@ -487,14 +812,6 @@ void xe_pagefault_reset(struct xe_device *xe, struct xe_gt *gt)
+@@ -488,14 +813,6 @@ void xe_pagefault_reset(struct xe_device *xe, struct xe_gt *gt)
  	xe_pagefault_queue_reset(xe, gt, &xe->usm.pf_queue);
  }
  
@@ -570,7 +572,7 @@ index ecad76dcb..4d7427d6b 100644
  /*
   * This function can race with multiple page fault producers, but worst case we
   * stick a page fault on the same queue for consumption.
-@@ -520,18 +837,28 @@ int xe_pagefault_handler(struct xe_device *xe, struct xe_pagefault *pf)
+@@ -521,18 +838,28 @@ int xe_pagefault_handler(struct xe_device *xe, struct xe_pagefault *pf)
  {
  	struct xe_pagefault_queue *pf_queue = &xe->usm.pf_queue;
  	unsigned long flags;
@@ -906,4 +908,3 @@ index 46be2e5c6..2a0dc0d12 100644
  }
 -- 
 2.43.0
-

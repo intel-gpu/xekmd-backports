@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Helen Koike <koike@igalia.com>
+Date: Fri, 16 Oct 2026 18:40:50 -0300
+Subject: [PATCH] drm/xe/lrc: Restore CTX_CS_INDIRECT_CTX_OFFSET programming
+ for pre-Xe2
+
+CTX_CS_INDIRECT_CTX_OFFSET default value is not retrieved from the GPU
+by inhibit+context save mechanism since it is not part of the Engine
+Context. Thus, at restore, 0x0 is programmed back to the GPU, which is
+an invalid value according to the PRM.
+
+This causes sporadic hangs on Alder Lake when executing test
+IntelAngleEnd2EndTestCases (error VK_DEVICE_LOST).
+
+Fix it by partially reverting commit c9dfd66cb91e ("drm/xe/lrc: Allow
+INDIRECT_CTX for more engine classes"). Re-add the programming of
+CTX_CS_INDIRECT_CTX_OFFSET for pre-Xe2 (in theory it should apply to all
+platforms, but we got an unexpected behaviour on Xe2 that still requires
+investigation).
+
+Fixes: c9dfd66cb91e ("drm/xe/lrc: Allow INDIRECT_CTX for more engine classes")
+Suggested-by: Tvrtko Ursulin <tvrtko.ursulin@igalia.com>
+Signed-off-by: Helen Koike <koike@igalia.com>
+Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
+Link: https://patch.msgid.link/20261016214112.1647202-1-koike@igalia.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Assisted-by: GNAI:gpt-5.3-codex
+(cherry-picked from commit b99292acb2dce61ce50d37f54a66d84b768b8927 linux-next)
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_lrc_layout.h | 3 +++
+ drivers/gpu/drm/xe/xe_lrc.c             | 8 ++++----
+ 2 files changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_lrc_layout.h b/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
+index 9cf18eac6cbc..3f9cb9216a8f 100644
+--- a/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
++++ b/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
+@@ -45,4 +45,7 @@
+ #define INDIRECT_CTX_RING_START_UDW	(0x08 + 1)
+ #define INDIRECT_CTX_RING_CTL		(0x0a + 1)
+ 
++#define CTX_INDIRECT_CTX_OFFSET_MASK	REG_GENMASK(15, 6)
++#define CTX_INDIRECT_CTX_OFFSET_DEFAULT	REG_FIELD_PREP(CTX_INDIRECT_CTX_OFFSET_MASK, 0xd)
++
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
+index 5396eb370ac8..eaf32dcbe94d 100644
+--- a/drivers/gpu/drm/xe/xe_lrc.c
++++ b/drivers/gpu/drm/xe/xe_lrc.c
+@@ -1461,15 +1461,15 @@ setup_indirect_ctx(struct xe_lrc *lrc, struct xe_hw_engine *hwe)
+ 	finish_bo(&state);
+ 	kfree(state.buffer);
+ 
+-	/*
+-	 * Enable INDIRECT_CTX leaving INDIRECT_CTX_OFFSET at its default: it
+-	 * varies per engine class, but the default is good enough
+-	 */
+ 	xe_lrc_write_ctx_reg(lrc,
+ 			     CTX_CS_INDIRECT_CTX,
+ 			     (xe_bo_ggtt_addr(lrc->bo) + state.offset) |
+ 			     /* Size in CLs. */
+ 			     (state.written * sizeof(u32) / 64));
++	if (GRAPHICS_VER(lrc_to_xe(lrc)) < 20)
++		xe_lrc_write_ctx_reg(lrc,
++				     CTX_CS_INDIRECT_CTX_OFFSET,
++				     CTX_INDIRECT_CTX_OFFSET_DEFAULT);
+ 
+ 	return 0;
+ }
+-- 
+2.43.0
+

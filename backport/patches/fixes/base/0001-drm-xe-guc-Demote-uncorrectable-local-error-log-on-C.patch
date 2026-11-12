@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Varun Gupta <varun.gupta@intel.com>
+Date: Fri, 6 Nov 2026 09:18:05 +0530
+Subject: [PATCH] drm/xe/guc: Demote uncorrectable local error log on CRI
+
+The UNCORRECTABLE_LOCAL_ERROR notification sent by the GuC indicates a
+local, queue-level context termination rather than a global device or
+driver failure. On CRI, due to a hardware limitation, the platform cannot
+distinguish GT translation faults from true RAS conditions, meaning
+standard workloads routinely trigger this error.
+
+Printing this at ERROR level is too noisy and causes false-positive
+dmesg-warn failures in CI. Demote the log level to debug for CRI.
+
+v5:
+  - Correct commmit message and comment (Tejas)
+v4:
+  - Change to _dbg instead of _info. (Matt)
+v3:
+  - Limit the demotion to CRI and add comment explaining the HW limitation
+    (Rodrigo)
+v2:
+  - Also ratelimit the GUC_ID_UNKNOWN to match the CAT error handler.
+    (Himal)
+
+Fixes: 4e57574fa3a3 ("drm/xe/guc: Handle GuC local uncorrectable error notifications")
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
+Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+Link: https://patch.msgid.link/20261106034804.2005214-2-varun.gupta@intel.com
+Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+(cherry-picked from commit e305536554790e06876dd4e4f854c97d1353aa79 drm-xe-next)
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_submit.c | 18 ++++++++++++++----
+ 1 file changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index 60469e153197..bf6f83fc9681 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -3535,7 +3535,7 @@ int xe_guc_uncorrectable_error_handler(struct xe_guc *guc, u32 *msg, u32 len)
+ 	guc_id = msg[0];
+ 
+ 	if (guc_id == GUC_ID_UNKNOWN) {
+-		xe_gt_err(gt, "GuC: Uncorrectable local error with unknown GuC id\n");
++		xe_gt_err_ratelimited(gt, "GuC: Uncorrectable local error with unknown GuC id\n");
+ 		return 0;
+ 	}
+ 
+@@ -3543,9 +3543,19 @@ int xe_guc_uncorrectable_error_handler(struct xe_guc *guc, u32 *msg, u32 len)
+ 	if (unlikely(!q))
+ 		return -EPROTO;
+ 
+-	xe_gt_err(gt,
+-		  "GuC: Uncorrectable local error! guc_id=%d class=%s, logical_mask=0x%x",
+-		  guc_id, xe_hw_engine_class_to_str(q->class), q->logical_mask);
++	/*
++	 * On CRI, the hardware cannot distinguish GT translation faults
++	 * from true RAS conditions. Demote to debug to avoid false
++	 * positive hardware error logs.
++	 */
++	if (gt_to_xe(gt)->info.platform == XE_CRESCENTISLAND)
++		xe_gt_dbg(gt,
++			  "GuC: Uncorrectable local error! guc_id=%d class=%s, logical_mask=0x%x",
++			  guc_id, xe_hw_engine_class_to_str(q->class), q->logical_mask);
++	else
++		xe_gt_err(gt,
++			  "GuC: Uncorrectable local error! guc_id=%d class=%s, logical_mask=0x%x",
++			  guc_id, xe_hw_engine_class_to_str(q->class), q->logical_mask);
+ 
+ 	trace_xe_guc_uncorrectable_error(q);
+ 
+-- 
+2.43.0
+

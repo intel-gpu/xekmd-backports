@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Gustavo Sousa <gustavo.sousa@intel.com>
+Date: Thu, 5 Nov 2026 20:31:49 -0300
+Subject: [PATCH] drm/xe: Sync Wa_16023105232 in xe_was to match OOB rule
+
+Wa_16023105232 was extended in xe_wa_oob.rules to match extra IP
+releases while the respective entry in xe_was[] was overlooked.
+Update the latter to be in sync with the former.
+
+Also add comments in the code so that we don't forget to update both
+places if new IP versions are added.
+
+Fixes: c96e0df4e9f5 ("drm/xe/xe3: Add support for media IP version 30.02")
+Fixes: 4fde66699f1c ("drm/xe/xe3: Add support for graphics IP versions 30.04 & 30.05")
+Cc: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Cc: Matt Roper <matthew.d.roper@intel.com>
+Cc: Shekhar Chauhan <shekhar.chauhan@intel.com>
+Reviewed-by: Matt Atwood <matthew.s.atwood@intel.com>
+Link: https://patch.msgid.link/20261105-wa_16031259911-v3-2-da6ec790aa29@intel.com
+Signed-off-by: Gustavo Sousa <gustavo.sousa@intel.com>
+(cherry-picked from commit 0cfb54f8f4d69efc847641738d25065049160aca drm-xe-next)
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+---
+ drivers/gpu/drm/xe/xe_wa.c         | 5 +++--
+ drivers/gpu/drm/xe/xe_wa_oob.rules | 1 +
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_wa.c b/drivers/gpu/drm/xe/xe_wa.c
+index eff2be4203d9..5b6f97ba6f6a 100644
+--- a/drivers/gpu/drm/xe/xe_wa.c
++++ b/drivers/gpu/drm/xe/xe_wa.c
+@@ -589,8 +589,9 @@ static const struct xe_rtp_table_sr engine_was = XE_RTP_TABLE_SR(
+ 	  XE_RTP_ACTIONS(SET(TDL_CHICKEN, QID_WAIT_FOR_THREAD_NOT_RUN_DISABLE))
+ 	},
+ 	{ XE_RTP_NAME("16023105232"),
+-	  XE_RTP_RULES(MEDIA_VERSION_RANGE(1301, 3000), OR,
+-		       GRAPHICS_VERSION_RANGE(2001, 3001)),
++	  /* IP versions need to be in sync with the respective entry in xe_wa_oob.rules. */
++	  XE_RTP_RULES(MEDIA_VERSION_RANGE(1301, 3002), OR,
++		       GRAPHICS_VERSION_RANGE(2001, 3005)),
+ 	  XE_RTP_ACTIONS(SET(RING_PSMI_CTL(0), RC_SEMA_IDLE_MSG_DISABLE,
+ 			     XE_RTP_ACTION_FLAG(ENGINE_BASE)))
+ 	},
+diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
+index 17aff02f7846..496ceadd171e 100644
+--- a/drivers/gpu/drm/xe/xe_wa_oob.rules
++++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
+@@ -43,6 +43,7 @@
+ 18013179988	GRAPHICS_VERSION(1255)
+ 		GRAPHICS_VERSION_RANGE(1270, 1274)
+ 1508761755	GRAPHICS_VERSION(1255)
++# IP versions need to be in sync with the respective entry in xe_wa.c.
+ 16023105232	GRAPHICS_VERSION_RANGE(2001, 3005)
+ 		MEDIA_VERSION_RANGE(1301, 3002)
+ 16026508708	GRAPHICS_VERSION_RANGE(1200, 3005)
+-- 
+2.43.0
+

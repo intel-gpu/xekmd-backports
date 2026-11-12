@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Karthik Poosa <karthik.poosa@intel.com>
+Date: Thu, 15 Oct 2026 12:44:23 +0530
+Subject: [PATCH] drm/xe/hwmon: Handle unavailable memory controller sensors
+
+Skip memory controller sensors that report invalid readings when
+computing the average temperature in get_mc_temp(). Return -ENXIO when
+no valid sensor data is available, and allow the helper to be used as
+an availability probe by making the output parameter optional.
+
+Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
+Fixes: 3a0cb885e111 ("drm/xe/hwmon: Expose memory controller temperature")
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20261015071434.1063785-6-karthik.poosa@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Assisted-by: GNAI:gpt-5.3-codex
+(cherry-picked from commit 99ceaebb888944d00932063a649ebb41bd8af1d2 linux-next)
+Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hwmon.c | 22 ++++++++++++++++------
+ 1 file changed, 16 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
+index 66a550605526..ebc34cf8489e 100644
+--- a/drivers/gpu/drm/xe/xe_hwmon.c
++++ b/drivers/gpu/drm/xe/xe_hwmon.c
+@@ -860,10 +860,8 @@ drm_dbg(&hwmon->xe->drm, "thermal info read val 0x%x val1 0x%x\n", data0, data1)
+ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ {
+ 	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
++	int ret, i, count = 0;
+ 	s32 average = 0;
+-	int ret, i;
+-	int start = TEMP_INDEX_MCTRL;
+-	int end = hwmon->temp.count - 1;
+ 
+ 	guard(mutex)(&hwmon->hwmon_lock);
+ 
+@@ -878,11 +876,23 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ 		hwmon->temp.dword[i] = cpu_to_le32(data);
+ 	}
+ 
+-	for (i = start; i < end; i++)
++	for (i = TEMP_INDEX_MCTRL; i < hwmon->temp.count - 1; i++) {
++		if (!hwmon->temp.value[i])
++			continue;
+ 		average += (s8)hwmon->temp.value[i];
++		count++;
++	}
++
++	if (!count) {
++		drm_dbg(&hwmon->xe->drm, "Memory controller temperature unavailable!\n");
++		return -ENXIO;
++	}
++
++	average /= count;
++
++	if (val)
++		*val = average * MILLIDEGREE_PER_DEGREE;
+ 
+-	average /= (end - start);
+-	*val = average * MILLIDEGREE_PER_DEGREE;
+ 	return 0;
+ }
+ 
+-- 
+2.43.0
+

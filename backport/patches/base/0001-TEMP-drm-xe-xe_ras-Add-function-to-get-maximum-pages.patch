@@ -34,7 +34,7 @@ index ec0c2fcf7..09e561613 100644
 +		state->max_pages = response.max_entries;
  }
  
- static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
+ #define PCI_EXP_AER_FLAGS	(PCI_EXP_DEVCTL_CERE | PCI_EXP_DEVCTL_NFERE | \
 @@ -1397,6 +1401,17 @@ bool xe_ras_get_disable_page_offline(struct xe_device *xe)
  	return xe->ras.state.disable_page_offline;
  }

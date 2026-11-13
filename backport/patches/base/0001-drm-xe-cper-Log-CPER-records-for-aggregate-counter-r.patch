@@ -62,9 +62,9 @@ index fcb8d2a43..49e113495 100644
 +	}
 +}
 +
- static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
- {
- 	struct pci_dev *vsp;
+ #define PCI_EXP_AER_FLAGS	(PCI_EXP_DEVCTL_CERE | PCI_EXP_DEVCTL_NFERE | \
+ 				 PCI_EXP_DEVCTL_FERE | PCI_EXP_DEVCTL_URRE)
+ 
 @@ -681,6 +700,7 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
   */
  int xe_ras_get_counter(struct xe_device *xe, u8 severity, u8 component, u32 *value)

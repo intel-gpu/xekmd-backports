@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Thu, 12 Nov 2026 11:37:06 +0530
+Subject: [PATCH] drm/xe/ras: Treat non-fatal PCIe errors as recovered
+
+On systems lacking RAS capability, only PCIe errors are reported, via
+AER, not device errors. Non-fatal PCIe errors reported at the Upstream
+Switch Port (USP) have no impact on link or device state, so treat
+them as recovered without requiring a secondary bus reset (SBR).
+
+Fixes: 25913a062cd4 ("drm/xe/xe_ras: Add support for uncorrectable core-compute errors")
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20261112060701.3327125-14-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from f416c3899d2a0fe5f05921567164c10e5e36dbde linux-next)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 2c01c183d02b..cd753c82b0ff 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -493,8 +493,8 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+ 	}
+ 
+ 	if (!xe->info.has_sysctrl)
+-		return XE_RAS_RECOVERY_ACTION_RESET;
++		return XE_RAS_RECOVERY_ACTION_RECOVERED;
+ 
+ 	BUILD_BUG_ON(BITS_PER_TYPE(sent) < XE_RAS_COMP_MAX);
+ 
+ 	/* Default action */
+-- 
+2.43.0
+

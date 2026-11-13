@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Thu, 12 Nov 2026 11:37:05 +0530
+Subject: [PATCH] drm/xe/survivability: Guard runtime survivability enable
+ against unbind
+
+Runtime survivability mode creates sysfs and declares the device as
+wedged in a worker thread. This can race with unbind.
+
+During unbind, devres actions such as disabling the worker run as part of
+teardown. A runtime survivability enable that is still in flight or gets
+scheduled in that window can create the survivability sysfs entries while
+the device is being removed. This is incorrect, as runtime survivability
+mode must not be entered once during devres teardown.
+
+Use the DRM device enter/exit protection so that the enable path
+synchronizes with device unplug and returns early if the device is
+already being unbound.
+
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20261112060701.3327125-13-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from 042d84d7e69f4da41c58707d558a95421e565869 linux-next)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_survivability_mode.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
+index d73cdad0b3a9..91a0680e449b 100644
+--- a/drivers/gpu/drm/xe/xe_survivability_mode.c
++++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
+@@ -10,6 +10,8 @@
+ #include <linux/pci.h>
+ #include <linux/sysfs.h>
+ 
++#include <drm/drm_drv.h>
++
+ #include "xe_configfs.h"
+ #include "xe_device.h"
+ #include "xe_heci_gsc.h"
+@@ -437,11 +439,16 @@ void xe_survivability_mode_runtime_enable(struct xe_device *xe)
+ {
+ 	struct xe_survivability *survivability = &xe->survivability;
+ 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
++	int idx;
+ 
+ 	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe) || xe->info.platform < XE_BATTLEMAGE) {
+ 		xe_log_err(xe, SURVIVABILITY, -EOPNOTSUPP, "Runtime Mode not supported!\n");
+ 		return;
+ 	}
+ 
++	/* Synchronize with unbind, do not enter runtime survivability mode during unbind */
++	if (!drm_dev_enter(&xe->drm, &idx))
++		return;
++
+ 	populate_survivability_info(xe);
+ 
+@@ -456,4 +463,6 @@ void xe_survivability_mode_runtime_enable(struct xe_device *xe)
+ 	xe_log_err(xe, SURVIVABILITY, 0, "Firmware flash required!\n");
+ 	xe_info(xe, "Please refer to the userspace documentation for more details how to flash the firmware on %s!\n",
+ 			xe->info.platform_name);
++
++	drm_dev_exit(idx);
+ }
+-- 
+2.43.0
+

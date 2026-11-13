@@ -34,8 +34,8 @@ index 93a094fcc..b1455936b 100644
  #include "xe_configfs.h"
  #include "xe_debugfs.h"
  #include "xe_device.h"
-@@ -249,6 +251,9 @@ static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
- 	return pci_upstream_bridge(vsp);
+@@ -234,6 +236,9 @@ static bool ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter)
+ 	return true;
  }
  
 +#define PCI_EXP_AER_FLAGS	(PCI_EXP_DEVCTL_CERE | PCI_EXP_DEVCTL_NFERE | \

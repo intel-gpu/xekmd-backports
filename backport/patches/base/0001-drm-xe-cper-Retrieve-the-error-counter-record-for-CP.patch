@@ -87,9 +87,9 @@ index 17b47843a..b1dd6196a 100644
 -	return true;
 -}
 -
- static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
- {
- 	struct pci_dev *vsp;
+ #define PCI_EXP_AER_FLAGS	(PCI_EXP_DEVCTL_CERE | PCI_EXP_DEVCTL_NFERE | \
+ 				 PCI_EXP_DEVCTL_FERE | PCI_EXP_DEVCTL_URRE)
+ 
 @@ -312,21 +292,21 @@ MODULE_IMPORT_NS("CXL");
  static void ras_send_error_event(struct xe_device *xe, u8 severity, u8 component)
  {

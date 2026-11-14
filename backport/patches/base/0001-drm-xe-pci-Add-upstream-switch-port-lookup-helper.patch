@@ -1,0 +1,114 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Thu, 12 Nov 2026 11:37:07 +0530
+Subject: [PATCH] drm/xe/pci: Add upstream switch port lookup helper
+
+Move the USP lookup logic out of RAS code and into the PCI
+layer so it can be reused by other callers.
+
+No functional change.
+
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Andi Shyti <andi.shyti@linux.intel.com>
+Link: https://patch.msgid.link/20261112060701.3327125-15-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(backported from 3fe338ed5debcc115ebef8ee832fc11b6b5ba2da linux-next)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c | 23 +++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_pci.h |  1 +
+ drivers/gpu/drm/xe/xe_ras.c | 19 ++-----------------
+ 3 files changed, 26 insertions(+), 17 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 073b81c525e02..63eeb3c7b2f26 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -1541,6 +1541,29 @@ struct xe_device *xe_pci_to_pf_device(struct pci_dev *pdev)
+ 	return to_xe_device(drm);
+ }
+ 
++/**
++ * xe_pci_get_usp_dev() - Get the upstream switch port device.
++ * @pdev: pci device of SGunit
++ *
++ * Device Hierarchy:
++ * Upstream Switch Port (USP) --> Virtual Switch Port (VSP) --> SGunit (GPU endpoint)
++ *
++ * The function traverses the PCI device hierarchy to find the upstream switch port
++ * device.
++ *
++ * Return: pointer to USP &pci_dev, NULL otherwise.
++ */
++struct pci_dev *xe_pci_get_usp_dev(struct pci_dev *pdev)
++{
++	struct pci_dev *vsp;
++
++	vsp = pci_upstream_bridge(pdev);
++	if (!vsp)
++		return NULL;
++
++	return pci_upstream_bridge(vsp);
++}
++
+ int xe_register_pci_driver(void)
+ {
+ 	return pci_register_driver(&xe_pci_driver);
+diff --git a/drivers/gpu/drm/xe/xe_pci.h b/drivers/gpu/drm/xe/xe_pci.h
+index 11bcc5fe2c5b9..3dc3539c39708 100644
+--- a/drivers/gpu/drm/xe/xe_pci.h
++++ b/drivers/gpu/drm/xe/xe_pci.h
+@@ -11,5 +11,6 @@ struct pci_dev;
+ int xe_register_pci_driver(void);
+ void xe_unregister_pci_driver(void);
+ struct xe_device *xe_pci_to_pf_device(struct pci_dev *pdev);
++struct pci_dev *xe_pci_get_usp_dev(struct pci_dev *pdev);
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index cd753c82b0fff..3aea4969af13e 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -13,6 +13,7 @@
+ #include "xe_device.h"
+ #include "xe_drm_ras.h"
+ #include "xe_log.h"
++#include "xe_pci.h"
+ #include "xe_pm.h"
+ #include "xe_printk.h"
+ #include "xe_ras.h"
+@@ -219,22 +220,6 @@ static bool ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter)
+ 	return true;
+ }
+ 
+-static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
+-{
+-	struct pci_dev *vsp;
+-
+-	/*
+-	 * Device Hierarchy:
+-	 *
+-	 * Upstream Switch Port (USP) --> Virtual Switch Port (VSP) --> SGunit (GPU endpoint)
+-	 */
+-	vsp = pci_upstream_bridge(pdev);
+-	if (!vsp)
+-		return NULL;
+-
+-	return pci_upstream_bridge(vsp);
+-}
+-
+ static void ras_usp_aer_init(struct xe_device *xe)
+ {
+ 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+@@ -527,7 +512,7 @@ static void ras_usp_aer_init(struct xe_device *xe)
+ 	u16 aer_cap;
+ 	u32 status;
+ 
+-	usp = find_usp_dev(pdev);
++	usp = xe_pci_get_usp_dev(pdev);
+ 	if (!usp)
+ 		return;
+ 
+-- 
+2.43.0
+

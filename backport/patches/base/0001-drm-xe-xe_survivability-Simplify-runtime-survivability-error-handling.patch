@@ -1,0 +1,89 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Date: Mon, 4 May 2026 16:33:01 +0530
+Subject: [PATCH] drm/xe/xe_survivability: Simplify runtime survivability error
+ handling
+
+xe_survivability_mode_runtime_enable() returns an int, but its caller
+cannot take any meaningful recovery action on failure. The function
+already logs errors and declares the device wedged regardless of sysfs
+creation failure, making the return value redundant.
+
+Change the return type to void and remove the unnecessary error handling
+in the caller. Sysfs error logging has already been moved into the helper.
+
+Signed-off-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link: https://patch.msgid.link/20260504110300.1467303-2-mallesh.koujalagi@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 2b8c1d7fe0d521f9d264ef08c15760235e61c341 linux-next)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hw_error.c           | 5 +----
+ drivers/gpu/drm/xe/xe_survivability_mode.c | 8 ++------
+ drivers/gpu/drm/xe/xe_survivability_mode.h | 2 +-
+ 3 files changed, 4 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
+--- a/drivers/gpu/drm/xe/xe_hw_error.c
++++ b/drivers/gpu/drm/xe/xe_hw_error.c
+@@ -168,11 +168,8 @@ static void hw_error_work(struct work_struct *work)
+ {
+ 	struct xe_tile *tile = container_of(work, typeof(*tile), hw_error_work);
+ 	struct xe_device *xe = tile_to_xe(tile);
+-	int ret;
+ 
+-	ret = xe_survivability_mode_runtime_enable(xe);
+-	if (ret)
+-		drm_err(&xe->drm, "Failed to enable runtime survivability mode\n");
++	xe_survivability_mode_runtime_enable(xe);
+ }
+ 
+ static void csc_hw_error_handler(struct xe_tile *tile, const enum hardware_error hw_err)
+diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
+--- a/drivers/gpu/drm/xe/xe_survivability_mode.c
++++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
+@@ -430,19 +430,17 @@ bool xe_survivability_mode_is_requested(struct xe_device *xe)
+  * Runtime survivability mode is enabled when certain errors cause the device to be
+  * in non-recoverable state. The device is declared wedged with the appropriate
+  * recovery method and survivability mode sysfs exposed to userspace
+- *
+- * Return: 0 if runtime survivability mode is enabled, negative error code otherwise.
+  */
+-int xe_survivability_mode_runtime_enable(struct xe_device *xe)
++void xe_survivability_mode_runtime_enable(struct xe_device *xe)
+ {
+ 	struct xe_survivability *survivability = &xe->survivability;
+ 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+ 
+ 	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe) || xe->info.platform < XE_BATTLEMAGE) {
+ 		xe_log_err(xe, SURVIVABILITY, -EOPNOTSUPP, "Runtime Mode not supported!\n");
+-		return -EINVAL;
++		return;
+ 	}
+ 
+ 	populate_survivability_info(xe);
+ 
+ 	create_survivability_sysfs(pdev);
+@@ -458,8 +456,6 @@ int xe_survivability_mode_runtime_enable(struct xe_device *xe)
+ 	xe_log_err(xe, SURVIVABILITY, 0, "Firmware flash required!\n");
+ 	xe_info(xe, "Please refer to the userspace documentation for more details how to flash the firmware on %s!\n",
+ 			xe->info.platform_name);
+-
+-	return 0;
+ }
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.h b/drivers/gpu/drm/xe/xe_survivability_mode.h
+--- a/drivers/gpu/drm/xe/xe_survivability_mode.h
++++ b/drivers/gpu/drm/xe/xe_survivability_mode.h
+@@ -11,6 +11,6 @@ struct xe_device;
+ 
+ int xe_survivability_mode_boot_enable(struct xe_device *xe);
+-int xe_survivability_mode_runtime_enable(struct xe_device *xe);
++void xe_survivability_mode_runtime_enable(struct xe_device *xe);
+ bool xe_survivability_mode_is_boot_enabled(struct xe_device *xe);
+ bool xe_survivability_mode_is_requested(struct xe_device *xe);
+ 
+-- 
+2.43.0

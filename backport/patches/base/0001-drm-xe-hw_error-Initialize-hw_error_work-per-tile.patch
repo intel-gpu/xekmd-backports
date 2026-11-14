@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Raag Jadav <raag.jadav@intel.com>
-Date: Fri, 27 Mar 2026 06:18:40 -0700
-Subject: [TEMP] drm/xe/hw_error: Initialize hw_error_work per tile
+Date: Thu, 12 Nov 2026 11:37:04 +0530
+Subject: [PATCH] drm/xe/hw_error: Initialize hw_error_work per tile
 
 Since hw_error_work is now being reused generically, initialize it per tile
 so that we don't hit uninitialized work for non-root tile. While at it,
@@ -9,18 +9,20 @@ disable hw_error_work on fini to prevent UAF during unwind.
 
 Signed-off-by: Raag Jadav <raag.jadav@intel.com>
 Reviewed-by: Riana Tauro <riana.tauro@intel.com>
-(backported from https://patchwork.freedesktop.org/patch/749203/?series=173001&rev=1)
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20261112060701.3327125-12-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from 14bbd417a6e0f12d225d835f85263cf6e56ce7e9 linux-next)
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
-
 ---
  drivers/gpu/drm/xe/xe_hw_error.c | 17 +++++++++++++++--
  1 file changed, 15 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
-index df6275c3d316..5a57b7eaebc3 100644
+index a934b649575c..ef41bd24ece0 100644
 --- a/drivers/gpu/drm/xe/xe_hw_error.c
 +++ b/drivers/gpu/drm/xe/xe_hw_error.c
-@@ -535,6 +535,16 @@ static void process_hw_errors(struct xe_device *xe)
+@@ -537,6 +537,16 @@ static void process_hw_errors(struct xe_device *xe)
  	}
  }
  
@@ -37,7 +39,7 @@ index df6275c3d316..5a57b7eaebc3 100644
  /**
   * xe_hw_error_init - Initialize hw errors
   * @xe: xe device instance
-@@ -544,12 +554,15 @@ static void process_hw_errors(struct xe_device *xe)
+@@ -546,12 +556,15 @@ static void process_hw_errors(struct xe_device *xe)
   */
  void xe_hw_error_init(struct xe_device *xe)
  {
@@ -55,3 +57,6 @@ index df6275c3d316..5a57b7eaebc3 100644
  	process_hw_errors(xe);
 +	devm_add_action_or_reset(xe->drm.dev, hw_error_fini, xe);
  }
+-- 
+2.43.0
+

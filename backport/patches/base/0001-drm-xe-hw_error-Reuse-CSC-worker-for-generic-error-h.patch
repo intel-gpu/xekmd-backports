@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Raag Jadav <raag.jadav@intel.com>
-Date: Fri, 27 Mar 2026 06:18:40 -0700
-Subject: [TEMP] drm/xe/hw_error: Reuse CSC worker for generic error handling
+Date: Thu, 12 Nov 2026 11:37:03 +0530
+Subject: [PATCH] drm/xe/hw_error: Reuse CSC worker for generic error handling
 
 We have upcoming usecases which require defering work during error
 handling. Since we already have CSC worker in place, prepare it to
@@ -9,7 +9,10 @@ be reused generically.
 
 Signed-off-by: Raag Jadav <raag.jadav@intel.com>
 Reviewed-by: Riana Tauro <riana.tauro@intel.com>
-(backported from https://patchwork.freedesktop.org/patch/749205/?series=173001&rev=1)
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20261112060701.3327125-11-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(backported from 3541c71284fa85e08e54aa2cc28dd80c0e936a69 linux-next)
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 ---
  drivers/gpu/drm/xe/xe_hw_error.c   | 10 +++++-----
@@ -17,10 +20,10 @@ Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
  2 files changed, 7 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_hw_error.c b/drivers/gpu/drm/xe/xe_hw_error.c
-index 5f2abc9485ff..df6275c3d316 100644
+index ac720710c8e8..a934b649575c 100644
 --- a/drivers/gpu/drm/xe/xe_hw_error.c
 +++ b/drivers/gpu/drm/xe/xe_hw_error.c
-@@ -165,9 +165,9 @@ static_assert(ARRAY_SIZE(pvc_master_local_nonfatal_err_reg) == XE_RAS_REG_SIZE);
+@@ -166,9 +166,9 @@ static_assert(ARRAY_SIZE(pvc_master_local_nonfatal_err_reg) == XE_RAS_REG_SIZE);
  						 pvc_master_local_fatal_err_reg : \
  						 pvc_master_local_nonfatal_err_reg)
  
@@ -32,7 +35,7 @@ index 5f2abc9485ff..df6275c3d316 100644
  	struct xe_device *xe = tile_to_xe(tile);
  	int ret;
  
-@@ -205,7 +205,7 @@ static void csc_hw_error_handler(struct xe_tile *tile, const enum hardware_error
+@@ -204,7 +204,7 @@ static void csc_hw_error_handler(struct xe_tile *tile, const enum hardware_error
  					     hec_uncorrected_fw_errors[err_bit], severity_str,
  					     err_bit);
  
@@ -41,7 +44,7 @@ index 5f2abc9485ff..df6275c3d316 100644
  		}
  	}
  
-@@ -514,7 +514,7 @@ void xe_hw_error_irq_handler(struct xe_tile *tile, const u32 master_ctl)
+@@ -513,7 +513,7 @@ void xe_hw_error_irq_handler(struct xe_tile *tile, const u32 master_ctl)
  	enum hardware_error hw_err;
  
  	if (xe_fault_csc_hw_error())
@@ -50,7 +53,7 @@ index 5f2abc9485ff..df6275c3d316 100644
  
  	for (hw_err = 0; hw_err < HARDWARE_ERROR_MAX; hw_err++) {
  		if (master_ctl & ERROR_IRQ(hw_err))
-@@ -552,7 +552,7 @@ void xe_hw_error_init(struct xe_device *xe)
+@@ -551,7 +551,7 @@ void xe_hw_error_init(struct xe_device *xe)
  	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe))
  		return;
  
@@ -60,10 +63,10 @@ index 5f2abc9485ff..df6275c3d316 100644
  	process_hw_errors(xe);
  }
 diff --git a/drivers/gpu/drm/xe/xe_tile_types.h b/drivers/gpu/drm/xe/xe_tile_types.h
-index 0048100ccb72..bc6940b08841 100644
+index e1368c04846a..3dc011f111a4 100644
 --- a/drivers/gpu/drm/xe/xe_tile_types.h
 +++ b/drivers/gpu/drm/xe/xe_tile_types.h
-@@ -114,8 +114,8 @@ struct xe_tile {
+@@ -118,8 +118,8 @@ struct xe_tile {
  	/** @memirq: Memory Based Interrupts. */
  	struct xe_memirq memirq;
  
@@ -74,3 +77,6 @@ index 0048100ccb72..bc6940b08841 100644
  
  	/** @pcode: tile's PCODE */
  	struct {
+-- 
+2.43.0
+

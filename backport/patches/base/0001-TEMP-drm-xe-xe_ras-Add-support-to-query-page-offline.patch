@@ -98,9 +98,9 @@ index c716f883f..d2a252f12 100644
 +			  &response, sizeof(response), &response.common, false);
 +}
 +
- static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
- {
- 	struct pci_dev *vsp;
+ #define PCI_EXP_AER_FLAGS	(PCI_EXP_DEVCTL_CERE | PCI_EXP_DEVCTL_NFERE | \
+ 				 PCI_EXP_DEVCTL_FERE | PCI_EXP_DEVCTL_URRE)
+ 
 @@ -1341,6 +1412,9 @@ void xe_ras_init(struct xe_device *xe)
  	if (IS_ENABLED(CONFIG_PCIEAER))
  		ras_usp_aer_init(xe);

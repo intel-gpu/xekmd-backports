@@ -244,6 +244,16 @@ struct xe_device {
 		 * state the firmware or bootloader left it in.
 		 */
 		u8 probe_display:1;
+		/**
+		 * @info.media_allowed: Media IP may be used.  Latched during
+		 * early probe from the enable_media modparam, the
+		 * gt_types_allowed configfs attribute and any per-device
+		 * restriction, so that the decision stays fixed for the
+		 * lifetime of the device even if the modparam or configfs
+		 * inputs change later.  Cleared again if the System
+		 * Controller cannot be told how media is configured.
+		 */
+		u8 media_allowed:1;
 		/** @info.skip_guc_pc: Skip GuC based PM feature init */
 		u8 skip_guc_pc:1;
 		/** @info.skip_mtcfg: skip Multi-Tile configuration from MTCFG register */

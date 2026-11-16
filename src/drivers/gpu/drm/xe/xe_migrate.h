@@ -178,6 +178,8 @@ xe_migrate_update_pgtables(struct xe_migrate *m,
 
 void xe_migrate_wait(struct xe_migrate *m);
 
+bool xe_migrate_can_blit(struct xe_migrate *m);
+
 #if IS_ENABLED(CONFIG_PROVE_LOCKING)
 void xe_migrate_job_lock_assert(struct xe_exec_queue *q);
 #else

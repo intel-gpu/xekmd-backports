@@ -263,6 +263,15 @@ int xe_pm_resume(struct xe_device *xe)
 
 	xe_sysctrl_pm_resume(xe);
 
+	/*
+	 * The System Controller drops the media defeature configuration on
+	 * every ATS enable, and the PCI core re-enables ATS when it restores
+	 * config space on resume, so re-send it before any media GT resumes.
+	 */
+	err = xe_sysctrl_media_defeature(xe);
+	if (err)
+		goto err;
+
 	xe_irq_resume(xe);
 
 	for_each_gt(gt, xe, id) {
@@ -705,8 +714,21 @@ int xe_pm_runtime_resume(struct xe_device *xe)
 
 	xe_i2c_pm_resume(xe, xe->d3cold.allowed);
 
-	if (xe->d3cold.allowed)
-		xe_sysctrl_pm_resume(xe);
+	/*
+	 * Both are done unconditionally: @d3cold.allowed is only the state xe
+	 * asked the PCI core for, the platform can still drop power when the
+	 * bridge above us runtime suspends, taking the SoC remapper
+	 * configuration with it. The PCI core restores config space
+	 * (re-enabling ATS, which clears the media defeature) on every runtime
+	 * resume for exactly that reason, so the System Controller has to be
+	 * reprogrammed on every runtime resume as well, before any media GT
+	 * resumes.
+	 */
+	xe_sysctrl_pm_resume(xe);
+
+	err = xe_sysctrl_media_defeature(xe);
+	if (err)
+		goto out;
 
 	xe_irq_resume(xe);
 

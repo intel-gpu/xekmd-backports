@@ -813,9 +813,6 @@ int xe_device_probe_early(struct xe_device *xe)
 {
 	int err;
 
-	xe_wa_device_init(xe);
-	xe_wa_process_device_oob(xe);
-
 	err = xe_mmio_probe_early(xe);
 	if (err)
 		return err;
@@ -1059,6 +1056,13 @@ int xe_device_probe(struct xe_device *xe)
 	if (err)
 		return err;
 
+	/*
+	 * Let the System Controller know how media is configured as early as
+	 * the mailbox allows, before any media GT is brought up.  Media is
+	 * dropped if that cannot be done.
+	 */
+	xe_sysctrl_media_probe(xe);
+
 	err = xe_ras_init(xe);
 	if (err)
 		return err;
@@ -1225,6 +1229,20 @@ void xe_device_shutdown(struct xe_device *xe)
 		/* BOOM! */
 		__xe_driver_flr(xe);
 	}
+}
+
+/**
+ * xe_device_media_allowed() - Check whether the media IP may be used.
+ * @xe: the &xe_device to check
+ *
+ * Returns the decision latched during early probe, see
+ * @xe_device.info.media_allowed.
+ *
+ * Return: true if media may be used, false otherwise.
+ */
+bool xe_device_media_allowed(struct xe_device *xe)
+{
+	return xe->info.media_allowed;
 }
 
 /**

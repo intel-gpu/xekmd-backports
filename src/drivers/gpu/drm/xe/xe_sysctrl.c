@@ -5,12 +5,16 @@
 
 #include <linux/device.h>
 #include <linux/mutex.h>
+#include <linux/pci.h>
 
 #include <drm/drm_managed.h>
+
+#include <generated/xe_device_wa_oob.h>
 
 #include "regs/xe_irq_regs.h"
 #include "regs/xe_sysctrl_regs.h"
 #include "xe_device.h"
+#include "xe_force_wake.h"
 #include "xe_mmio.h"
 #include "xe_pm.h"
 #include "xe_printk.h"
@@ -19,6 +23,7 @@
 #include "xe_sysctrl_mailbox.h"
 #include "xe_sysctrl_mailbox_types.h"
 #include "xe_sysctrl_types.h"
+#include "xe_wa.h"
 
 /**
  * DOC: System Controller (sysctrl)
@@ -103,6 +108,7 @@ int xe_sysctrl_init(struct xe_device *xe)
 
 	xe->soc_remapper.set_sysctrl_region(xe, SYSCTRL_MAILBOX_INDEX);
 	INIT_WORK(&sc->work, xe_sysctrl_work);
+	sc->has_media_feature_disable = true;
 
 	return devm_add_action_or_reset(xe->drm.dev, sysctrl_fini, xe);
 }
@@ -129,8 +135,10 @@ void xe_sysctrl_irq_handler(struct xe_device *xe, u32 master_ctl)
  * xe_sysctrl_pm_resume() - System Controller resume handler
  * @xe: xe device instance
  *
- * Invoked during system resume (S3/S4 to S0) and runtime resume from D3cold.
- * Restores SoC remapper configuration.
+ * Invoked during system resume (S3/S4 to S0) and on every runtime resume.
+ * Restores SoC remapper configuration, which is lost whenever the device
+ * loses power - including when the platform drops power behind our back
+ * because the bridge above us runtime suspended.
  */
 void xe_sysctrl_pm_resume(struct xe_device *xe)
 {
@@ -248,4 +256,196 @@ int xe_sysctrl_sdk_api_version(struct xe_device *xe, u16 *version)
 	*version = resp.sdk_api_version;
 
 	return 0;
+}
+
+static int sysctrl_media_defeature(struct xe_device *xe, u8 feature)
+{
+	struct xe_sysctrl_media_defeature_req req = { .feature = feature };
+	struct xe_sysctrl_media_defeature_resp resp = {};
+	struct xe_sysctrl_mailbox_command cmd = {};
+	size_t out_len = 0;
+	int ret;
+
+	xe_sysctrl_create_command(&cmd, XE_SYSCTRL_GROUP_RUNTIME,
+				  XE_SYSCTRL_CMD_MEDIA_DEFEATURE,
+				  &req, sizeof(req), &resp, sizeof(resp));
+
+	ret = xe_sysctrl_send_command(&xe->sc, &cmd, &out_len);
+	if (ret)
+		return ret;
+
+	if (out_len != sizeof(resp)) {
+		xe_err(xe, "sysctrl: unexpected media defeature response length %zu (expected %zu)\n",
+		       out_len, sizeof(resp));
+		return -EPROTO;
+	}
+
+	return 0;
+}
+
+/* Check whether the ATS Enable bit is set in the PCI ATS Control register */
+static bool sysctrl_ats_enabled(struct xe_device *xe)
+{
+	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+	int ats_cap;
+	u16 ctrl;
+
+	ats_cap = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_ATS);
+	if (!ats_cap)
+		return false;
+
+	if (pci_read_config_word(pdev, ats_cap + PCI_ATS_CTRL, &ctrl))
+		return false;
+
+	return ctrl & PCI_ATS_CTRL_ENABLE;
+}
+
+/* Send the media defeature command and report the outcome */
+static int sysctrl_media_defeature_send(struct xe_device *xe, u8 feature)
+{
+	bool media_allowed = feature == XE_SYSCTRL_MEDIA_DEFEATURE_ATS_DISABLE;
+	int ret;
+
+	ret = sysctrl_media_defeature(xe, feature);
+	if (ret) {
+		xe_err(xe, "sysctrl: failed to defeature media (0x%02x): %pe\n",
+		       feature, ERR_PTR(ret));
+		return ret;
+	}
+
+	xe_info(xe, "sysctrl: media %s, %s defeatured\n",
+		media_allowed ? "enabled" : "disabled",
+		media_allowed ? "address translation" : "media");
+
+	return 0;
+}
+
+/*
+ * The System Controller reaches into media while processing the request, so
+ * hold the media GT forcewake for its duration.
+ */
+static int sysctrl_media_ats_defeature_send(struct xe_device *xe, struct xe_gt *media_gt)
+{
+	int ret = 0;
+
+	xe_with_force_wake(fw_ref, gt_to_fw(media_gt), XE_FW_GT) {
+		if (!xe_force_wake_ref_has_domain(fw_ref.domains, XE_FW_GT))
+			xe_err(xe, "sysctrl: failed to wake media GT, defeaturing media ATS anyway\n");
+
+		ret = sysctrl_media_defeature_send(xe, XE_SYSCTRL_MEDIA_DEFEATURE_ATS_DISABLE);
+	}
+
+	return ret;
+}
+
+/* Whether this platform needs the media defeature workaround at all */
+static bool sysctrl_media_defeature_needed(struct xe_device *xe)
+{
+	return XE_DEVICE_WA(xe, 14028632488) &&
+	       xe->info.has_soc_remapper_sysctrl &&
+	       xe->info.has_sysctrl &&
+	       xe->sc.has_media_feature_disable;
+}
+
+/**
+ * xe_sysctrl_media_defeature() - Tell System Controller how media is configured
+ * @xe: xe device instance
+ *
+ * The driver and the System Controller must agree on the media configuration
+ * before media is used. When media is enabled, address translation for media
+ * is not supported and must be defeatured. When media has been disabled by the
+ * user, via either the enable_media modparam or the gt_types_allowed configfs
+ * attribute, media itself is defeatured.
+ *
+ * This is restricted to platforms that need this workaround.
+ *
+ * The System Controller drops this configuration on every ATS enable, so it
+ * has to be sent at probe and again from both resume paths, since the PCI core
+ * restores config space - and with it the ATS capability - on every system and
+ * runtime resume.
+ *
+ * Once a request has failed, the System Controller is assumed not to support
+ * it and it is not sent again; this returns 0 from then on.
+ *
+ * When platform ATS is enabled, the media ATS defeature is sent with the media
+ * GT forcewake held, since the System Controller reaches into media while
+ * processing it.
+ *
+ * Must be called after xe_sysctrl_init() and after xe_gt_init_early() has run
+ * for the media GT, so its forcewake is initialized, but before any media GT
+ * is brought up or resumed.
+ *
+ * Return: 0 on success, error code on failure
+ */
+int xe_sysctrl_media_defeature(struct xe_device *xe)
+{
+	bool media_allowed = xe_device_media_allowed(xe);
+	struct xe_gt *media_gt;
+	u8 feature;
+	int ret;
+
+	if (!sysctrl_media_defeature_needed(xe))
+		return 0;
+
+	feature = media_allowed ? XE_SYSCTRL_MEDIA_DEFEATURE_ATS_DISABLE :
+				  XE_SYSCTRL_MEDIA_DEFEATURE_DISABLE;
+
+	media_gt = xe_device_get_root_tile(xe)->media_gt;
+
+	if (media_gt && feature == XE_SYSCTRL_MEDIA_DEFEATURE_ATS_DISABLE &&
+	    sysctrl_ats_enabled(xe))
+		ret = sysctrl_media_ats_defeature_send(xe, media_gt);
+	else
+		ret = sysctrl_media_defeature_send(xe, feature);
+
+	if (ret)
+		xe->sc.has_media_feature_disable = false;
+
+	return ret;
+}
+
+/*
+ * Drop media from the device.  Only safe during probe, before the media GT is
+ * brought up.  The dma_mask_size cap derived from the early media decision is
+ * left in place, which is harmless since it is only more restrictive than
+ * needed.
+ */
+static void sysctrl_media_drop(struct xe_device *xe)
+{
+	struct xe_tile *tile;
+	u8 id;
+
+	xe->info.media_allowed = false;
+
+	for_each_tile(tile, xe, id)
+		tile->media_gt = NULL;
+}
+
+/**
+ * xe_sysctrl_media_probe() - Configure media with the System Controller at probe
+ * @xe: xe device instance
+ *
+ * Same as xe_sysctrl_media_defeature(), but media cannot be used while the
+ * System Controller does not know how it is configured, so on failure media is
+ * dropped and probe continues without it rather than failing driver load.
+ *
+ * Must be called from the same place xe_sysctrl_media_defeature() would be
+ * called during probe.
+ */
+void xe_sysctrl_media_probe(struct xe_device *xe)
+{
+	if (!xe_sysctrl_media_defeature(xe))
+		return;
+
+	/*
+	 * Media is going away, so ask the System Controller to defeature it
+	 * too.  Nothing more can be done if even that fails, but the driver
+	 * does not touch media from here on either way.
+	 */
+	if (xe_device_media_allowed(xe))
+		sysctrl_media_defeature_send(xe, XE_SYSCTRL_MEDIA_DEFEATURE_DISABLE);
+
+	sysctrl_media_drop(xe);
+
+	xe_info(xe, "sysctrl: media configuration failed, continuing without media\n");
 }

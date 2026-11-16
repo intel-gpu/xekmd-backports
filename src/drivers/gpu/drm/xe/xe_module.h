@@ -13,6 +13,7 @@ struct work_struct;
 /* Module modprobe variables */
 struct xe_modparam {
 	bool force_execlist;
+	int enable_media;
 	bool probe_display;
 	int force_vram_bar_size;
 	int guc_log_level;

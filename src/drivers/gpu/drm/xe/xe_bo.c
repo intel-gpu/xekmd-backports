@@ -1122,6 +1122,19 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 	}
 
 	/*
+	 * A tile with no copy engine cannot blit, so move the data with the
+	 * CPU instead.  For VRAM that means going over the PCIe BAR, which is
+	 * slow, but a device with no graphics IP offers no alternative.
+	 * ttm_bo_move_memcpy() covers the clear case too, by way of an
+	 * unpopulated source.
+	 */
+	if (!xe_migrate_can_blit(migrate)) {
+		ret = ttm_bo_move_memcpy(ttm_bo, ctx, new_mem);
+		xe_pm_runtime_put(xe);
+		goto out;
+	}
+
+	/*
 	 * Attach CCS BBs before submitting the copy job below so a VF
 	 * migration racing the copy sees valid, up to date attach state.
 	 */
@@ -1421,17 +1434,18 @@ int xe_bo_notifier_unprepare_pinned(struct xe_bo *bo)
 static int xe_bo_evict_pinned_copy(struct xe_bo *bo, struct xe_bo *backup)
 {
 	struct xe_device *xe = xe_bo_device(bo);
+	struct xe_migrate *migrate;
 	bool unmap = false;
 	int ret = 0;
 
-	if (xe_bo_is_user(bo) || (bo->flags & XE_BO_FLAG_PINNED_LATE_RESTORE)) {
-		struct xe_migrate *migrate;
-		struct dma_fence *fence;
+	if (bo->tile)
+		migrate = bo->tile->migrate;
+	else
+		migrate = mem_type_to_migrate(xe, bo->ttm.resource->mem_type);
 
-		if (bo->tile)
-			migrate = bo->tile->migrate;
-		else
-			migrate = mem_type_to_migrate(xe, bo->ttm.resource->mem_type);
+	if ((xe_bo_is_user(bo) || (bo->flags & XE_BO_FLAG_PINNED_LATE_RESTORE)) &&
+	    xe_migrate_can_blit(migrate)) {
+		struct dma_fence *fence;
 
 		xe_assert(xe, bo->ttm.base.resv == backup->ttm.base.resv);
 		ret = dma_resv_reserve_fences(bo->ttm.base.resv, 1);
@@ -1560,6 +1574,7 @@ int xe_bo_restore_pinned(struct xe_bo *bo)
 	};
 	struct xe_device *xe = ttm_to_xe_device(bo->ttm.bdev);
 	struct xe_bo *backup = bo->backup_obj;
+	struct xe_migrate *migrate;
 	bool unmap = false;
 	int ret;
 
@@ -1574,14 +1589,14 @@ int xe_bo_restore_pinned(struct xe_bo *bo)
 			goto out_unlock_bo;
 	}
 
-	if (xe_bo_is_user(bo) || (bo->flags & XE_BO_FLAG_PINNED_LATE_RESTORE)) {
-		struct xe_migrate *migrate;
-		struct dma_fence *fence;
+	if (bo->tile)
+		migrate = bo->tile->migrate;
+	else
+		migrate = mem_type_to_migrate(xe, bo->ttm.resource->mem_type);
 
-		if (bo->tile)
-			migrate = bo->tile->migrate;
-		else
-			migrate = mem_type_to_migrate(xe, bo->ttm.resource->mem_type);
+	if ((xe_bo_is_user(bo) || (bo->flags & XE_BO_FLAG_PINNED_LATE_RESTORE)) &&
+	    xe_migrate_can_blit(migrate)) {
+		struct dma_fence *fence;
 
 		ret = dma_resv_reserve_fences(bo->ttm.base.resv, 1);
 		if (ret)

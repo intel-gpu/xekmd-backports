@@ -55,11 +55,29 @@ struct xe_sysctrl {
 	/** @cmd_lock: Mutex protecting mailbox command operations */
 	struct mutex cmd_lock;
 
+	/**
+	 * @cmd_buf: Request staging buffer, sized to the maximum mailbox
+	 * message. Preallocated because commands are sent from the runtime
+	 * resume path, which may be entered from reclaim. Protected by
+	 * @cmd_lock.
+	 */
+	u8 cmd_buf[XE_SYSCTRL_MB_MAX_MESSAGE_SIZE];
+
+	/** @resp_buf: Response staging buffer, see @cmd_buf */
+	u8 resp_buf[XE_SYSCTRL_MB_MAX_MESSAGE_SIZE];
+
 	/** @work: Pending events worker */
 	struct work_struct work;
 
 	/** @event_lock: Mutex protecting pending events */
 	struct mutex event_lock;
+
+	/**
+	 * @has_media_feature_disable: The System Controller accepts media
+	 * defeature requests. Cleared if a request fails, after which none
+	 * are sent again.
+	 */
+	bool has_media_feature_disable;
 
 	/** @debugfs: Debugfs entries */
 	struct {

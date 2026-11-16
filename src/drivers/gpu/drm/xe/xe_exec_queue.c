@@ -27,6 +27,7 @@
 #include "xe_macros.h"
 #include "xe_migrate.h"
 #include "xe_pm.h"
+#include "xe_tile.h"
 #include "xe_trace.h"
 #include "xe_vm.h"
 #include "xe_pxp.h"
@@ -602,7 +603,7 @@ struct xe_exec_queue *xe_exec_queue_create_bind(struct xe_device *xe,
 						struct xe_vm *user_vm,
 						u32 flags, u64 extensions)
 {
-	struct xe_gt *gt = tile->primary_gt;
+	struct xe_gt *gt = xe_tile_pt_gt(tile);
 	struct xe_exec_queue *q;
 	struct xe_vm *migrate_vm;
 
@@ -623,7 +624,7 @@ struct xe_exec_queue *xe_exec_queue_create_bind(struct xe_device *xe,
 					 flags, extensions);
 	} else {
 		q = xe_exec_queue_create_class(xe, gt, migrate_vm,
-					       XE_ENGINE_CLASS_COPY, flags,
+					       xe_tile_pt_class(tile), flags,
 					       extensions);
 	}
 	xe_vm_put(migrate_vm);

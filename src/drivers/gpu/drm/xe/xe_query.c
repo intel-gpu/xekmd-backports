@@ -585,7 +585,8 @@ query_uc_fw_version(struct xe_device *xe, struct drm_xe_device_query *query)
 
 	switch (resp.uc_type) {
 	case XE_QUERY_UC_TYPE_GUC_SUBMISSION: {
-		struct xe_guc *guc = &xe->tiles[0].primary_gt->uc.guc;
+		struct xe_gt *gt = xe_device_any_gt(xe);
+		struct xe_guc *guc = &gt->uc.guc;
 
 		version = &guc->fw.versions.found[XE_UC_FW_VER_COMPATIBILITY];
 		break;

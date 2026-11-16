@@ -67,6 +67,7 @@ sed -e 's/^[[:space:]]*//' -e '/^DEL/d' <<EOF
 	$BIN BuildRequires: gcc, make, kernel-devel
 
 	Requires: dkms, kernel-devel, gcc, make, flex, bison
+	$DKMS Requires: autoconf, automake
 
 	Provides: xe-modules
 

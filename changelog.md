@@ -39,6 +39,25 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.1.4.75_260728.53` | | | |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/759600/?series=175989&rev=1>) | TEMP: drm/xe/cri: Implement workaround Wa_15020021844 |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/172710/#rev3>) | &#91;TEMP&#93;: drm/xe/xe_ras: Add function to get maximum pages firmware can store |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/172710/#rev3>) | &#91;TEMP&#93;: drm/xe/xe_ras: Add support to query page offline queue and list |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/169692/#rev3>) | &#91;TEMP&#93; drm/xe/cper: Log CPER records for aggregate counter retrival |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/169692/#rev3>) | &#91;TEMP&#93; drm/xe/cper: Retrieve the error counter record for CPER reporting |
+| | ML | [Patchwork](<https://patchwork.freedesktop.org/patch/748149/>) | &#91;TEMP&#93; drm/xe/ras: Enable SGUnit PCIe error reporting |
+| | linux-next | [`b6bd6c613`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b6bd6c613fd5e7967e5b4c0a0a5270b6ede1a8b8>) | drm/xe: Add support for wa_14028434957 |
+| | linux-next | [`14bbd417a`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=14bbd417a6e0f12d225d835f85263cf6e56ce7e9>) | drm/xe/hw_error: Initialize hw_error_work per tile |
+| | linux-next | [`3541c7128`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3541c71284fa85e08e54aa2cc28dd80c0e936a69>) | drm/xe/hw_error: Reuse CSC worker for generic error handling |
+| | linux-next | [`3fe338ed5`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3fe338ed5debcc115ebef8ee832fc11b6b5ba2da>) | drm/xe/pci: Add upstream switch port lookup helper |
+| | linux-next | [`f416c3899`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f416c3899d2a0fe5f05921567164c10e5e36dbde>) | drm/xe/ras: Treat non-fatal PCIe errors as recovered |
+| | linux-next | [`042d84d7e`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=042d84d7e69f4da41c58707d558a95421e565869>) | drm/xe/survivability: Guard runtime survivability enable against unbind |
+| | linux-next | [`3b8cc72ad`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3b8cc72ad59765ad4ba7461a77285a625cd9c799>) | drm/xe/xe_ras: Add a flag for uncorrectable internal error |
+| | linux-next | [`ee5e2de26`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=ee5e2de2688665e4061e1cfef61030ca1283dbc1>) | drm/xe/xe_ras: Skip double-bit ECC page offlining on AER path |
+| | linux-next | [`2b8c1d7fe`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=2b8c1d7fe0d521f9d264ef08c15760235e61c341>) | drm/xe/xe_survivability: Simplify runtime survivability error handling |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/749203/?series=173001&rev=1>) | &#91;TEMP&#93; drm/xe/hw_error: Initialize hw_error_work per tile |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/749205/?series=173001&rev=1>) | &#91;TEMP&#93; drm/xe/hw_error: Reuse CSC worker for generic error handling |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/749204/?series=173001&rev=1>) | &#91;TEMP&#93; drm/xe/xe_hw_error: Handle non-fatal errors routed via direct IRQ |
 | `xebr_v7.1.4.74_260728.53` | | | |
 | | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/757598/?series=175385&rev=1>) | Revert &#91;TEMP&#93;: platform/x86/intel/pmt: Fix NULL dereference when reading crashlog data |
 | | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/762356/?series=176683&rev=1>) | Revert &#91;TEMP&#93;: platform/x86/intel/pmt: Notify userspace when crashlogs complete |

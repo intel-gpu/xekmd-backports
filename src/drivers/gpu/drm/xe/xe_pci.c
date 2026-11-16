@@ -1432,6 +1432,29 @@ struct xe_device *xe_pci_to_pf_device(struct pci_dev *pdev)
 	return to_xe_device(drm);
 }
 
+/**
+ * xe_pci_get_usp_dev() - Get the upstream switch port device.
+ * @pdev: pci device of SGunit
+ *
+ * Device Hierarchy:
+ * Upstream Switch Port (USP) --> Virtual Switch Port (VSP) --> SGunit (GPU endpoint)
+ *
+ * The function traverses the PCI device hierarchy to find the upstream switch port
+ * device.
+ *
+ * Return: pointer to USP &pci_dev, NULL otherwise.
+ */
+struct pci_dev *xe_pci_get_usp_dev(struct pci_dev *pdev)
+{
+	struct pci_dev *vsp;
+
+	vsp = pci_upstream_bridge(pdev);
+	if (!vsp)
+		return NULL;
+
+	return pci_upstream_bridge(vsp);
+}
+
 int xe_register_pci_driver(void)
 {
 	return pci_register_driver(&xe_pci_driver);

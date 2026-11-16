@@ -10,6 +10,8 @@
 #include <linux/pci.h>
 #include <linux/sysfs.h>
 
+#include <drm/drm_drv.h>
+
 #include "xe_configfs.h"
 #include "xe_device.h"
 #include "xe_heci_gsc.h"
@@ -431,18 +433,21 @@ bool xe_survivability_mode_is_requested(struct xe_device *xe)
  * Runtime survivability mode is enabled when certain errors cause the device to be
  * in non-recoverable state. The device is declared wedged with the appropriate
  * recovery method and survivability mode sysfs exposed to userspace
- *
- * Return: 0 if runtime survivability mode is enabled, negative error code otherwise.
  */
-int xe_survivability_mode_runtime_enable(struct xe_device *xe)
+void xe_survivability_mode_runtime_enable(struct xe_device *xe)
 {
 	struct xe_survivability *survivability = &xe->survivability;
 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+	int idx;
 
 	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe) || xe->info.platform < XE_BATTLEMAGE) {
 		xe_log_err(xe, SURVIVABILITY, -EOPNOTSUPP, "Runtime Mode not supported!\n");
-		return -EINVAL;
+		return;
 	}
+
+	/* Synchronize with unbind, do not enter runtime survivability mode during unbind */
+	if (!drm_dev_enter(&xe->drm, &idx))
+		return;
 
 	populate_survivability_info(xe);
 
@@ -458,7 +463,7 @@ int xe_survivability_mode_runtime_enable(struct xe_device *xe)
 	xe_info(xe, "Please refer to the userspace documentation for more details how to flash the firmware on %s!\n",
 			xe->info.platform_name);
 
-	return 0;
+	drm_dev_exit(idx);
 }
 
 /**

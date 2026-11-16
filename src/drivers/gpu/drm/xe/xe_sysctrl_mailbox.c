@@ -9,7 +9,6 @@
 #include <linux/slab.h>
 #include <linux/sprintf.h>
 #include <linux/string.h>
-
 #include "regs/xe_sysctrl_regs.h"
 #include "xe_device.h"
 #include "xe_log.h"
@@ -74,7 +73,6 @@ static void sysctrl_write_frame(struct xe_sysctrl *sc, const void *frame,
 	xe_assert(xe, len > 0 && len <= XE_SYSCTRL_MB_FRAME_SIZE);
 
 	memcpy(val, frame, len);
-
 	for (i = 0; i < dw; i++)
 		xe_mmio_write32(sc->mmio, regs[i], val[i]);
 }

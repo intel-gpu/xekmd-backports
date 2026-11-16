@@ -138,7 +138,7 @@ struct xe_ras_info_queue_header {
 	/** @sequence_number: Sequence number for this chunk, starts at 0 */
 	u32 sequence_number;
 	/** @flags: Info queue control flags (RAS_INFO_QUEUE_FLAG_*) */
-	u32 flags:8;
+u32 flags:8;
 	/** @compression_type: Compression algorithm used; 0 = none */
 	u32 compression_type:4;
 	/** @num_headers: Number of detailed counter headers at start of queue_data */
@@ -202,6 +202,54 @@ struct xe_ras_error_log {
 	/** @error_details: Error-specific details */
 	u32 error_details[16];
 } __packed;
+
+/**
+ * struct xe_ras_offline_common - Common structure for offline list and queue
+ */
+struct xe_ras_offline_common {
+	/** @total_pages: Total number of queued pages */
+	u32 total_pages;
+/** @pages_returned: Number of pages returned in this response */
+	u32 pages_returned;
+	/** @page_addresses: Array of page addresses (4KB aligned) */
+	u64 page_addresses[XE_RAS_NUM_PAGES];
+	/** @additional_data: Indicates if more data is available */
+	u8 additional_data;
+	/** @reserved: Reserved for future use */
+	u8 reserved[3];
+} __packed;
+
+/**
+ * struct xe_ras_offline_list_request - Request for get offline list command
+ */
+struct xe_ras_offline_list_request {
+	/** @index: Zero-based index into the offline page list */
+	u32 index;
+} __packed;
+
+/**
+ * struct xe_ras_offline_list_response - Response from get offline list command
+ */
+struct xe_ras_offline_list_response {
+	/** @max_entries: Total no of pages that can be stored in flash */
+	u32 max_entries;
+	/** @common: Common offline page information */
+	struct xe_ras_offline_common common;
+} __packed;
+
+/* Device structures */
+
+/**
+ * struct xe_ras_state - RAS device and firmware state
+ */
+struct xe_ras_state {
+	/** @disable_page_offline: cached configfs policy, immutable after init */
+	bool disable_page_offline;
+	/** @max_pages: Total number of pages that can be stored by firmware */
+	u32 max_pages;
+	/** @offlined_pages: XArray of pages offlined by firmware */
+	struct xarray offlined_pages;
+};
 
 /**
  * struct xe_ras_get_info_queue_data_request - Request for RAS_CMD_GET_INFO_QUEUE_DATA
@@ -332,7 +380,6 @@ struct xe_ras_set_threshold_response {
 	/** @reserved1: Reserved for future use */
 	u32 reserved1[2];
 } __packed;
-
 /**
  * struct xe_ras_error_array - Details of the error types
  */
@@ -370,47 +417,6 @@ struct xe_ras_compute_error {
 } __packed;
 
 /**
- * struct xe_ras_get_health_request - Request structure for obtaining gpu health
- */
-struct xe_ras_get_health_request {
-	/** @reserved: Reserved for future use. */
-	u32 reserved[2];
-} __packed;
-
-/**
- * struct xe_ras_get_health_response - Response structure for obtaining gpu health
- */
-struct xe_ras_get_health_response {
-	/** @health: gpu health value */
-	u8 health;
-	/** @reserved: Reserved for future use */
-	u8 reserved[3];
-} __packed;
-
-/**
- * struct xe_ras_set_health_request - Request structure for setting gpu health
- */
-struct xe_ras_set_health_request {
-	/** @health: gpu health value */
-	u8 health;
-	/** @reserved: Reserved for future use */
-	u8 reserved[3];
-} __packed;
-
-/**
- * struct xe_ras_set_health_response - Response structure for setting gpu health
- */
-struct xe_ras_set_health_response {
-	/** @status: Status of set health operation */
-	u32 status;
-	/** @health: Resulting gpu health value */
-	u8 health;
-	/** @reserved: Reserved for future use */
-	u8 reserved[3];
-	/** @reserved1: Reserved for future use */
-	u32 reserved1[2];
-} __packed;
-/**
  * struct xe_ras_soc_error_source - Source of SoC error
  */
 struct xe_ras_soc_error_source {
@@ -444,7 +450,7 @@ struct xe_ras_csc_error {
 
 /**
  * struct xe_ras_ieh_error - IEH (Integrated Error Handler) error details
- */
+*/
 struct xe_ras_ieh_error {
 	/** @reserved: Reserved for future use */
 	u32 reserved;
@@ -495,51 +501,44 @@ struct xe_ras_page_offline_response {
 } __packed;
 
 /**
- * struct xe_ras_offline_common - Common structure for offline list and queue
+ * struct xe_ras_get_health_request - Request structure for obtaining gpu health
  */
-struct xe_ras_offline_common {
-	/** @total_pages: Total number of queued pages */
-	u32 total_pages;
-	/** @pages_returned: Number of pages returned in this response */
-	u32 pages_returned;
-	/** @page_addresses: Array of page addresses (4KB aligned) */
-	u64 page_addresses[XE_RAS_NUM_PAGES];
-	/** @additional_data: Indicates if more data is available */
-	u8 additional_data;
+struct xe_ras_get_health_request {
+	/** @reserved: Reserved for future use. */
+	u32 reserved[2];
+} __packed;
+
+/**
+ * struct xe_ras_get_health_response - Response structure for obtaining gpu health
+ */
+struct xe_ras_get_health_response {
+	/** @health: gpu health value */
+	u8 health;
 	/** @reserved: Reserved for future use */
 	u8 reserved[3];
 } __packed;
 
 /**
- * struct xe_ras_offline_list_request - Request for get offline list command
+ * struct xe_ras_set_health_request - Request structure for setting gpu health
  */
-struct xe_ras_offline_list_request {
-	/** @index: Zero-based index into the offline page list */
-	u32 index;
+struct xe_ras_set_health_request {
+	/** @health: gpu health value */
+	u8 health;
+	/** @reserved: Reserved for future use */
+	u8 reserved[3];
 } __packed;
 
 /**
- * struct xe_ras_offline_list_response - Response from get offline list command
+ * struct xe_ras_set_health_response - Response structure for setting gpu health
  */
-struct xe_ras_offline_list_response {
-	/** @max_entries: Total no of pages that can be stored in flash */
-	u32 max_entries;
-	/** @common: Common offline page information */
-	struct xe_ras_offline_common common;
+struct xe_ras_set_health_response {
+	/** @status: Status of set health operation */
+	u32 status;
+	/** @health: Resulting gpu health value */
+	u8 health;
+	/** @reserved: Reserved for future use */
+	u8 reserved[3];
+	/** @reserved1: Reserved for future use */
+	u32 reserved1[2];
 } __packed;
-
-/* Device structures */
-
-/**
- * struct xe_ras_state - RAS device and firmware state
- */
-struct xe_ras_state {
-	/** @disable_page_offline: cached configfs policy, immutable after init */
-	bool disable_page_offline;
-	/** @max_pages: Total number of pages that can be stored by firmware */
-	u32 max_pages;
-	/** @offlined_pages: XArray of pages offlined by firmware */
-	struct xarray offlined_pages;
-};
-
 #endif

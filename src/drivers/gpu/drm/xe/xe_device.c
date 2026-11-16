@@ -10,13 +10,13 @@
 #include <linux/fault-inject.h>
 #include <linux/units.h>
 
-#include <drm/drm_atomic_helper.h>
 #include <drm/drm_client.h>
 #include <drm/drm_gem_ttm_helper.h>
 #include <drm/drm_ioctl.h>
 #include <drm/drm_managed.h>
 #include <drm/drm_pagemap_util.h>
 #include <drm/drm_print.h>
+#include <kunit/static_stub.h>
 #include <uapi/drm/xe_drm.h>
 
 #include "display/xe_display.h"
@@ -25,6 +25,7 @@
 #include "regs/xe_regs.h"
 #include "xe_bo.h"
 #include "xe_bo_evict.h"
+#include "xe_configfs.h"
 #include "xe_debugfs.h"
 #include "xe_defaults.h"
 #include "xe_devcoredump.h"
@@ -313,7 +314,7 @@ static vm_fault_t barrier_fault(struct vm_fault *vmf)
 	pgprot_t prot;
 	int idx;
 
-	prot = vm_get_page_prot(vma->vm_flags);
+	prot = vma_get_page_prot(vma);
 
 	if (drm_dev_enter(dev, &idx)) {
 		unsigned long pfn;
@@ -362,7 +363,7 @@ static int xe_pci_barrier_mmap(struct file *filp,
 	if (vma->vm_end - vma->vm_start > SZ_4K)
 		return -EINVAL;
 
-	if (is_cow_mapping(vma->vm_flags))
+	if (vma_is_cow_mapping(vma))
 		return -EINVAL;
 
 	if (vma->vm_flags & (VM_READ | VM_EXEC))
@@ -443,11 +444,15 @@ bool xe_is_xe_file(const struct file *file)
 	return file->f_op == &xe_driver_fops;
 }
 
-static struct drm_driver driver = {
+static const struct drm_driver regular_driver = {
 	.driver_features =
+#ifdef BPM_DRM_DRIVER_GEM_GPUVA_PRESENT
+	    DRIVER_GEM_GPUVA |
+#endif
+	    XE_DISPLAY_DRIVER_FEATURES |
 	    DRIVER_GEM |
 	    DRIVER_RENDER | DRIVER_SYNCOBJ |
-	    DRIVER_SYNCOBJ_TIMELINE | DRIVER_GEM_GPUVA,
+	    DRIVER_SYNCOBJ_TIMELINE,
 	.open = xe_file_open,
 	.postclose = xe_file_close,
 
@@ -473,7 +478,45 @@ static struct drm_driver driver = {
 	.major = DRIVER_MAJOR,
 	.minor = DRIVER_MINOR,
 	.patchlevel = DRIVER_PATCHLEVEL,
+	XE_DISPLAY_DRIVER_OPS
 };
+
+#ifdef CONFIG_PCI_IOV
+static const struct drm_ioctl_desc xe_ioctls_admin_only[] = {
+	DRM_IOCTL_DEF_DRV(XE_DEVICE_QUERY, xe_query_ioctl, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(XE_OBSERVATION, xe_observation_ioctl, DRM_RENDER_ALLOW),
+};
+
+static const struct drm_driver admin_only_driver = {
+	.driver_features =
+#ifdef BPM_DRM_DRIVER_GEM_GPUVA_PRESENT
+	    DRIVER_GEM_GPUVA |
+#endif
+	    DRIVER_GEM | DRIVER_RENDER,
+	.open = xe_file_open,
+	.postclose = xe_file_close,
+	.ioctls = xe_ioctls_admin_only,
+	.num_ioctls = ARRAY_SIZE(xe_ioctls_admin_only),
+	.fops = &xe_driver_fops,
+	.name = DRIVER_NAME,
+	.desc = DRIVER_DESC,
+	.major = DRIVER_MAJOR,
+	.minor = DRIVER_MINOR,
+	.patchlevel = DRIVER_PATCHLEVEL,
+};
+
+/**
+ * xe_device_is_admin_only() - Check whether device is admin only or not.
+ * @xe: the &xe_device to check
+ *
+ * Return: true if the device is admin only, false otherwise.
+ */
+bool xe_device_is_admin_only(const struct xe_device *xe)
+{
+	KUNIT_STATIC_STUB_REDIRECT(xe_device_is_admin_only, xe);
+	return xe->drm.driver == &admin_only_driver;
+}
+#endif
 
 static void xe_device_destroy(struct drm_device *dev, void *dummy)
 {
@@ -509,16 +552,24 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
  */
 struct xe_device *xe_device_create(struct pci_dev *pdev)
 {
+	const struct drm_driver *driver = &regular_driver;
 	struct xe_device *xe;
 	int err;
 
-	xe_display_driver_set_hooks(&driver);
+#ifdef CONFIG_PCI_IOV
+	/*
+	 * Since XE device is not initialized yet, read from configfs
+	 * directly to decide whether we are in admin-only PF mode or not.
+	 */
+	if (xe_configfs_admin_only_pf(pdev))
+		driver = &admin_only_driver;
+#endif
 
-	err = aperture_remove_conflicting_pci_devices(pdev, driver.name);
+	err = aperture_remove_conflicting_pci_devices(pdev, driver->name);
 	if (err)
 		return ERR_PTR(err);
 
-	xe = devm_drm_dev_alloc(&pdev->dev, &driver, struct xe_device, drm);
+	xe = devm_drm_dev_alloc(&pdev->dev, driver, struct xe_device, drm);
 	if (IS_ERR(xe))
 		return xe;
 
@@ -529,6 +580,17 @@ struct xe_device *xe_device_create(struct pci_dev *pdev)
 	return xe;
 }
 ALLOW_ERROR_INJECTION(xe_device_create, ERRNO); /* See xe_pci_probe() */
+
+static void xe_device_parse_modparam(struct xe_device *xe)
+{
+	xe->atomic_svm_timeslice_ms = 5;
+	xe->min_run_period_lr_ms = 5;
+	xe->info.num_pf_work = xe_modparam.num_pf_work;
+	if (xe->info.num_pf_work < 1)
+		xe->info.num_pf_work = 1;
+	else if (xe->info.num_pf_work > XE_PAGEFAULT_WORK_MAX)
+		xe->info.num_pf_work = XE_PAGEFAULT_WORK_MAX;
+}
 
 /**
  * xe_device_init_early() - Initialize a new &xe_device instance
@@ -544,7 +606,6 @@ int xe_device_init_early(struct xe_device *xe)
 			      xe->drm.anon_inode->i_mapping,
 			      xe->drm.vma_offset_manager,
 			      TTM_ALLOCATION_POOL_BENEFICIAL_ORDER(get_order(SZ_2M)));
-
 	if (err)
 		return err;
 
@@ -557,8 +618,7 @@ int xe_device_init_early(struct xe_device *xe)
 	if (err)
 		return err;
 
-	xe->atomic_svm_timeslice_ms = 5;
-	xe->min_run_period_lr_ms = 5;
+	xe_device_parse_modparam(xe);
 
 	err = xe_irq_init(xe);
 	if (err)
@@ -727,8 +787,7 @@ static int xe_set_dma_info(struct xe_device *xe)
 	err = dma_set_mask(xe->drm.dev, DMA_BIT_MASK(mask_size));
 	if (err)
 		goto mask_err;
-
-	err = dma_set_coherent_mask(xe->drm.dev, DMA_BIT_MASK(mask_size));
+err = dma_set_coherent_mask(xe->drm.dev, DMA_BIT_MASK(mask_size));
 	if (err)
 		goto mask_err;
 
@@ -755,6 +814,7 @@ static void vf_update_device_info(struct xe_device *xe)
 	xe->info.probe_display = 0;
 	xe->info.has_heci_cscfi = 0;
 	xe->info.has_heci_gscfi = 0;
+	xe->info.has_i2c = 0;
 	xe->info.late_bind_mask = 0;
 	xe->info.skip_guc_pc = 1;
 	xe->info.skip_pcode = 1;
@@ -790,7 +850,6 @@ static int xe_device_vram_alloc(struct xe_device *xe)
 int xe_device_probe_early(struct xe_device *xe)
 {
 	int err;
-
 	xe_wa_device_init(xe);
 	xe_wa_process_device_oob(xe);
 
@@ -799,6 +858,11 @@ int xe_device_probe_early(struct xe_device *xe)
 		return err;
 
 	xe_sriov_probe_early(xe);
+
+	if (xe_device_is_admin_only(xe) && !IS_SRIOV_PF(xe)) {
+		xe_err(xe, "Can't run Admin-only mode without SR-IOV PF mode!\n");
+		return -ENODEV;
+	}
 
 	if (IS_SRIOV_VF(xe))
 		vf_update_device_info(xe);
@@ -989,6 +1053,15 @@ int xe_device_probe(struct xe_device *xe)
 			return err;
 	}
 
+	/*
+	 * Wa_16029380221: The affected GT will always use non-coherent
+	 * access to page tables, so we must do uncached writes from the
+	 * CPU.
+	 */
+	for_each_gt(gt, xe, id)
+		if (XE_GT_WA(gt, 16029380221))
+			xe->info.has_cached_pt = false;
+
 	for_each_tile(tile, xe, id) {
 		err = xe_ggtt_init_early(tile->mem.ggtt);
 		if (err)
@@ -1051,6 +1124,10 @@ int xe_device_probe(struct xe_device *xe)
 	if (err)
 		return err;
 
+	err = xe_vram_reserve_memtest_bo(xe);
+	if (err)
+		return err;
+
 	for_each_tile(tile, xe, id) {
 		err = xe_tile_init(tile);
 		if (err)
@@ -1066,6 +1143,10 @@ int xe_device_probe(struct xe_device *xe)
 		if (err)
 			return err;
 	}
+
+	err = xe_vram_memtest(xe);
+	if (err)
+		return err;
 
 	err = xe_pagefault_init(xe);
 	if (err)
@@ -1190,14 +1271,14 @@ void xe_device_shutdown(struct xe_device *xe)
 
 	drm_dbg(&xe->drm, "Shutting down device\n");
 
-	xe_display_pm_shutdown(xe);
+	xe_display_shutdown(xe);
 
 	xe_irq_suspend(xe);
 
 	for_each_gt(gt, xe, id)
 		xe_gt_shutdown(gt);
 
-	xe_display_pm_shutdown_late(xe);
+	xe_display_shutdown_late(xe);
 
 	if (!xe_driver_flr_disabled(xe)) {
 		/* BOOM! */
@@ -1272,7 +1353,7 @@ bool xe_device_is_l2_flush_optimized(struct xe_device *xe)
 	return false;
 }
 
-void xe_device_l2_flush(struct xe_device *xe)
+void xe_device_l2_flush(struct xe_device *xe, bool force)
 {
 	struct xe_gt *gt;
 
@@ -1280,7 +1361,7 @@ void xe_device_l2_flush(struct xe_device *xe)
 	if (!gt)
 		return;
 
-	if (!XE_GT_WA(gt, 16023588340))
+	if (!force && !XE_GT_WA(gt, 16023588340))
 		return;
 
 	CLASS(xe_force_wake, fw_ref)(gt_to_fw(gt), XE_FW_GT);
@@ -1335,7 +1416,7 @@ void xe_device_td_flush(struct xe_device *xe)
 
 	if (XE_GT_WA(root_gt, 16023588340)) {
 		/* A transient flush is not sufficient: flush the L2 */
-		xe_device_l2_flush(xe);
+		xe_device_l2_flush(xe, false);
 	} else {
 		xe_guc_pc_apply_flush_freq_limit(&root_gt->uc.guc.pc);
 		tdf_request_sync(xe);

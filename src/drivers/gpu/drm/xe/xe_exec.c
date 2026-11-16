@@ -302,9 +302,8 @@ retry:
 	 */
 	if (!xe_vm_in_lr_mode(vm)) {
 		struct drm_gem_object *obj;
-		unsigned long index;
 
-		drm_exec_for_each_locked_object(exec, index, obj) {
+		drm_exec_for_each_locked_object(exec, obj) {
 			err = xe_sched_job_add_deps(job, obj->resv,
 						    DMA_RESV_USAGE_KERNEL);
 			if (err)
@@ -347,11 +346,8 @@ retry:
 	xe_sched_job_push(job);
 	xe_vm_reactivate_rebind(vm);
 
-	if (!err && !xe_vm_in_lr_mode(vm)) {
-		spin_lock(&xe->ttm.lru_lock);
-		ttm_lru_bulk_move_tail(&vm->lru_bulk_move);
-		spin_unlock(&xe->ttm.lru_lock);
-	}
+	if (!err && !xe_vm_in_lr_mode(vm))
+		xe_vm_bump_lru(vm, exec);
 
 	if (mode == EXEC_MODE_LR)
 		xe_hw_engine_group_resume_faulting_lr_jobs(group);

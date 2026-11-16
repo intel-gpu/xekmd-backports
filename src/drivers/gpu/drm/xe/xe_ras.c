@@ -87,7 +87,7 @@ enum xe_ras_health {
 };
 
 static const char *const xe_ras_severities[] = {
-	[XE_RAS_SEV_NOT_SUPPORTED]		= "Not Supported",
+[XE_RAS_SEV_NOT_SUPPORTED]		= "Not Supported",
 	[XE_RAS_SEV_CORRECTABLE]		= "Correctable Error",
 	[XE_RAS_SEV_UNCORRECTABLE]		= "Uncorrectable Error",
 	[XE_RAS_SEV_INFORMATIONAL]		= "Informational Error",
@@ -106,9 +106,9 @@ static const char *const xe_ras_components[] = {
 static_assert(ARRAY_SIZE(xe_ras_components) == XE_RAS_COMP_MAX);
 
 static const char * const gpu_health_states[] = {
-	[XE_RAS_HEALTH_OK]              = "ok",
-	[XE_RAS_HEALTH_WARNING]         = "warning",
-	[XE_RAS_HEALTH_CRITICAL]        = "critical",
+	[XE_RAS_HEALTH_OK]		= "ok",
+	[XE_RAS_HEALTH_WARNING]		= "warning",
+	[XE_RAS_HEALTH_CRITICAL]	= "critical",
 };
 static_assert(ARRAY_SIZE(gpu_health_states) == XE_RAS_HEALTH_MAX);
 

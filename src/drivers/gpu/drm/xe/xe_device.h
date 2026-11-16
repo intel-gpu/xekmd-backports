@@ -117,7 +117,7 @@ static inline struct xe_mmio *xe_root_tile_mmio(struct xe_device *xe)
 
 static inline bool xe_device_uc_enabled(struct xe_device *xe)
 {
-	return !xe->info.force_execlist;
+	return true;
 }
 
 #define for_each_tile(tile__, xe__, id__) \
@@ -147,44 +147,39 @@ static inline struct xe_force_wake *gt_to_fw(struct xe_gt *gt)
 
 void xe_device_assert_mem_access(struct xe_device *xe);
 
-static inline bool xe_device_has_flat_ccs(struct xe_device *xe)
+static inline bool xe_device_has_flat_ccs(const struct xe_device *xe)
 {
 	return xe->info.has_flat_ccs;
 }
 
-static inline bool xe_device_has_sriov(struct xe_device *xe)
+static inline bool xe_device_has_sriov(const struct xe_device *xe)
 {
 	return xe->info.has_sriov;
 }
 
-static inline bool xe_device_has_msix(struct xe_device *xe)
+static inline bool xe_device_has_msix(const struct xe_device *xe)
 {
 	return xe->irq.msix.nvec > 0;
 }
 
-static inline bool xe_device_has_memirq(struct xe_device *xe)
+static inline bool xe_device_has_memirq(const struct xe_device *xe)
 {
 	return GRAPHICS_VERx100(xe) >= 1250;
 }
 
-static inline bool xe_device_uses_memirq(struct xe_device *xe)
+static inline bool xe_device_uses_memirq(const struct xe_device *xe)
 {
 	return xe_device_has_memirq(xe) && (IS_SRIOV_VF(xe) || xe_device_has_msix(xe));
 }
 
-static inline bool xe_device_has_lmtt(struct xe_device *xe)
+static inline bool xe_device_has_lmtt(const struct xe_device *xe)
 {
 	return IS_DGFX(xe);
 }
 
-static inline bool xe_device_has_mert(struct xe_device *xe)
+static inline bool xe_device_has_mert(const struct xe_device *xe)
 {
 	return xe->info.has_mert;
-}
-
-static inline bool xe_device_eudebug_uses_guc(struct xe_device *xe)
-{
-	return GRAPHICS_VERx100(xe) >= 3500;
 }
 
 static inline bool xe_device_is_in_reset(struct xe_device *xe)
@@ -197,6 +192,11 @@ static inline void xe_device_set_in_reset(struct xe_device *xe)
 	atomic_set(&xe->in_reset, 1);
 }
 
+static inline bool xe_device_eudebug_uses_guc(struct xe_device *xe)
+{
+	return GRAPHICS_VERx100(xe) >= 3500;
+}
+
 u32 xe_device_ccs_bytes(struct xe_device *xe, u64 size);
 
 void xe_device_snapshot_print(struct xe_device *xe, struct drm_printer *p);
@@ -206,7 +206,7 @@ u64 xe_device_uncanonicalize_addr(struct xe_device *xe, u64 address);
 
 bool xe_device_is_l2_flush_optimized(struct xe_device *xe);
 void xe_device_td_flush(struct xe_device *xe);
-void xe_device_l2_flush(struct xe_device *xe);
+void xe_device_l2_flush(struct xe_device *xe, bool force);
 
 static inline bool xe_device_wedged(struct xe_device *xe)
 {
@@ -274,6 +274,15 @@ int xe_is_injection_active(void);
 bool xe_is_xe_file(const struct file *file);
 
 struct xe_vm *xe_device_asid_to_vm(struct xe_device *xe, u32 asid);
+
+#ifdef CONFIG_PCI_IOV
+bool xe_device_is_admin_only(const struct xe_device *xe);
+#else
+static inline bool xe_device_is_admin_only(const struct xe_device *xe)
+{
+	return false;
+}
+#endif
 
 /*
  * Occasionally it is seen that the G2H worker starts running after a delay of more than

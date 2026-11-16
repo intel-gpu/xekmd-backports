@@ -138,7 +138,7 @@ static const char * const pvc_master_local_fatal_err_reg[] = {
 	[6]		= "Base Die MDFI T2C",
 	[7]		= "Undefined",
 	[8]		= "Invalid CSC PSF Command Parity",
-	[9]		= "Invalid CSC PSF Unexpected Completion",
+[9]		= "Invalid CSC PSF Unexpected Completion",
 	[10]		= "Invalid CSC PSF Unsupported Request",
 	[11]		= "Invalid PCIe PSF Command Parity",
 	[12]		= "PCIe PSF Unexpected Completion",
@@ -188,7 +188,6 @@ static void hw_error_work(struct work_struct *work)
 
 	if (xe->info.has_sysctrl) {
 		ret = xe_ras_process_errors(xe);
-		/* For any non-fatal errors that do not return recovered, declare wedged */
 		if (ret) {
 			xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_BUS_RESET);
 			xe_device_declare_wedged(xe);
@@ -197,9 +196,7 @@ static void hw_error_work(struct work_struct *work)
 		return;
 	}
 
-	ret = xe_survivability_mode_runtime_enable(xe);
-	if (ret)
-		drm_err(&xe->drm, "Failed to enable runtime survivability mode\n");
+	xe_survivability_mode_runtime_enable(xe);
 }
 
 static void csc_hw_error_handler(struct xe_tile *tile, const enum hardware_error hw_err)
@@ -230,7 +227,6 @@ static void csc_hw_error_handler(struct xe_tile *tile, const enum hardware_error
 					    "HEC FW %s %s reported, bit[%d] is set\n",
 					     hec_uncorrected_fw_errors[err_bit], severity_str,
 					     err_bit);
-
 			schedule_work(&tile->hw_error_work);
 		}
 	}

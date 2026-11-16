@@ -120,7 +120,7 @@ static const char * const reg_map[] = {
 	[POSTCODE_TRACE_OVERFLOW] = "Postcode trace overflow",
 	[AUX_INFO0]               = "Auxiliary Info 0",
 	[AUX_INFO1]               = "Auxiliary Info 1",
-	[AUX_INFO2]               = "Auxiliary Info 2",
+[AUX_INFO2]               = "Auxiliary Info 2",
 	[AUX_INFO3]               = "Auxiliary Info 3",
 	[AUX_INFO4]               = "Auxiliary Info 4",
 };
@@ -233,7 +233,7 @@ static ssize_t survivability_info_show(struct device *dev,
 	struct xe_survivability *survivability = &xe->survivability;
 	u32 *info = survivability->info;
 
-	if (sa->index == FDO_INFO)
+if (sa->index == FDO_INFO)
 		return sysfs_emit(buff, "%s\n", str_enabled_disabled(survivability->fdo_mode));
 
 	return sysfs_emit(buff, "0x%x\n", info[sa->index]);
@@ -297,7 +297,6 @@ static struct attribute *survivability_info_attrs[] = {
 	&attr_fdo_mode.attr.attr,
 	NULL,
 };
-
 static const struct attribute_group survivability_info_group = {
 	.name = "survivability_info",
 	.attrs = survivability_info_attrs,
@@ -318,7 +317,7 @@ static int create_survivability_sysfs(struct pci_dev *pdev)
 
 	ret = devm_add_action_or_reset(xe->drm.dev,
 				       xe_survivability_mode_fini, xe);
-	if (ret)
+if (ret)
 		goto failed;
 
 	if (needs_info) {
@@ -417,7 +416,7 @@ bool xe_survivability_mode_is_requested(struct xe_device *xe)
 	if (survivability_mode)
 		return true;
 
-	data = xe_mmio_read32(mmio, PCODE_SCRATCH(0));
+data = xe_mmio_read32(mmio, PCODE_SCRATCH(0));
 	survivability->boot_status = REG_FIELD_GET(BOOT_STATUS, data);
 
 	return check_boot_failure(xe);
@@ -431,17 +430,15 @@ bool xe_survivability_mode_is_requested(struct xe_device *xe)
  * Runtime survivability mode is enabled when certain errors cause the device to be
  * in non-recoverable state. The device is declared wedged with the appropriate
  * recovery method and survivability mode sysfs exposed to userspace
- *
- * Return: 0 if runtime survivability mode is enabled, negative error code otherwise.
  */
-int xe_survivability_mode_runtime_enable(struct xe_device *xe)
+void xe_survivability_mode_runtime_enable(struct xe_device *xe)
 {
 	struct xe_survivability *survivability = &xe->survivability;
 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
 
 	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe) || xe->info.platform < XE_BATTLEMAGE) {
-		xe_log_err(xe, SURVIVABILITY, -EOPNOTSUPP, "Runtime Mode not supported!\n");
-		return -EINVAL;
+		dev_err(&pdev->dev, "Runtime Survivability Mode not supported\n");
+		return;
 	}
 
 	populate_survivability_info(xe);
@@ -449,16 +446,11 @@ int xe_survivability_mode_runtime_enable(struct xe_device *xe)
 	create_survivability_sysfs(pdev);
 
 	survivability->type = XE_SURVIVABILITY_TYPE_RUNTIME;
-	xe_log_err(xe, SURVIVABILITY, 0, "Runtime Mode enabled!\n");
+	dev_err(&pdev->dev, "Runtime Survivability mode enabled\n");
 
 	xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_VENDOR);
 	xe_device_declare_wedged(xe);
-
-	xe_log_err(xe, SURVIVABILITY, 0, "Firmware flash required!\n");
-	xe_info(xe, "Please refer to the userspace documentation for more details how to flash the firmware on %s!\n",
-			xe->info.platform_name);
-
-	return 0;
+	dev_err(&pdev->dev, "Firmware flash required, Please refer to the userspace documentation for more details!\n");
 }
 
 /**
@@ -487,7 +479,6 @@ int xe_survivability_mode_boot_enable(struct xe_device *xe)
 		log_survivability_info(xe);
 		return -ENXIO;
 	}
-
 	survivability->type = XE_SURVIVABILITY_TYPE_BOOT;
 
 	return enable_boot_survivability_mode(pdev);

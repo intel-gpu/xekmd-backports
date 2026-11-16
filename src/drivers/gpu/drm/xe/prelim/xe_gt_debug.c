@@ -5,6 +5,8 @@
 #include <linux/circ_buf.h>
 
 #include <linux/delay.h>
+#include <linux/string.h>
+
 #include "regs/xe_gt_regs.h"
 #include "xe_device.h"
 #include "prelim/xe_eudebug.h"
@@ -12,6 +14,7 @@
 #include "xe_force_wake.h"
 #include "xe_gt.h"
 #include "prelim/xe_gt_debug.h"
+#include "xe_gt_debug_types.h"
 #include "xe_gt_mcr.h"
 #include "xe_gt_topology.h"
 #include "xe_gt_types.h"
@@ -77,7 +80,7 @@ static int read_first_attention_mcr(struct xe_gt *gt, void *data,
 		return 0;
 
 	for (reg = 0; reg < prelim_xe_gt_eu_att_regs(gt); reg++) {
-		for (row = 0; row < PRELIM_XE_GT_EU_ATT_ROWS; row++) {
+		for (row = 0; row < XE_GT_EU_ATT_ROWS; row++) {
 			u32 val;
 
 			val = xe_gt_mcr_unicast_read(gt, EU_ATT(reg, row), group, instance);
@@ -111,7 +114,7 @@ int prelim_xe_gt_eu_attention_bitmap_size(struct xe_gt *gt)
 		  gt->fuse_topo.g_dss_mask, XE_MAX_DSS_FUSE_BITS);
 
 	return (find_last_bit(dss_mask, XE_MAX_DSS_FUSE_BITS) + 1) *
-		PRELIM_XE_GT_EU_ATT_ROWS * prelim_xe_gt_eu_att_regs(gt) * MAX_THREADS *
+		XE_GT_EU_ATT_ROWS * prelim_xe_gt_eu_att_regs(gt) * MAX_THREADS *
 		MAX_EUS_PER_ROW / 8;
 }
 
@@ -129,7 +132,7 @@ static int read_eu_attentions_mcr(struct xe_gt *gt, void *data,
 	unsigned int reg, row;
 
 	for (reg = 0; reg < prelim_xe_gt_eu_att_regs(gt); reg++) {
-		for (row = 0; row < PRELIM_XE_GT_EU_ATT_ROWS; row++) {
+		for (row = 0; row < XE_GT_EU_ATT_ROWS; row++) {
 			u32 val;
 
 			if (iter->i >= iter->size)
@@ -191,64 +194,89 @@ int prelim_xe_gt_eu_threads_needing_attention(struct xe_gt *gt)
 static inline unsigned int
 xe_eu_attentions_count(const struct prelim_xe_eu_attentions *a)
 {
-	return bitmap_weight((void *)a->att, a->size * BITS_PER_BYTE);
+	return memweight(a->att, a->size);
 }
 
-void prelim_xe_gt_eu_attentions_read(struct xe_gt *gt,
-			      struct prelim_xe_eu_attentions *a,
-			      const unsigned int settle_time_ms)
+int prelim_xe_gt_eu_attentions_read(struct xe_gt *gt,
+			     struct prelim_xe_eu_attentions *a,
+			     const unsigned int settle_time_ms)
 {
-	unsigned int prev = 0;
-	ktime_t end, now;
+	unsigned int attn = 0, prev = 0;
+	ktime_t end, hard_end, now;
+	int ret;
 
 	now = ktime_get_raw();
+
+	/*
+	 * Wait one settle period for the picture to stop moving, restarting
+	 * it below on every change. There is no point starting out with a
+	 * longer window in the hope that something turns up: on a gt where
+	 * nothing raises attention, every sample reads zero and waiting ten
+	 * periods returns exactly what waiting one would have, having swept
+	 * the attention registers of every dss a few thousand times to get
+	 * there.
+	 */
 	end = ktime_add_ms(now, settle_time_ms);
 
-	a->ts = 0;
+	/*
+	 * The grace period restarts on any change in the count, so a count
+	 * that keeps churning could push @end out for as long as it churns.
+	 * Cap the whole thing at what used to be the starting window.
+	 */
+	hard_end = ktime_add_ms(now, settle_time_ms * 10);
+
 	a->size = min_t(int,
 			prelim_xe_gt_eu_attention_bitmap_size(gt),
 			sizeof(a->att));
 
 	do {
-		unsigned int attn;
+		/*
+		 * Report the failure rather than leaving @att holding
+		 * whatever it held before. A caller that relayed it with
+		 * @size still set would be telling the debugger that no
+		 * thread raised attention, which is not something we know.
+		 */
+		ret = prelim_xe_gt_eu_attention_bitmap(gt, a->att, a->size);
+		if (ret < 0) {
+			a->size = 0;
+			return ret;
+		}
 
-		prelim_xe_gt_eu_attention_bitmap(gt, a->att, a->size);
+		if (!settle_time_ms)
+			break;
+
 		attn = xe_eu_attentions_count(a);
 
 		now = ktime_get_raw();
 
-		if (a->ts == 0)
-			a->ts = now;
-		else if (attn && attn != prev)
-			a->ts = now;
+		/*
+		 * Any change means the picture is still moving, so give it
+		 * another settle period to stop. Growth alone is not the
+		 * test: threads leaving attention are just as much a sign
+		 * that this is not a stable snapshot yet.
+		 */
+		if (attn != prev) {
+			prev = attn;
+			end = ktime_add_ms(now, settle_time_ms);
+			if (ktime_after(end, hard_end))
+				end = hard_end;
+		}
 
-		prev = attn;
-
-		if (settle_time_ms)
-			udelay(5);
+		/*
+		 * Sleeping rather than spinning: every caller is in process
+		 * context holding a mutex, and the loop below runs for the
+		 * whole settle window rather than exiting early.
+		 */
+		usleep_range(15, 30);
 
 		/*
 		 * XXX We are gathering data for production SIP to find
 		 * the upper limit of settle time. For now, we wait full
 		 * timeout value regardless.
 		 */
-	} while (ktime_before(now, end));
-}
+	} while ((attn < a->size * 8) && ktime_before(now, end));
 
-unsigned int prelim_xe_eu_attentions_xor_count(const struct prelim_xe_eu_attentions *a,
-					const struct prelim_xe_eu_attentions *b)
-{
-	unsigned int count = 0;
-	unsigned int i;
-
-	if (XE_WARN_ON(a->size != b->size))
-		return -EINVAL;
-
-	for (i = 0; i < a->size; i++)
-		if (a->att[i] ^ b->att[i])
-			count++;
-
-	return count;
+	return 0;
 }
 
 /* XXX: copy-paste from xe_guc_submit.c, find common define place */

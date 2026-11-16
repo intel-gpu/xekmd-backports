@@ -1,0 +1,91 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Date: Thu, 29 Oct 2026 14:21:28 +0200
+Subject: drm/xe/migrate: Keep access_memory chunks within the transfer limit
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+xe_migrate_access_memory() caps each chunk at MAX_PREEMPTDISABLE_TRANSFER,
+but xe_migrate_vram() maps the system memory side from the start of the
+page the chunk begins in, DIV_ROUND_UP(len + sram_offset, PAGE_SIZE)
+pages.
+
+So when buf is mid page, the 'wasted' space at the start of the first
+page needs to be taken into account when considering the amount that
+can be copied. Otherwise a full chunk needs one page more than the limit
+allows, which trips the warning in pte_update_cmd_size() and, on debug
+builds, the assert in xe_migrate_vram().
+
+window:  |slot 0|slot 1| ...  |slot 2047|
+         0                              8M
+data:      [=================================]   starts at sram_offset
+           ^ sram_offset                ^ must end here or earlier
+
+This happens for example when the access starts at an unaligned vram
+offset.
+
+Fix this by capping the chunk at the limit minus sram_offset.
+
+Seen on BMG with igt@xe_eudebug@vm-access-alignment, which rewrites 24M
+and 48M objects from offset 4 through eudebug vm access:
+
+  xe 0000:03:00.0: [drm] Assertion `npages * ((1UL) << 12) <= 0x00800000` failed!
+  WARNING: drivers/gpu/drm/xe/xe_migrate.c:2255 at xe_migrate_vram+0xf40/0x15e0 [xe]
+  Call Trace:
+  xe_migrate_access_memory
+  xe_ttm_access_memory
+  ttm_bo_access
+
+  WARNING: drivers/gpu/drm/xe/xe_migrate.c:2118 at xe_migrate_vram+0xbb7/0x15e0 [xe]
+  Call Trace:
+  xe_migrate_access_memory
+  xe_ttm_access_memory
+  ttm_bo_access
+
+Fixes: 270172f64b11 ("drm/xe: Update xe_ttm_access_memory to use GPU for non-visible access")
+Cc: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Reviewed-by: Jan Maslak <jan.maslak@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Link: https://patch.msgid.link/20261029122130.2795549-1-mika.kuoppala@linux.intel.com
+(cherry-picked from commit 9095ffa88962be9052a44154cfe23da5c6fea367 drm-xe-next)
+Signed-off-by: Jan Maslak <jan.maslak@intel.com>
+---
+ drivers/gpu/drm/xe/xe_migrate.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 70408fa0a606..19c37eb31589 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -2611,6 +2611,7 @@ int xe_migrate_access_memory(struct xe_migrate *m, struct xe_bo *bo,
+ 		struct dma_fence *__fence;
+ 		u64 vram_addr = vram_region_gpu_offset(bo->ttm.resource) +
+ 			cursor.start;
++		unsigned long sram_offset = (unsigned long)buf & ~PAGE_MASK;
+ 		int current_bytes;
+ 
+ 		if (cursor.size > MAX_PREEMPTDISABLE_TRANSFER)
+@@ -2619,6 +2620,9 @@ int xe_migrate_access_memory(struct xe_migrate *m, struct xe_bo *bo,
+ 		else
+ 			current_bytes = min_t(int, bytes_left, cursor.size);
+ 
++		current_bytes = min_t(int, current_bytes,
++				      MAX_PREEMPTDISABLE_TRANSFER - sram_offset);
++
+ 		{
+ 			/*
+ 			 * Optimized copy strategy to minimize number of jobs:
+@@ -2676,8 +2680,7 @@ int xe_migrate_access_memory(struct xe_migrate *m, struct xe_bo *bo,
+ 			}
+ 		}
+ 
+-		__fence = xe_migrate_vram(m, current_bytes,
+-					  (unsigned long)buf & ~PAGE_MASK,
++		__fence = xe_migrate_vram(m, current_bytes, sram_offset,
+ 					  &pagemap_addr[current_page],
+ 					  vram_addr, NULL, write ?
+ 					  XE_MIGRATE_COPY_TO_VRAM :

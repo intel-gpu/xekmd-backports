@@ -1,4 +1,4 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 89076abe1129e3d8c617838bdffbaa3d69c77135 Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Mon, 1 Dec 2025 14:30:12 +0100
 Subject: [PATCH] drm/xe/eudebug: Mark guc contexts as debuggable
@@ -66,7 +66,7 @@ index 4bcdc1a96..147a1d0a1 100644
  	GUC_WA_KLV_REMAP_RANGED_TLB_INV							= 0x900f,
  	GUC_WA_KLV_IGNORE_MMIO_READ_SEM_TOKEN_64					= 0x9010,
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 99b94b42c..b777d68a8 100644
+index d1a8e0910..06e017560 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -19,6 +19,7 @@
@@ -96,10 +96,10 @@ index 99b94b42c..b777d68a8 100644
  		return -EINVAL;
  	/*
 diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
-index 2c7f411b8..5ce27ec3e 100644
+index 6b94bbb4f..238b1d61a 100644
 --- a/drivers/gpu/drm/xe/xe_guc.c
 +++ b/drivers/gpu/drm/xe/xe_guc.c
-@@ -1923,6 +1923,23 @@ u16 xe_hwe_guc_logical_instance(struct xe_hw_engine *hwe)
+@@ -1934,6 +1934,23 @@ u16 xe_hwe_guc_logical_instance(struct xe_hw_engine *hwe)
  	return hwe->logical_instance;
  }
  
@@ -124,7 +124,7 @@ index 2c7f411b8..5ce27ec3e 100644
  #include "tests/xe_guc_g2g_test.c"
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_guc.h b/drivers/gpu/drm/xe/xe_guc.h
-index 61e3ee19a..c72829490 100644
+index 02e1dd4aa..0389018b4 100644
 --- a/drivers/gpu/drm/xe/xe_guc.h
 +++ b/drivers/gpu/drm/xe/xe_guc.h
 @@ -29,6 +29,8 @@
@@ -136,8 +136,8 @@ index 61e3ee19a..c72829490 100644
  struct drm_printer;
  
  void xe_guc_comm_init_early(struct xe_guc *guc);
-@@ -63,6 +65,7 @@ int xe_guc_start(struct xe_guc *guc);
- void xe_guc_declare_wedged(struct xe_guc *guc);
+@@ -64,6 +66,7 @@ int xe_guc_start(struct xe_guc *guc);
+ void xe_guc_wedge_declare(struct xe_guc *guc);
  bool xe_guc_using_main_gamctrl_queues(struct xe_guc *guc);
  bool xe_guc_has_paging_engine(struct xe_guc *guc);
 +bool xe_guc_has_debug_contexts(struct xe_guc *guc);
@@ -173,10 +173,10 @@ index de51ac612..652ea0c3c 100644
  	if (!size)
  		return;
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 4d8f4ed90..cfee8abfc 100644
+index 61c90064b..cfaa6a589 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -1004,6 +1004,34 @@ static u32 xe_hwe_guc_logical_to_submit_mask(struct xe_hw_engine *hwe, u32 logic
+@@ -1015,6 +1015,34 @@ static u32 xe_hwe_guc_logical_to_submit_mask(struct xe_hw_engine *hwe, u32 logic
  	return logical_mask;
  }
  
@@ -211,10 +211,10 @@ index 4d8f4ed90..cfee8abfc 100644
  static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
  {
  	struct xe_guc *guc = exec_queue_to_guc(q);
-@@ -1065,6 +1093,9 @@ static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
+@@ -1076,6 +1104,9 @@ static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
  
  	if (xe_exec_queue_is_multi_queue_secondary(q))
- 		guc_exec_queue_send_cgp_sync(q);
+ 		guc_exec_queue_send_cgp_sync(q, CGP_SYNC_REGISTRATION);
 +
 +	if (xe_exec_queue_is_debuggable(q))
 +		set_eu_kernel_debug(q);
@@ -222,10 +222,10 @@ index 4d8f4ed90..cfee8abfc 100644
  
  static u32 wq_space_until_wrap(struct xe_exec_queue *q)
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.h b/drivers/gpu/drm/xe/xe_guc_submit.h
-index be6d26bea..25e323598 100644
+index ccade320d..e7a24f8ec 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.h
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.h
-@@ -57,5 +57,6 @@ void xe_guc_register_vf_exec_queue(struct xe_exec_queue *q, int ctx_type);
+@@ -56,5 +56,6 @@ void xe_guc_register_vf_exec_queue(struct xe_exec_queue *q, int ctx_type);
  bool xe_guc_has_registered_mlrc_queues(struct xe_guc *guc);
  
  int xe_guc_contexts_hwsp_rebase(struct xe_guc *guc, void *scratch);
@@ -233,10 +233,10 @@ index be6d26bea..25e323598 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
-index 0d1ebac46..cee9d6b09 100644
+index 29d65bee3..b74674ca3 100644
 --- a/drivers/gpu/drm/xe/xe_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
-@@ -60,6 +60,8 @@
+@@ -61,6 +61,8 @@
  		GRAPHICS_VERSION(3510), GRAPHICS_STEP(A0, B0)
  18022722726	GRAPHICS_VERSION_RANGE(1250, 1274)
  14015474168	PLATFORM(PVC)

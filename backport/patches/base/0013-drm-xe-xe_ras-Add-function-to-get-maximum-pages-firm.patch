@@ -1,0 +1,87 @@
+From ced34e4f1b80ba0bcd65b8e6ef035cf7cf1c030d Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Tue, 13 Oct 2026 11:30:03 +0530
+Subject: [PATCH 13/16] drm/xe/xe_ras: Add function to get maximum pages
+ firmware can store
+
+Add function to get maximum number of pages that firmware can store for
+offline tracking. This will be used to report max pages to userspace.
+
+Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Link: https://patch.msgid.link/20261013055959.2569963-12-riana.tauro@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c       | 17 +++++++++++++++++
+ drivers/gpu/drm/xe/xe_ras.h       |  1 +
+ drivers/gpu/drm/xe/xe_ras_types.h |  2 ++
+ 3 files changed, 20 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 8a9fe312b..2292b6166 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -353,6 +353,7 @@ static void process_offline_pages(struct xe_device *xe, u32 cmd, void *req, size
+ {
+ 	struct xe_sysctrl_mailbox_command command = {0};
+ 	struct xe_ras_offline_list_request *list_req;
++	struct xe_ras_state *state = &xe->ras.state;
+ 	u32 total_pages = 0, count = 0;
+ 	size_t rlen;
+ 	int ret, i;
+@@ -382,6 +383,11 @@ static void process_offline_pages(struct xe_device *xe, u32 cmd, void *req, size
+ 			return;
+ 		}
+ 
++		/* Populate the maximum number of pages from offline list */
++		if (list_req && !state->max_pages)
++			state->max_pages =
++				((struct xe_ras_offline_list_response *)resp)->max_entries;
++
+ 		for (i = 0; i < common->pages_returned && i < XE_RAS_NUM_PAGES; i++)
+ 			handle_page_offline(xe, common->page_addresses[i], notify_fw);
+ 
+@@ -1124,6 +1130,17 @@ bool xe_ras_get_disable_vram_page_offline(struct xe_device *xe)
+ 	return xe->ras.state.disable_vram_page_offline;
+ }
+ 
++/**
++ * xe_ras_get_max_pages - Get the maximum number of pages
++ * @xe: xe device instance
++ *
++ * Return: Maximum number of pages stored by the firmware in flash
++ */
++u32 xe_ras_get_max_pages(struct xe_device *xe)
++{
++	return xe->ras.state.max_pages;
++}
++
+ /**
+  * xe_ras_init - Initialize Xe RAS
+  * @xe: xe device instance
+diff --git a/drivers/gpu/drm/xe/xe_ras.h b/drivers/gpu/drm/xe/xe_ras.h
+index 1a2545f96..268c2afa1 100644
+--- a/drivers/gpu/drm/xe/xe_ras.h
++++ b/drivers/gpu/drm/xe/xe_ras.h
+@@ -22,5 +22,6 @@ int xe_ras_set_threshold(struct xe_device *xe, u8 severity, u8 component, u32 th
+ void xe_ras_init(struct xe_device *xe);
+ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe);
+ bool xe_ras_get_disable_vram_page_offline(struct xe_device *xe);
++u32 xe_ras_get_max_pages(struct xe_device *xe);
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
+index b6f4cfbad..1283c8351 100644
+--- a/drivers/gpu/drm/xe/xe_ras_types.h
++++ b/drivers/gpu/drm/xe/xe_ras_types.h
+@@ -415,5 +415,7 @@ struct xe_ras_set_health_response {
+ struct xe_ras_state {
+ 	/** @disable_vram_page_offline: cached configfs policy, immutable after init */
+ 	bool disable_vram_page_offline;
++	/** @max_pages: Total number of pages that can be stored by firmware */
++	u32 max_pages;
+ };
+ #endif
+-- 
+2.43.0
+

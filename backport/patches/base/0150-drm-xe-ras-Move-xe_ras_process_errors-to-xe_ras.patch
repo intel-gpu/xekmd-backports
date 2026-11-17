@@ -1,4 +1,4 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 84474fbf9ae5a0fe482aa81fd255f2ce247ab566 Mon Sep 17 00:00:00 2001
 From: Raag Jadav <raag.jadav@intel.com>
 Date: Thu, 22 Oct 2026 10:42:33 +0530
 Subject: [PATCH] drm/xe/ras: Move xe_ras_process_errors() to xe_ras
@@ -19,17 +19,17 @@ Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
  2 files changed, 7 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 87e3effac..f0ad5ca6a 100644
+index 9de173995a78..a07655b4c7a9 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -1169,13 +1169,6 @@ int xe_device_probe(struct xe_device *xe)
- 	if (err)
- 		goto err_unregister_display;
+@@ -1091,13 +1091,6 @@ int xe_device_probe(struct xe_device *xe)
+ 
+ 	detect_preproduction_hw(xe);
  
 -	/*
 -	 * Process and log any errors detected by hardware. Possible results can
 -	 * include declaring the device as wedged, which must be done only after
--	 * xe_device_wedged_fini() is registered.
+-	 * xe_wedge_fini() is registered.
 -	 */
 -	xe_ras_process_errors(xe);
 -
@@ -37,12 +37,12 @@ index 87e3effac..f0ad5ca6a 100644
  	if (err)
  		goto err_unregister_display;
 diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
-index 7a85735c5..f5318680d 100644
+index 0072bb4cc5df..db3cbc186a51 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
-@@ -932,6 +932,13 @@ void xe_ras_init(struct xe_device *xe)
- 	if (IS_ENABLED(CONFIG_PCIEAER))
- 		ras_usp_aer_init(xe);
+@@ -1212,6 +1212,13 @@ int xe_ras_init(struct xe_device *xe)
+ 	get_offline_list(xe);
+ 	get_offline_queue(xe);
  
 +	/*
 +	 * During probe, process and log any errors detected by firmware while the driver was not

@@ -1,4 +1,4 @@
-From aaabebe76a3d24297bee4605118b94513cb402d0 Mon Sep 17 00:00:00 2001
+From c3c79f0da33e882dd0389b7e09742247711fd5d4 Mon Sep 17 00:00:00 2001
 From: Satyanarayana K V P <satyanarayana.k.v.p@intel.com>
 Date: Thu, 5 Nov 2026 11:49:25 +0000
 Subject: [PATCH] drm/xe/pf: Program LMTT directory pointer from each GT's init
@@ -26,6 +26,8 @@ Cc: Matt Roper <matthew.d.roper@intel.com>
 Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
 Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
 Link: https://patch.msgid.link/20261105114923.880265-4-satyanarayana.k.v.p@intel.com
+(cherry picked from commit a8653bee6a0404e9962e80894eae0afab355cbd3)
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h |  1 +
  drivers/gpu/drm/xe/xe_gt.c           | 14 +++----
@@ -46,10 +48,10 @@ index 210fe0181..eba98324c 100644
  
  #define XE2_GAMWALK_CTRL			0x47e4
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index 59866cda6..746bb88c9 100644
+index bbdb7ab6c..3ef4b8380 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
-@@ -703,11 +703,10 @@ static int gt_init_with_all_forcewake(struct xe_gt *gt)
+@@ -714,11 +714,10 @@ static int gt_init_with_all_forcewake(struct xe_gt *gt)
  		xe_gt_apply_ccs_mode(gt);
  	}
  
@@ -63,8 +65,8 @@ index 59866cda6..746bb88c9 100644
 +	}
  
  	/* Last action registered here so devres drains resets before teardown */
- 	err = devm_add_action_or_reset(xe->drm.dev, gt_reset_worker_disable, gt);
-@@ -904,11 +903,10 @@ static int do_gt_restart(struct xe_gt *gt)
+ 	err = devm_add_action_or_reset(xe->drm.dev, gt_worker_disable, gt);
+@@ -918,11 +917,10 @@ static int do_gt_restart(struct xe_gt *gt)
  	if (err)
  		return err;
  

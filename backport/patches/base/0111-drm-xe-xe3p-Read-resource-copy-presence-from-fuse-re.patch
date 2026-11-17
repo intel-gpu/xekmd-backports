@@ -1,0 +1,106 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matt Roper <matthew.d.roper@intel.com>
+Date: Wed, 30 Sep 2026 15:44:00 -0700
+Subject: [PATCH] drm/xe/xe3p: Read resource copy presence from fuse register
+
+As with service copy engines, Xe3p also introduced a fuse register to
+indicate whether the resource copy engine is present.  Somewhat
+confusingly, the register field is 16 bits wide, even though all current
+platforms only have at most a single resource copy engine (BCS0).
+
+Bspec: 74623
+Cc: Gustavo Sousa <gustavo.sousa@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://patch.msgid.link/20260930-res_copy_fuse-v2-1-60444264f666@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_gt_regs.h        |  3 ++
+ drivers/gpu/drm/xe/xe_gt_sriov_pf_service.c |  1 +
+ drivers/gpu/drm/xe/xe_hw_engine.c           | 37 ++++++++++++++++-----
+ 3 files changed, 32 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+index e4cdbbdc4..210fe0181 100644
+--- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+@@ -274,6 +274,9 @@
+ #define SERVICE_COPY_ENABLE			XE_REG(0x9170)
+ #define   FUSE_SERVICE_COPY_ENABLE_MASK		REG_GENMASK(7, 0)
+ 
++#define RESOURCE_COPY_ENABLE			XE_REG(0x9174)
++#define   FUSE_RESOURCE_COPY_ENABLE_MASK	REG_GENMASK(15, 0)
++
+ #define GDRST					XE_REG(0x941c)
+ #define   GRDOM_GUC				REG_BIT(3)
+ #define   GRDOM_FULL				REG_BIT(0)
+diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_pf_service.c b/drivers/gpu/drm/xe/xe_gt_sriov_pf_service.c
+index 6586df2fc..fba2d5e1e 100644
+--- a/drivers/gpu/drm/xe/xe_gt_sriov_pf_service.c
++++ b/drivers/gpu/drm/xe/xe_gt_sriov_pf_service.c
+@@ -114,6 +114,7 @@ static const struct xe_reg ver_35_runtime_regs[] = {
+ 	XE3P_XPC_GT_GEOMETRY_DSS_3,	/* _MMIO(0x915c) */
+ 	XE3P_XPC_GT_COMPUTE_DSS_3,	/* _MMIO(0x9160) */
+ 	SERVICE_COPY_ENABLE,		/* _MMIO(0x9170) */
++	RESOURCE_COPY_ENABLE,		/* _MMIO(0x9174) */
+ };
+ 
+ static const struct xe_reg *pick_runtime_regs(struct xe_device *xe, unsigned int *count)
+diff --git a/drivers/gpu/drm/xe/xe_hw_engine.c b/drivers/gpu/drm/xe/xe_hw_engine.c
+index 9680d2a5a..265f95c0c 100644
+--- a/drivers/gpu/drm/xe/xe_hw_engine.c
++++ b/drivers/gpu/drm/xe/xe_hw_engine.c
+@@ -875,23 +875,42 @@ static u32 read_svccopy_fuses(struct xe_gt *gt)
+ 			     xe_mmio_read32(&gt->mmio, SERVICE_COPY_ENABLE));
+ }
+ 
++static u32 read_rescopy_fuses(struct xe_gt *gt)
++{
++	u32 fuse = REG_FIELD_GET(FUSE_RESOURCE_COPY_ENABLE_MASK,
++				 xe_mmio_read32(&gt->mmio, RESOURCE_COPY_ENABLE));
++
++	/*
++	 * Although the register field is 16-bits wide, we don't expect to ever
++	 * see more than one resource copy engine (BCS0 in bit 0) enabled.
++	 */
++	xe_gt_WARN(gt, fuse & GENMASK(15, 1), "Unexpected resource copy fuse (%#x)\n", fuse);
++
++	return fuse & BIT(0);
++}
++
+ static void read_copy_fuses(struct xe_gt *gt)
+ {
+ 	struct xe_device *xe = gt_to_xe(gt);
+-	u32 bcs_mask;
++	u32 bcs_mask, svc_copy_mask, res_copy_mask;
+ 
+ 	xe_force_wake_assert_held(gt_to_fw(gt), XE_FW_GT);
+ 
+-	if (GRAPHICS_VER(xe) >= 35)
+-		bcs_mask = read_svccopy_fuses(gt);
+-	else if (GRAPHICS_VERx100(xe) == 1260)
+-		bcs_mask = infer_svccopy_from_meml3(gt);
+-	else
++	if (GRAPHICS_VER(xe) >= 35) {
++		svc_copy_mask = read_svccopy_fuses(gt);
++		res_copy_mask = read_rescopy_fuses(gt);
++	} else if (GRAPHICS_VERx100(xe) == 1260) {
++		svc_copy_mask = infer_svccopy_from_meml3(gt);
++		/* Only BCS1-BCS8 may be fused off */
++		res_copy_mask = 0x1;
++	} else {
+ 		return;
++	}
++
++	bcs_mask = svc_copy_mask << XE_HW_ENGINE_BCS1 |
++		res_copy_mask << XE_HW_ENGINE_BCS0;
+ 
+-	/* Only BCS1-BCS8 may be fused off */
+-	bcs_mask <<= XE_HW_ENGINE_BCS1;
+-	for (int i = XE_HW_ENGINE_BCS1; i <= XE_HW_ENGINE_BCS8; ++i) {
++	for (int i = XE_HW_ENGINE_BCS0; i <= XE_HW_ENGINE_BCS8; ++i) {
+ 		if (!(gt->info.engine_mask & BIT(i)))
+ 			continue;
+ 
+-- 
+2.43.0
+

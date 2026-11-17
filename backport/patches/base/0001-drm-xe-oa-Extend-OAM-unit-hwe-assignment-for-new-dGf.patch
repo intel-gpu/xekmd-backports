@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Ashutosh Dixit <ashutosh.dixit@intel.com>
 Date: Wed, 29 Jul 2026 16:06:45 -0700
-Subject: drm/xe/oa: Extend OAM unit hwe assignment for new dGfx
+Subject: [PATCH] drm/xe/oa: Extend OAM unit hwe assignment for new dGfx
 
 dGfx vecs hwe's for media version 35.00 and later follow the same
 assignment to OAM units as vcs engines.
@@ -11,17 +11,15 @@ Bspec: 77977
 Signed-off-by: Ashutosh Dixit <ashutosh.dixit@intel.com>
 Reviewed-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
 Link: https://patch.msgid.link/20260729230645.3052178-3-ashutosh.dixit@intel.com
-(cherry-picked from commit cffeb4ef6f2867df5cc4811b59930dc0fe3ea7e9 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_oa.c | 7 ++++---
  1 file changed, 4 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_oa.c b/drivers/gpu/drm/xe/xe_oa.c
-index 18d990c5d4ec..aa70839932f4 100644
+index 64f01d998..3bb8bbef4 100644
 --- a/drivers/gpu/drm/xe/xe_oa.c
 +++ b/drivers/gpu/drm/xe/xe_oa.c
-@@ -2576,10 +2576,11 @@ static u32 __hwe_oam_unit(struct xe_hw_engine *hwe)
+@@ -2590,10 +2590,11 @@ static u32 __hwe_oam_unit(struct xe_hw_engine *hwe)
  		return XE_OA_UNIT_INVALID;
  	else if (!IS_DGFX(gt_to_xe(hwe->gt)))
  		return XE_OAM_UNIT_SCMI_0;

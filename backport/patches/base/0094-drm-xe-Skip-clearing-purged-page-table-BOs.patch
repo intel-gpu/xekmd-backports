@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Date: Wed, 9 Sep 2026 16:46:21 +0530
+Subject: [PATCH] drm/xe: Skip clearing purged page-table BOs
+
+VRAM page offlining can clear a page-table BO's vmap before VM teardown
+calls xe_pt_clear(). Check for a purged BO under its dma-resv lock before
+writing to the mapping.
+
+v4(Sashiko):
+- dont leave svm notifier lock early
+v3(Sashiko):
+- Validate NULL vmap
+v2(Sashiko):
+- Fix lock ordering
+
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260909111620.1276402-2-tejas.upadhyay@intel.com
+Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pt.c | 6 ++++--
+ drivers/gpu/drm/xe/xe_vm.c | 4 ++++
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pt.c b/drivers/gpu/drm/xe/xe_pt.c
+index 5d990c1c3..426e8a29c 100644
+--- a/drivers/gpu/drm/xe/xe_pt.c
++++ b/drivers/gpu/drm/xe/xe_pt.c
+@@ -236,9 +236,11 @@ void xe_pt_destroy(struct xe_pt *pt, u32 flags, struct llist_head *deferred)
+  */
+ void xe_pt_clear(struct xe_device *xe, struct xe_pt *pt)
+ {
+-	struct iosys_map *map = &pt->bo->vmap;
++	struct xe_bo *bo = pt->bo;
+ 
+-	xe_map_memset(xe, map, 0, 0, SZ_4K);
++	xe_bo_assert_held(bo);
++	if (!iosys_map_is_null(&bo->vmap))
++		xe_map_memset(xe, &bo->vmap, 0, 0, SZ_4K);
+ }
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index c0874ded7..390fcfce3 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -1901,6 +1901,8 @@ static void xe_vm_close(struct xe_vm *vm)
+ 	bound = drm_dev_enter(&xe->drm, &idx);
+ 
+ 	down_write(&vm->lock);
++	xe_vm_lock(vm, false);
++
+ 	if (xe_vm_in_fault_mode(vm))
+ 		xe_svm_notifier_lock(vm);
+ 
+@@ -1928,6 +1930,8 @@ static void xe_vm_close(struct xe_vm *vm)
+ 
+ 	if (xe_vm_in_fault_mode(vm))
+ 		xe_svm_notifier_unlock(vm);
++
++	xe_vm_unlock(vm);
+ 	up_write(&vm->lock);
+ 
+ 	if (bound)
+-- 
+2.43.0
+

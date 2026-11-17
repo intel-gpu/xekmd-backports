@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Date: Mon, 12 Oct 2026 17:55:10 +0530
+Subject: [PATCH] drm/xe/log: Add VRAM, PAT, and HWMON DRIVER_HARDWARE
+ components
+
+Register new DRIVER_HARDWARE log components for hardware I/O subsystems
+that currently lack structured error reporting:
+
+  - VRAM (ID 6): Video RAM/Local Memory access and BAR visibility errors
+  - PAT (ID 7): Page Attribute Table programming errors
+  - HWMON (ID 8): Hardware monitor registration and sensor errors
+
+All three use IO_BUS as their default SIGID since they interact with
+hardware through MMIO or PCode register paths.
+
+Signed-off-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20261012122522.2307625-2-dnyaneshwar.bhadane@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+---
+ drivers/gpu/drm/xe/abi/xe_log_abi.h | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/abi/xe_log_abi.h b/drivers/gpu/drm/xe/abi/xe_log_abi.h
+index d61055201..426439335 100644
+--- a/drivers/gpu/drm/xe/abi/xe_log_abi.h
++++ b/drivers/gpu/drm/xe/abi/xe_log_abi.h
+@@ -150,6 +150,9 @@ enum xe_log_location_bits {
+ 	define(DRIVER_HARDWARE, 3, GT, GT_TDR, "Graphics Technology")		\
+ 	define(DRIVER_HARDWARE, 4, LMTT, IO_BUS, "LMEM Translation Table")	\
+ 	define(DRIVER_HARDWARE, 5, MEMIRQ, IO_BUS, "Memory Based IRQ")		\
++	define(DRIVER_HARDWARE, 6, VRAM, IO_BUS, "Video Memory/Local Memory")	\
++	define(DRIVER_HARDWARE, 7, PAT, IO_BUS, "Page Attribute Table")		\
++	define(DRIVER_HARDWARE, 8, HWMON, IO_BUS, "Hardware Monitoring")	\
+ 	/* */									\
+ 	define(DRIVER_FEATURE, 1, PF, SW, "SR-IOV Physical Function")		\
+ 	define(DRIVER_FEATURE, 2, VF, SW, "SR-IOV Virtual Function")		\
+-- 
+2.43.0
+

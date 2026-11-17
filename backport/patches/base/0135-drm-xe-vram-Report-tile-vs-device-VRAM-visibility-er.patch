@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Date: Mon, 12 Oct 2026 17:55:20 +0530
+Subject: [PATCH] drm/xe/vram: Report tile vs device VRAM visibility errors
+
+Derive the owning tile of a struct xe_vram_region inside
+vram_region_init() from vram->id, so the "no CPU visible VRAM"
+error can distinguish a per-tile region from the device-wide
+region without changing the function's signature.
+
+Signed-off-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20261012122522.2307625-12-dnyaneshwar.bhadane@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vram.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_vram.c b/drivers/gpu/drm/xe/xe_vram.c
+index dcedd8cfd..73aef047e 100644
+--- a/drivers/gpu/drm/xe/xe_vram.c
++++ b/drivers/gpu/drm/xe/xe_vram.c
+@@ -244,6 +244,8 @@ static int vram_region_init(struct xe_device *xe, struct xe_vram_region *vram,
+ 			    struct xe_vram_region *lmem_bar, u64 offset, u64 usable_size,
+ 			    u64 region_size, resource_size_t remain_io_size)
+ {
++	struct xe_tile *tile = vram != xe->mem.vram ? &xe->tiles[vram->id] : NULL;
++
+ 	/* Check if VRAM region is already initialized */
+ 	if (vram->mapping)
+ 		return 0;
+@@ -253,11 +255,12 @@ static int vram_region_init(struct xe_device *xe, struct xe_vram_region *vram,
+ 	vram->io_size = min_t(u64, usable_size, remain_io_size);
+ 
+ 	if (!vram->io_size) {
+-		drm_err(&xe->drm, "Tile without any CPU visible VRAM. Aborting.\n");
++		drm_err(&xe->drm, "%s without any CPU visible VRAM. Aborting.\n",
++			tile ? "Tile" : "Device");
+ 		return -ENODEV;
+ 	}
+ 
+-	if (vram != xe->mem.vram) {
++	if (tile) {
+ 		struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+ 
+ 		vram->mapping = devm_ioremap_wc(&pdev->dev, vram->io_start, vram->io_size);
+-- 
+2.43.0
+

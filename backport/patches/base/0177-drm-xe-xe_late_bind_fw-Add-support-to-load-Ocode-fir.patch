@@ -1,0 +1,285 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Mon, 2 Nov 2026 22:55:32 +0530
+Subject: [PATCH] drm/xe/xe_late_bind_fw: Add support to load Ocode firmware
+
+Enable loading of Ocode, the legacy OOBMSM firmware, through the
+late binding flow. The payload size check is no longer needed as
+late binding supports larger payloads.
+
+Ocode may not remain backward compatible across IFWI updates. Query
+the SDK API version from the System Controller mailbox and load the
+corresponding xe/cri_ocode_<ver>.bin. Skip loading the firmware if
+the SDK API version in its manifest does not match.
+
+v2:
+  - Make sdk_api_version part of ip_specific_data union (Daniele)
+
+Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Link: https://patch.msgid.link/20261102172527.2794537-12-badal.nilawar@intel.com
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+---
+ drivers/gpu/drm/xe/abi/uc_fw_abi.h            | 11 ++++-
+ drivers/gpu/drm/xe/xe_late_bind_fw.c          | 48 +++++++++++++++----
+ drivers/gpu/drm/xe/xe_late_bind_fw_types.h    |  6 ++-
+ drivers/gpu/drm/xe/xe_sysctrl.c               | 32 +++++++++++++
+ drivers/gpu/drm/xe/xe_sysctrl.h               |  1 +
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h | 12 +++++
+ 6 files changed, 97 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/abi/uc_fw_abi.h b/drivers/gpu/drm/xe/abi/uc_fw_abi.h
+index 198e94966..59699ba4d 100644
+--- a/drivers/gpu/drm/xe/abi/uc_fw_abi.h
++++ b/drivers/gpu/drm/xe/abi/uc_fw_abi.h
+@@ -316,6 +316,11 @@ struct gsc_cpd_entry {
+ 	u8 reserved[4];
+ } __packed;
+ 
++struct ocode_manifest_data {
++	u16 sdk_api_version;
++	u8 reserved[22];
++} __packed;
++
+ struct gsc_manifest_header {
+ 	u32 header_type; /* 0x4 for manifest type */
+ 	u32 header_length; /* in dwords */
+@@ -331,7 +336,11 @@ struct gsc_manifest_header {
+ 	struct gsc_version meu_kit_version;
+ 	u32 meu_manifest_version;
+ 	u8 general_data[4];
+-	u8 reserved3[56];
++	union {
++		u8 ip_specific_data[24];
++		struct ocode_manifest_data ocode_data;
++	};
++	u8 reserved3[32];
+ 	u32 modulus_size; /* in dwords */
+ 	u32 exponent_size; /* in dwords */
+ } __packed;
+diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+index 881a46abc..190674f6d 100644
+--- a/drivers/gpu/drm/xe/xe_late_bind_fw.c
++++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+@@ -17,6 +17,12 @@
+ #include "xe_pcode.h"
+ #include "xe_pcode_api.h"
+ #include "xe_pm.h"
++#include "xe_sysctrl.h"
++
++/*
++ * TODO: Add MODULE_FIRMWARE() for xe/cri_ocode_<ver>.bin once the
++ *       Ocode firmware binary is available upstream.
++ */
+ 
+ /*
+  * The component should load quite quickly in most cases, but it could take
+@@ -33,10 +39,12 @@
+ 
+ static const u32 fw_id_to_type[] = {
+ 		[XE_LB_FW_FAN_CONTROL] = INTEL_LB_TYPE_FAN_CONTROL,
++		[XE_LB_FW_OCODE] = INTEL_LB_TYPE_OCODE,
+ 	};
+ 
+ static const char * const fw_id_to_name[] = {
+ 		[XE_LB_FW_FAN_CONTROL] = "fan_control",
++		[XE_LB_FW_OCODE] = "ocode",
+ 	};
+ 
+ static struct xe_device *
+@@ -104,6 +112,7 @@ static int parse_cpd_header(struct xe_late_bind_fw *lb_fw,
+ 	manifest = data + offset;
+ 
+ 	lb_fw->version = manifest->fw_version;
++	lb_fw->sdk_api_version = manifest->ocode_data.sdk_api_version;
+ 
+ 	return 0;
+ }
+@@ -298,6 +307,7 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
+ 	struct xe_late_bind_fw *lb_fw;
+ 	const struct firmware *fw;
+ 	u32 num_fans;
++	u16 sdk_ver = 0;
+ 	int ret;
+ 
+ 	if (fw_id >= XE_LB_FW_MAX_ID)
+@@ -320,9 +330,23 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
+ 			return 0;
+ 	}
+ 
+-	snprintf(lb_fw->blob_path, sizeof(lb_fw->blob_path), "xe/%s_8086_%04x_%04x_%04x.bin",
+-		 fw_id_to_name[lb_fw->id], pdev->device,
+-		 pdev->subsystem_vendor, pdev->subsystem_device);
++	if (lb_fw->type == INTEL_LB_TYPE_OCODE) {
++		/* Get SDK API version */
++		ret = xe_sysctrl_sdk_api_version(xe, &sdk_ver);
++		if (ret) {
++			drm_warn(&xe->drm, "Failed to get OCODE SDK API version: %pe\n",
++				 ERR_PTR(ret));
++			return 0;
++		}
++
++		snprintf(lb_fw->blob_path, sizeof(lb_fw->blob_path),
++			 "xe/cri_ocode_%u.bin", sdk_ver);
++	} else {
++		snprintf(lb_fw->blob_path, sizeof(lb_fw->blob_path),
++			 "xe/%s_8086_%04x_%04x_%04x.bin",
++			 fw_id_to_name[lb_fw->id], pdev->device,
++			 pdev->subsystem_vendor, pdev->subsystem_device);
++	}
+ 
+ 	drm_dbg(&xe->drm, "Request late binding firmware %s\n", lb_fw->blob_path);
+ 	ret = firmware_request_nowarn(&fw, lb_fw->blob_path, xe->drm.dev);
+@@ -332,17 +356,17 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
+ 		return 0;
+ 	}
+ 
+-	if (fw->size > XE_LB_MAX_PAYLOAD_SIZE) {
+-		drm_err(&xe->drm, "Firmware %s size %zu is larger than max pay load size %u\n",
+-			lb_fw->blob_path, fw->size, XE_LB_MAX_PAYLOAD_SIZE);
+-		ret = -ENODATA;
+-		goto release_fw;
+-	}
+-
+ 	ret = parse_lb_layout(lb_fw, fw->data, fw->size, "LTES");
+ 	if (ret)
+ 		goto release_fw;
+ 
++	if (lb_fw->type == INTEL_LB_TYPE_OCODE && lb_fw->sdk_api_version != sdk_ver) {
++		drm_warn(&xe->drm, "%s late binding fw: SDK API version mismatch %u != %u\n",
++			 fw_id_to_name[lb_fw->id], lb_fw->sdk_api_version, sdk_ver);
++		ret = 0;
++		goto release_fw;
++	}
++
+ 	lb_fw->payload_size = fw->size;
+ 	lb_fw->payload = drmm_kzalloc(&xe->drm, lb_fw->payload_size, GFP_KERNEL);
+ 	if (!lb_fw->payload) {
+@@ -355,6 +379,10 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
+ 		 lb_fw->version.major, lb_fw->version.minor,
+ 		 lb_fw->version.hotfix, lb_fw->version.build);
+ 
++	if (lb_fw->type == INTEL_LB_TYPE_OCODE)
++		drm_info(&xe->drm, "%s firmware SDK API version %u\n",
++			 fw_id_to_name[lb_fw->id], lb_fw->sdk_api_version);
++
+ 	memcpy((void *)lb_fw->payload, fw->data, lb_fw->payload_size);
+ 	INIT_WORK(&lb_fw->work, xe_late_bind_work);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw_types.h b/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
+index ee5efe607..c7b3ffc74 100644
+--- a/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
++++ b/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
+@@ -13,14 +13,14 @@
+ 
+ #include "abi/uc_fw_abi.h"
+ 
+-#define XE_LB_MAX_PAYLOAD_SIZE SZ_4K
+-
+ /**
+  * enum xe_late_bind_fw_id - enum to determine late binding fw index
+  */
+ enum xe_late_bind_fw_id {
+ 	/** @XE_LB_FW_FAN_CONTROL: Fan control */
+ 	XE_LB_FW_FAN_CONTROL = 0,
++	/** @XE_LB_FW_OCODE: Ocode firmware */
++	XE_LB_FW_OCODE,
+ 	/** @XE_LB_FW_MAX_ID: Number of IDs */
+ 	XE_LB_FW_MAX_ID
+ };
+@@ -45,6 +45,8 @@ struct xe_late_bind_fw {
+ 	struct work_struct work;
+ 	/** @version: late binding blob manifest version */
+ 	struct gsc_version version;
++	/** @sdk_api_version: late binding blob manifest SDK API version */
++	u16 sdk_api_version;
+ };
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl.c b/drivers/gpu/drm/xe/xe_sysctrl.c
+index 4067e1dfd..27a59e8e4 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl.c
++++ b/drivers/gpu/drm/xe/xe_sysctrl.c
+@@ -217,3 +217,35 @@ bool xe_sysctrl_is_diag_fw_ready(struct xe_device *xe)
+ 	return xe_sysctrl_check_app_status(xe, XE_SYSCTRL_APP_DIAG) ==
+ 	       XE_SYSCTRL_FIRMWARE_APP_INITIALIZED;
+ }
++
++/**
++ * xe_sysctrl_sdk_api_version - Get SDK API version
++ * @xe: Xe device
++ * @version: SDK API version
++ *
++ * Return: 0 on success, negative error code on failure.
++ */
++int xe_sysctrl_sdk_api_version(struct xe_device *xe, u16 *version)
++{
++	struct xe_sysctrl_sdk_api_resp resp = {};
++	struct xe_sysctrl_mailbox_command cmd = {};
++	size_t out_len = 0;
++	int ret;
++
++	xe_sysctrl_create_command(&cmd, XE_SYSCTRL_GROUP_CORE, XE_SYSCTRL_CMD_SDK_API_VERSION,
++				  0, 0, &resp, sizeof(resp));
++
++	ret = xe_sysctrl_send_command(&xe->sc, &cmd, &out_len);
++	if (ret)
++		return ret;
++
++	if (out_len != sizeof(resp)) {
++		xe_err(xe, "sysctrl: unexpected SDK API version length %zu (expected %zu)\n",
++		       out_len, sizeof(resp));
++		return -EPROTO;
++	}
++
++	*version = resp.sdk_api_version;
++
++	return 0;
++}
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl.h b/drivers/gpu/drm/xe/xe_sysctrl.h
+index b69a3f474..c0b6d4330 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl.h
++++ b/drivers/gpu/drm/xe/xe_sysctrl.h
+@@ -22,5 +22,6 @@ void xe_sysctrl_irq_handler(struct xe_device *xe, u32 master_ctl);
+ void xe_sysctrl_pm_resume(struct xe_device *xe);
+ bool xe_sysctrl_is_oobmsm_fw_ready(struct xe_device *xe);
+ bool xe_sysctrl_is_diag_fw_ready(struct xe_device *xe);
++int xe_sysctrl_sdk_api_version(struct xe_device *xe, u16 *version);
+ 
+ #endif
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
+index a0628eb47..05e1485d2 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
+@@ -51,10 +51,12 @@ enum xe_sysctrl_gfsp_cmd {
+  *
+  * @XE_SYSCTRL_CMD_LOOPBACK: Loopback test command
+  * @XE_SYSCTRL_CMD_GET_APP_STATUS_BY_ID: Retrieve application status by ID
++ * @XE_SYSCTRL_CMD_SDK_API_VERSION: Get SDK API version
+  */
+ enum xe_sysctrl_core_cmd {
+ 	XE_SYSCTRL_CMD_LOOPBACK				= 0x03,
+ 	XE_SYSCTRL_CMD_GET_APP_STATUS_BY_ID		= 0x05,
++	XE_SYSCTRL_CMD_SDK_API_VERSION			= 0x06,
+ };
+ 
+ /**
+@@ -120,6 +122,16 @@ enum xe_sysctrl_fw_status {
+ 	XE_SYSCTRL_FIRMWARE_COMM_FAILURE,
+ };
+ 
++/**
++ * struct xe_sysctrl_sdk_api_resp - Get sdk api version response
++ */
++struct xe_sysctrl_sdk_api_resp {
++	/** @sdk_api_version: SDK API version */
++	u16 sdk_api_version;
++	/** @reserved: Reserved for future use */
++	u16 reserved;
++} __packed;
++
+ /**
+  * struct xe_sysctrl_mailbox_command - System Controller mailbox command
+  */
+-- 
+2.43.0
+

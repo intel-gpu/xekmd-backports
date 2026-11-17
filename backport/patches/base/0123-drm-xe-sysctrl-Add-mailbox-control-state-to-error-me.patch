@@ -1,0 +1,121 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Anoop Vijay <anoop.c.vijay@intel.com>
+Date: Thu, 8 Oct 2026 23:47:55 -0700
+Subject: [PATCH] drm/xe/sysctrl: Add mailbox control state to error messages
+
+Include decoded mailbox control register information in mailbox
+busy, timeout and firmware error paths to provide additional
+context for failure debugging
+
+Signed-off-by: Anoop Vijay <anoop.c.vijay@intel.com>
+Reviewed-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Link: https://patch.msgid.link/20261009064754.3927132-2-anoop.c.vijay@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox.c | 38 ++++++++++++++++++-------
+ 1 file changed, 27 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+index e91dd625a..e1013a01d 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+@@ -7,6 +7,7 @@
+ #include <linux/cleanup.h>
+ #include <linux/minmax.h>
+ #include <linux/slab.h>
++#include <linux/sprintf.h>
+ #include <linux/string.h>
+ 
+ #include "regs/xe_sysctrl_regs.h"
+@@ -128,17 +129,23 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
+ 			       const u8 *mbox_cmd,
+ 			       size_t cmd_size, unsigned int timeout_ms)
+ {
++	const struct xe_sysctrl_mailbox_msg_hdr *hdr =
++		(const struct xe_sysctrl_mailbox_msg_hdr *)mbox_cmd;
+ 	struct xe_device *xe = sc_to_xe(sc);
+ 	u32 ctrl_reg, total_frames, frame;
+ 	size_t bytes_sent, frame_size;
++	char ctrl_desc[48];
+ 	bool phase;
+ 	int ret;
+ 
+ 	total_frames = DIV_ROUND_UP(cmd_size, XE_SYSCTRL_MB_FRAME_SIZE);
+ 
+-	ret = sysctrl_wait_bit_clear(sc, SYSCTRL_MB_CTRL_RUN_BUSY, timeout_ms);
++	ret = sysctrl_wait_bit_clear(sc, SYSCTRL_MB_CTRL_RUN_BUSY, timeout_ms, &ctrl_reg);
+ 	if (ret) {
+-		xe_log_err(xe, SYSCTRL, ret, "Mailbox busy\n");
++		sysctrl_mb_ctrl_desc(ctrl_reg, ctrl_desc, sizeof(ctrl_desc));
++		xe_log_err(xe, SYSCTRL, ret, "Mailbox busy %#x.%#x %s\n",
++			   XE_SYSCTRL_HDR_GROUP_ID(hdr), XE_SYSCTRL_HDR_COMMAND(hdr),
++			   ctrl_desc);
+ 		return ret;
+ 	}
+ 
+@@ -159,9 +166,12 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
+ 
+ 		xe_mmio_write32(sc->mmio, SYSCTRL_MB_CTRL, ctrl_reg);
+ 
+-		ret = sysctrl_wait_bit_clear(sc, SYSCTRL_MB_CTRL_RUN_BUSY, timeout_ms);
++		ret = sysctrl_wait_bit_clear(sc, SYSCTRL_MB_CTRL_RUN_BUSY, timeout_ms, &ctrl_reg);
+ 		if (ret) {
+-			xe_log_err(xe, SYSCTRL, ret, "Frame %u acknowledgment timeout\n", frame);
++			sysctrl_mb_ctrl_desc(ctrl_reg, ctrl_desc, sizeof(ctrl_desc));
++			xe_log_err(xe, SYSCTRL, ret, "Frame acknowledgment timeout %#x.%#x %s\n",
++				   XE_SYSCTRL_HDR_GROUP_ID(hdr), XE_SYSCTRL_HDR_COMMAND(hdr),
++				   ctrl_desc);
+ 			return ret;
+ 		}
+ 
+@@ -171,17 +181,22 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
+ 	return 0;
+ }
+ 
+-static int sysctrl_process_frame(struct xe_sysctrl *sc, void *out,
+-				 size_t frame_size, unsigned int timeout_ms,
++static int sysctrl_process_frame(struct xe_sysctrl *sc,
++				 const struct xe_sysctrl_mailbox_msg_hdr *req,
++				 void *out, size_t frame_size, unsigned int timeout_ms,
+ 				 bool *done)
+ {
+ 	u32 curr_frame, total_frames, ctrl_reg;
+ 	struct xe_device *xe = sc_to_xe(sc);
++	char ctrl_desc[48];
+ 	int ret;
+ 
+-	ret = sysctrl_wait_bit_set(sc, SYSCTRL_MB_CTRL_RUN_BUSY_OUT, timeout_ms);
++	ret = sysctrl_wait_bit_set(sc, SYSCTRL_MB_CTRL_RUN_BUSY_OUT, timeout_ms, &ctrl_reg);
+ 	if (ret) {
+-		xe_log_err(xe, SYSCTRL, ret, "Response frame timeout\n");
++		sysctrl_mb_ctrl_desc(ctrl_reg, ctrl_desc, sizeof(ctrl_desc));
++		xe_log_err(xe, SYSCTRL, ret, "Response frame timeout %#x.%#x %s\n",
++			   XE_SYSCTRL_HDR_GROUP_ID(req), XE_SYSCTRL_HDR_COMMAND(req),
++			   ctrl_desc);
+ 		return ret;
+ 	}
+ 
+@@ -219,7 +234,7 @@ static int sysctrl_receive_frames(struct xe_sysctrl *sc,
+ 	while (!done && remain) {
+ 		frame_size = min_t(size_t, remain, XE_SYSCTRL_MB_FRAME_SIZE);
+ 
+-		ret = sysctrl_process_frame(sc, out, frame_size, timeout_ms,
++		ret = sysctrl_process_frame(sc, req, out, frame_size, timeout_ms,
+ 					    &done);
+ 		if (ret)
+ 			return ret;
+@@ -240,8 +255,9 @@ static int sysctrl_receive_frames(struct xe_sysctrl *sc,
+ 	}
+ 
+ 	if (XE_SYSCTRL_HDR_RESULT(hdr) != 0) {
+-		xe_log_err(xe, SYSCTRL, -EIO, "Firmware error: %#04x\n",
+-			   XE_SYSCTRL_HDR_RESULT(hdr));
++		xe_log_err(xe, SYSCTRL, -EIO, "Firmware error: %#04x %#x.%#x\n",
++			   XE_SYSCTRL_HDR_RESULT(hdr),
++			   XE_SYSCTRL_HDR_GROUP_ID(req), XE_SYSCTRL_HDR_COMMAND(req));
+ 		return -EIO;
+ 	}
+ 
+-- 
+2.43.0
+

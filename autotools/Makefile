@@ -61,7 +61,7 @@ XE_DKMS_MK_README=$(BACKPORT_DIR)/scripts/backport-mkdebreadme
 XE_DKMS_MK_COPYRIGHT=$(BACKPORT_DIR)/scripts/backport-mkdebcopyright
 KBUILD_ONLYXEDIRS := src/drivers/gpu src/include src/scripts src/drivers/platform src/drivers/mtd
 KBUILD_XEVFIOPCIDIRS := src/drivers/vfio/pci/xe
-KBUILD_AUTOTOOLS := m4 AUTHORS ChangeLog configure.ac COPYING INSTALL Makefile Makefile.am NEWS README.md oot-build.sh
+KBUILD_AUTOTOOLS := m4 AUTHORS ChangeLog configure.ac COPYING INSTALL Makefile Makefile.am NEWS oot-build.sh
 XE_TAR_CONTENT=$(KBUILD_ONLYXEDIRS) $(KBUILD_AUTOTOOLS) $(KBUILD_XEVFIOPCIDIRS) src/Makefile* src/local-symbols src/MAINTAINERS src/local-symbols-autoconf \
 	src/Kconfig src/Kconfig.sources src/Kconfig.package.hacks src/COPYING src/versions src/defconfigs src/backport-include src/kconf src/compat
 

@@ -27,7 +27,8 @@ Note:
 
 | Branch Name | Kernel Version | Status |
 |-------------|----------------|--------|
-| kernel-backport/main | 7.1 | Active |
+| kernel-backport/main | 7.3 | Active |
+| kernel-backport/v7.1 | 7.1 | Active |
 | kernel-backport/v7.0 | 7.0 | Frozen |
 | kernel-backport/v6.17 | 6.17 | Frozen |
 | kernel-backport/v6.14 | 6.14 | Frozen |

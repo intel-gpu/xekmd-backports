@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Date: Mon, 6 Apr 2026 23:40:55 +0530
+Subject: drm/xe: skip devcoredump registration on kernels without
+ dev_coredump_put()
+
+dev_coredump_put() was added in v6.10 (commit a28380f119a9). On older
+kernels, xe_driver_devcoredump_fini() calling it unconditionally causes
+mutex corruption (DEBUG_LOCKS_WARN_ON) during module unload/reload.
+
+A header-only backport is not possible: dev_coredump_put() relies on
+devcd_class, a file-scope static in drivers/base/devcoredump.c that is
+never exported.
+
+On kernels below 6.10, where BPM_DEVCOREDUMP_PUT_NOT_PRESENT is defined,
+the deferred snapshot worker frees captured state immediately instead
+of registering a persistent coredump entry, and the fini callback skips the
+dev_coredump_put() call.
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/xe/xe_devcoredump.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_devcoredump.c b/drivers/gpu/drm/xe/xe_devcoredump.c
+index 203e303..61c2d63 100644
+--- a/drivers/gpu/drm/xe/xe_devcoredump.c
++++ b/drivers/gpu/drm/xe/xe_devcoredump.c
+@@ -278,6 +278,14 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
+ 	struct xe_device *xe = coredump_to_xe(coredump);
+ 	unsigned int fw_ref;
+ 
++#ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
++	mutex_lock(&coredump->lock);
++	xe_devcoredump_snapshot_free(ss);
++	coredump->captured = false;
++	mutex_unlock(&coredump->lock);
++
++	return;
++#else
+ 	/*
+ 	 * NB: Despite passing a GFP_ flags parameter here, more allocations are done
+ 	 * internally using GFP_KERNEL explicitly. Hence this call must be in the worker
+@@ -286,6 +294,7 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
+ 	dev_coredumpm_timeout(gt_to_xe(ss->gt)->drm.dev, THIS_MODULE, coredump, 0, GFP_KERNEL,
+ 			      xe_devcoredump_read, xe_devcoredump_free,
+ 			      XE_COREDUMP_TIMEOUT_JIFFIES);
++#endif
+ 
+ 	xe_pm_runtime_get(xe);
+ 
+@@ -412,7 +421,9 @@ static void xe_driver_devcoredump_fini(void *arg)
+ {
+ 	struct drm_device *drm = arg;
+ 
++#ifndef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
+ 	dev_coredump_put(drm->dev);
++#endif
+ }
+ 
+ int xe_devcoredump_init(struct xe_device *xe)
+-- 
+2.43.0

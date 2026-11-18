@@ -29,8 +29,4 @@
 #define dev_coredumpm_timeout(a,b,c,d,e,f,g,h) dev_coredumpm(a,b,c,d,e,f,g)
 #endif
 
-#ifdef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
-static inline void dev_coredump_put(struct device *dev){}
-#endif
-
 #endif /* _BPM_DEVCOREDUMP_H  */

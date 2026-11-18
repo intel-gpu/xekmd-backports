@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Riana Tauro <riana.tauro@intel.com>
+Date: Fri, 28 Aug 2026 17:01:07 +0530
+Subject: [PATCH] [TEMP]: drm/xe/xe_guc: Skip GuC reset post SBR
+
+Secondary Bus Reset causes all VRAM state to be lost along with hardware
+state. The goal is to keep the device in reset till the teardown is
+complete to avoid device accesses such as GuC reset in an unknown state.
+
+Fixes: e46ee82f120f ("drm/xe: Skip device access during PCI error recovery")
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+(backported from [rev1 drm/xe/xe_guc: Skip GuC reset post SBR])
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.h    | 5 -----
+ drivers/gpu/drm/xe/xe_guc.c       | 5 +++++
+ drivers/gpu/drm/xe/xe_pci_error.c | 1 -
+ 3 files changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
+index 19cf7ddcf..b58110f52 100644
+--- a/drivers/gpu/drm/xe/xe_device.h
++++ b/drivers/gpu/drm/xe/xe_device.h
+@@ -196,11 +196,6 @@ static inline void xe_device_set_in_reset(struct xe_device *xe)
+ 	atomic_set(&xe->in_reset, 1);
+ }
+ 
+-static inline void xe_device_clear_in_reset(struct xe_device *xe)
+-{
+-	atomic_set(&xe->in_reset, 0);
+-}
+-
+ static inline bool xe_device_eudebug_uses_guc(struct xe_device *xe)
+ {
+ 	return GRAPHICS_VERx100(xe) >= 3500;
+diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
+index 238b1d61a..745b2791c 100644
+--- a/drivers/gpu/drm/xe/xe_guc.c
++++ b/drivers/gpu/drm/xe/xe_guc.c
+@@ -986,6 +986,11 @@ int xe_guc_reset(struct xe_guc *guc)
+ 	u32 guc_status, gdrst;
+ 	int ret;
+ 
++	if (xe_device_is_in_reset(gt_to_xe(gt))) {
++		xe_gt_dbg(gt, "Skipping GuC reset, device is in reset\n");
++		return 0;
++	}
++
+ 	xe_force_wake_assert_held(gt_to_fw(gt), XE_FW_GT);
+ 
+ 	if (IS_SRIOV_VF(gt_to_xe(gt)))
+diff --git a/drivers/gpu/drm/xe/xe_pci_error.c b/drivers/gpu/drm/xe/xe_pci_error.c
+index 67920751e..6b75d6fd0 100644
+--- a/drivers/gpu/drm/xe/xe_pci_error.c
++++ b/drivers/gpu/drm/xe/xe_pci_error.c
+@@ -164,7 +164,6 @@ static pci_ers_result_t xe_pci_error_slot_reset(struct pci_dev *pdev)
+ 	 * TODO: optimize by re-initializing only the hardware state and re-creating
+ 	 * kernel BOs.
+ 	 */
+-	xe_device_clear_in_reset(xe);
+ 	pdev->driver->remove(pdev);
+ 	devres_release_group(&pdev->dev, xe->devres_group);
+ 
+-- 
+2.43.0
+

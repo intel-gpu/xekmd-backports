@@ -1,0 +1,109 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Fei Yang <fei.yang@intel.com>
+Date: Mon, 2 Nov 2026 18:14:18 -0800
+Subject: [PATCH 7/9] drm/xe/cri: Implement Wa_14028586678
+
+Implement the documented Wa_14028586678 hardware workaround on
+Crescent Island by updating the L3 class-of-service and caching-policy
+fields in DWNSTRM_ACCESS_MODE (0x144154). Change bits [7:4] from 0x3
+to 0xc to select L3 class of service 3 and write-back caching, while
+preserving the other register fields.
+
+v2:
+  - Move this workaround into a dedicated MERT table instead of
+    placing it in gt_was, since MERT registers are device-level and
+    accessed through root-tile MMIO, outside GT forcewake and GT
+    save/restore bookkeeping.
+  - Add an RTP helper for full-register device MMIO writes and apply
+    the MERT table during probe and after pcode is ready on system or
+    D3cold resume. Match Crescent Island and skip devices without MERT
+    and SR-IOV VFs.
+
+v3:
+  - Use PLATFORM(CRESCENTISLAND) instead of GRAPHICS_VERSION(3511),
+    because device-level OOB processing has no GT context and the
+    graphics-version matcher requires one.
+
+v4:
+  - Switching from RTP to OOB removes the need for the MERT-specific
+    table and RTP helper proposed in v2. The v2 and v3 notes are retained
+    as revision history; this version uses the device OOB rule through
+    the existing per-tile workaround helper.
+  - Program the register on every tile, assuming the workaround values
+    are identical across tiles.
+  - Use a masked read-modify-write to set [7:6] to 0x3 and [5:4] to
+    0x0, preserving all other register fields.
+
+v5:
+  - Apply tile workarounds after PCODE initialization completes on system
+    resume, matching the runtime resume ordering.
+
+v6:
+  - Split the system and runtime resume changes into a prerequisite PM
+    fix with its own commit message and Fixes tag.
+  - Rename the class-of-service field macro to L3_CLOS and drop the
+    redundant MERT capability check; applicability is selected by the
+    device OOB rule.
+
+BSpec: 73603
+Signed-off-by: Fei Yang <fei.yang@intel.com>
+Signed-off-by: Daniel Charles <daniel.charles@intel.com>
+Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
+Link: https://patch.msgid.link/20261103021418.654723-3-daniel.charles@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_mert_regs.h    | 4 ++++
+ drivers/gpu/drm/xe/xe_device_wa_oob.rules | 1 +
+ drivers/gpu/drm/xe/xe_wa.c                | 7 +++++++
+ 3 files changed, 12 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_mert_regs.h b/drivers/gpu/drm/xe/regs/xe_mert_regs.h
+index 99e5a26da..64570ea6e 100644
+--- a/drivers/gpu/drm/xe/regs/xe_mert_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_mert_regs.h
+@@ -8,6 +8,10 @@
+ 
+ #include "regs/xe_reg_defs.h"
+ 
++#define DWNSTRM_ACCESS_MODE_GAMREQ_MERTSS	XE_REG(0x144154)
++#define   DWNSTRM_ACCESS_MODE_L3_CLOS		REG_GENMASK(7, 6)
++#define   DWNSTRM_ACCESS_MODE_L3_POLICY		REG_GENMASK(5, 4)
++
+ #define MERT_LMEM_CFG				XE_REG(0x1448b0)
+ 
+ #define MERT_TLB_CT_INTR_ERR_ID_PORT		XE_REG(0x145190)
+diff --git a/drivers/gpu/drm/xe/xe_device_wa_oob.rules b/drivers/gpu/drm/xe/xe_device_wa_oob.rules
+index d8dc41851..77fd57520 100644
+--- a/drivers/gpu/drm/xe/xe_device_wa_oob.rules
++++ b/drivers/gpu/drm/xe/xe_device_wa_oob.rules
+@@ -7,3 +7,4 @@
+ 14026633728	PLATFORM(CRESCENTISLAND)
+ 14026746987	PLATFORM(CRESCENTISLAND)
+ 14026779378	PLATFORM(CRESCENTISLAND)
++14028586678	PLATFORM(CRESCENTISLAND)
+diff --git a/drivers/gpu/drm/xe/xe_wa.c b/drivers/gpu/drm/xe/xe_wa.c
+index bbe1696a5..fb3b72b56 100644
+--- a/drivers/gpu/drm/xe/xe_wa.c
++++ b/drivers/gpu/drm/xe/xe_wa.c
+@@ -16,6 +16,7 @@
+ #include "regs/xe_engine_regs.h"
+ #include "regs/xe_gt_regs.h"
+ #include "regs/xe_guc_regs.h"
++#include "regs/xe_mert_regs.h"
+ #include "regs/xe_regs.h"
+ #include "xe_device_types.h"
+ #include "xe_force_wake.h"
+@@ -1032,4 +1033,10 @@ void xe_wa_apply_tile_workarounds(struct xe_tile *tile)
+ 
+ 	if (XE_DEVICE_WA(tile->xe, 22010954014))
+ 		xe_mmio_rmw32(mmio, XEHP_CLOCK_GATE_DIS, 0, SGSI_SIDECLK_DIS);
++
++	if (XE_DEVICE_WA(tile->xe, 14028586678))
++		xe_mmio_rmw32(mmio, DWNSTRM_ACCESS_MODE_GAMREQ_MERTSS,
++			      DWNSTRM_ACCESS_MODE_L3_CLOS |
++			      DWNSTRM_ACCESS_MODE_L3_POLICY,
++			      REG_FIELD_PREP(DWNSTRM_ACCESS_MODE_L3_CLOS, 3));
+ }
+-- 
+2.43.0
+

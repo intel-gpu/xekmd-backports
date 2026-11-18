@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Raag Jadav <raag.jadav@intel.com>
+Date: Wed, 22 Jul 2026 20:01:42 +0530
+Subject: [PATCH] drm/xe/ras: Validate sysctrl response
+
+Validate errors raised by sysctrl firmware instead of blindly trusting
+them.
+
+Signed-off-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Riana Tauro <riana.tauro@intel.com>
+Link: https://patch.msgid.link/20260722143142.675658-1-raag.jadav@intel.com
+Signed-off-by: Riana Tauro <riana.tauro@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c | 30 ++++++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index d98ff9453..93e45ef49 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -156,6 +156,24 @@ static inline const char *comp_to_str(u8 component)
+ 	return xe_ras_components[component];
+ }
+ 
++static bool ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter)
++{
++	u8 severity = counter->common.severity;
++	u8 component = counter->common.component;
++
++	if (!in_range(severity, XE_RAS_SEV_NOT_SUPPORTED + 1, XE_RAS_SEV_MAX - 1)) {
++		xe_err(xe, "sysctrl: unexpected severity %u\n", severity);
++		return false;
++	}
++
++	if (!in_range(component, XE_RAS_COMP_NOT_SUPPORTED + 1, XE_RAS_COMP_MAX - 1)) {
++		xe_err(xe, "sysctrl: unexpected component %u\n", component);
++		return false;
++	}
++
++	return true;
++}
++
+ static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
+ {
+ 	struct pci_dev *vsp;
+@@ -327,6 +345,9 @@ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
+ 		severity = errors[id].common.severity;
+ 		component = errors[id].common.component;
+ 
++		if (!ras_counter_is_valid(xe, &errors[id]))
++			continue;
++
+ 		xe_warn(xe, "[RAS]: %s %s detected\n",
+ 			comp_to_str(component), sev_to_str(severity));
+ 	}
+@@ -358,6 +379,9 @@ static int get_counter(struct xe_device *xe, struct xe_ras_error_class *counter,
+ 		return -EIO;
+ 	}
+ 
++	if (!ras_counter_is_valid(xe, &response.counter))
++		return -EBADMSG;
++
+ 	common = &response.counter.common;
+ 	*value = response.value;
+ 
+@@ -422,6 +446,9 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+ 			component = arr->counter.common.component;
+ 			severity = arr->counter.common.severity;
+ 
++			if (!ras_counter_is_valid(xe, &arr->counter))
++				continue;
++
+ 			xe_info(xe, "[RAS]: %s %s detected\n", comp_to_str(component),
+ 				sev_to_str(severity));
+ 
+@@ -532,6 +559,9 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
+ 
+ 	counter = &response.counter;
+ 
++	if (!ras_counter_is_valid(xe, counter))
++		return -EBADMSG;
++
+ 	xe_dbg(xe, "[RAS]: clear counter for %s %s\n", comp_to_str(counter->common.component),
+ 	       sev_to_str(counter->common.severity));
+ 
+-- 
+2.43.0
+

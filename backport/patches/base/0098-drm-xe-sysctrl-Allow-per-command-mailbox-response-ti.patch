@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Anoop Vijay <anoop.c.vijay@intel.com>
+Date: Tue, 22 Sep 2026 04:14:17 -0700
+Subject: [PATCH] drm/xe/sysctrl: Allow per-command mailbox response timeout
+
+xe_sysctrl_send_command() currently uses a fixed mailbox response
+timeout of %XE_SYSCTRL_MB_DEFAULT_TIMEOUT_MS for all commands.
+
+Add a timeout_ms field to struct xe_sysctrl_mailbox_command to allow
+callers to override the default timeout when needed. A value of 0
+preserves the existing default behavior.
+
+Signed-off-by: Anoop Vijay <anoop.c.vijay@intel.com>
+Reviewed-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Signed-off-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Link: https://patch.msgid.link/20260922111416.94416-2-anoop.c.vijay@intel.com
+---
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox.c       | 7 ++++++-
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h | 3 +++
+ 2 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+index a0179e62a..7701348f0 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
+@@ -334,6 +334,9 @@ void xe_sysctrl_create_command(struct xe_sysctrl_mailbox_command *command, u8 gr
+  * If a response is expected, @cmd->data_out must point to a buffer of
+  * size @cmd->data_out_len supplied by caller.
+  *
++ * @cmd->timeout_ms specifies the response timeout in milliseconds.
++ * A value of 0 uses %XE_SYSCTRL_MB_DEFAULT_TIMEOUT_MS.
++ *
+  * On success, @rdata_len is updated with number of valid response bytes
+  * returned by firmware, bounded by @cmd->data_out_len.
+  *
+@@ -347,6 +350,7 @@ int xe_sysctrl_send_command(struct xe_sysctrl *sc,
+ 	u8 group_id, command_code;
+ 	u8 *mbox_cmd = NULL;
+ 	size_t cmd_size = 0;
++	unsigned int timeout_ms;
+ 	int ret;
+ 
+ 	guard(xe_pm_runtime_noresume)(xe);
+@@ -360,6 +364,7 @@ int xe_sysctrl_send_command(struct xe_sysctrl *sc,
+ 
+ 	group_id = XE_SYSCTRL_APP_HDR_GROUP_ID(&cmd->header);
+ 	command_code = XE_SYSCTRL_APP_HDR_COMMAND(&cmd->header);
++	timeout_ms = cmd->timeout_ms ?: XE_SYSCTRL_MB_DEFAULT_TIMEOUT_MS;
+ 
+ 	might_sleep();
+ 
+@@ -375,7 +380,7 @@ int xe_sysctrl_send_command(struct xe_sysctrl *sc,
+ 
+ 	ret = sysctrl_send_command(sc, mbox_cmd, cmd_size,
+ 				   cmd->data_out, cmd->data_out_len, rdata_len,
+-				   XE_SYSCTRL_MB_DEFAULT_TIMEOUT_MS);
++				   timeout_ms);
+ 	if (ret)
+ 		xe_err(xe, "sysctrl: Mailbox command failed: %pe\n", ERR_PTR(ret));
+ 
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
+index 66e7cbcc3..43489f7fd 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
++++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
+@@ -60,6 +60,9 @@ struct xe_sysctrl_mailbox_command {
+ 
+ 	/** @data_out_len: Size of output buffer in bytes (0 if no response expected) */
+ 	size_t data_out_len;
++
++	/** @timeout_ms: Response timeout in ms, or 0 for %XE_SYSCTRL_MB_DEFAULT_TIMEOUT_MS */
++	unsigned int timeout_ms;
+ };
+ 
+ /* Modify as needed */
+-- 
+2.43.0
+

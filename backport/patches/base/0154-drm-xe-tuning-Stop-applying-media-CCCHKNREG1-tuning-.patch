@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nitin Gote <nitin.r.gote@intel.com>
+Date: Thu, 22 Oct 2026 12:21:14 +0530
+Subject: [PATCH] drm/xe/tuning: Stop applying media CCCHKNREG1 tuning from
+ Xe3p onward
+
+Commit 288b775a1cd4 ("drm/xe/tuning: Stop applying CCCHKNREG1 tuning
+from Xe3p onward") bounded the graphics-side Compression Overfetch
+tuning to graphics version 34.99. The media counterpart
+(XE2LPM_CCCHKNREG1) was left unbounded and kept being applied on
+Xe3p-generation media blocks. This was caught by
+igt@xe_debugfs@check-gt-reg-sr on a CRI media GT:
+
+  Mismatch on 0x82a8, expected 0x800000 got 0x0
+
+The tuning guide (Bspec: 72161) still lists this programming for
+HUB_DIE (media) projects on this generation, but bit 23 (L3CMPCTRL)
+no longer exists on CCCHKNREG1 on Xe3p, and bit 25 (COMPOVFDIS) is
+also absent. Bit 18 (ENCOMPPERFFIX) already defaults to 0, so
+clearing it is a no-op. The tuning guide entry is stale for Xe3p.
+
+Bound the media tuning the same way as its graphics counterpart so
+it stops being applied from Xe3p onward.
+
+Bspec: 72161
+Cc: Matt Roper <matthew.d.roper@intel.com>
+Signed-off-by: Nitin Gote <nitin.r.gote@intel.com>
+Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
+Link: https://patch.msgid.link/20261022065113.928244-2-nitin.r.gote@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+---
+ drivers/gpu/drm/xe/xe_tuning.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_tuning.c b/drivers/gpu/drm/xe/xe_tuning.c
+index bcec40ca2..5e96c5603 100644
+--- a/drivers/gpu/drm/xe/xe_tuning.c
++++ b/drivers/gpu/drm/xe/xe_tuning.c
+@@ -49,7 +49,7 @@ VISIBLE_IF_KUNIT const struct xe_rtp_table_sr gt_tunings = XE_RTP_TABLE_SR(
+ 			 SET(CCCHKNREG1, L3CMPCTRL))
+ 	},
+ 	{ XE_RTP_NAME("Tuning: Compression Overfetch - media"),
+-	  XE_RTP_RULES(MEDIA_VERSION_RANGE(2000, XE_RTP_END_VERSION_UNDEFINED)),
++	  XE_RTP_RULES(MEDIA_VERSION_RANGE(2000, 3499)),
+ 	  XE_RTP_ACTIONS(CLR(XE2LPM_CCCHKNREG1, ENCOMPPERFFIX),
+ 			 SET(XE2LPM_CCCHKNREG1, L3CMPCTRL))
+ 	},
+-- 
+2.43.0
+

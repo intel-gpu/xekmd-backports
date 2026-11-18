@@ -1,0 +1,148 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Thu, 29 Oct 2026 17:06:55 +0530
+Subject: [PATCH] drm/xe/cper: Add CPER reporting entry point for xe_log
+
+Introduce xe_cper_emit() as the single entry point for emitting
+CPER records from xe_log. xe_log now forwards every SIGID log entry
+with its full context (component, location, data/len and formatted
+message), and xe_cper decides how to report it. Hardware SIGIDs are
+routed to a hardware error helper, software SIGIDs are left as TODO.
+
+Assisted-by: LLM
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link: https://patch.msgid.link/20261029113653.1860286-13-badal.nilawar@intel.com
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+---
+ drivers/gpu/drm/xe/Makefile  |  2 ++
+ drivers/gpu/drm/xe/xe_cper.c | 47 ++++++++++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_cper.h | 26 ++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_log.c  |  5 +++-
+ 4 files changed, 79 insertions(+), 1 deletion(-)
+ create mode 100644 drivers/gpu/drm/xe/xe_cper.c
+ create mode 100644 drivers/gpu/drm/xe/xe_cper.h
+
+diff --git a/drivers/gpu/drm/xe/Makefile b/drivers/gpu/drm/xe/Makefile
+index 5b01f3ec8..c5747d37b 100644
+--- a/drivers/gpu/drm/xe/Makefile
++++ b/drivers/gpu/drm/xe/Makefile
+@@ -167,6 +167,8 @@ xe-$(CONFIG_HWMON) += xe_hwmon.o
+ xe-$(CONFIG_PERF_EVENTS) += xe_pmu.o
+ xe-$(CONFIG_CONFIGFS_FS) += xe_configfs.o
+ 
++xe-$(CONFIG_UEFI_CPER) += xe_cper.o
++
+ # graphics virtualization (SR-IOV) support
+ xe-y += \
+ 	xe_gt_sriov_vf.o \
+diff --git a/drivers/gpu/drm/xe/xe_cper.c b/drivers/gpu/drm/xe/xe_cper.c
+new file mode 100644
+index 000000000..ee7ca3cba
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_cper.c
+@@ -0,0 +1,47 @@
++// SPDX-License-Identifier: MIT
++/*
++ * Copyright © 2026 Intel Corporation
++ */
++
++#include <linux/err.h>
++#include <linux/minmax.h>
++
++#include "xe_cper.h"
++#include "xe_device.h"
++#include "xe_ras_types.h"
++
++static bool is_hw_sigid(enum xe_sigid sigid)
++{
++	return in_range(sigid, INTEL_SIGID_GPU_XE_HARDWARE_START, INTEL_SIGID_BATCH);
++}
++
++static void cper_emit_hw_err(struct xe_device *xe, int cper_sev, enum xe_sigid sigid,
++			     const struct xe_ras_error_class *counter)
++{
++	/* TODO */
++}
++
++/**
++ * xe_cper_emit() - Emit a CPER record for a SIGID log entry
++ * @xe: The &xe_device
++ * @cper_sev: CPER severity
++ * @sigid: Error signature identifier
++ * @component: Component identifier
++ * @location: Location details of the @component
++ * @data: Pointer to the additional details, or ERR_PTR, or NULL if not applicable
++ * @len: Length of the @data in bytes, or 0 if not applicable
++ * @vaf: Formatted log message
++ *
++ * Emit a CPER record for a SIGID log entry
++ */
++void xe_cper_emit(struct xe_device *xe, int cper_sev, enum xe_sigid sigid,
++		  u32 component, u32 location, const void *data, size_t len,
++		  struct va_format *vaf)
++{
++	if (is_hw_sigid(sigid) && !IS_ERR_OR_NULL(data)) {
++		cper_emit_hw_err(xe, cper_sev, sigid, data);
++		return;
++	}
++
++	/* TODO software CPER */
++}
+diff --git a/drivers/gpu/drm/xe/xe_cper.h b/drivers/gpu/drm/xe/xe_cper.h
+new file mode 100644
+index 000000000..84676c764
+--- /dev/null
++++ b/drivers/gpu/drm/xe/xe_cper.h
+@@ -0,0 +1,26 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright © 2026 Intel Corporation
++ */
++
++#ifndef _XE_CPER_H_
++#define _XE_CPER_H_
++
++#include <linux/types.h>
++
++#include "abi/xe_sigid_abi.h"
++
++struct va_format;
++struct xe_device;
++
++#if IS_ENABLED(CONFIG_UEFI_CPER)
++void xe_cper_emit(struct xe_device *xe, int cper_sev, enum xe_sigid sigid,
++		  u32 component, u32 location, const void *data, size_t len,
++		  struct va_format *vaf);
++#else
++static inline void xe_cper_emit(struct xe_device *xe, int cper_sev, enum xe_sigid sigid,
++				u32 component, u32 location, const void *data, size_t len,
++				struct va_format *vaf) {}
++#endif
++
++#endif /* _XE_CPER_H_ */
+diff --git a/drivers/gpu/drm/xe/xe_log.c b/drivers/gpu/drm/xe/xe_log.c
+index 29eb16db3..80e2b1724 100644
+--- a/drivers/gpu/drm/xe/xe_log.c
++++ b/drivers/gpu/drm/xe/xe_log.c
+@@ -8,6 +8,7 @@
+ 
+ #include "abi/xe_log_abi.h"
+ 
++#include "xe_cper.h"
+ #include "xe_device.h"
+ #include "xe_log.h"
+ #include "xe_pci_types.h"
+@@ -19,7 +20,9 @@ static void log_emit_cper(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigi
+ {
+ 	KUNIT_STATIC_STUB_REDIRECT(log_emit_cper, pdev, cper_sev, sigid,
+ 				   component, location, data, len, vaf);
+-	/* TODO */
++
++	xe_cper_emit(xe_any_to_xe(pdev), cper_sev, sigid,
++		     component, location, data, len, vaf);
+ }
+ 
+ static const char *log_unknown_component_prefix(u32 component)
+-- 
+2.43.0
+

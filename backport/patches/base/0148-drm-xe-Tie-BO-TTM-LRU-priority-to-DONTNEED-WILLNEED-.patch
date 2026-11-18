@@ -1,0 +1,159 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Brost <matthew.brost@intel.com>
+Date: Tue, 20 Oct 2026 09:51:37 -0700
+Subject: [PATCH] drm/xe: Tie BO TTM LRU priority to DONTNEED/WILLNEED madvise
+ state
+
+The DRM_XE_MADVISE ioctl lets userspace mark a VMA's BO as DONTNEED,
+signalling that its contents are not needed right now and may be
+discarded under memory pressure (see madvise_purgeable() in
+xe_vm_madvise.c), or restore it back to WILLNEED. This is a stronger,
+explicit signal than a plain unbind: userspace has told us the BO is not
+just unused for now, but that it is actively fine to lose the data.
+There is no reason to keep such a BO competing for LRU space with
+actively used buffers, and conversely, once userspace marks it WILLNEED
+again it is back in active use and should be reprioritized accordingly.
+
+Give xe two TTM LRU priority bands and tie them to that state:
+XE_BO_PRIORITY_LOW for DONTNEED BOs and XE_BO_PRIORITY_NORMAL for
+everything else. Since the TTM LRU is walked in ascending priority
+order, DONTNEED BOs become the first candidates for eviction and
+shrinking. The transition is driven from xe_bo_set_purgeable_state(),
+the single point through which a BO's aggregate purgeable state actually
+moves between WILLNEED and DONTNEED (PURGED is terminal and left at
+XE_BO_PRIORITY_LOW).
+
+Changing bo->ttm.priority cannot be done by a plain store: private, user
+BOs have bo->ttm.bulk_move set to their VM's LRU bulk-move range, which
+tracks a contiguous [first, last] run of resources per (mem_type,
+priority) bucket. Writing the priority while the BO is still attached
+would leave the resource linked in the old priority's bucket while the
+bulk-move code looks it up under the new one, corrupting both. Add
+xe_bo_update_ttm_priority(), which temporarily detaches the BO from its
+bulk-move range, updates the priority with a plain non-bulk LRU update,
+and reattaches it into the new priority's bucket.
+xe_bo_set_purgeable_state() is always called with the BO's dma-resv
+held, so this is safe.
+
+With DONTNEED BOs now clustered at XE_BO_PRIORITY_LOW, the shrinker's
+purge pass no longer needs to walk each memory type's whole LRU: nothing
+beyond XE_BO_PRIORITY_LOW can possibly be purgeable, so continuing past
+it just wastes time trylocking BOs that can never be purged in this
+pass. Break out of the per-mem_type LRU walk in __xe_shrinker_walk()
+once a BO's priority rises above XE_BO_PRIORITY_LOW during the purge
+pass. Behavior of the non-purge (regular shrink) pass is unchanged.
+
+Assisted-by: LLM
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Link: https://patch.msgid.link/20261020165137.765886-1-matthew.brost@intel.com
+---
+ drivers/gpu/drm/xe/xe_bo.c       | 43 ++++++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_bo_types.h |  8 +++++-
+ drivers/gpu/drm/xe/xe_shrinker.c |  3 +++
+ 3 files changed, 53 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
+index a61810ef4..dd3d67e59 100644
+--- a/drivers/gpu/drm/xe/xe_bo.c
++++ b/drivers/gpu/drm/xe/xe_bo.c
+@@ -991,6 +991,38 @@ static void xe_bo_set_purgeable_shrinker(struct xe_bo *bo,
+ 	}
+ }
+ 
++/*
++ * Change @bo's TTM LRU priority to @priority. @bo's dma-resv must be held.
++ *
++ * Private, user BOs of non-fault-mode VMs have bo->ttm.bulk_move set to their
++ * VM's LRU bulk-move range (see xe_bo_create_user()), which tracks a
++ * contiguous [first, last] run of resources per (mem_type, priority) bucket.
++ * Writing bo->ttm.priority while the BO is still attached to that range would
++ * leave the resource linked in the old priority's bucket while the bulk-move
++ * code looks it up under the new one, corrupting both buckets. Temporarily
++ * detaching the BO from its bulk-move range moves it with a plain, non-bulk
++ * LRU update instead, and reattaching afterwards re-inserts it into the new
++ * priority's bucket.
++ */
++static void xe_bo_update_ttm_priority(struct xe_bo *bo, int priority)
++{
++	struct ttm_lru_bulk_move *bulk = bo->ttm.bulk_move;
++
++	xe_bo_assert_held(bo);
++
++	if (bo->ttm.priority == priority)
++		return;
++
++	if (bulk)
++		ttm_bo_set_bulk_move(&bo->ttm, NULL);
++
++	bo->ttm.priority = priority;
++	ttm_bo_move_to_lru_tail_unlocked(&bo->ttm);
++
++	if (bulk)
++		ttm_bo_set_bulk_move(&bo->ttm, bulk);
++}
++
+ /**
+  * xe_bo_set_purgeable_state() - Set BO purgeable state with validation
+  * @bo: Buffer object
+@@ -1000,6 +1032,10 @@ static void xe_bo_set_purgeable_shrinker(struct xe_bo *bo,
+  * transitions. Once a BO is PURGED, it cannot transition to any other state.
+  * Invalid transitions are caught with xe_assert(). Shrinker page accounting
+  * is updated automatically.
++ *
++ * A WILLNEED -> DONTNEED transition also lowers the BO's TTM LRU priority to
++ * XE_BO_PRIORITY_LOW. Conversely, a DONTNEED -> WILLNEED transition restores
++ * XE_BO_PRIORITY_NORMAL.
+  */
+ void xe_bo_set_purgeable_state(struct xe_bo *bo,
+ 			       enum xe_madv_purgeable_state new_state)
+@@ -1017,6 +1053,13 @@ void xe_bo_set_purgeable_state(struct xe_bo *bo,
+ 	xe_assert(xe, !(bo->purgeable.state == XE_MADV_PURGEABLE_PURGED &&
+ 			new_state != XE_MADV_PURGEABLE_PURGED));
+ 
++	if (new_state == XE_MADV_PURGEABLE_DONTNEED &&
++	    bo->purgeable.state == XE_MADV_PURGEABLE_WILLNEED)
++		xe_bo_update_ttm_priority(bo, XE_BO_PRIORITY_LOW);
++	else if (new_state == XE_MADV_PURGEABLE_WILLNEED &&
++		 bo->purgeable.state == XE_MADV_PURGEABLE_DONTNEED)
++		xe_bo_update_ttm_priority(bo, XE_BO_PRIORITY_NORMAL);
++
+ 	bo->purgeable.state = new_state;
+ 	xe_bo_set_purgeable_shrinker(bo, new_state);
+ }
+diff --git a/drivers/gpu/drm/xe/xe_bo_types.h b/drivers/gpu/drm/xe/xe_bo_types.h
+index 0eb93052c..517114bef 100644
+--- a/drivers/gpu/drm/xe/xe_bo_types.h
++++ b/drivers/gpu/drm/xe/xe_bo_types.h
+@@ -24,7 +24,13 @@ struct xe_exec_queue;
+ 
+ #define XE_BO_MAX_PLACEMENTS	3
+ 
+-/* TODO: To be selected with VM_MADVISE */
++/*
++ * TTM LRU priority bands. The LRU is walked in ascending priority order, so
++ * XE_BO_PRIORITY_LOW objects are the first candidates for eviction and
++ * shrinking. BOs advised DONTNEED through DRM_XE_MADVISE live at
++ * XE_BO_PRIORITY_LOW, everything else at XE_BO_PRIORITY_NORMAL.
++ */
++#define	XE_BO_PRIORITY_LOW	0
+ #define	XE_BO_PRIORITY_NORMAL	1
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_shrinker.c b/drivers/gpu/drm/xe/xe_shrinker.c
+index 40db2540c..7fa89148c 100644
+--- a/drivers/gpu/drm/xe/xe_shrinker.c
++++ b/drivers/gpu/drm/xe/xe_shrinker.c
+@@ -133,6 +133,9 @@ static int __xe_shrinker_walk(struct xe_shrinker *shrinker,
+ 		}
+ 
+ 		ttm_bo_lru_for_each_reserved_guarded(&curs, man, &arg, ttm_bo) {
++			if (flags.purge && ttm_bo->priority > XE_BO_PRIORITY_LOW)
++				break;
++
+ 			if (!ttm_bo_shrink_suitable(ttm_bo, ctx))
+ 				continue;
+ 
+-- 
+2.43.0
+

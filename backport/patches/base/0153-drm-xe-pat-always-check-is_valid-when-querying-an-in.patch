@@ -1,0 +1,95 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Thu, 22 Oct 2026 13:09:19 +0100
+Subject: [PATCH] drm/xe/pat: always check is_valid() when querying an index
+
+Make the bevaviour consistent. If trying to extract comp or l3 on an
+unknown index, just treat as a programmer error, like we already do for
+coh_mode (implicit).
+
+v2 (Tejas):
+  - Make is_valid() return false for an index which is out of range, to
+    avoid multiple WARNs.
+
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Cc: Alan Previn <alan.previn.teres.alexis@intel.com>
+Cc: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Link: https://patch.msgid.link/20261022120915.138606-8-matthew.auld@intel.com
+---
+ drivers/gpu/drm/xe/xe_pat.c | 10 ++++++----
+ drivers/gpu/drm/xe/xe_pat.h |  6 ++++--
+ 2 files changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pat.c b/drivers/gpu/drm/xe/xe_pat.c
+index d239693b8..53c5f4030 100644
+--- a/drivers/gpu/drm/xe/xe_pat.c
++++ b/drivers/gpu/drm/xe/xe_pat.c
+@@ -297,13 +297,15 @@ static const struct xe_pat_table_entry xe3p_lpg_pat_table[] = {
+ 
+ bool xe_pat_index_is_valid(struct xe_device *xe, u16 pat_index)
+ {
+-	WARN_ON(pat_index >= xe->pat.n_entries);
++	if (WARN_ON(pat_index >= xe->pat.n_entries))
++		return false;
++
+ 	return xe->pat.table[pat_index].valid;
+ }
+ 
+ u16 xe_pat_index_get_coh_mode(struct xe_device *xe, u16 pat_index)
+ {
+-	WARN_ON(pat_index >= xe->pat.n_entries);
++	WARN_ON(!xe_pat_index_is_valid(xe, pat_index));
+ 	WARN_ON(!xe->pat.table[pat_index].coh_mode ||
+ 		xe->pat.table[pat_index].coh_mode > XE_COH_2WAY);
+ 	return xe->pat.table[pat_index].coh_mode;
+@@ -311,13 +313,13 @@ u16 xe_pat_index_get_coh_mode(struct xe_device *xe, u16 pat_index)
+ 
+ bool xe_pat_index_get_comp_en(struct xe_device *xe, u16 pat_index)
+ {
+-	WARN_ON(pat_index >= xe->pat.n_entries);
++	WARN_ON(!xe_pat_index_is_valid(xe, pat_index));
+ 	return !!(xe->pat.table[pat_index].value & XE2_COMP_EN);
+ }
+ 
+ u16 xe_pat_index_get_l3_policy(struct xe_device *xe, u16 pat_index)
+ {
+-	WARN_ON(pat_index >= xe->pat.n_entries);
++	WARN_ON(!xe_pat_index_is_valid(xe, pat_index));
+ 
+ 	return REG_FIELD_GET(XE2_L3_POLICY, xe->pat.table[pat_index].value);
+ }
+diff --git a/drivers/gpu/drm/xe/xe_pat.h b/drivers/gpu/drm/xe/xe_pat.h
+index f6b0fac20..16beda6db 100644
+--- a/drivers/gpu/drm/xe/xe_pat.h
++++ b/drivers/gpu/drm/xe/xe_pat.h
+@@ -57,7 +57,8 @@ int xe_pat_dump(struct xe_gt *gt, struct drm_printer *p);
+ int xe_pat_dump_sw_config(struct xe_gt *gt, struct drm_printer *p);
+ 
+ /**
+- * xe_pat_index_is_valid - Check whether the given pat_index is valid.
++ * xe_pat_index_is_valid - Check whether the given pat_index is valid. Index
++ * must be within valid range.
+  * @xe: xe device
+  * @pat_index: The pat_index to query
+  *
+@@ -75,7 +76,7 @@ u16 xe_pat_index_get_coh_mode(struct xe_device *xe, u16 pat_index);
+ 
+ /**
+  * xe_pat_index_get_comp_en - Extract the compression enable flag for
+- * the given pat_index.
++ * the given pat_index. Index must be valid for the hw.
+  * @xe: xe device
+  * @pat_index: The pat_index to query
+  *
+@@ -88,6 +89,7 @@ bool xe_pat_index_get_comp_en(struct xe_device *xe, u16 pat_index);
+ #define XE_L3_POLICY_UC		3 /* Uncached */
+ /**
+  * xe_pat_index_get_l3_policy - Extract the L3 policy for the given pat_index.
++ * Index must be valid for the hw.
+  * @xe: xe device
+  * @pat_index: The pat_index to query
+  */
+-- 
+2.43.0
+

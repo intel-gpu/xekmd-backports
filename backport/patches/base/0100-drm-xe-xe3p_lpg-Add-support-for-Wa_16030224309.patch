@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tangudu Tilak Tirumalesh <tilak.tirumalesh.tangudu@intel.com>
+Date: Fri, 25 Sep 2026 22:57:22 +0530
+Subject: [PATCH] drm/xe/xe3p_lpg: Add support for Wa_16030224309
+
+Opt in to the GuC workaround, to ignore context completion status
+with preemption or preemption-to-idle in the CSB when the multi-queue
+feature is enabled, which is supported on Graphics Version 35.10.
+This WA is supported starting from GuC 70.73.
+
+Apply Wa_16030224309 to Graphics Version 35.10.
+
+v2: Place this code near to KLV WAs. -Lin Shuicheng
+
+Signed-off-by: Tangudu Tilak Tirumalesh <tilak.tirumalesh.tangudu@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Reviewed-by: Shuicheng Lin <shuicheng.lin@intel.com>
+Link: https://patch.msgid.link/20260925172722.238924-1-tilak.tirumalesh.tangudu@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+---
+ drivers/gpu/drm/xe/abi/guc_klvs_abi.h | 1 +
+ drivers/gpu/drm/xe/xe_guc_ads.c       | 6 ++++++
+ drivers/gpu/drm/xe/xe_wa_oob.rules    | 1 +
+ 3 files changed, 8 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
+index 685c4ef17..4bcdc1a96 100644
+--- a/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
++++ b/drivers/gpu/drm/xe/abi/guc_klvs_abi.h
+@@ -525,6 +525,7 @@ enum xe_guc_klv_ids {
+ 	GUC_WA_KLV_CLR_CS_INDIRECT_RING_STATE_IF_IDLE_AT_CTX_REG			= 0x900e,
+ 	GUC_WA_KLV_REMAP_RANGED_TLB_INV							= 0x900f,
+ 	GUC_WA_KLV_IGNORE_MMIO_READ_SEM_TOKEN_64					= 0x9010,
++	GUC_WA_KLV_IGNORE_MULTIQ_CTX_COMPLETE_WITH_PREEMPT_IN_CSB			= 0x9011,
+ };
+ 
+ /**
+diff --git a/drivers/gpu/drm/xe/xe_guc_ads.c b/drivers/gpu/drm/xe/xe_guc_ads.c
+index 58a3f6293..de51ac612 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ads.c
++++ b/drivers/gpu/drm/xe/xe_guc_ads.c
+@@ -383,6 +383,12 @@ static void guc_waklv_init(struct xe_guc_ads *ads)
+ 		guc_waklv_enable(ads, NULL, 0, &offset, &remain,
+ 				 GUC_WA_KLV_IGNORE_MMIO_READ_SEM_TOKEN_64);
+ 
++	/* GuC only applies this WA for scheduled MultiQ contexts; no KMD-side gating needed. */
++	if (XE_GT_WA(gt, 16030224309) &&
++	    GUC_FIRMWARE_VER_AT_LEAST(&gt->uc.guc, 70, 73))
++		guc_waklv_enable(ads, NULL, 0, &offset, &remain,
++				 GUC_WA_KLV_IGNORE_MULTIQ_CTX_COMPLETE_WITH_PREEMPT_IN_CSB);
++
+ 	/*
+ 	 * On GuC firmware 70.66 and above, use the Feature KLV (shared with the
+ 	 * WA KLV buffer); older firmware uses GUC_CTL_DISABLE_MULTI_QUEUE in
+diff --git a/drivers/gpu/drm/xe/xe_wa_oob.rules b/drivers/gpu/drm/xe/xe_wa_oob.rules
+index 3001155f8..485d1e3d0 100644
+--- a/drivers/gpu/drm/xe/xe_wa_oob.rules
++++ b/drivers/gpu/drm/xe/xe_wa_oob.rules
+@@ -74,3 +74,4 @@
+ 14027054324	GRAPHICS_VERSION(3511)
+ 14025941587	GRAPHICS_VERSION_RANGE(2001, 3511), FUNC(xe_rtp_match_not_sriov_vf)
+ 		MEDIA_VERSION_RANGE(1301, 3503), FUNC(xe_rtp_match_not_sriov_vf)
++16030224309	GRAPHICS_VERSION(3510)
+-- 
+2.43.0
+

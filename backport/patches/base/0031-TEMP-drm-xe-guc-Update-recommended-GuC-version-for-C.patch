@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Pravalika Gurram <pravalika.gurram@intel.com>
+Date: Fri, 25 Sep 2026 15:27:45 +0530
+Subject: [PATCH] [TEMP]: drm/xe/guc: Update recommended GuC version for CRI
+
+v1: v70.77.0 (Pravalika)
+v2: v70.77.100 (Pravalika)
+
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_uc_fw.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_uc_fw.c b/drivers/gpu/drm/xe/xe_uc_fw.c
+index d67c02ca7..9da901d1a 100644
+--- a/drivers/gpu/drm/xe/xe_uc_fw.c
++++ b/drivers/gpu/drm/xe/xe_uc_fw.c
+@@ -116,7 +116,7 @@ struct fw_blobs_by_type {
+ #define XE_GT_TYPE_ANY XE_GT_TYPE_UNINITIALIZED
+ 
+ #define XE_GUC_FIRMWARE_DEFS(fw_def, mmp_ver, major_ver)					\
+-fw_def(CRESCENTISLAND,	GT_TYPE_ANY,	mmp_ver(xe,	guc,	cri,	70, 70, 0))	\
++fw_def(CRESCENTISLAND,	GT_TYPE_ANY,	mmp_ver(xe,	guc,	cri,	70, 77, 100))	\
+ 	fw_def(NOVALAKE_S,	GT_TYPE_ANY,	major_ver(xe,	guc,	nvl,	70, 71, 0))	\
+ 	fw_def(PANTHERLAKE,	GT_TYPE_ANY,	major_ver(xe,	guc,	ptl,	70, 54, 0))	\
+ 	fw_def(BATTLEMAGE,	GT_TYPE_ANY,	major_ver(xe,	guc,	bmg,	70, 54, 0))	\
+-- 
+2.43.0
+

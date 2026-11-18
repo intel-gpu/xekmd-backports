@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Thu, 29 Oct 2026 17:07:02 +0530
+Subject: [PATCH] drm/xe/xe_ras: Report core compute errors using SIGID
+
+Use xe_log_* helpers to report core compute errors.
+
+Example:
+	xe 0000:03:00.0: [drm] *ERROR* SIGID=203 (02020012000a000200000800)
+[Hardware Error]: CORE_COMPUTE: Uncorrectable error detected, type 2
+
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Cc: Riana Tauro <riana.tauro@intel.com>
+Link: https://patch.msgid.link/20261029113653.1860286-20-badal.nilawar@intel.com
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index a8c9751ca..08e5e009d 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -577,13 +577,17 @@ static void ras_send_error_event(struct xe_device *xe, u8 severity, u8 component
+ 	xe_drm_ras_event(xe, drm_component, drm_severity, value);
+ }
+ 
+-static u8 handle_core_compute_errors(struct xe_ras_error_array *arr)
++static u8 handle_core_compute_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
+ {
+ 	struct xe_ras_compute_error *error_info = (void *)arr->details;
++	u8 cper_sev = ras_sev_to_cper_sev(arr->counter.common.severity);
+ 	u8 uncorr_type;
+ 
+ 	uncorr_type = FIELD_GET(CORE_COMPUTE_UNCORR_TYPE, error_info->log_header);
+ 
++	xe_log_comp(xe, cper_sev, CORE_COMPUTE, &arr->counter, sizeof(arr->counter),
++		    "Uncorrectable error detected, type %u\n", uncorr_type);
++
+ 	/* Request a reset if error is global */
+ 	if (uncorr_type == GLOBAL_UNCORR_ERROR)
+ 		return XE_RAS_RECOVERY_ACTION_RESET;
+@@ -861,7 +865,7 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
+ 
+ 			switch (component) {
+ 			case XE_RAS_COMP_CORE_COMPUTE:
+-				action = handle_core_compute_errors(arr);
++				action = handle_core_compute_errors(xe, arr);
+ 				break;
+ 			case XE_RAS_COMP_SOC_INTERNAL:
+ 				action = handle_soc_internal_errors(xe, arr);
+-- 
+2.43.0
+

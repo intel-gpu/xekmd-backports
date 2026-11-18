@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Badal Nilawar <badal.nilawar@intel.com>
+Date: Mon, 2 Nov 2026 22:55:33 +0530
+Subject: [PATCH] drm/xe/xe_late_bind_fw: Enable late binding support for CRI
+
+Enable late binding support for CRI.
+
+V2:
+  - Add CONFIG_INTEL_MEI_CSC check (Sashiko)
+  - Check only has_heci_cscfi (Daniele)
+
+Cc: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Link: https://patch.msgid.link/20261102172527.2794537-13-badal.nilawar@intel.com
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+---
+ drivers/gpu/drm/xe/xe_late_bind_fw.c | 15 ++++++++++++++-
+ drivers/gpu/drm/xe/xe_pci.c          |  2 ++
+ 2 files changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+index 190674f6d..cc4bb9a54 100644
+--- a/drivers/gpu/drm/xe/xe_late_bind_fw.c
++++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+@@ -456,6 +456,19 @@ static void xe_late_bind_remove(void *arg)
+ 	}
+ }
+ 
++static bool late_bind_mei_enabled(struct xe_device *xe)
++{
++	if (!IS_ENABLED(CONFIG_INTEL_MEI_LB))
++		return false;
++
++	/* MEI exposed as xe auxiliary device */
++	if (xe->info.has_heci_cscfi)
++		return IS_ENABLED(CONFIG_INTEL_MEI_GSC);
++
++	/* Standalone MEI PCI function */
++	return IS_ENABLED(CONFIG_INTEL_MEI_CSC);
++}
++
+ /**
+  * xe_late_bind_init() - add xe mei late binding component
+  * @late_bind: pointer to late bind structure.
+@@ -470,7 +483,7 @@ int xe_late_bind_init(struct xe_late_bind *late_bind)
+ 	if (!xe->info.late_bind_mask)
+ 		return 0;
+ 
+-	if (!IS_ENABLED(CONFIG_INTEL_MEI_LB) || !IS_ENABLED(CONFIG_INTEL_MEI_GSC)) {
++	if (!late_bind_mei_enabled(xe)) {
+ 		drm_info(&xe->drm, "Can't init xe mei late bind missing mei component\n");
+ 		return 0;
+ 	}
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 246870792..122adafee 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -486,6 +486,8 @@ static const struct xe_device_desc cri_desc = {
+ 	.has_sriov = true,
+ 	.has_sysctrl = true,
+ 	.has_temp_sentinel = true,
++	.late_bind_mask = BIT(XE_LB_FW_FAN_CONTROL) |
++			  BIT(XE_LB_FW_OCODE),
+ 	.max_gt_per_tile = 2,
+ 	MULTI_LRC_MASK,
+ 	.require_force_probe = true,
+-- 
+2.43.0
+

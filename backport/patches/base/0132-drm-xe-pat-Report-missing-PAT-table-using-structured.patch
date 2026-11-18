@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Date: Mon, 12 Oct 2026 17:55:17 +0530
+Subject: [PATCH] drm/xe/pat: Report missing PAT table using structured xe_log
+ API
+
+Replace drm_err() with xe_log_err() using the PAT component tag
+when a platform has no matching PAT table entry.
+
+Signed-off-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20261012122522.2307625-9-dnyaneshwar.bhadane@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pat.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pat.c b/drivers/gpu/drm/xe/xe_pat.c
+index 0ac64a6a3..3dfcd364a 100644
+--- a/drivers/gpu/drm/xe/xe_pat.c
++++ b/drivers/gpu/drm/xe/xe_pat.c
+@@ -16,6 +16,7 @@
+ #include "xe_force_wake.h"
+ #include "xe_gt.h"
+ #include "xe_gt_mcr.h"
++#include "xe_log.h"
+ #include "xe_mmio.h"
+ #include "xe_sriov.h"
+ #include "xe_wa.h"
+@@ -692,8 +693,9 @@ int xe_pat_init_early(struct xe_device *xe)
+ 		 * raise an error rather than trying to silently inherit the
+ 		 * most recent platform's behavior.
+ 		 */
+-		drm_err(&xe->drm, "Missing PAT table for platform with graphics version %d.%02d!\n",
+-			GRAPHICS_VER(xe), GRAPHICS_VERx100(xe) % 100);
++		xe_log_err(xe, PAT, -ENODATA,
++			   "Missing PAT table for platform with graphics version %d.%02d!\n",
++			   GRAPHICS_VER(xe), GRAPHICS_VERx100(xe) % 100);
+ 		return -ENODATA;
+ 	}
+ 
+-- 
+2.43.0
+

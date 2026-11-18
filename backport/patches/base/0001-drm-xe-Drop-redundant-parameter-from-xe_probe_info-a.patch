@@ -1,0 +1,106 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 4 Sep 2026 19:05:29 +0200
+Subject: [PATCH] drm/xe: Drop redundant parameter from xe_probe_info and
+ friends
+
+We can now obtain the const pointer to struct xe_device_desc directly
+from the xe, no need to pass it as explicit parameter.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://patch.msgid.link/20260904170531.516-6-michal.wajdeczko@intel.com
+(cherry-picked from commit a158eba2fb0d82b7a11f316c6b4065d5861ba0dd linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/tests/xe_pci.c |  5 +++--
+ drivers/gpu/drm/xe/xe_pci.c       | 13 ++++++-------
+ 2 files changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/tests/xe_pci.c b/drivers/gpu/drm/xe/tests/xe_pci.c
+index c817692c0..771228230 100644
+--- a/drivers/gpu/drm/xe/tests/xe_pci.c
++++ b/drivers/gpu/drm/xe/tests/xe_pci.c
+@@ -311,10 +311,11 @@ const void *xe_pci_id_gen_param(struct kunit *test, const void *prev, char *desc
+ EXPORT_SYMBOL_IF_KUNIT(xe_pci_id_gen_param);
+ 
+ static int fake_probe_info(struct xe_device *xe,
+-			   const struct xe_device_desc *desc,
+ 			   struct xe_pci_fake_data *data,
+ 			   struct xe_probed_info *probed_info)
+ {
++	const struct xe_device_desc *desc = xe->desc;
++
+ 	probed_info->tile_count = 1 + desc->max_remote_tiles;
+ 
+ 	if (!data || desc->pre_gmdid_graphics_ip) {
+@@ -379,7 +380,7 @@ int xe_pci_fake_device_init(struct xe_device *xe)
+ 	xe->sriov.__mode = data && data->sriov_mode ?
+ 			   data->sriov_mode : XE_SRIOV_MODE_NONE;
+ 
+-	err = fake_probe_info(xe, desc, data, &probed_info);
++	err = fake_probe_info(xe, data, &probed_info);
+ 	if (err)
+ 		return err;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 4ef02622a..78f8eabb4 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -844,14 +844,13 @@ static int xe_info_init_early(struct xe_device *xe,
+ }
+ 
+ static void xe_probe_tile_count(struct xe_device *xe,
+-				const struct xe_device_desc *desc,
+ 				struct xe_probed_info *probed_info)
+ {
+ 	struct xe_mmio *mmio;
+ 	u8 tile_count;
+ 	u32 mtcfg;
+ 
+-	probed_info->tile_count = 1 + desc->max_remote_tiles;
++	probed_info->tile_count = 1 + xe->desc->max_remote_tiles;
+ 
+ 	/*
+ 	 * Probe for tile count only for platforms that support multiple
+@@ -954,9 +953,10 @@ static struct xe_gt *alloc_media_gt(struct xe_tile *tile,
+ }
+ 
+ static int xe_probe_ips(struct xe_device *xe,
+-			const struct xe_device_desc *desc,
+ 			struct xe_probed_info *probed_info)
+ {
++	const struct xe_device_desc *desc = xe->desc;
++
+ 	/*
+ 	 * If this platform supports GMD_ID, we'll detect the proper IP
+ 	 * descriptor to use from hardware registers.
+@@ -997,14 +997,13 @@ static int xe_probe_ips(struct xe_device *xe,
+  * Probe from the hardware the info required by xe_info_init().
+  */
+ static int xe_probe_info(struct xe_device *xe,
+-			 const struct xe_device_desc *desc,
+ 			 struct xe_probed_info *probed_info)
+ {
+ 	int err;
+ 
+-	xe_probe_tile_count(xe, desc, probed_info);
++	xe_probe_tile_count(xe, probed_info);
+ 
+-	err = xe_probe_ips(xe, desc, probed_info);
++	err = xe_probe_ips(xe, probed_info);
+ 	if (err)
+ 		return err;
+ 
+@@ -1248,7 +1247,7 @@ static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *des
+ 	if (err)
+ 		return err;
+ 
+-	err = xe_probe_info(xe, desc, &probed_info);
++	err = xe_probe_info(xe, &probed_info);
+ 	if (err)
+ 		return err;
+ 
+-- 
+2.43.0
+

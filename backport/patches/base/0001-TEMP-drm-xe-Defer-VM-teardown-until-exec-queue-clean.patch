@@ -47,22 +47,24 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/xe_device.c     |  20 +++-
  drivers/gpu/drm/xe/xe_exec_queue.c |  22 ++--
- drivers/gpu/drm/xe/xe_vm.c         | 178 +++++++++++++++++++++++++----
+ drivers/gpu/drm/xe/xe_vm.c         | 176 +++++++++++++++++++++++++----
  drivers/gpu/drm/xe/xe_vm.h         |   5 +
  drivers/gpu/drm/xe/xe_vm_types.h   |  15 +++
- 5 files changed, 211 insertions(+), 29 deletions(-)
+ 5 files changed, 209 insertions(+), 29 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 6416939e3..d8b94b2d4 100644
+index 87a704cd1..bdf98f94b 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -8,4 +8,5 @@
+@@ -8,6 +8,7 @@
  #include <linux/aperture.h>
  #include <linux/delay.h>
  #include <linux/fault-inject.h>
 +#include <linux/jiffies.h>
  #include <linux/units.h>
-@@ -169,6 +170,8 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+ 
+ #include <drm/drm_client.h>
+@@ -176,6 +177,8 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  	struct xe_file *xef = file->driver_priv;
  	struct xe_vm *vm;
  	struct xe_exec_queue *q;
@@ -71,7 +73,7 @@ index 6416939e3..d8b94b2d4 100644
  	unsigned long idx;
  
  	guard(xe_pm_runtime)(xe);
-@@ -194,8 +197,23 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -203,8 +206,23 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  		xe_exec_queue_put(q);
  	}
  
@@ -97,10 +99,10 @@ index 6416939e3..d8b94b2d4 100644
  	xe_file_put(xef);
  }
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index a8ece4198..7d65f0e0c 100644
+index 6d6453f2d..6f1bc5e96 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -154,9 +154,16 @@ static void __xe_exec_queue_free(struct xe_exec_queue *q)
+@@ -156,9 +156,16 @@ static void __xe_exec_queue_free(struct xe_exec_queue *q)
  
  	if (q->vm) {
  		xe_vm_remove_exec_queue(q->vm, q);
@@ -117,7 +119,7 @@ index a8ece4198..7d65f0e0c 100644
  	if (q->xef)
  		xe_file_put(q->xef);
  
-@@ -250,8 +257,12 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
+@@ -252,8 +259,12 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
  		}
  	}
  
@@ -131,7 +133,7 @@ index a8ece4198..7d65f0e0c 100644
  
  	if (extensions) {
  		/*
-@@ -616,8 +627,10 @@ struct xe_exec_queue *xe_exec_queue_create_bind(struct xe_device *xe,
+@@ -627,8 +638,10 @@ struct xe_exec_queue *xe_exec_queue_create_bind(struct xe_device *xe,
  			return ERR_PTR(err);
  		}
  
@@ -143,7 +145,7 @@ index a8ece4198..7d65f0e0c 100644
  	}
  
  	return q;
-@@ -656,11 +669,6 @@ void xe_exec_queue_destroy(struct kref *ref)
+@@ -667,11 +680,6 @@ void xe_exec_queue_destroy(struct kref *ref)
  			xe_exec_queue_put(eq);
  	}
  
@@ -156,18 +158,10 @@ index a8ece4198..7d65f0e0c 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 1358e6c2b..d4278033e 100644
+index 0099212c6..948d2ee6f 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -31,6 +31,7 @@
- #include "xe_exec_queue.h"
- #include "xe_gt.h"
- #include "xe_migrate.h"
-+#include "xe_module.h"
- #include "xe_pagefault.h"
- #include "xe_pat.h"
- #include "xe_pm.h"
-@@ -1516,6 +1516,7 @@ static const struct xe_pt_ops xelp_pt_ops = {
+@@ -1729,6 +1729,7 @@ static const struct xe_pt_ops xelp_pt_ops = {
  	.pde_encode_bo = xelp_pde_encode_bo,
  };
  
@@ -175,7 +169,7 @@ index 1358e6c2b..d4278033e 100644
  static void vm_destroy_work_func(struct work_struct *w);
  
  /**
-@@ -1659,6 +1660,10 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags, struct xe_file *xef)
+@@ -1872,6 +1873,10 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags, struct xe_file *xef)
  	ttm_lru_bulk_move_init(&vm->lru_bulk_move);
  
  	INIT_WORK(&vm->destroy_work, vm_destroy_work_func);
@@ -186,7 +180,7 @@ index 1358e6c2b..d4278033e 100644
  
  	INIT_LIST_HEAD(&vm->preempt.exec_queues);
  	for (id = 0; id < XE_MAX_TILES_PER_DEVICE * XE_MAX_GT_PER_TILE; ++id)
-@@ -1904,25 +1909,7 @@ void xe_vm_close_and_put(struct xe_vm *vm)
+@@ -2121,25 +2126,7 @@ void xe_vm_close_and_put(struct xe_vm *vm)
  	if (xe_vm_in_fault_mode(vm))
  		xe_svm_close(vm);
  
@@ -213,7 +207,7 @@ index 1358e6c2b..d4278033e 100644
  
  	down_write(&vm->lock);
  	xe_vm_lock(vm, false);
-@@ -1994,6 +1981,149 @@ void xe_vm_close_and_put(struct xe_vm *vm)
+@@ -2208,6 +2195,149 @@ void xe_vm_close_and_put(struct xe_vm *vm)
  	xe_vm_put(vm);
  }
  
@@ -363,21 +357,20 @@ index 1358e6c2b..d4278033e 100644
  static void vm_destroy_work_func(struct work_struct *w)
  {
  	struct xe_vm *vm =
-@@ -2040,7 +2170,7 @@ i
- 	drm_dev_get(&vm->xe->drm);
- 
- 	/* To destroy the VM we need to be able to sleep */
--	queue_work(system_dfl_wq, &vm->destroy_work);
+@@ -2260,7 +2390,7 @@ static void xe_vm_free(struct drm_gpuvm *gpuvm)
+ 	 * drm_gpuvm keeps at least one device reference at this
+ 	 * point so xe->destroy_wq must still be alive.
+ 	 */
+-	queue_work(vm->xe->destroy_wq, &vm->destroy_work);
 +	xe_destroy_wq_queue(&vm->destroy_work);
  }
  
  struct xe_vm *xe_vm_lookup(struct xe_file *xef, u32 id)
-@@ -2186,7 +2316,12 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
- 
+@@ -2409,7 +2539,11 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
  	if (!err) {
+ 		prelim_xe_eudebug_vm_destroy(xef, vm);
  		xe_vm_close_start(vm);
 -		xe_vm_close_and_put(vm);
-+
 +		/*
 +		 * User exec queues can outlive the VM handle. Do not wait for
 +		 * queues which this ioctl does not destroy.
@@ -387,7 +380,7 @@ index 1358e6c2b..d4278033e 100644
  
  	return err;
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index 70456ffe2..efa427651 100644
+index d86087814..d6e0e4c96 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
 @@ -221,6 +221,11 @@ int xe_vm_get_property_ioctl(struct drm_device *dev, void *data,
@@ -403,7 +396,7 @@ index 70456ffe2..efa427651 100644
  static inline bool xe_vm_in_fault_mode(struct xe_vm *vm)
  {
 diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
-index 2268a1ca3..f2a047ddb 100644
+index 997bf3421..4200ab0a1 100644
 --- a/drivers/gpu/drm/xe/xe_vm_types.h
 +++ b/drivers/gpu/drm/xe/xe_vm_types.h
 @@ -14,6 +14,7 @@
@@ -414,7 +407,7 @@ index 2268a1ca3..f2a047ddb 100644
  
  #include "xe_device_types.h"
  #include "xe_pt_types.h"
-@@ -292,6 +293,20 @@ struct xe_vm {
+@@ -327,6 +328,20 @@ struct xe_vm {
  	 */
  	struct work_struct destroy_work;
  

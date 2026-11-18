@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alexander Usyskin <alexander.usyskin@intel.com>
 Date: Mon, 31 Aug 2026 14:38:34 +0300
-Subject: mei: me: reduce active polling timeout to 20 ms
+Subject: [PATCH] mei: me: reduce active polling timeout to 20 ms
 
 Improve performance of polling by reducing active timeout.
 20 ms active timeout helps increase channel throughtput
@@ -12,17 +12,19 @@ for core CPU utilization.
 
 Reviewed-by: Menachem Adin <menachem.adin@intel.com>
 Signed-off-by: Alexander Usyskin <alexander.usyskin@intel.com>
-(backported from [mei: me: reduce active polling timeout to 20 ms via char-misc-next])
-Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Link: https://patch.msgid.link/20260831-cri_polling-v1-4-d927315e6598@intel.com
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+(cherry-picked from commit 819583c41eacb83b3b5ebe1d8a8dbd5c54a3aa31 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/misc/mei/hw-me.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/drivers/misc/mei/hw-me.c b/drivers/misc/mei/hw-me.c
-index 5f571e6b6..ae061c133 100644
+index f3d833be0..1c3ab9eb8 100644
 --- a/drivers/misc/mei/hw-me.c
 +++ b/drivers/misc/mei/hw-me.c
-@@ -1417,7 +1417,7 @@ irqreturn_t mei_me_irq_thread_handler(int irq, void *dev_id)
+@@ -1419,7 +1419,7 @@ irqreturn_t mei_me_irq_thread_handler(int irq, void *dev_id)
  }
  EXPORT_SYMBOL_GPL(mei_me_irq_thread_handler);
  
@@ -32,4 +34,5 @@ index 5f571e6b6..ae061c133 100644
  
  /**
 -- 
-2.34.1
+2.43.0
+

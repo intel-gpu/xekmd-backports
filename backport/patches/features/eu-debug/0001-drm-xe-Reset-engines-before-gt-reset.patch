@@ -1,4 +1,4 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From b56247f4fd260dabe51f7e246cd3e9c7f17b6115 Mon Sep 17 00:00:00 2001
 From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
 Date: Fri, 24 Jan 2025 15:27:11 +0200
 Subject: [PATCH] drm/xe: Reset engines before gt reset
@@ -30,14 +30,14 @@ Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_gt_regs.h |  1 +
- drivers/gpu/drm/xe/xe_gt.c           | 38 ++++++++++++++++++++++++++++
- 2 files changed, 39 insertions(+)
+ drivers/gpu/drm/xe/xe_gt.c           | 39 ++++++++++++++++++++++++++++
+ 2 files changed, 40 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-index f8dacb284..02461145b 100644
+index c7e3a1881..4370eb898 100644
 --- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
 +++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
-@@ -276,6 +276,7 @@
+@@ -280,6 +280,7 @@
  
  #define GDRST					XE_REG(0x941c)
  #define   GRDOM_GUC				REG_BIT(3)
@@ -46,7 +46,7 @@ index f8dacb284..02461145b 100644
  
  #define MISCCPCTL				XE_REG(0x9424)
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index a25c863a1..24aa2dacf 100644
+index 63e5d2f07..7cab6baf2 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -5,6 +5,7 @@
@@ -57,7 +57,7 @@ index a25c863a1..24aa2dacf 100644
  #include <linux/minmax.h>
  
  #include <kunit/visibility.h>
-@@ -820,8 +821,42 @@ void xe_gt_record_user_engines(struct xe_gt *gt)
+@@ -846,8 +847,42 @@ void xe_gt_record_user_engines(struct xe_gt *gt)
  		     == gt->info.engine_mask);
  }
  
@@ -100,16 +100,17 @@ index a25c863a1..24aa2dacf 100644
  	int err;
  
  	if (IS_SRIOV_VF(gt_to_xe(gt)))
-@@ -829,6 +864,9 @@ static int do_gt_reset(struct xe_gt *gt)
+@@ -855,6 +890,10 @@ static int do_gt_reset(struct xe_gt *gt)
  
  	xe_gsc_wa_14015076503(gt, true);
  
++
 +	if (xe->eudebug.enable)
 +		do_render_reset(gt);
 +
  	xe_mmio_write32(&gt->mmio, GDRST, GRDOM_FULL);
- 	err = xe_mmio_wait32(&gt->mmio, GDRST, GRDOM_FULL, 0, 5000, NULL, false);
- 	if (err)
+ 	err = xe_mmio_wait32(&gt->mmio, GDRST, GRDOM_FULL, 0,
+ 			     GRDOM_RESET_TIMEOUT_MS * USEC_PER_MSEC,
 -- 
 2.43.0
 

@@ -1,0 +1,91 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
+Date: Thu, 29 Oct 2026 22:57:56 +0530
+Subject: [PATCH] drm/xe/guc: Print register addresses in capture snapshot
+ output
+
+Include register offsets in GuC capture snapshot print output for both
+32-bit and 64-bit registers.
+
+When dumping captured engine register state, print each register name
+alongside its MMIO offset to make the snapshot output easier to
+cross-reference with register definitions and hardware debug
+documentation.
+
+This improves postmortem analysis without changing capture contents.
+Adding offset as a requirement posted.
+
+v2:(Sashiko)
+- Ensure lower DWORD prints
+
+v3:(Sashiko)
+- Use the LOW_DW MMIO offset(capture in last_address)  when combined 64bit
+  register values in the dump instead of HI_SW offset
+- preserve existing coredump register-name format and append register
+  address as trailing metadata as a debug info and avoids disrupting
+  existing format
+v6:(Tejas)
+- Removed extra lines
+
+Signed-off-by: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Link: https://patch.msgid.link/20261029172800.2150325-4-naresh.kumar.g@intel.com
+Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+(cherry-picked from commit 3486e838f653b9e7677fa7ff22c6ef85c5d85e2f drm-tip)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc_capture.c | 16 +++++++++++-----
+ 1 file changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc_capture.c b/drivers/gpu/drm/xe/xe_guc_capture.c
+index 5a4d085660a20..850e428b0f86b 100644
+--- a/drivers/gpu/drm/xe/xe_guc_capture.c
++++ b/drivers/gpu/drm/xe/xe_guc_capture.c
+@@ -1716,6 +1716,7 @@ snapshot_print_by_list_order(struct xe_hw_engine_snapshot *snapshot, struct drm_
+ 	struct xe_devcoredump_snapshot *devcore_snapshot = &devcoredump->snapshot;
+ 	struct gcap_reg_list_info *reginfo = NULL;
+ 	u32 i, last_value = 0;
++	u32 last_address = 0;
+ 	bool low32_ready = false;
+ 
+ 	if (!list || !list->list || list->num_regs == 0)
+@@ -1743,6 +1744,7 @@ snapshot_print_by_list_order(struct xe_hw_engine_snapshot *snapshot, struct drm_
+ 		switch (reg_desc->data_type) {
+ 		case REG_64BIT_LOW_DW:
+ 			last_value = value;
++			last_address = reg_desc->reg.addr;
+ 
+ 			/*
+ 			 * A 64 bit register define requires 2 consecutive
+@@ -1774,7 +1776,10 @@ snapshot_print_by_list_order(struct xe_hw_engine_snapshot *snapshot, struct drm_
+ 			XE_WARN_ON(!low32_ready);
+ 			low32_ready = false;
+ 
+-			drm_printf(p, "\t%s: 0x%016llx\n", reg_desc->regname, value_qw);
++			drm_printf(p, "\t%s: 0x%016llx [addr=0x%x]\n",
++				   reg_desc->regname,
++				   value_qw,
++				   last_address);
+ 			break;
+ 		}
+ 
+@@ -1788,11 +1793,12 @@ snapshot_print_by_list_order(struct xe_hw_engine_snapshot *snapshot, struct drm_
+ 			XE_WARN_ON(low32_ready);
+ 
+ 			if (FIELD_GET(GUC_REGSET_STEERING_NEEDED, reg_desc->flags))
+-				drm_printf(p, "\t%s[%u]: 0x%08x\n", reg_desc->regname,
+-					   reg_desc->dss_id, value);
++				drm_printf(p, "\t%s[%u]: 0x%08x [addr=0x%x]\n",
++					   reg_desc->regname,
++					   reg_desc->dss_id, value, reg_desc->reg.addr);
+ 			else
+-				drm_printf(p, "\t%s: 0x%08x\n", reg_desc->regname, value);
+-
++				drm_printf(p, "\t%s: 0x%08x [addr=0x%x]\n",
++					   reg_desc->regname, value, reg_desc->reg.addr);
+ 			break;
+ 		}
+ 	}
+-- 
+2.43.0
+

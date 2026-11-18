@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Karthik Poosa <karthik.poosa@intel.com>
-Date: Fri, 25 Sep 2026 02:24:27 +0530
-Subject: [TEMP] drm/xe/hwmon: Decode CRI temperature registers as
- IEEE-754
+Date: Thu, 15 Oct 2026 12:44:29 +0530
+Subject: [PATCH] drm/xe/hwmon: Decode CRI temperature registers as IEEE-754
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -16,17 +15,20 @@ floating-point operations and hwmon reports integer temperatures.
 
 Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
 Assisted-by: LLM
-(backported from https://patchwork.freedesktop.org/series/174898/#rev3)
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20261015071434.1063785-12-karthik.poosa@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 24ec15d646179a255f314e404343bf8e3200c9c0 linux-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
- drivers/gpu/drm/xe/xe_hwmon.c | 92 +++++++++++++++++++++++++++++------
- 1 file changed, 78 insertions(+), 14 deletions(-)
+ drivers/gpu/drm/xe/xe_hwmon.c | 99 ++++++++++++++++++++++++++++++-----
+ 1 file changed, 85 insertions(+), 14 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
-index ea2caa1d2..48ff9750d 100644
+index cf0cd5df7..4b168d96a 100644
 --- a/drivers/gpu/drm/xe/xe_hwmon.c
 +++ b/drivers/gpu/drm/xe/xe_hwmon.c
-@@ -1250,6 +1250,69 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
+@@ -1287,6 +1287,70 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
  	}
  }
  
@@ -40,6 +42,7 @@ index ea2caa1d2..48ff9750d 100644
 +/**
 + * xe_hwmon_temperature_decode - Decode an IEEE-754 temperature register value
 + * @reg_val: The raw register value to decode
++ * @temperature: Pointer to store the decoded temperature in millidegrees Celsius.
 + *
 + * IEEE-754 single-precision format:
 + *
@@ -96,7 +99,7 @@ index ea2caa1d2..48ff9750d 100644
  static int
  xe_hwmon_temp_read(struct xe_hwmon *hwmon, u32 attr, int channel, long *val)
  {
-@@ -1259,26 +1322,27 @@ xe_hwmon_temp_read(struct xe_hwmon *hwmon, u32 attr, int channel, long *val)
+@@ -1296,26 +1360,33 @@ xe_hwmon_temp_read(struct xe_hwmon *hwmon, u32 attr, int channel, long *val)
  	switch (attr) {
  	case hwmon_temp_input:
  		switch (channel) {
@@ -122,6 +125,12 @@ index ea2caa1d2..48ff9750d 100644
 -			*val = (s32)(REG_FIELD_GET(TEMP_MASK_VRAM_N, reg_val)) *
 -				(REG_FIELD_GET(TEMP_SIGN_MASK, reg_val) ? -1 : 1) *
 -				 MILLIDEGREE_PER_DEGREE;
++			if (!mmio_temp_valid(hwmon, reg_val)) {
++				drm_dbg(&hwmon->xe->drm,
++					"channel %d temperature invalid, val 0x%llx\n",
++					channel, reg_val);
++				return -ENXIO;
++			}
 +			if (hwmon->xe->info.platform >= XE_CRESCENTISLAND) {
 +				return xe_hwmon_temperature_decode((u32)reg_val, val);
 +			} else if (channel >= CHANNEL_VRAM_N) {

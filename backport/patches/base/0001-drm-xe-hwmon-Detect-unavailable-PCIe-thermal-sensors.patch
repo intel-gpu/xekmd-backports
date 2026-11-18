@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Karthik Poosa <karthik.poosa@intel.com>
-Date: Fri, 25 Sep 2026 02:24:22 +0530
-Subject: [TEMP] drm/xe/hwmon: Detect unavailable PCIe thermal sensors
+Date: Thu, 15 Oct 2026 12:44:24 +0530
+Subject: [PATCH] drm/xe/hwmon: Detect unavailable PCIe thermal sensors
 
 Return -ENXIO from get_pcie_temp() when the mailbox reports an invalid
 reading, so the PCIe sensor can be treated as unavailable. Guard the val
@@ -9,17 +9,20 @@ store so the function can be used purely as an availability probe. No
 sysfs visibility changes.
 
 Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
-(backported from https://patchwork.freedesktop.org/series/174898/#rev3)
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20261015071434.1063785-7-karthik.poosa@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 8fdd3d4c55ecb6cd3abc55b713f7b6722f08b61d linux-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_hwmon.c | 8 +++++++-
  1 file changed, 7 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
-index 00179cce6..e3bd6ab5e 100644
+index 649324ecb..63adee455 100644
 --- a/drivers/gpu/drm/xe/xe_hwmon.c
 +++ b/drivers/gpu/drm/xe/xe_hwmon.c
-@@ -908,7 +908,13 @@ static int get_pcie_temp(struct xe_hwmon *hwmon, long *val)
+@@ -945,7 +945,13 @@ static int get_pcie_temp(struct xe_hwmon *hwmon, long *val)
  		data = REG_FIELD_GET(PCIE_SENSOR_MASK, data);
  
  	data = REG_FIELD_GET(TEMP_MASK, data);

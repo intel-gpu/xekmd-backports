@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Varun Gupta <varun.gupta@intel.com>
 Date: Fri, 6 Nov 2026 09:18:05 +0530
-Subject: drm/xe/guc: Demote uncorrectable local error log on CRI
+Subject: [PATCH] drm/xe/guc: Demote uncorrectable local error log on CRI
 
 The UNCORRECTABLE_LOCAL_ERROR notification sent by the GuC indicates a
 local, queue-level context termination rather than a global device or
@@ -29,14 +29,14 @@ Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
 Link: https://patch.msgid.link/20261106034804.2005214-2-varun.gupta@intel.com
 Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
-(cherry picked form commit e305536554790e06876dd4e4f854c97d1353aa79 drm-xe-next)
-Signed-off-by: Varun Gupta <varun.gupta@intel.com>
+(cherry-picked from commit e305536554790e06876dd4e4f854c97d1353aa79 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_guc_submit.c | 18 ++++++++++++++----
  1 file changed, 14 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 9e7c2778029c..b14b37b767f5 100644
+index 9e7c2778029ca85ab5550abfc3954bf6b2438d8d..b14b37b767f5e3ff1fc31cc64254090edcd3b33a 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
 @@ -3610,7 +3610,7 @@ int xe_guc_uncorrectable_error_handler(struct xe_guc *guc, u32 *msg, u32 len)

@@ -40,21 +40,21 @@ Assisted-by: ChatGPT:gpt-5 # Documentation
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Francois Dugast <francois.dugast@intel.com>
 Link: https://patch.msgid.link/20260806185202.3922432-9-matthew.brost@intel.com
-(backported from commit f2b4b3f81466291bde7553c097350f9e08ec59ca linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+(cherry-picked from commit f2b4b3f81466291bde7553c097350f9e08ec59ca linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
- drivers/gpu/drm/xe/xe_pagefault.c       | 435 +++++++++++++++++++++---
+ drivers/gpu/drm/xe/xe_pagefault.c       | 441 +++++++++++++++++++++---
  drivers/gpu/drm/xe/xe_pagefault.h       |  71 ++++
  drivers/gpu/drm/xe/xe_pagefault_types.h |  81 +++--
  drivers/gpu/drm/xe/xe_svm.c             |  16 +-
  drivers/gpu/drm/xe/xe_svm.h             |   9 +-
- 5 files changed, 527 insertions(+), 85 deletions(-)
+ 5 files changed, 531 insertions(+), 87 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index ecad76dcb..4d7427d6b 100644
+index 5c21e6584..bdc881739 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
-@@ -37,6 +37,70 @@
+@@ -36,6 +36,70 @@
   * xe_pagefault.c implements the consumer layer.
   */
  
@@ -125,7 +125,7 @@ index ecad76dcb..4d7427d6b 100644
  static int xe_pagefault_entry_size(void)
  {
  	/*
-@@ -79,7 +143,7 @@ static int xe_pagefault_begin(struct drm_exec *exec, struct xe_vma *vma,
+@@ -78,7 +142,7 @@ static int xe_pagefault_begin(struct drm_exec *exec, struct xe_vma *vma,
  }
  
  static int xe_pagefault_handle_vma(struct xe_gt *gt, struct xe_vma *vma,
@@ -134,7 +134,7 @@ index ecad76dcb..4d7427d6b 100644
  {
  	struct xe_vm *vm = xe_vma_vm(vma);
  	struct xe_tile *tile = gt_to_tile(gt);
-@@ -104,8 +168,11 @@ static int xe_pagefault_handle_vma(struct xe_gt *gt, struct xe_vma *vma,
+@@ -103,8 +167,11 @@ static int xe_pagefault_handle_vma(struct xe_gt *gt, struct xe_vma *vma,
  
  	/* Check if VMA is valid, opportunistic check only */
  	if (xe_vm_has_valid_gpu_mapping(tile, vma->tile_present,
@@ -147,7 +147,7 @@ index ecad76dcb..4d7427d6b 100644
  
  	do {
  		if (xe_vma_is_userptr(vma) &&
-@@ -143,6 +210,10 @@ static int xe_pagefault_handle_vma(struct xe_gt *gt, struct xe_vma *vma,
+@@ -142,6 +209,10 @@ static int xe_pagefault_handle_vma(struct xe_gt *gt, struct xe_vma *vma,
  	} while (err == -EAGAIN);
  
  	if (!err) {
@@ -158,7 +158,7 @@ index ecad76dcb..4d7427d6b 100644
  		dma_fence_wait(fence, false);
  		dma_fence_put(fence);
  	}
-@@ -210,10 +281,10 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
+@@ -209,10 +280,10 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
  	atomic = xe_pagefault_access_is_atomic(pf->consumer.access_type);
  
  	if (xe_vma_is_cpu_addr_mirror(vma))
@@ -171,7 +171,7 @@ index ecad76dcb..4d7427d6b 100644
  
  unlock_vm:
  	up_read(&vm->lock);
-@@ -222,21 +293,221 @@ unlock_vm:
+@@ -221,21 +292,221 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
  	return err;
  }
  
@@ -198,7 +198,11 @@ index ecad76dcb..4d7427d6b 100644
 +	return CIRC_SPACE(pf_queue->head, pf_queue->tail,
 +			  pf_queue->size) <= xe_pagefault_entry_size();
 +}
-+
+ 
+-	spin_lock_irq(&pf_queue->lock);
+-	if (pf_queue->tail != pf_queue->head) {
+-		memcpy(pf, pf_queue->data + pf_queue->tail, sizeof(*pf));
+-		pf_queue->tail = (pf_queue->tail + xe_pagefault_entry_size()) %
 +static struct xe_pagefault *
 +xe_pagefault_queue_add(struct xe_pagefault_queue *pf_queue,
 +		       struct xe_pagefault *pf)
@@ -213,11 +217,7 @@ index ecad76dcb..4d7427d6b 100644
 +		/* Not possible, warn on and drop page fault */
 +		if (WARN_ON(xe_pagefault_queue_full(pf_queue)))
 +			return NULL;
- 
--	spin_lock_irq(&pf_queue->lock);
--	if (pf_queue->tail != pf_queue->head) {
--		memcpy(pf, pf_queue->data + pf_queue->tail, sizeof(*pf));
--		pf_queue->tail = (pf_queue->tail + xe_pagefault_entry_size()) %
++
 +		lpf = (pf_queue->data + pf_queue->head);
 +		pf_queue->head = (pf_queue->head + xe_pagefault_entry_size()) %
  			pf_queue->size;
@@ -360,8 +360,10 @@ index ecad76dcb..4d7427d6b 100644
 +			continue;
 +
 +		*pf = lpf;	/* Hand back page fault for processing */
-+	}
-+
+ 	}
+-	spin_unlock_irq(&pf_queue->lock);
+ 
+-	return found_fault;
 +	/*
 +	 * No cache hit; allocate a new cache entry. We assume most faults
 +	 * within a 2M range will hit the same pages. If this assumption proves
@@ -395,15 +397,13 @@ index ecad76dcb..4d7427d6b 100644
 +			break;
 +
 +		xe_pagefault_queue_advance(pf_queue);
- 	}
--	spin_unlock_irq(&pf_queue->lock);
- 
--	return found_fault;
++	}
++
 +	return true;
  }
  
  static void xe_pagefault_print(struct xe_pagefault *pf)
-@@ -297,10 +568,11 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -296,10 +567,11 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  		container_of(w, typeof(*pf_work), work);
  	struct xe_device *xe = pf_work->xe;
  	struct xe_pagefault_queue *pf_queue = &xe->usm.pf_queue;
@@ -417,7 +417,7 @@ index ecad76dcb..4d7427d6b 100644
  
  	/*
  	 * A live VM holds a PM reference, but a torn-down VM does not.
-@@ -312,27 +584,73 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -311,28 +583,76 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  #define USM_QUEUE_MAX_RUNTIME_MS      20
  	threshold = jiffies + msecs_to_jiffies(USM_QUEUE_MAX_RUNTIME_MS);
  
@@ -431,30 +431,35 @@ index ecad76dcb..4d7427d6b 100644
  
 -		if (!pf.gt)	/* Fault squashed during reset */
 -			continue;
+ 
+-		gt = pf.gt;
+-		err = xe_pagefault_service(&pf);
 +		/* Last fault same address, ack immediately */
 +		if (xe_pagefault_match(pf, cache_start, cache_end, cache_asid))
 +			goto ack_fault;
 +
 +		err = xe_pagefault_service(pf);
- 
--		gt = pf.gt;
--		err = xe_pagefault_service(&pf);
++
  		if (err) {
 -			if (!(pf.consumer.access_type & XE_PAGEFAULT_ACCESS_PREFETCH)) {
 -				xe_pagefault_save_to_vm(gt_to_xe(pf.gt), &pf);
 -				xe_pagefault_print(&pf);
--				xe_log_err_info(pf.gt, PAGEFAULT, err, "Unsuccessful response\n");
+-				xe_gt_info(pf.gt, "Fault response: Unsuccessful %pe\n",
+-					   ERR_PTR(err));
 +			if (!(pf->consumer.access_type & XE_PAGEFAULT_ACCESS_PREFETCH)) {
 +				xe_pagefault_save_to_vm(gt_to_xe(gt), pf);
 +				xe_pagefault_cache_start_invalidate(cache_start);
 +				xe_pagefault_print(pf);
-+				xe_log_err_info(pf->gt, PAGEFAULT, err, "Unsuccessful response\n");
++				xe_gt_info(pf->gt, "Fault response: Unsuccessful %pe\n",
++						ERR_PTR(err));
  			} else {
 -				xe_gt_stats_incr(pf.gt, XE_GT_STATS_ID_INVALID_PREFETCH_PAGEFAULT_COUNT, 1);
 -				xe_gt_dbg(pf.gt, "Prefetch Fault response: Unsuccessful %pe\n",
+-					  ERR_PTR(err));
 +				xe_gt_stats_incr(pf->gt, XE_GT_STATS_ID_INVALID_PREFETCH_PAGEFAULT_COUNT, 1);
 +				xe_gt_dbg(pf->gt, "Prefetch Fault response: Unsuccessful %pe\n",
- 					  ERR_PTR(err));
++
++						ERR_PTR(err));
  			}
 +		} else {
 +			/* Cache valid fault locally */
@@ -466,12 +471,12 @@ index ecad76dcb..4d7427d6b 100644
 -		pf.producer.ops->ack_fault(&pf, err);
 +ack_fault:
 +		xe_assert(xe, pf->consumer.alloc_state ==
-+			  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
++				XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
 +		xe_assert(xe, pf == pf_work->cache.pf);
 +
 +		while (pf) {
 +			xe_assert(xe, pf->consumer.alloc_state ==
-+				  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
++					XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
 +
 +			pf->producer.ops->ack_fault(pf, err);
 +
@@ -480,7 +485,7 @@ index ecad76dcb..4d7427d6b 100644
 +			if (!invalidated) {
 +				invalidated = true;
 +				xe_pagefault_cache_invalidate(pf_queue,
-+							      pf_work);
++						pf_work);
 +			}
 +
 +			pf->consumer.alloc_state = XE_PAGEFAULT_ALLOC_STATE_FREE;
@@ -491,7 +496,7 @@ index ecad76dcb..4d7427d6b 100644
 +			 * fault processed
 +			 */
 +			while (pf && !xe_pagefault_match(pf, cache_start,
-+							 cache_end, cache_asid))
++						cache_end, cache_asid))
 +				pf = xe_pagefault_queue_unchain_requeue(pf_queue, pf, gt);
 +
 +			/* Ensure resets are safe */
@@ -504,7 +509,7 @@ index ecad76dcb..4d7427d6b 100644
  
  		if (time_after(jiffies, threshold)) {
  			queue_work(xe->usm.pagefault_wq, w);
-@@ -341,10 +659,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -341,10 +661,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  	}
  #undef USM_QUEUE_MAX_RUNTIME_MS
  
@@ -517,7 +522,7 @@ index ecad76dcb..4d7427d6b 100644
  }
  
  static int xe_pagefault_queue_init(struct xe_device *xe,
-@@ -440,6 +756,7 @@ int xe_pagefault_init(struct xe_device *xe)
+@@ -440,6 +758,7 @@ int xe_pagefault_init(struct xe_device *xe)
  
  		pf_work->xe = xe;
  		pf_work->id = i;
@@ -525,7 +530,7 @@ index ecad76dcb..4d7427d6b 100644
  		INIT_WORK(&pf_work->work, xe_pagefault_queue_work);
  	}
  
-@@ -463,15 +780,23 @@ static void xe_pagefault_queue_reset(struct xe_device *xe, struct xe_gt *gt,
+@@ -463,15 +782,23 @@ static void xe_pagefault_queue_reset(struct xe_device *xe, struct xe_gt *gt,
  
  	/* Squash all pending faults on the GT */
  
@@ -555,7 +560,7 @@ index ecad76dcb..4d7427d6b 100644
  }
  
  /**
-@@ -487,14 +812,6 @@ void xe_pagefault_reset(struct xe_device *xe, struct xe_gt *gt)
+@@ -487,14 +814,6 @@ void xe_pagefault_reset(struct xe_device *xe, struct xe_gt *gt)
  	xe_pagefault_queue_reset(xe, gt, &xe->usm.pf_queue);
  }
  
@@ -570,7 +575,7 @@ index ecad76dcb..4d7427d6b 100644
  /*
   * This function can race with multiple page fault producers, but worst case we
   * stick a page fault on the same queue for consumption.
-@@ -520,18 +837,28 @@ int xe_pagefault_handler(struct xe_device *xe, struct xe_pagefault *pf)
+@@ -520,18 +839,28 @@ int xe_pagefault_handler(struct xe_device *xe, struct xe_pagefault *pf)
  {
  	struct xe_pagefault_queue *pf_queue = &xe->usm.pf_queue;
  	unsigned long flags;
@@ -831,7 +836,7 @@ index 6a470a02f..627a74129 100644
  {
  	int devmem_possible = IS_DGFX(vm->xe) &&
  		IS_ENABLED(CONFIG_DRM_XE_PAGEMAP);
-@@ -1424,6 +1425,10 @@ get_pages:
+@@ -1424,6 +1425,10 @@ static int __xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
  	xe_svm_range_bind_us_stats_incr(gt, range, bind_start);
  
  out:
@@ -842,7 +847,7 @@ index 6a470a02f..627a74129 100644
  	xe_svm_range_fault_us_stats_incr(gt, range, start);
  	mutex_unlock(&range->lock);
  	drm_gpusvm_range_put(&range->base);
-@@ -1446,6 +1451,7 @@ err_out:
+@@ -1446,6 +1451,7 @@ static int __xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
   * xe_svm_handle_pagefault() - SVM handle page fault
   * @vm: The VM.
   * @vma: The CPU address mirror VMA.
@@ -850,7 +855,7 @@ index 6a470a02f..627a74129 100644
   * @gt: The gt upon the fault occurred.
   * @fault_addr: The GPU fault address.
   * @atomic: The fault atomic access bit.
-@@ -1456,8 +1462,8 @@ err_out:
+@@ -1456,8 +1462,8 @@ static int __xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
   * Return: 0 on success, negative error code on error.
   */
  int xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
@@ -861,7 +866,7 @@ index 6a470a02f..627a74129 100644
  {
  	int need_vram, ret;
  retry:
-@@ -1465,7 +1471,7 @@ retry:
+@@ -1465,7 +1471,7 @@ int xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
  	if (need_vram < 0)
  		return need_vram;
  

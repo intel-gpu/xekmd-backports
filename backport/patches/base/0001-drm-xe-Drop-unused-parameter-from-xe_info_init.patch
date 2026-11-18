@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 4 Sep 2026 19:05:25 +0200
+Subject: [PATCH] drm/xe: Drop unused parameter from xe_info_init
+
+We don't need anything from struct xe_device_desc in xe_info_init()
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://patch.msgid.link/20260904170531.516-2-michal.wajdeczko@intel.com
+(cherry-picked from commit 424e8b5e61aadcfcc54c6ee27064471b46268116 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/tests/xe_pci.c | 2 +-
+ drivers/gpu/drm/xe/xe_pci.c       | 3 +--
+ 2 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/tests/xe_pci.c b/drivers/gpu/drm/xe/tests/xe_pci.c
+index bb0393475..4965a01f6 100644
+--- a/drivers/gpu/drm/xe/tests/xe_pci.c
++++ b/drivers/gpu/drm/xe/tests/xe_pci.c
+@@ -382,7 +382,7 @@ int xe_pci_fake_device_init(struct xe_device *xe)
+ 		return err;
+ 
+ 	xe_info_init_early(xe, desc, subplatform_desc, &probed_info);
+-	xe_info_init(xe, desc, &probed_info);
++	xe_info_init(xe, &probed_info);
+ 
+ 	return 0;
+ }
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 8f914684a..a6da0a1e1 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -1019,7 +1019,6 @@ static int xe_probe_info(struct xe_device *xe,
+  * present in device info.
+  */
+ static int xe_info_init(struct xe_device *xe,
+-			const struct xe_device_desc *desc,
+ 			struct xe_probed_info *probed_info)
+ {
+ 	const struct xe_ip *graphics_ip;
+@@ -1252,7 +1251,7 @@ static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *des
+ 	if (err)
+ 		return err;
+ 
+-	err = xe_info_init(xe, desc, &probed_info);
++	err = xe_info_init(xe, &probed_info);
+ 	if (err)
+ 		return err;
+ 
+-- 
+2.43.0
+

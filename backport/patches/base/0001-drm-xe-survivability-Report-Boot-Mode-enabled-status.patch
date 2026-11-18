@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:49 +0200
-Subject: drm/xe/survivability: Report 'Boot Mode enabled' status using
+Subject: [PATCH] drm/xe/survivability: Report 'Boot Mode enabled' status using
  SIGID
 
 Report 'Boot Mode' status or failure using various xe_log() helpers.
@@ -15,17 +15,16 @@ Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-24-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit a0e2160a0111e40fc7bd2221cbe2bb6fb4091cff linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
-
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_survivability_mode.c | 18 ++++++++++--------
  1 file changed, 10 insertions(+), 8 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
-index 1556415bc43d..bbe4756bf1ca 100644
+index e14553295..77923bdfb 100644
 --- a/drivers/gpu/drm/xe/xe_survivability_mode.c
 +++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
-@@ -330,14 +330,13 @@ static int create_survivability_sysfs(struct pci_dev *pdev)
+@@ -338,14 +338,13 @@ static int create_survivability_sysfs(struct pci_dev *pdev)
  
  static int enable_boot_survivability_mode(struct pci_dev *pdev)
  {
@@ -42,7 +41,7 @@ index 1556415bc43d..bbe4756bf1ca 100644
  
  	/* Make sure xe_heci_gsc_init() and xe_i2c_probe() are aware of survivability */
  	survivability->mode = true;
-@@ -349,19 +348,22 @@ static int enable_boot_survivability_mode(struct pci_dev *pdev)
+@@ -357,19 +356,22 @@ static int enable_boot_survivability_mode(struct pci_dev *pdev)
  	if (survivability->fdo_mode) {
  		ret = xe_nvm_init(xe);
  		if (ret)

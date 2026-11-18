@@ -1,12 +1,16 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Date: Thu, 24 Sep 2026 11:39:03 +0530
-Subject: drm/xe/sysctrl: Return error codes from
+Subject: [PATCH] drm/xe/sysctrl: Return error codes from
  sysctrl_wait_bit_set()
 
 Make sysctrl_wait_bit_set() return an error code rather than a bool
 and update callers to use xe_log_err() with the propagated error code.
 
+Signed-off-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Link: https://patch.msgid.link/20260924060900.146167-14-mallesh.koujalagi@intel.com
 (cherry-picked from commit 026bd0e216077ea04c72c2f90261fba7b305d409 linux-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
@@ -14,7 +18,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  1 file changed, 8 insertions(+), 11 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
-index c36cac8c6..b3d1538c8 100644
+index d2bce1ed7..5bd0480e6 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
 @@ -42,15 +42,11 @@ static int sysctrl_wait_bit_clear(struct xe_sysctrl *sc, u32 bit_mask,

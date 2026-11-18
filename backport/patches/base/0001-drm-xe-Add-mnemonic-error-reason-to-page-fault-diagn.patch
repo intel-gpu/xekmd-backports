@@ -33,7 +33,7 @@ Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Link: https://patch.msgid.link/20260917203850.321385-1-matthew.brost@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit fd831e3af1e0858cdf12b49635c4ffb4600442fa linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_pagefault.c       | 102 +++++++++++++++++++-----
  drivers/gpu/drm/xe/xe_pagefault.h       |  67 +++++++++++++++-
@@ -43,7 +43,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  5 files changed, 250 insertions(+), 25 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index aeb56ff5d..c4aafdbdb 100644
+index dc43d3737..f99c36c7b 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
 @@ -158,8 +158,14 @@ static int xe_pagefault_handle_vma(struct xe_gt *gt, struct xe_vma *vma,
@@ -476,7 +476,7 @@ diff --git a/drivers/gpu/drm/xe/xe_svm.c b/drivers/gpu/drm/xe/xe_svm.c
 index 627a74129..75ab51a97 100644
 --- a/drivers/gpu/drm/xe/xe_svm.c
 +++ b/drivers/gpu/drm/xe/xe_svm.c
-@@ -1303,16 +1303,20 @@ retry:
+@@ -1303,16 +1303,20 @@ static int __xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
  
  	/* Always process UNMAPs first so view SVM ranges is current */
  	err = xe_svm_garbage_collector(vm);
@@ -499,7 +499,7 @@ index 627a74129..75ab51a97 100644
  
  	xe_svm_range_fault_count_stats_incr(gt, range);
  
-@@ -1414,6 +1418,7 @@ get_pages:
+@@ -1414,6 +1418,7 @@ static int __xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
  			err = PTR_ERR(fence);
  			xe_validation_retry_on_oom(&vctx, &err);
  			xe_svm_range_bind_us_stats_incr(gt, range, bind_start);
@@ -507,7 +507,7 @@ index 627a74129..75ab51a97 100644
  			break;
  		}
  	}
-@@ -1436,6 +1441,7 @@ out:
+@@ -1436,6 +1441,7 @@ static int __xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
  
  err_out:
  	if (err == -EAGAIN) {
@@ -527,7 +527,7 @@ index 627a74129..75ab51a97 100644
  
  	ret =  __xe_svm_handle_pagefault(vm, vma, pf, gt, fault_addr,
  					 need_vram ? true : false);
-@@ -1479,11 +1487,16 @@ retry:
+@@ -1479,11 +1487,16 @@ int xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
  		 * may have been split by xe_svm_range_set_default_attr.
  		 */
  		vma = xe_vm_find_vma_by_addr(vm, fault_addr);
@@ -546,7 +546,7 @@ index 627a74129..75ab51a97 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index c0874ded7..e08928268 100644
+index 390fcfce3..519b983d2 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -29,6 +29,7 @@

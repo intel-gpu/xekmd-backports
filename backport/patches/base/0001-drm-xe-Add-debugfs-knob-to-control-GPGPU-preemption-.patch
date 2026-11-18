@@ -78,9 +78,8 @@ Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
 Reviewed-by: Matt Roper <matthew.d.roper@intel.com>
 Link: https://patch.msgid.link/20260827072106.1138741-2-varun.gupta@intel.com
 Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
-(backported from commit 6a8789e948c1 linux-next)
-Signed-off-by:  Pravalika Gurram <pravalika.gurram@intel.com>
-Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+(cherry-picked from commit 6a8789e948c15f6daea4961e73e8ba01016716b2 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/regs/xe_lrc_layout.h |  2 +
  drivers/gpu/drm/xe/xe_gt.c              |  6 +++
@@ -91,20 +90,20 @@ Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
  6 files changed, 139 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_lrc_layout.h b/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
-index 4ab86fc369fd..9cf18eac6cbc 100644
+index 4ab86fc36..6f7abc018 100644
 --- a/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
 +++ b/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
-@@ -34,6 +34,8 @@
- #define CTX_CS_INT_VEC_REG		0x5a
- #define CTX_CS_INT_VEC_DATA		(CTX_CS_INT_VEC_REG + 1)
- 
-+#define CTX_CS_CHICKEN1			(0x12e + 1)
-+
+@@ -37,6 +37,8 @@
  #define CTX_QUEUE_TIMESTAMP		(0xd0 + 1)
  #define CTX_QUEUE_TIMESTAMP_UDW		(0xd2 + 1)
  
++#define CTX_CS_CHICKEN1			(0x12e + 1)
++
+ #define INDIRECT_CTX_RING_HEAD		(0x02 + 1)
+ #define INDIRECT_CTX_RING_TAIL		(0x04 + 1)
+ #define INDIRECT_CTX_RING_START		(0x06 + 1)
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index 6805e0d3bf21..478e047031f4 100644
+index 6805e0d3b..478e04703 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -610,6 +610,12 @@ static int gt_init_with_gt_forcewake(struct xe_gt *gt)
@@ -121,7 +120,7 @@ index 6805e0d3bf21..478e047031f4 100644
  	 * Wa_14026539277 can't be implemented as a regular GT workaround (i.e.
  	 * as an entry in gt_was[]) for two reasons: it is actually a device
 diff --git a/drivers/gpu/drm/xe/xe_gt_debugfs.c b/drivers/gpu/drm/xe/xe_gt_debugfs.c
-index c38bcacb27e4..6211c0b6d00b 100644
+index c38bcacb2..bfc13e7ef 100644
 --- a/drivers/gpu/drm/xe/xe_gt_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_gt_debugfs.c
 @@ -6,6 +6,8 @@
@@ -162,8 +161,8 @@ index c38bcacb27e4..6211c0b6d00b 100644
 +}
 +
 +static ssize_t gpgpu_preemption_level_write(struct file *file,
-+					    const char __user *ubuf,
-+					    size_t len, loff_t *offp)
++		const char __user *ubuf,
++		size_t len, loff_t *offp)
 +{
 +	struct seq_file *m = file->private_data;
 +	struct xe_gt *gt = m->private;
@@ -194,8 +193,8 @@ index c38bcacb27e4..6211c0b6d00b 100644
 +	if (new_level != XE_GPGPU_PREEMPT_DEFAULT) {
 +		add_taint(TAINT_USER, LOCKDEP_STILL_OK);
 +		xe_gt_notice(gt,
-+			     "GPGPU preemption overridden to '%s' (applies to new LRCs only)\n",
-+			     gpgpu_preemption_level_names[new_level]);
++				"GPGPU preemption overridden to '%s' (applies to new LRCs only)\n",
++				gpgpu_preemption_level_names[new_level]);
 +	}
 +
 +	gt->gpgpu_preemption_level = new_level;
@@ -219,7 +218,7 @@ index c38bcacb27e4..6211c0b6d00b 100644
  				 ARRAY_SIZE(vf_safe_debugfs_list),
  				 root, minor);
 diff --git a/drivers/gpu/drm/xe/xe_gt_types.h b/drivers/gpu/drm/xe/xe_gt_types.h
-index a8bbfbdf3849..628911346455 100644
+index a8bbfbdf3..628911346 100644
 --- a/drivers/gpu/drm/xe/xe_gt_types.h
 +++ b/drivers/gpu/drm/xe/xe_gt_types.h
 @@ -35,6 +35,24 @@ enum xe_gt_eu_type {
@@ -273,7 +272,7 @@ index a8bbfbdf3849..628911346455 100644
  	struct {
  		/**
 diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
-index e4388a960490..5396eb370ac8 100644
+index e4388a960..5396eb370 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.c
 +++ b/drivers/gpu/drm/xe/xe_lrc.c
 @@ -1498,6 +1498,36 @@ void xe_lrc_set_multi_queue_priority(struct xe_lrc *lrc, enum xe_multi_queue_pri
@@ -324,7 +323,7 @@ index e4388a960490..5396eb370ac8 100644
  	lrc->desc |= FIELD_PREP(LRC_ADDRESSING_MODE, LRC_LEGACY_64B_CONTEXT);
  	/* TODO: Priority */
 diff --git a/drivers/gpu/drm/xe/xe_wa.c b/drivers/gpu/drm/xe/xe_wa.c
-index 139434946f8f..c94fe7753f9a 100644
+index 139434946..c94fe7753 100644
 --- a/drivers/gpu/drm/xe/xe_wa.c
 +++ b/drivers/gpu/drm/xe/xe_wa.c
 @@ -343,7 +343,9 @@ static const struct xe_rtp_table_sr engine_was = XE_RTP_TABLE_SR(

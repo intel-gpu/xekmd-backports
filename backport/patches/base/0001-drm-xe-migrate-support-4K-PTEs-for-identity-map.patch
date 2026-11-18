@@ -28,13 +28,13 @@ Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://patch.msgid.link/20260902124117.918018-8-matthew.auld@intel.com
 (cherry-picked from commit 188d8139945c8dc37374efbf8552d0c2b13659a8 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_migrate.c | 57 +++++++++++++++++++++------------
  1 file changed, 37 insertions(+), 20 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
-index 8d3beeeb8934..17fe50c7803a 100644
+index 75b83687f..0bf000d7c 100644
 --- a/drivers/gpu/drm/xe/xe_migrate.c
 +++ b/drivers/gpu/drm/xe/xe_migrate.c
 @@ -87,7 +87,7 @@ struct xe_migrate {
@@ -165,3 +165,6 @@ index 8d3beeeb8934..17fe50c7803a 100644
  	 *
  	 * This makes the lowest part of the VM point to the pagetables.
  	 * Hence the lowest 2M in the vm should point to itself, with a few writes
+-- 
+2.43.0
+

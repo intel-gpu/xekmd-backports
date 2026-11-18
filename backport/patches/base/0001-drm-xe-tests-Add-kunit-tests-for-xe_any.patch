@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:43 +0200
-Subject: drm/xe/tests: Add kunit tests for xe_any
+Subject: [PATCH] drm/xe/tests: Add kunit tests for xe_any
 
 Add simple sanity tests for all xe_any macros to make sure they
 are working as expected.
@@ -11,8 +11,7 @@ Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-18-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit 14cd83cb77d49230edc318a7683fb446259dbfec linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
-
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/tests/Makefile       |   1 +
  drivers/gpu/drm/xe/tests/xe_any_kunit.c | 213 ++++++++++++++++++++++++
@@ -20,10 +19,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  create mode 100644 drivers/gpu/drm/xe/tests/xe_any_kunit.c
 
 diff --git a/drivers/gpu/drm/xe/tests/Makefile b/drivers/gpu/drm/xe/tests/Makefile
-index 0e3408f4952c..f5f5d4ed8cbf 100644
+index f7aa47f11..0b809a252 100644
 --- a/drivers/gpu/drm/xe/tests/Makefile
 +++ b/drivers/gpu/drm/xe/tests/Makefile
-@@ -7,7 +7,8 @@ xe_live_test-y = xe_live_test_mod.o
+@@ -7,6 +7,7 @@ xe_live_test-y = xe_live_test_mod.o
  # Normal kunit tests
  obj-$(CONFIG_DRM_XE_KUNIT_TEST) += xe_test.o
  xe_test-y = xe_test_mod.o \
@@ -31,10 +30,9 @@ index 0e3408f4952c..f5f5d4ed8cbf 100644
  	xe_args_test.o \
  	xe_pci_test.o \
  	xe_rtp_tables_test.o \
- 	xe_rtp_test.o \
 diff --git a/drivers/gpu/drm/xe/tests/xe_any_kunit.c b/drivers/gpu/drm/xe/tests/xe_any_kunit.c
 new file mode 100644
-index 000000000000..0a5f28894cd2
+index 000000000..0a5f28894
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/tests/xe_any_kunit.c
 @@ -0,0 +1,213 @@
@@ -253,3 +251,4 @@ index 000000000000..0a5f28894cd2
 +kunit_test_suite(xe_any_test_suite);
 -- 
 2.43.0
+

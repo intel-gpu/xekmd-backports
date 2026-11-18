@@ -1,43 +1,45 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Karthik Poosa <karthik.poosa@intel.com>
-Date: Fri, 25 Sep 2026 02:24:20 +0530
-Subject: [TEMP] drm/xe/hwmon: Add helpers to validate thermal sensor
- readings
+Date: Thu, 15 Oct 2026 12:44:22 +0530
+Subject: [PATCH] drm/xe/hwmon: Add helpers to validate thermal sensor readings
 
 Add mmio_temp_valid() and mbx_temp_valid() to check whether a temperature
 sensor reading is valid. An MMIO value of 0xFFFFFFFF or a mailbox value of
 0xFF indicates the sensor is unavailable.
 
-Gate these checks behind has_mbx_temp_sentinel, enabled on CRI currently.
+Gate these checks behind has_temp_sentinel, enabled on CRI currently.
 
 Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
-(backported from https://patchwork.freedesktop.org/series/174898/#rev3)
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20261015071434.1063785-5-karthik.poosa@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 054805851f2e10a2238b581dc65b12d121fae692 drm-xe-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_device_types.h |  2 ++
- drivers/gpu/drm/xe/xe_hwmon.c        | 16 ++++++++++++++++
+ drivers/gpu/drm/xe/xe_hwmon.c        | 27 +++++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_pci.c          |  2 ++
  drivers/gpu/drm/xe/xe_pci_types.h    |  1 +
- 4 files changed, 21 insertions(+)
+ 4 files changed, 32 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 2c05b31a0..ee8fb4191 100644
+index 8d95d4fe4..add6fa3ae 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -198,6 +198,8 @@ struct xe_device {
- 		 * pcode mailbox commands.
- 		 */
- 		u8 has_mbx_power_limits:1;
-+		/** @info.has_mbx_temp_sentinel: Device has temperature-unavailable sentinels */
-+		u8 has_mbx_temp_sentinel:1;
- 		/** @info.has_mbx_thermal_info: Device supports thermal mailbox commands */
- 		u8 has_mbx_thermal_info:1;
- 		/** @info.has_mem_copy_instr: Device supports MEM_COPY instruction */
+@@ -222,6 +222,8 @@ struct xe_device {
+ 		u8 has_sriov:1;
+ 		/** @info.has_sysctrl: Supports System Controller */
+ 		u8 has_sysctrl:1;
++		/** @info.has_temp_sentinel: Device has temperature-unavailable sentinels */
++		u8 has_temp_sentinel:1;
+ 		/** @info.has_usm: Device has unified shared memory support */
+ 		u8 has_usm:1;
+ 		/** @info.has_64bit_timestamp: Device supports 64-bit timestamps */
 diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
-index 6d512b915..55c93b17c 100644
+index e62ad456d..9c5adf847 100644
 --- a/drivers/gpu/drm/xe/xe_hwmon.c
 +++ b/drivers/gpu/drm/xe/xe_hwmon.c
-@@ -109,6 +109,9 @@ enum sensor_attr_power {
+@@ -105,6 +105,9 @@ enum sensor_attr_power {
  /* Index of memory controller in READ_THERMAL_DATA output */
  #define TEMP_INDEX_MCTRL	2
  
@@ -47,58 +49,69 @@ index 6d512b915..55c93b17c 100644
  /* Mailbox temperature is sign-magnitude: bit 7 sign, bits 6:0 magnitude. */
  #define TEMP_MBX_SIGN		BIT(7)
  #define TEMP_MBX_MAG		GENMASK(6, 0)
-@@ -833,6 +836,19 @@ static int xe_hwmon_pcode_read_thermal_info(struct xe_hwmon *hwmon)
+@@ -855,6 +858,30 @@ static int xe_hwmon_pcode_read_thermal_info(struct xe_hwmon *hwmon)
  	return ret;
  }
  
 +static inline bool mmio_temp_valid(const struct xe_hwmon *hwmon, u32 value)
 +{
-+	return hwmon->xe->info.has_mbx_temp_sentinel ? value != U32_MAX
-+						     : value != 0;
++	/*
++	 * On platforms lacking temperature sentinel support, a value of 0 is treated
++	 * as invalid. While 0°C is theoretically possible, it is highly unlikely for
++	 * a discrete GPU in normal environments, making it a reasonable fallback
++	 * indicator for invalid or uninitialized temperature readings.
++	 * All-ones is returned when the device is off the bus, so reject it too.
++	 */
++	if (value == U32_MAX)
++		return false;
++
++	return hwmon->xe->info.has_temp_sentinel || value != 0;
 +}
 +
 +/* Mailbox temperature is sign-magnitude (bit 7 sign, bits 6:0 magnitude). */
 +static inline bool mbx_temp_valid(const struct xe_hwmon *hwmon, u8 value)
 +{
-+	return hwmon->xe->info.has_mbx_temp_sentinel ? value != TEMP_MBX_INVALID
-+						     : value != 0;
++	if (value == TEMP_MBX_INVALID)
++		return false;
++
++	return hwmon->xe->info.has_temp_sentinel || value != 0;
 +}
 +
  /* Decode an 8-bit sign-magnitude mailbox temperature to degrees Celsius. */
  static int mbx_temp_decode(u8 value)
  {
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index 9a747e9bf..a4a355798 100644
+index 4cf02f720..67204914d 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -476,6 +476,7 @@ static const struct xe_device_desc cri_desc = {
- 	.has_gsc_nvm = 1,
- 	.has_i2c = true,
- 	.has_mbx_power_limits = true,
-+	.has_mbx_temp_sentinel = true,
- 	.has_mbx_thermal_info = true,
- 	.has_mert = true,
- 	.has_pre_prod_wa = 1,
-@@ -781,6 +782,7 @@ static int xe_info_init_early(struct xe_device *xe,
- 	/* runtime fusing may force flat_ccs to disabled later */
- 	xe->info.has_flat_ccs = desc->has_flat_ccs;
- 	xe->info.has_mbx_power_limits = desc->has_mbx_power_limits;
-+	xe->info.has_mbx_temp_sentinel = desc->has_mbx_temp_sentinel;
- 	xe->info.has_mbx_thermal_info = desc->has_mbx_thermal_info;
- 	xe->info.has_gsc_nvm = desc->has_gsc_nvm;
- 	xe->info.has_heci_gscfi = desc->has_heci_gscfi;
+@@ -484,6 +484,7 @@ static const struct xe_device_desc cri_desc = {
+ 	.has_soc_remapper_telem = true,
+ 	.has_sriov = true,
+ 	.has_sysctrl = true,
++	.has_temp_sentinel = true,
+ 	.max_gt_per_tile = 2,
+ 	MULTI_LRC_MASK,
+ 	.require_force_probe = true,
+@@ -817,6 +818,7 @@ static int xe_info_init_early(struct xe_device *xe,
+ 	xe->info.has_sriov = xe_configfs_primary_gt_allowed(to_pci_dev(xe->drm.dev)) &&
+ 		desc->has_sriov;
+ 	xe->info.has_sysctrl = desc->has_sysctrl;
++	xe->info.has_temp_sentinel = desc->has_temp_sentinel;
+ 	xe->info.skip_guc_pc = desc->skip_guc_pc;
+ 	xe->info.skip_pcode = desc->skip_pcode;
+ 	xe->info.needs_scratch = desc->needs_scratch;
 diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
-index 1be996854..3b8d70119 100644
+index fe327323a..7cb372a83 100644
 --- a/drivers/gpu/drm/xe/xe_pci_types.h
 +++ b/drivers/gpu/drm/xe/xe_pci_types.h
-@@ -51,6 +51,7 @@ struct xe_device_desc {
- 	u8 has_i2c:1;
- 	u8 has_llc:1;
- 	u8 has_mbx_power_limits:1;
-+	u8 has_mbx_temp_sentinel:1;
- 	u8 has_mbx_thermal_info:1;
- 	u8 has_mert:1;
- 	u8 has_pre_prod_wa:1;
+@@ -60,6 +60,7 @@ struct xe_device_desc {
+ 	u8 has_soc_remapper_telem:1;
+ 	u8 has_sriov:1;
+ 	u8 has_sysctrl:1;
++	u8 has_temp_sentinel:1;
+ 	u8 needs_scratch:1;
+ 	u8 skip_guc_pc:1;
+ 	u8 skip_pcode:1;
 -- 
 2.43.0
 

@@ -134,13 +134,15 @@ index 373fe4e80..83d726e73 100644
  	return 0;
  }
  
-@@ -178,4 +178,6 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -174,6 +177,8 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+ 
  	guard(xe_pm_runtime)(xe);
  
 +	xe_eudebug_file_close(xef);
 +
- 	/* Block new VM work before starting asynchronous queue teardown. */
- 	xa_for_each(&xef->vm.xa, idx, vm)
+ 	/*
+ 	 * No need for exec_queue.lock here as there is no contention for it
+ 	 * when FD is closing as IOCTLs presumably can't be modifying the
 @@ -222,6 +227,7 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
  			  DRM_RENDER_ALLOW),
  	DRM_IOCTL_DEF_DRV(XE_VM_GET_PROPERTY, xe_vm_get_property_ioctl,
@@ -1624,10 +1626,18 @@ index e08928268..4ec05aa22 100644
  	return 0;
  
  err_close_and_put:
-@@ -2379,2 +2379,3 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
- 	if (!err) {
+@@ -2224,8 +2227,10 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
+ 		xa_erase(&xef->vm.xa, args->vm_id);
+ 	mutex_unlock(&xef->vm.lock);
+ 
+-	if (!err)
++	if (!err) {
 +		xe_eudebug_vm_destroy(xef, vm);
- 		xe_vm_close_start(vm);
+ 		xe_vm_close_and_put(vm);
++	}
+ 
+ 	return err;
+ }
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
 index 578f0c1eb..13a104261 100644
 --- a/include/uapi/drm/xe_drm.h

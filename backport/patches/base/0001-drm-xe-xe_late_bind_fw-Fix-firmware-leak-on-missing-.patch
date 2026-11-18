@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Badal Nilawar <badal.nilawar@intel.com>
 Date: Mon, 2 Nov 2026 22:55:29 +0530
-Subject: [PATCH] drm/xe/xe_late_bind_fw: Fix firmware leak on missing
- manifest entry
+Subject: [PATCH] drm/xe/xe_late_bind_fw: Fix firmware leak on missing manifest
+ entry
 
 Release firmware when the "LTES" manifest entry is not found in the
 firmware header.
@@ -11,8 +11,8 @@ Fixes: efa29317a553 ("drm/xe/xe_late_bind_fw: Extract and print version info")
 Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Link: https://patch.msgid.link/20261102172527.2794537-9-badal.nilawar@intel.com
 Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
-(cherry-picked from commit 3e4b2a6349ed7258057fa95a1e58730615703dae linux-next)
-Signed-off-by: Pravalika Gurram pravalika.gurram@intel.com
+(cherry-picked from commit 3e4b2a6349ed7258057fa95a1e58730615703dae drm-xe-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_late_bind_fw.c | 15 ++++++++-------
  1 file changed, 8 insertions(+), 7 deletions(-)

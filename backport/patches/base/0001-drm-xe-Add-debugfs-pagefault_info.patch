@@ -15,8 +15,8 @@ Assisted-by: ChatGPT:gpt-5 # Documentation
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Link: https://patch.msgid.link/20260806185202.3922432-11-matthew.brost@intel.com
-(backported from commit dd157120f71f843b79f3684d9da48240776d3382 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+(cherry-picked from commit dd157120f71f843b79f3684d9da48240776d3382 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_debugfs.c   | 11 +++++
  drivers/gpu/drm/xe/xe_pagefault.c | 67 +++++++++++++++++++++++++++++++
@@ -24,7 +24,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  3 files changed, 81 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index bb310c2ad..80f62634f 100644
+index 8de78cd0a..eeceab4a9 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
 @@ -22,6 +22,7 @@
@@ -35,7 +35,7 @@ index bb310c2ad..80f62634f 100644
  #include "xe_pcode.h"
  #include "xe_pm.h"
  #include "xe_psmi.h"
-@@ -247,6 +248,15 @@ static int sriov_info(struct seq_file *m, void *data)
+@@ -194,6 +195,15 @@ static int sriov_info(struct seq_file *m, void *data)
  	return 0;
  }
  
@@ -51,7 +51,7 @@ index bb310c2ad..80f62634f 100644
  static int workarounds(struct xe_device *xe, struct drm_printer *p)
  {
  	guard(xe_pm_runtime)(xe);
-@@ -338,6 +348,7 @@ static const struct drm_info_list debugfs_list[] = {
+@@ -285,6 +295,7 @@ static const struct drm_info_list debugfs_list[] = {
  	{"info", info, 0},
  	{ .name = "sriov_info", .show = sriov_info, },
  	{ .name = "workarounds", .show = workaround_info, },
@@ -60,10 +60,10 @@ index bb310c2ad..80f62634f 100644
  
  static const struct drm_info_list pcode_info_debugfs[] = {
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index bfde93154..790fc7fa9 100644
+index 4b0399350..c30576d82 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
-@@ -85,6 +85,8 @@
+@@ -84,6 +84,8 @@
   *	Entry is not independently serviced; it has been chained onto an
   *	ACTIVE entry via consumer.next and will be acknowledged when the
   *	leading fault completes.
@@ -72,7 +72,7 @@ index bfde93154..790fc7fa9 100644
   *
   * The page fault queue provides stable storage for outstanding faults so the
   * IRQ handler can chain new cache hits directly onto a worker's active fault.
-@@ -99,6 +101,7 @@ enum xe_pagefault_alloc_state {
+@@ -98,6 +100,7 @@ enum xe_pagefault_alloc_state {
  	XE_PAGEFAULT_ALLOC_STATE_QUEUED		= 1,
  	XE_PAGEFAULT_ALLOC_STATE_CHAINED	= 2,
  	XE_PAGEFAULT_ALLOC_STATE_ACTIVE		= 3,
@@ -80,7 +80,7 @@ index bfde93154..790fc7fa9 100644
  };
  
  static int xe_pagefault_entry_size(void)
-@@ -882,3 +885,67 @@ int xe_pagefault_handler(struct xe_device *xe, struct xe_pagefault *pf)
+@@ -885,3 +888,67 @@ int xe_pagefault_handler(struct xe_device *xe, struct xe_pagefault *pf)
  
  	return full ? -ENOSPC : 0;
  }

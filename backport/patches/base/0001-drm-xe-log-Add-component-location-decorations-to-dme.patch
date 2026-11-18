@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:30 +0200
-Subject: drm/xe/log: Add component/location decorations to dmesg
+Subject: [PATCH] drm/xe/log: Add component/location decorations to dmesg
 
 While we can't directly use our xe_tile|gt_err|info helpers to get
 nice Tile/GT decorations, we can still add them manually based on
@@ -15,13 +15,13 @@ Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-5-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit 1151b9f6f46570650bdda5931380320119ae97e4 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_log.c | 102 +++++++++++++++++++++++++++++++++---
  1 file changed, 94 insertions(+), 8 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_log.c b/drivers/gpu/drm/xe/xe_log.c
-index 37963fe4c59e..0b4f791a490f 100644
+index 37963fe4c..0b4f791a4 100644
 --- a/drivers/gpu/drm/xe/xe_log.c
 +++ b/drivers/gpu/drm/xe/xe_log.c
 @@ -3,6 +3,9 @@

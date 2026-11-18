@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Karthik Poosa <karthik.poosa@intel.com>
-Date: Fri, 25 Sep 2026 02:24:18 +0530
-Subject: [TEMP] drm/xe/hwmon: Decode mailbox temperature as
- sign-magnitude
+Date: Thu, 15 Oct 2026 12:44:20 +0530
+Subject: [PATCH] drm/xe/hwmon: Decode mailbox temperature as sign-magnitude
 
 The mailbox temperature is an 8-bit sign-magnitude value (bit 7 sign,
 bits 6:0 magnitude, range -127..127), not two's-complement. Casting the
@@ -13,17 +12,20 @@ get_mc_temp() and get_pcie_temp() so temperatures are decoded correctly.
 
 Fixes: 3a0cb885e111 ("drm/xe/hwmon: Expose memory controller temperature")
 Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
-(backported from https://patchwork.freedesktop.org/series/174898/#rev3)
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20261015071434.1063785-3-karthik.poosa@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 1bbbd7d98fa588d5ace3d79ce56d8928f18768f5 drm-xe-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_hwmon.c | 20 ++++++++++++++++----
  1 file changed, 16 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
-index 0701a965e..365f33339 100644
+index 0195bdae4..1bfc3d1ea 100644
 --- a/drivers/gpu/drm/xe/xe_hwmon.c
 +++ b/drivers/gpu/drm/xe/xe_hwmon.c
-@@ -109,6 +109,10 @@ enum sensor_attr_power {
+@@ -105,6 +105,10 @@ enum sensor_attr_power {
  /* Index of memory controller in READ_THERMAL_DATA output */
  #define TEMP_INDEX_MCTRL	2
  
@@ -34,7 +36,7 @@ index 0701a965e..365f33339 100644
  /* Maximum characters in hwmon label name */
  #define MAX_LABEL_SIZE		16
  
-@@ -144,8 +148,8 @@ struct xe_hwmon_thermal_info {
+@@ -140,8 +144,8 @@ struct xe_hwmon_thermal_info {
  	};
  	/** @count: no of temperature sensors available for the platform */
  	u8 count;
@@ -45,7 +47,7 @@ index 0701a965e..365f33339 100644
  	/** @vram_label: vram label names */
  	char vram_label[MAX_VRAM_CHANNELS][MAX_LABEL_SIZE];
  };
-@@ -825,6 +829,14 @@ static int xe_hwmon_pcode_read_thermal_info(struct xe_hwmon *hwmon)
+@@ -809,6 +813,14 @@ static int xe_hwmon_pcode_read_thermal_info(struct xe_hwmon *hwmon)
  	return ret;
  }
  
@@ -60,7 +62,7 @@ index 0701a965e..365f33339 100644
  static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
  {
  	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
-@@ -841,7 +853,7 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+@@ -825,7 +837,7 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
  	}
  
  	for (i = TEMP_INDEX_MCTRL; i < hwmon->temp.count - 1; i++)
@@ -69,7 +71,7 @@ index 0701a965e..365f33339 100644
  
  	average /= (hwmon->temp.count - TEMP_INDEX_MCTRL - 1);
  	*val = average * MILLIDEGREE_PER_DEGREE;
-@@ -864,7 +876,7 @@ static int get_pcie_temp(struct xe_hwmon *hwmon, long *val)
+@@ -848,7 +860,7 @@ static int get_pcie_temp(struct xe_hwmon *hwmon, long *val)
  		data = REG_FIELD_GET(PCIE_SENSOR_MASK, data);
  
  	data = REG_FIELD_GET(TEMP_MASK, data);

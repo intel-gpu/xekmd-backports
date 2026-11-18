@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
+Date: Thu, 29 Oct 2026 22:57:58 +0530
+Subject: [PATCH] drm/xe/guc: add TDL, SLICE gfx registers to capture list
+
+Add ROW_INSTDONE_TDL_GFX, SS_LSC_HDC_IDLE_TDL_GFX and SLICE_ARB_STATUS
+register definitions and include them in the XeHPG extended GuC capture
+register list.
+
+v2:(Sashiko)
+- Refactored ROW_INSTDONE_TDL_GFX to ROW_INSTDONE_TDL_GFX
+- Add SLICE_ARB_STATUS register to xeHP register list
+- Refactor commit message
+
+Signed-off-by: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Link: https://patch.msgid.link/20261029172800.2150325-6-naresh.kumar.g@intel.com
+Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+(cherry-picked from commit a927c43a30aa120f10bbae9b8ec7ccf7b36dd5be drm-tip)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_gt_regs.h | 5 +++++
+ drivers/gpu/drm/xe/xe_guc_capture.c  | 5 ++++-
+ 2 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+index d2b398e4983f..e6b63a2496f1 100644
+--- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+@@ -529,6 +529,8 @@
+ #define PAGE_FLTRPTQ_HEAD			XE_REG_MCR(0xcf90)
+ #define PAGE_FLTRPTQ_TAIL			XE_REG_MCR(0xcf94)
+ 
++#define SLICE_ARB_STATUS			XE_REG_MCR(0xd814)
++
+ #define HALF_SLICE_CHICKEN5			XE_REG_MCR(0xe188, XE_REG_OPTION_MASKED)
+ #define   DISABLE_SAMPLE_G_PERFORMANCE		REG_BIT(0)
+ 
+@@ -593,6 +595,9 @@
+ #define EU_SYSTOLIC_LIC_THROTTLE_CTL_WITH_LOCK	XE_REG_MCR(0xe534)
+ #define   EU_SYSTOLIC_LIC_THROTTLE_CTL_LOCK_BIT	REG_BIT(31)
+ 
++#define ROW_INSTDONE_TDL_GFX			XE_REG_MCR(0xe580)
++#define SS_LSC_HDC_IDLE_TDL_GFX			XE_REG_MCR(0xe584)
++
+ #define XEHP_HDC_CHICKEN0					XE_REG_MCR(0xe5f0, XE_REG_OPTION_MASKED)
+ #define   LSC_L1_FLUSH_CTL_3D_DATAPORT_FLUSH_EVENTS_MASK	REG_GENMASK(13, 11)
+ #define   DIS_ATOMIC_CHAINING_TYPED_WRITES	REG_BIT(3)
+diff --git a/drivers/gpu/drm/xe/xe_guc_capture.c b/drivers/gpu/drm/xe/xe_guc_capture.c
+index 850e428b0f86..a8a3271991e2 100644
+--- a/drivers/gpu/drm/xe/xe_guc_capture.c
++++ b/drivers/gpu/drm/xe/xe_guc_capture.c
+@@ -376,7 +376,10 @@ static const struct __ext_steer_reg xehpg_extregs[] = {
+ 	{"SC_INSTDONE",			XEHPG_SC_INSTDONE},
+ 	{"SC_INSTDONE_EXTRA",		XEHPG_SC_INSTDONE_EXTRA},
+ 	{"SC_INSTDONE_EXTRA2",		XEHPG_SC_INSTDONE_EXTRA2},
+-	{"INSTDONE_GEOM_SVGUNIT",	XEHPG_INSTDONE_GEOM_SVGUNIT}
++	{"INSTDONE_GEOM_SVGUNIT",	XEHPG_INSTDONE_GEOM_SVGUNIT},
++	{"ROW_INSTDONE_TDL_GFX",	ROW_INSTDONE_TDL_GFX},
++	{"SS_LSC_HDC_IDLE_TDL_GFX",	SS_LSC_HDC_IDLE_TDL_GFX},
++	{"SLICE_ARB_STATUS",		SLICE_ARB_STATUS}
+ };
+ 
+ static void __fill_ext_reg(struct __guc_mmio_reg_descr *ext,
+-- 
+2.43.0
+

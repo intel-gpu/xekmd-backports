@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Riana Tauro <riana.tauro@intel.com>
 Date: Mon, 10 Aug 2026 16:50:10 +0530
-Subject: drm/drm_ras: Add drm_ras netlink error event
+Subject: [PATCH] drm/drm_ras: Add drm_ras netlink error event
 
 Define a new netlink event 'error-event' and a new multicast group
 'error-report' in drm_ras. Each event contains device name, node and
@@ -27,7 +27,7 @@ Reviewed-by: Raag Jadav <raag.jadav@intel.com>
 Link: https://patch.msgid.link/20260810112008.1858731-5-riana.tauro@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit 6fdbfc75eaa1b10ff5d2a45b6b8cf2b57f7a1d03 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  Documentation/gpu/drm-ras.rst            |  21 +++++
  Documentation/netlink/specs/drm_ras.yaml |  48 +++++++++++
@@ -39,10 +39,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  7 files changed, 200 insertions(+)
 
 diff --git a/Documentation/gpu/drm-ras.rst b/Documentation/gpu/drm-ras.rst
-index 4636e68f5678..de07e9ae0e10 100644
+index 83c21853b..406e4c49b 100644
 --- a/Documentation/gpu/drm-ras.rst
 +++ b/Documentation/gpu/drm-ras.rst
-@@ -54,6 +54,7 @@ User space tools can:
+@@ -56,6 +56,7 @@ User space tools can:
    ``node-id`` and ``error-id`` as parameters.
  * Clear specific error counters with the ``clear-error-counter`` command, using both
    ``node-id`` and ``error-id`` as parameters.
@@ -50,7 +50,7 @@ index 4636e68f5678..de07e9ae0e10 100644
  
  YAML-based Interface
  --------------------
-@@ -109,3 +110,23 @@ Example: Clear an error counter for a given node
+@@ -111,3 +112,23 @@ Example: Clear an error counter for a given node
  
      sudo ynl --family drm_ras --do clear-error-counter --json '{"node-id":0, "error-id":1}'
      None
@@ -75,7 +75,7 @@ index 4636e68f5678..de07e9ae0e10 100644
 +        }
 +    }
 diff --git a/Documentation/netlink/specs/drm_ras.yaml b/Documentation/netlink/specs/drm_ras.yaml
-index e113056f8c01..8aed3d4515e5 100644
+index e113056f8..8aed3d451 100644
 --- a/Documentation/netlink/specs/drm_ras.yaml
 +++ b/Documentation/netlink/specs/drm_ras.yaml
 @@ -69,6 +69,33 @@ attribute-sets:
@@ -138,7 +138,7 @@ index e113056f8c01..8aed3d4515e5 100644
 +    -
 +      name: error-report
 diff --git a/drivers/gpu/drm/drm_ras.c b/drivers/gpu/drm/drm_ras.c
-index d6eab29a1394..39155fb514de 100644
+index d6eab29a1..39155fb51 100644
 --- a/drivers/gpu/drm/drm_ras.c
 +++ b/drivers/gpu/drm/drm_ras.c
 @@ -41,6 +41,11 @@
@@ -264,7 +264,7 @@ index d6eab29a1394..39155fb514de 100644
   * drm_ras_nl_get_error_counter_dumpit() - Dump all Error Counters
   * @skb: Netlink message buffer
 diff --git a/drivers/gpu/drm/drm_ras_nl.c b/drivers/gpu/drm/drm_ras_nl.c
-index dea1c1b2494e..9d3123cc9f9c 100644
+index dea1c1b24..9d3123cc9 100644
 --- a/drivers/gpu/drm/drm_ras_nl.c
 +++ b/drivers/gpu/drm/drm_ras_nl.c
 @@ -58,6 +58,10 @@ static const struct genl_split_ops drm_ras_nl_ops[] = {
@@ -286,7 +286,7 @@ index dea1c1b2494e..9d3123cc9f9c 100644
 +	.n_mcgrps	= ARRAY_SIZE(drm_ras_nl_mcgrps),
  };
 diff --git a/drivers/gpu/drm/drm_ras_nl.h b/drivers/gpu/drm/drm_ras_nl.h
-index a398643572a5..03ec275aca92 100644
+index a39864357..03ec275ac 100644
 --- a/drivers/gpu/drm/drm_ras_nl.h
 +++ b/drivers/gpu/drm/drm_ras_nl.h
 @@ -21,6 +21,10 @@ int drm_ras_nl_get_error_counter_dumpit(struct sk_buff *skb,
@@ -301,10 +301,10 @@ index a398643572a5..03ec275aca92 100644
  
  #endif /* _LINUX_DRM_RAS_GEN_H */
 diff --git a/include/drm/drm_ras.h b/include/drm/drm_ras.h
-index f2a787bc4f64..ed8175f62b23 100644
+index 0beede3dd..ee2caa0ed 100644
 --- a/include/drm/drm_ras.h
 +++ b/include/drm/drm_ras.h
-@@ -78,9 +78,14 @@ struct drm_device;
+@@ -80,9 +80,14 @@ struct drm_device;
  #if IS_ENABLED(CONFIG_DRM_RAS)
  int drm_ras_node_register(struct drm_ras_node *node);
  void drm_ras_node_unregister(struct drm_ras_node *node);
@@ -320,7 +320,7 @@ index f2a787bc4f64..ed8175f62b23 100644
  
  #endif
 diff --git a/include/uapi/drm/drm_ras.h b/include/uapi/drm/drm_ras.h
-index 218a3ee86805..eab8231aa87c 100644
+index 218a3ee86..eab8231aa 100644
 --- a/include/uapi/drm/drm_ras.h
 +++ b/include/uapi/drm/drm_ras.h
 @@ -38,13 +38,28 @@ enum {

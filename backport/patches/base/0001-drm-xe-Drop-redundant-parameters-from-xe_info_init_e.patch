@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 4 Sep 2026 19:05:27 +0200
+Subject: [PATCH] drm/xe: Drop redundant parameters from xe_info_init_early
+
+We can now obtain the const pointers to struct xe_device_desc and
+xe_subplatform_desc directly from the xe, no need to pass them as
+explicit parameters.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://patch.msgid.link/20260904170531.516-4-michal.wajdeczko@intel.com
+(cherry-picked from commit e98e6b57dad5f7d072d85595d2138c84859bf5f0 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/tests/xe_pci.c | 2 +-
+ drivers/gpu/drm/xe/xe_pci.c       | 6 +++---
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/tests/xe_pci.c b/drivers/gpu/drm/xe/tests/xe_pci.c
+index 48d5ee478..c817692c0 100644
+--- a/drivers/gpu/drm/xe/tests/xe_pci.c
++++ b/drivers/gpu/drm/xe/tests/xe_pci.c
+@@ -383,7 +383,7 @@ int xe_pci_fake_device_init(struct xe_device *xe)
+ 	if (err)
+ 		return err;
+ 
+-	xe_info_init_early(xe, desc, subplatform_desc, &probed_info);
++	xe_info_init_early(xe, &probed_info);
+ 	xe_info_init(xe, &probed_info);
+ 
+ 	return 0;
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index e8ffa2607..da38027bf 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -776,10 +776,10 @@ static int xe_probe_info_early(struct xe_device *xe,
+  * passed to the driver at probe time from PCI ID table.
+  */
+ static int xe_info_init_early(struct xe_device *xe,
+-			      const struct xe_device_desc *desc,
+-			      const struct xe_subplatform_desc *subplatform_desc,
+ 			      struct xe_probed_info *probed_info)
+ {
++	const struct xe_subplatform_desc *subplatform_desc = xe->subplatform_desc;
++	const struct xe_device_desc *desc = xe->desc;
+ 	int err;
+ 
+ 	xe->info.devid = probed_info->devid;
+@@ -1230,7 +1230,7 @@ static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *des
+ 	if (err)
+ 		return err;
+ 
+-	err = xe_info_init_early(xe, desc, subplatform_desc, &probed_info);
++	err = xe_info_init_early(xe, &probed_info);
+ 	if (err)
+ 		return err;
+ 
+-- 
+2.43.0
+

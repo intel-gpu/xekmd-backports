@@ -1,7 +1,7 @@
-From d2c9411bab3bae39bbab27aa88c808707b7e3170 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Karthik Poosa <karthik.poosa@intel.com>
 Date: Fri, 3 Jul 2026 21:03:20 +0530
-Subject: drm/xe/hwmon: handle CRI+ power interval encoding
+Subject: [PATCH] drm/xe/hwmon: handle CRI+ power interval encoding
 
 On CRI and newer platforms, the power-limit interval encoding is changed
 from the legacy 1.x * 2^y format to a U5.2 value in milliseconds.
@@ -16,8 +16,8 @@ Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
 Reviewed-by: Badal Nilawar <badal.nilawar@intel.com>
 Link: https://patch.msgid.link/20260703153320.1368225-1-karthik.poosa@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
-(cherry-picked from commit b30c9875542e linux-next)
-Signed-off-by:  Pravalika Gurram <pravalika.gurram@intel.com>
+(cherry-picked from commit b30c9875542e89d36c5677ee8e0b46fb76b5baf0 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_hwmon.c | 86 ++++++++++++++++++++++-------------
  1 file changed, 55 insertions(+), 31 deletions(-)

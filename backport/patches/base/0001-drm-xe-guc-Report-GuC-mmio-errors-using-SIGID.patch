@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:55 +0200
-Subject: drm/xe/guc: Report 'GuC mmio' errors using SIGID
+Subject: [PATCH] drm/xe/guc: Report 'GuC mmio' errors using SIGID
 
 Report various 'GuC mmio' errors using xe_log() helpers.
 
@@ -14,17 +14,16 @@ Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-30-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit 9e35364579ddd3260e890d90b55a8de597ea00fd linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
-
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_guc.c | 18 ++++++++++--------
  1 file changed, 10 insertions(+), 8 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
-index ccebb437e37f..de1e98123f1a 100644
+index 4286bd05c..c7f8bbd4c 100644
 --- a/drivers/gpu/drm/xe/xe_guc.c
 +++ b/drivers/gpu/drm/xe/xe_guc.c
-@@ -38,6 +38,7 @@
+@@ -39,6 +39,7 @@
  #include "xe_guc_rc.h"
  #include "xe_guc_relay.h"
  #include "xe_guc_submit.h"
@@ -32,7 +31,7 @@ index ccebb437e37f..de1e98123f1a 100644
  #include "xe_memirq.h"
  #include "xe_mmio.h"
  #include "xe_platform_types.h"
-@@ -1516,8 +1517,9 @@ int xe_guc_mmio_send_recv(struct xe_guc *guc, const u32 *request,
+@@ -1542,8 +1543,9 @@ int xe_guc_mmio_send_recv(struct xe_guc *guc, const u32 *request,
  		/* scratch registers might be cleared during FLR, try once more */
  		if (!header) {
  			if (++lost > MAX_RETRIES_ON_FLR) {
@@ -44,7 +43,7 @@ index ccebb437e37f..de1e98123f1a 100644
  				return -ENOLINK;
  			}
  			xe_gt_dbg(gt, "GuC mmio request %#x: lost, trying again\n", request[0]);
-@@ -1525,8 +1527,8 @@ int xe_guc_mmio_send_recv(struct xe_guc *guc, const u32 *request,
+@@ -1551,8 +1553,8 @@ int xe_guc_mmio_send_recv(struct xe_guc *guc, const u32 *request,
  			goto retry;
  		}
  timeout:
@@ -55,7 +54,7 @@ index ccebb437e37f..de1e98123f1a 100644
  		return ret;
  	}
  
-@@ -1581,16 +1583,16 @@ int xe_guc_mmio_send_recv(struct xe_guc *guc, const u32 *request,
+@@ -1607,16 +1609,16 @@ int xe_guc_mmio_send_recv(struct xe_guc *guc, const u32 *request,
  			return -EREMCHG;
  		}
  

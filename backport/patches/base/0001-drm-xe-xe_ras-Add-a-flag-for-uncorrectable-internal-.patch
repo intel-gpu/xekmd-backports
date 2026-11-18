@@ -1,7 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Riana Tauro <riana.tauro@intel.com>
 Date: Thu, 12 Nov 2026 11:37:08 +0530
-Subject: [PATCH] drm/xe/xe_ras: Add a flag for uncorrectable internal error
+Subject: [PATCH] drm/xe/xe_ras: Add a flag for uncorrectable internal
+ error
 
 Introduce a flag with get/set accessors to record when an
 uncorrectable internal error was reported via AER.
@@ -9,8 +10,8 @@ uncorrectable internal error was reported via AER.
 Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20261112060701.3327125-16-riana.tauro@intel.com
 Signed-off-by: Riana Tauro <riana.tauro@intel.com>
-(cherry-picked from 3b8cc72ad59765ad4ba7461a77285a625cd9c799 linux-next)
-Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+(cherry-picked from commit 3b8cc72ad59765ad4ba7461a77285a625cd9c799 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_pci_error.c | 26 ++++++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_ras.c       | 20 ++++++++++++++++++++
@@ -19,7 +20,7 @@ Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
  4 files changed, 50 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_pci_error.c b/drivers/gpu/drm/xe/xe_pci_error.c
-index 03a9f295d077..472b85d0ccc3 100644
+index 03a9f295d..472b85d0c 100644
 --- a/drivers/gpu/drm/xe/xe_pci_error.c
 +++ b/drivers/gpu/drm/xe/xe_pci_error.c
 @@ -55,6 +55,29 @@ static pci_ers_result_t ras_action_to_pci_result(struct pci_dev *pdev, u8 action
@@ -53,7 +54,7 @@ index 03a9f295d077..472b85d0ccc3 100644
  {
  	struct xe_device *xe = pdev_to_xe_device(pdev);
 @@ -68,6 +91,9 @@ static pci_ers_result_t xe_pci_error_detected(struct pci_dev *pdev, pci_channel_
- 	if (xe_survivability_mode_is_boot_enabled(xe) || xe_device_wedged(xe))
+ 	if (xe_survivability_mode_is_boot_enabled(xe) || xe_wedged(xe))
  		return PCI_ERS_RESULT_DISCONNECT;
  
 +	if (is_aer_internal_error(pdev))
@@ -63,7 +64,7 @@ index 03a9f295d077..472b85d0ccc3 100644
  	case pci_channel_io_normal:
  		return PCI_ERS_RESULT_CAN_RECOVER;
 diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
-index 3aea4969af13..58a0b5fa676d 100644
+index 3aea4969a..58a0b5fa6 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
 @@ -1253,6 +1253,26 @@ u32 xe_ras_get_max_pages(struct xe_device *xe)
@@ -94,19 +95,19 @@ index 3aea4969af13..58a0b5fa676d 100644
   * xe_ras_init - Initialize Xe RAS
   * @xe: xe device instance
 diff --git a/drivers/gpu/drm/xe/xe_ras.h b/drivers/gpu/drm/xe/xe_ras.h
-index c44fa172011f..f7b587ac84e3 100644
+index c44fa1720..f7b587ac8 100644
 --- a/drivers/gpu/drm/xe/xe_ras.h
 +++ b/drivers/gpu/drm/xe/xe_ras.h
-@@ -23,5 +23,7 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe);
- bool xe_ras_get_disable_page_offline(struct xe_device *xe);
+@@ -25,5 +25,7 @@ bool xe_ras_get_disable_vram_page_offline(struct xe_device *xe);
  u32 xe_ras_get_max_pages(struct xe_device *xe);
+ int xe_ras_get_counter_response(struct xe_device *xe, const struct xe_ras_error_class *counter,
+ 				struct xe_ras_get_counter_response *response);
 +bool xe_ras_is_aer_internal_error(struct xe_device *xe);
 +void xe_ras_set_aer_internal_error(struct xe_device *xe);
- int xe_ras_get_counter_response(struct xe_device *xe, struct xe_ras_error_class *counter,
- 				struct xe_ras_get_counter_response *out);
- bool xe_ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter);
+ 
+ #endif
 diff --git a/drivers/gpu/drm/xe/xe_ras_types.h b/drivers/gpu/drm/xe/xe_ras_types.h
-index a86f9d2b8c92..0ff5803d495b 100644
+index a86f9d2b8..0ff5803d4 100644
 --- a/drivers/gpu/drm/xe/xe_ras_types.h
 +++ b/drivers/gpu/drm/xe/xe_ras_types.h
 @@ -414,6 +414,8 @@ struct xe_ras_set_health_response {
@@ -115,8 +116,8 @@ index a86f9d2b8c92..0ff5803d495b 100644
  struct xe_ras_state {
 +	/** @aer_internal_error: true if an uncorrectable internal error was reported via AER */
 +	bool aer_internal_error;
- 	/** @disable_page_offline: cached configfs policy, immutable after init */
- 	bool disable_page_offline;
+ 	/** @disable_vram_page_offline: cached configfs policy, immutable after init */
+ 	bool disable_vram_page_offline;
  	/** @max_pages: Total number of pages that can be stored by firmware */
 -- 
 2.43.0

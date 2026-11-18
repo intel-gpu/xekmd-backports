@@ -1,7 +1,7 @@
-From 457777d66f4561567ce4e5179841a3216b17e9f1 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Michael J. Ruhl" <michael.j.ruhl@intel.com>
 Date: Tue, 13 Oct 2026 14:47:14 -0700
-Subject: [TEMP] drm/xe/vsec: Support survivability mode for CRI
+Subject: [PATCH] [TEMP] drm/xe/vsec: Support survivability mode for CRI
 
 For survivability mode, CRI can only support access to the
 PUNIT CRASHLOG PMT function.
@@ -18,18 +18,18 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  2 files changed, 35 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
-index 696fed96a..cbf10e5b6 100644
+index 91a0680e4..10f9de4eb 100644
 --- a/drivers/gpu/drm/xe/xe_survivability_mode.c
 +++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
-@@ -19,6 +19,7 @@
+@@ -21,6 +21,7 @@
  #include "xe_nvm.h"
  #include "xe_pcode_api.h"
  #include "xe_printk.h"
 +#include "xe_soc_remapper.h"
  #include "xe_vsec.h"
+ #include "xe_wedge.h"
  
- /**
-@@ -351,6 +352,7 @@ static int enable_boot_survivability_mode(struct pci_dev *pdev)
+@@ -354,6 +355,7 @@ static int enable_boot_survivability_mode(struct pci_dev *pdev)
  
  	xe_heci_gsc_init(xe);
  

@@ -6,26 +6,20 @@ Subject: [PATCH] drm/xe/sysctrl: Make sysctrl_write_frame() void
 The function always returned 0, so the int return type is misleading.
 Convert to void and drop the error handling in the caller.
 
+Signed-off-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Link: https://patch.msgid.link/20260924060900.146167-15-mallesh.koujalagi@intel.com
 (cherry-picked from commit 75e8c0bbf235ac1288421b82acc7064460bc7282 linux-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
-Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
 ---
- drivers/gpu/drm/xe/xe_sysctrl_mailbox.c | 13 ++++---------
- 1 file changed, 4 insertions(+), 9 deletions(-)
+ drivers/gpu/drm/xe/xe_sysctrl_mailbox.c | 11 +++--------
+ 1 file changed, 3 insertions(+), 8 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
-index caf22ab..e695469 100644
+index 5bd0480e6..f9d260313 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
-@@ -38,7 +38,7 @@ struct xe_sysctrl_mailbox_msg_hdr {
- static int sysctrl_wait_bit_clear(struct xe_sysctrl *sc, u32 bit_mask,
- 				  unsigned int timeout_ms)
- {
--	return xe_mmio_wait32_not(sc->mmio, SYSCTRL_MB_CTRL, bit_mask, bit_mask,
-+return xe_mmio_wait32_not(sc->mmio, SYSCTRL_MB_CTRL, bit_mask, bit_mask,
- 				  timeout_ms * 1000, NULL, false);
- }
- 
 @@ -49,8 +49,8 @@ static int sysctrl_wait_bit_set(struct xe_sysctrl *sc, u32 bit_mask,
  			      timeout_ms * 1000, NULL, false);
  }
@@ -37,8 +31,8 @@ index caf22ab..e695469 100644
  {
  	static const struct xe_reg regs[] = {
  		SYSCTRL_MB_DATA0, SYSCTRL_MB_DATA1, SYSCTRL_MB_DATA2, SYSCTRL_MB_DATA3
-@@ -65,8 +65,6 @@ static int sysctrl_write_frame(struct xe_sysctrl *sc, const void *frame,
- 	memcpy(val, frame, len);
+@@ -66,8 +66,6 @@ static int sysctrl_write_frame(struct xe_sysctrl *sc, const void *frame,
+ 
  	for (i = 0; i < dw; i++)
  		xe_mmio_write32(sc->mmio, regs[i], val[i]);
 -
@@ -46,7 +40,7 @@ index caf22ab..e695469 100644
  }
  
  static int sysctrl_read_frame(struct xe_sysctrl *sc, void *frame,
-@@ -155,10 +153,7 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
+@@ -156,10 +154,7 @@ static int sysctrl_send_frames(struct xe_sysctrl *sc,
  	for (frame = 0; frame < total_frames; frame++) {
  		frame_size = min_t(size_t, cmd_size - bytes_sent, XE_SYSCTRL_MB_FRAME_SIZE);
  

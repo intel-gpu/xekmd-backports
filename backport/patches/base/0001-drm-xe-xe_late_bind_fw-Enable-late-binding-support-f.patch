@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Badal Nilawar <badal.nilawar@intel.com>
 Date: Mon, 2 Nov 2026 22:55:33 +0530
-Subject: [PATCH] drm/xe/xe_late_bind_fw: Enable late binding support for
- CRI
+Subject: [PATCH] drm/xe/xe_late_bind_fw: Enable late binding support for CRI
 
 Enable late binding support for CRI.
 
@@ -14,18 +13,18 @@ Cc: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Link: https://patch.msgid.link/20261102172527.2794537-13-badal.nilawar@intel.com
 Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
-(backported from commit d7bc407b38090e908d2b63560bd3c5c44185e56f linux-next)
-Signed-off-by: Pravalika Gurram pravalika.gurram@intel.com
+(cherry-picked from commit d7bc407b38090e908d2b63560bd3c5c44185e56f linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_late_bind_fw.c | 15 ++++++++++++++-
  drivers/gpu/drm/xe/xe_pci.c          |  2 ++
  2 files changed, 16 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
-index c4f81fb1d..f32d245e3 100644
+index 190674f6d..cc4bb9a54 100644
 --- a/drivers/gpu/drm/xe/xe_late_bind_fw.c
 +++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
-@@ -484,6 +484,19 @@ static void xe_late_bind_remove(void *arg)
+@@ -456,6 +456,19 @@ static void xe_late_bind_remove(void *arg)
  	}
  }
  
@@ -45,7 +44,7 @@ index c4f81fb1d..f32d245e3 100644
  /**
   * xe_late_bind_init() - add xe mei late binding component
   * @late_bind: pointer to late bind structure.
-@@ -498,7 +511,7 @@ int xe_late_bind_init(struct xe_late_bind *late_bind)
+@@ -470,7 +483,7 @@ int xe_late_bind_init(struct xe_late_bind *late_bind)
  	if (!xe->info.late_bind_mask)
  		return 0;
  
@@ -55,18 +54,18 @@ index c4f81fb1d..f32d245e3 100644
  		return 0;
  	}
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index e0e2a43d3..9a747e9bf 100644
+index 246870792..122adafee 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -483,6 +483,8 @@ static const struct xe_device_desc cri_desc = {
- 	.has_soc_remapper_telem = true,
+@@ -486,6 +486,8 @@ static const struct xe_device_desc cri_desc = {
  	.has_sriov = true,
  	.has_sysctrl = true,
+ 	.has_temp_sentinel = true,
 +	.late_bind_mask = BIT(XE_LB_FW_FAN_CONTROL) |
 +			  BIT(XE_LB_FW_OCODE),
  	.max_gt_per_tile = 2,
  	MULTI_LRC_MASK,
- 	.va_bits = 57,
+ 	.require_force_probe = true,
 -- 
 2.43.0
 

@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 4 Sep 2026 19:05:28 +0200
+Subject: [PATCH] drm/xe: Drop redundant parameter from xe_probe_info_early
+
+We can now obtain the const pointer to struct xe_device_desc directly
+from the xe, no need to pass it as explicit parameter.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://patch.msgid.link/20260904170531.516-5-michal.wajdeczko@intel.com
+(cherry-picked from commit 31aa5fdb01c8e0ceb6a0ba84dde589b1db9b40b2 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index da38027bf..4ef02622a 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -758,7 +758,6 @@ struct xe_probed_info {
+  * Probe from the hardware the info required by xe_info_init_early().
+  */
+ static int xe_probe_info_early(struct xe_device *xe,
+-			       const struct xe_device_desc *desc,
+ 			       struct xe_probed_info *probed_info)
+ {
+ 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+@@ -766,7 +765,7 @@ static int xe_probe_info_early(struct xe_device *xe,
+ 	probed_info->devid = pdev->device;
+ 	probed_info->revid = pdev->revision;
+ 
+-	xe_step_platform_get(desc->platform, probed_info->revid, &probed_info->step);
++	xe_step_platform_get(xe->desc->platform, probed_info->revid, &probed_info->step);
+ 
+ 	return 0;
+ }
+@@ -1226,7 +1225,7 @@ static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *des
+ 
+ 	pci_set_master(pdev);
+ 
+-	err = xe_probe_info_early(xe, desc, &probed_info);
++	err = xe_probe_info_early(xe, &probed_info);
+ 	if (err)
+ 		return err;
+ 
+-- 
+2.43.0
+

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Anoop Vijay <anoop.c.vijay@intel.com>
-Date: Thu, 17 Sep 2026 12:30:28 -0700
-Subject: [Temp] drm/xe/sysctrl: Add RAS error injection debugfs interface
+Date: Wed, 30 Sep 2026 06:34:53 -0700
+Subject: [PATCH] drm/xe/sysctrl: Add RAS error injection debugfs interface
 
 Add debugfs interface for exercising System Controller's RAS error
 injection command, used to validate RAS error detection and recovery
@@ -22,9 +22,11 @@ file stays visible under sc/ but is inaccessible for both read and
 write until the diag firmware becomes ready.
 
 Signed-off-by: Anoop Vijay <anoop.c.vijay@intel.com>
-(backported from https://patchwork.freedesktop.org/series/161655/#rev6)
-Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
-
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20260930133451.667270-7-anoop.c.vijay@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit eacf3c423801e2fd35ce1e50926f522a35f74732 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_sysctrl_debugfs.c       | 152 ++++++++++++++++++
  drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h |  31 ++++
@@ -32,7 +34,7 @@ Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
  3 files changed, 186 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_debugfs.c b/drivers/gpu/drm/xe/xe_sysctrl_debugfs.c
-index 6e96b1190..272e51f24 100644
+index 0620a0101..8964a2d84 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_debugfs.c
 @@ -10,6 +10,7 @@
@@ -43,7 +45,7 @@ index 6e96b1190..272e51f24 100644
  #include <linux/uaccess.h>
  
  #include "xe_pm.h"
-@@ -130,6 +131,153 @@ static const struct file_operations xe_sysctrl_loopback_fops = {
+@@ -134,6 +135,153 @@ static const struct file_operations xe_sysctrl_loopback_fops = {
  	.release = single_release,
  };
  
@@ -197,7 +199,7 @@ index 6e96b1190..272e51f24 100644
  static void xe_sysctrl_register_entry(struct dentry *root, struct xe_sysctrl_debugfs_entry *entry,
  				      struct xe_sysctrl *sc, const char *name,
  				      u8 group, u8 command,
-@@ -169,4 +317,8 @@ void xe_sysctrl_debugfs_register(struct xe_sysctrl *sc, struct dentry *parent)
+@@ -173,4 +321,8 @@ void xe_sysctrl_debugfs_register(struct xe_sysctrl *sc, struct dentry *parent)
  	xe_sysctrl_register_entry(root, &sc->debugfs.loopback, sc, "loopback",
  				  XE_SYSCTRL_GROUP_CORE, XE_SYSCTRL_CMD_LOOPBACK,
  				  &xe_sysctrl_loopback_fops);
@@ -207,7 +209,7 @@ index 6e96b1190..272e51f24 100644
 +				  &xe_sysctrl_ras_error_inject_fops);
  }
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
-index 691a69966..f658c9c54 100644
+index 6a8284a42..2554848e7 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
 @@ -14,10 +14,12 @@

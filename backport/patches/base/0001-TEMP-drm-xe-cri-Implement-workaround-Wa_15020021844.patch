@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matt Roper <matthew.d.roper@intel.com>
 Date: Mon, 12 Oct 2026 16:30:36 -0700
-Subject: TEMP: drm/xe/cri: Implement workaround Wa_15020021844
+Subject: [PATCH] [TEMP] drm/xe/cri: Implement workaround Wa_15020021844
 
 On Crescent Island platforms, the pcode is signaling "ready" to the
 driver prematurely since one last sysctrl firmware initialization step
@@ -31,16 +31,16 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  2 files changed, 6 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_device_wa_oob.rules b/drivers/gpu/drm/xe/xe_device_wa_oob.rules
-index d8dc41851..0488a2046 100644
+index ed04994ee..4bb1e2026 100644
 --- a/drivers/gpu/drm/xe/xe_device_wa_oob.rules
 +++ b/drivers/gpu/drm/xe/xe_device_wa_oob.rules
-@@ -7,3 +7,4 @@
- 14026746987	PLATFORM(CRESCENTISLAND)
+@@ -9,3 +9,4 @@
  14026779378	PLATFORM(CRESCENTISLAND)
+ 14028586678	PLATFORM(CRESCENTISLAND)
  14028434957	PLATFORM(CRESCENTISLAND)
 +15020021844	PLATFORM(CRESCENTISLAND)
 diff --git a/drivers/gpu/drm/xe/xe_pcode.c b/drivers/gpu/drm/xe/xe_pcode.c
-index ad5a74c29..fc542eab3 100644
+index 708239e34..a04577edf 100644
 --- a/drivers/gpu/drm/xe/xe_pcode.c
 +++ b/drivers/gpu/drm/xe/xe_pcode.c
 @@ -11,6 +11,7 @@

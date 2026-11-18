@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Tangudu Tilak Tirumalesh <tilak.tirumalesh.tangudu@intel.com>
 Date: Thu, 27 Aug 2026 13:50:10 +0530
-Subject: drm/xe/tlb_inval: add xe_tlb_inval_ggtt_full() GGTT
+Subject: [PATCH] drm/xe/tlb_inval: add xe_tlb_inval_ggtt_full() GGTT
  invalidation helper
 
 Add xe_tlb_inval_ggtt_full() and its GuC backend
@@ -35,7 +35,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  4 files changed, 76 insertions(+), 6 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_guc_tlb_inval.c b/drivers/gpu/drm/xe/xe_guc_tlb_inval.c
-index cf6d106e6..6acf08229 100644
+index 046d06551..111fef781 100644
 --- a/drivers/gpu/drm/xe/xe_guc_tlb_inval.c
 +++ b/drivers/gpu/drm/xe/xe_guc_tlb_inval.c
 @@ -98,6 +98,33 @@ static int send_tlb_inval_ggtt(struct xe_tlb_inval *tlb_inval, u32 seqno)
@@ -72,7 +72,7 @@ index cf6d106e6..6acf08229 100644
  static int send_page_reclaim(struct xe_guc *guc, u32 seqno,
  			     u64 gpu_addr)
  {
-@@ -352,6 +379,7 @@ static long tlb_inval_timeout_delay(struct xe_tlb_inval *tlb_inval)
+@@ -346,6 +373,7 @@ static long tlb_inval_timeout_delay(struct xe_tlb_inval *tlb_inval)
  static const struct xe_tlb_inval_ops guc_tlb_inval_asid_ops = {
  	.all = send_tlb_inval_all,
  	.ggtt = send_tlb_inval_ggtt,
@@ -80,7 +80,7 @@ index cf6d106e6..6acf08229 100644
  	.ppgtt = send_tlb_inval_asid_ppgtt,
  	.initialized = tlb_inval_initialized,
  	.flush = tlb_inval_flush,
-@@ -360,6 +388,7 @@ static const struct xe_tlb_inval_ops guc_tlb_inval_asid_ops = {
+@@ -354,6 +382,7 @@ static const struct xe_tlb_inval_ops guc_tlb_inval_asid_ops = {
  
  static const struct xe_tlb_inval_ops guc_tlb_inval_ctx_ops = {
  	.ggtt = send_tlb_inval_ggtt,
@@ -89,10 +89,10 @@ index cf6d106e6..6acf08229 100644
  	.ppgtt = send_tlb_inval_ctx_ppgtt,
  	.initialized = tlb_inval_initialized,
 diff --git a/drivers/gpu/drm/xe/xe_tlb_inval.c b/drivers/gpu/drm/xe/xe_tlb_inval.c
-index 10dcd4abb..e72d86edd 100644
+index 67b205bf1..dd1030de9 100644
 --- a/drivers/gpu/drm/xe/xe_tlb_inval.c
 +++ b/drivers/gpu/drm/xe/xe_tlb_inval.c
-@@ -301,26 +301,56 @@ int xe_tlb_inval_all(struct xe_tlb_inval *tlb_inval,
+@@ -302,26 +302,56 @@ int xe_tlb_inval_all(struct xe_tlb_inval *tlb_inval,
  }
  
  /**

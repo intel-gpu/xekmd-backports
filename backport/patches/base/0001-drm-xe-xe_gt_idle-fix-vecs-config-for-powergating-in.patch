@@ -1,7 +1,7 @@
-From 67b2f34e785a0416d9ef1bef12ab47bd835a9469 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Ashutosh Dixit <ashutosh.dixit@intel.com>
 Date: Mon, 17 Aug 2026 22:00:41 -0700
-Subject: drm/xe/xe_gt_idle: fix vecs config for powergating info
+Subject: [PATCH] drm/xe/xe_gt_idle: fix vecs config for powergating info
 
 vecs configuration for newer platforms (media version >= 35) is
 different. Fix powergating info for these platforms.
@@ -11,17 +11,17 @@ Bspec: 67103, 77977
 Signed-off-by: Ashutosh Dixit <ashutosh.dixit@intel.com>
 Reviewed-by: Badal Nilawar <badal.nilawar@intel.com>
 Link: https://patch.msgid.link/20260818050041.448014-1-ashutosh.dixit@intel.com
-(cherry-picked from commit dcf510df4679 linux-next)
-Signed-off-by:  Pravalika Gurram <pravalika.gurram@intel.com>
+(cherry-picked from commit dcf510df467964344a0dfca6a9f7f6a5361e65af linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_gt_idle.c | 45 +++++++++++++++++++++++----------
  1 file changed, 32 insertions(+), 13 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt_idle.c b/drivers/gpu/drm/xe/xe_gt_idle.c
-index 4a2d9edb6..369fad2a4 100644
+index 7dc9873ae..c208d7563 100644
 --- a/drivers/gpu/drm/xe/xe_gt_idle.c
 +++ b/drivers/gpu/drm/xe/xe_gt_idle.c
-@@ -206,26 +206,34 @@ int xe_gt_idle_pg_print(struct xe_gt *gt, struct drm_printer *p)
+@@ -208,26 +208,34 @@ int xe_gt_idle_pg_print(struct xe_gt *gt, struct drm_printer *p)
  	/*
  	 * Media Slices
  	 *
@@ -68,7 +68,7 @@ index 4a2d9edb6..369fad2a4 100644
  	};
  
  	if (xe->info.platform == XE_PVC) {
-@@ -259,10 +267,21 @@ int xe_gt_idle_pg_print(struct xe_gt *gt, struct drm_printer *p)
+@@ -262,10 +270,21 @@ int xe_gt_idle_pg_print(struct xe_gt *gt, struct drm_printer *p)
  
  	/* Print media CPG status only if media is present */
  	if (vcs_mask || vecs_mask) {

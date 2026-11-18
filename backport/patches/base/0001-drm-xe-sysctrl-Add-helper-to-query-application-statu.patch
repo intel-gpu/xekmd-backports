@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Anoop Vijay <anoop.c.vijay@intel.com>
 Date: Fri, 4 Sep 2026 06:49:36 -0700
-Subject: [Temp] drm/xe/sysctrl: Add helper to query application status
+Subject: [PATCH] drm/xe/sysctrl: Add helper to query application status
 
 Add xe_sysctrl_check_app_status() to query the state of a System
 Controller application using get_app_status_by_id mailbox command.
@@ -13,9 +13,10 @@ wrapper to check diag firmware application readiness.
 Signed-off-by: Anoop Vijay <anoop.c.vijay@intel.com>
 Reviewed-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
 Reviewed-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
-(backported from https://patchwork.freedesktop.org/series/164471/#rev8)
-Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
-
+Signed-off-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Link: https://patch.msgid.link/20260904134935.674507-5-anoop.c.vijay@intel.com
+(cherry-picked from commit 0bae1d5438abecaf688b2df7ac30edf0482b8d90 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_sysctrl.c               | 73 +++++++++++++++++++
  drivers/gpu/drm/xe/xe_sysctrl.h               |  1 +
@@ -132,7 +133,7 @@ index 090dffb6d..8dc576796 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
-index 66e7cbcc3..c236e5377 100644
+index 43489f7fd..e98fa6877 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
 @@ -14,9 +14,11 @@

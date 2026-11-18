@@ -1,0 +1,178 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Vinay Belgaumkar <vinay.belgaumkar@intel.com>
+Date: Wed, 16 Sep 2026 12:06:14 -0700
+Subject: [PATCH] drm/xe: Poll GT for C6 before D3
+
+Ensure GT C6 state before D3 transition in runtime suspend flow.
+This avoids the scenario where GT is being accessed after D3 state
+is programmed. If the check for C6 fails, resume the device so it is
+not stuck in an intermediate state.
+
+v2: Force resume when we cancel suspend due to C6 check (Sashiko)
+v3: Abort the suspend properly when idle check fails (Sashiko)
+v4: Only check for C6 during suspend (Rodrigo). Have check in
+xe_pci_runtime_suspend() instead of xe_pci_suspend().
+v5: Don't checkfor PVC (Sashiko), rename function from_device_c6
+to _device_idle
+v6: Rename to _wait_all_c6 and move PVC check to gt_idle (Rodrigo)
+
+Cc: Badal Nilawar <badal.nilawar@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Signed-off-by: Vinay Belgaumkar <vinay.belgaumkar@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20260916190614.3047807-1-vinay.belgaumkar@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 320662381ca243a3364663e917a7447afaf618fa linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt_idle.c | 39 +++++++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_gt_idle.h |  1 +
+ drivers/gpu/drm/xe/xe_pci.c     | 13 ++++++++++-
+ drivers/gpu/drm/xe/xe_pm.c      | 18 +++++++++++++++
+ drivers/gpu/drm/xe/xe_pm.h      |  1 +
+ 5 files changed, 71 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt_idle.c b/drivers/gpu/drm/xe/xe_gt_idle.c
+index c208d7563..2eefd62f8 100644
+--- a/drivers/gpu/drm/xe/xe_gt_idle.c
++++ b/drivers/gpu/drm/xe/xe_gt_idle.c
+@@ -8,10 +8,12 @@
+ #include <drm/drm_managed.h>
+ 
+ #include <generated/xe_wa_oob.h>
++#include <linux/iopoll.h>
+ #include "xe_force_wake.h"
+ #include "xe_device.h"
+ #include "xe_gt.h"
+ #include "xe_gt_idle.h"
++#include "xe_gt_printk.h"
+ #include "xe_gt_sysfs.h"
+ #include "xe_guc_pc.h"
+ #include "regs/xe_gt_regs.h"
+@@ -451,3 +453,40 @@ int xe_gt_idle_disable_c6(struct xe_gt *gt)
+ 
+ 	return 0;
+ }
++
++static int wait_for_gt_c6_state(struct xe_gt *gt, u32 timeout_ms)
++{
++	struct xe_guc_pc *pc = &gt->uc.guc.pc;
++	enum xe_gt_idle_state state;
++
++	return poll_timeout_us(state = gt->gtidle.idle_status(pc),
++			       state == GT_IDLE_C6,
++			       20,
++			       timeout_ms * USEC_PER_MSEC,
++			       false);
++}
++
++/**
++ * xe_gt_idle_wait_for_c6 - Poll for GT C6
++ * @gt: GT object
++ * @timeout_ms: wait time in ms
++ *
++ * This function waits for GT to enter C6.
++ *
++ * Return: 0 on success, -EAGAIN otherwise
++ */
++int xe_gt_idle_wait_for_c6(struct xe_gt *gt, u32 timeout_ms)
++{
++	if (IS_SRIOV_VF(gt_to_xe(gt)))
++		return 0;
++
++	if (gt_to_xe(gt)->info.platform == XE_PVC)
++		return 0;
++
++	if (wait_for_gt_c6_state(gt, timeout_ms)) {
++		xe_gt_dbg(gt, "GT is not in C6\n");
++		return -EAGAIN;
++	}
++
++	return 0;
++}
+diff --git a/drivers/gpu/drm/xe/xe_gt_idle.h b/drivers/gpu/drm/xe/xe_gt_idle.h
+index 9c34a155e..2c8e9adf4 100644
+--- a/drivers/gpu/drm/xe/xe_gt_idle.h
++++ b/drivers/gpu/drm/xe/xe_gt_idle.h
+@@ -18,5 +18,6 @@ void xe_gt_idle_enable_pg(struct xe_gt *gt);
+ void xe_gt_idle_disable_pg(struct xe_gt *gt);
+ int xe_gt_idle_pg_print(struct xe_gt *gt, struct drm_printer *p);
+ u64 xe_gt_idle_residency_msec(struct xe_gt_idle *gtidle);
++int xe_gt_idle_wait_for_c6(struct xe_gt *gt, u32 timeout_ms);
+ 
+ #endif /* _XE_GT_IDLE_H_ */
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 1e04e8ef2..333f28593 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -1380,7 +1380,7 @@ static int xe_pci_runtime_suspend(struct device *dev)
+ {
+ 	struct pci_dev *pdev = to_pci_dev(dev);
+ 	struct xe_device *xe = pdev_to_xe_device(pdev);
+-	int err;
++	int err, ret;
+ 
+ 	/*
+ 	 * We hold an additional reference to the runtime PM to keep PF in D0
+@@ -1395,6 +1395,17 @@ static int xe_pci_runtime_suspend(struct device *dev)
+ 	if (err)
+ 		return err;
+ 
++	err = xe_pm_wait_all_c6(xe);
++	if (err) {
++		drm_dbg(&xe->drm, "Resuming - GT C6 check failed!");
++		ret = xe_pm_runtime_resume(xe);
++		if (ret) {
++			drm_err(&xe->drm, "Resume failed after suspend was canceled");
++			return ret;
++		}
++		return err;
++	}
++
+ 	pci_save_state(pdev);
+ 
+ 	if (xe->d3cold.allowed) {
+diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
+index f517bf453..4a745c3a9 100644
+--- a/drivers/gpu/drm/xe/xe_pm.c
++++ b/drivers/gpu/drm/xe/xe_pm.c
+@@ -1030,6 +1030,24 @@ void xe_pm_d3cold_allowed_toggle(struct xe_device *xe)
+ 	mutex_unlock(&xe->d3cold.lock);
+ }
+ 
++/**
++ * xe_pm_wait_all_c6() - Wait for all GTs to enter C6.
++ * @xe: xe device instance
++ *
++ * Return: 0 on success, -EAGAIN on failure
++ */
++int xe_pm_wait_all_c6(struct xe_device *xe)
++{
++	struct xe_gt *gt;
++	u8 id;
++
++	for_each_gt(gt, xe, id)
++		if (xe_gt_idle_wait_for_c6(gt, 200))
++			return -EAGAIN;
++
++	return 0;
++}
++
+ /**
+  * xe_pm_module_init() - Perform xe_pm specific module initialization.
+  *
+diff --git a/drivers/gpu/drm/xe/xe_pm.h b/drivers/gpu/drm/xe/xe_pm.h
+index 6d5ab09cb..fd8b2eab5 100644
+--- a/drivers/gpu/drm/xe/xe_pm.h
++++ b/drivers/gpu/drm/xe/xe_pm.h
+@@ -36,6 +36,7 @@ void xe_pm_d3cold_allowed_toggle(struct xe_device *xe);
+ bool xe_rpm_reclaim_safe(const struct xe_device *xe);
+ struct task_struct *xe_pm_read_callback_task(struct xe_device *xe);
+ int xe_pm_block_on_suspend(struct xe_device *xe);
++int xe_pm_wait_all_c6(struct xe_device *xe);
+ void xe_pm_might_block_on_suspend(void);
+ int xe_pm_module_init(void);
+ 
+-- 
+2.43.0
+

@@ -1,37 +1,65 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Badal Nilawar <badal.nilawar@intel.com>
-Date: Sun, 6 Sep 2026 22:56:16 +0530
-Subject: [TEMP] drm/xe/xe_ras: Report correctable errors using SIGID
+Date: Thu, 29 Oct 2026 17:07:04 +0530
+Subject: [PATCH] drm/xe/xe_ras: Report correctable errors using SIGID
 
 Use xe_log_* helper to report correctable errors.
 
-Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+Example:
+	xe 0000:03:00.0: [drm] *ERROR* SIGID=203 CORRECTED
+(010200180000000100000000) [Hardware Error]: CORE_COMPUTE: error detected
+
+Assisted-by: LLM
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
 Cc: Raag Jadav <raag.jadav@intel.com>
-(backported from https://patchwork.freedesktop.org/series/169692/#rev3)
+Link: https://patch.msgid.link/20261029113653.1860286-22-badal.nilawar@intel.com
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+(cherry-picked from commit de211a22d692904ee5f3983506072d31ca4c9eec linux-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
- drivers/gpu/drm/xe/xe_ras.c | 7 +++++--
- 1 file changed, 5 insertions(+), 2 deletions(-)
+ drivers/gpu/drm/xe/xe_ras.c | 15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
-index 4d4a66649..08913ded6 100644
+index eca80cf21..cdcbf3b14 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
-@@ -463,8 +463,11 @@ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
- 		if (!xe_ras_counter_is_valid(xe, &errors[id]))
+@@ -3,6 +3,8 @@
+  * Copyright © 2026 Intel Corporation
+  */
+ 
++#include <linux/bitfield.h>
++
+ #include "xe_assert.h"
+ #include "xe_bo.h"
+ #include "xe_configfs.h"
+@@ -225,6 +227,12 @@ static int ras_status_to_errno(u32 status)
+ 	}
+ }
+ 
++static u16 ras_comp_to_log_comp(u8 component)
++{
++	return FIELD_PREP(XE_LOG_COMPONENT_CLASS_MASK, XE_LOG_COMPONENT_CLASS_HARDWARE) |
++	       FIELD_PREP(XE_LOG_COMPONENT_TYPE_MASK, component);
++}
++
+ static inline const char *sev_to_str(u8 severity)
+ {
+ 	if (severity >= XE_RAS_SEV_MAX)
+@@ -716,8 +724,11 @@ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
+ 		if (!ras_counter_is_valid(xe, &errors[id]))
  			continue;
  
 -		xe_warn(xe, "[RAS]: %s %s detected\n",
 -			comp_to_str(component), sev_to_str(severity));
 +		xe_log_from(xe, ras_sev_to_cper_sev(severity),
 +			    ras_comp_to_hw_sigid(component),
-+			    component,
++			    ras_comp_to_log_comp(component),
 +			    &errors[id], sizeof(errors[id]),
 +			    "error detected\n");
  
  		/* Send event once per component */
  		if (sent & BIT(component))
----
 -- 
 2.43.0
 

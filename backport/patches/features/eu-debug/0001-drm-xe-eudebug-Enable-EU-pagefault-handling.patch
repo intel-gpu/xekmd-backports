@@ -62,18 +62,18 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  drivers/gpu/drm/xe/xe_eudebug_pagefault.c | 170 +++++++++++++++++++++-
  drivers/gpu/drm/xe/xe_eudebug_pagefault.h |  21 ++-
  drivers/gpu/drm/xe/xe_eudebug_types.h     |   5 +
- drivers/gpu/drm/xe/xe_gt.c                |   2 +
- drivers/gpu/drm/xe/xe_gt_types.h          |  12 ++
+ drivers/gpu/drm/xe/xe_gt.c                |   3 +
+ drivers/gpu/drm/xe/xe_gt_types.h          |  11 ++
  drivers/gpu/drm/xe/xe_guc_pagefault.c     |  10 +-
  drivers/gpu/drm/xe/xe_pagefault.c         | 104 ++++++++++++-
  drivers/gpu/drm/xe/xe_pagefault_types.h   |   4 +-
  10 files changed, 319 insertions(+), 20 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index e261fd915..42bde484f 100644
+index 0fd65b87c..f44417e32 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -660,6 +660,9 @@ struct xe_device {
+@@ -631,6 +631,9 @@ struct xe_device {
  
  		/** @eudebug.attention_scan: attention scan worker */
  		struct delayed_work attention_scan;
@@ -84,7 +84,7 @@ index e261fd915..42bde484f 100644
  #endif
  
 diff --git a/drivers/gpu/drm/xe/xe_eudebug.c b/drivers/gpu/drm/xe/xe_eudebug.c
-index d9cf00d97..66ac30fef 100644
+index 048afd4ff..f1c956e12 100644
 --- a/drivers/gpu/drm/xe/xe_eudebug.c
 +++ b/drivers/gpu/drm/xe/xe_eudebug.c
 @@ -2427,6 +2427,14 @@ void xe_eudebug_init(struct xe_device *xe)
@@ -215,7 +215,7 @@ index 9db368541..4a2b68fc6 100644
  		INIT_LIST_HEAD(&epf->link);
  		goto out_set_epf;
  	}
-@@ -342,7 +386,18 @@ out_set_epf:
+@@ -342,7 +386,18 @@ xe_eudebug_pagefault_start(struct xe_vm *vm, struct xe_pagefault *pf)
  	epf->fault.type_level = pf->consumer.fault_type_level;
  	epf->fault.access_type = pf->consumer.access_type;
  
@@ -441,7 +441,7 @@ index 61fc3342f..b4e6bc12d 100644
  
  #endif /* _XE_EUDEBUG_TYPES_H_ */
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index 478e04703..a25c863a1 100644
+index 3ef4b8380..63e5d2f07 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
 @@ -24,6 +24,7 @@
@@ -452,23 +452,23 @@ index 478e04703..a25c863a1 100644
  #include "xe_exec_queue.h"
  #include "xe_execlist.h"
  #include "xe_force_wake.h"
-@@ -723,6 +724,7 @@ int xe_gt_init(struct xe_gt *gt)
+@@ -745,6 +746,8 @@ int xe_gt_init(struct xe_gt *gt)
+ 	int err;
  	int i;
  
- 	INIT_WORK(&gt->reset.worker, gt_reset_worker);
 +	xe_eudebug_pagefault_gt_init(gt);
- 
++
  	for (i = 0; i < XE_ENGINE_CLASS_MAX; ++i) {
  		gt->ring_ops[i] = xe_ring_ops_get(gt, i);
+ 		xe_hw_fence_irq_init(&gt->fence_irq[i]);
 diff --git a/drivers/gpu/drm/xe/xe_gt_types.h b/drivers/gpu/drm/xe/xe_gt_types.h
-index 628911346..28158c9e9 100644
+index c00a7c171..ee2b6bf70 100644
 --- a/drivers/gpu/drm/xe/xe_gt_types.h
 +++ b/drivers/gpu/drm/xe/xe_gt_types.h
-@@ -419,6 +419,18 @@ struct xe_gt {
- 
+@@ -426,6 +426,17 @@ struct xe_gt {
  	/** @eu_stall: EU stall counters subsystem per gt info */
  	struct xe_eu_stall_gt *eu_stall;
-+
+ 
 +#if IS_ENABLED(CONFIG_DRM_XE_EUDEBUG)
 +	/**
 +	 * @eudebug: Worker to finalize eudebug pagefault on gt reset.
@@ -480,9 +480,9 @@ index 628911346..28158c9e9 100644
 +		struct work_struct gt_reset_work;
 +	} eudebug;
 +#endif
+ 	/** @initialized: GT is initialized */
+ 	bool initialized;
  };
- 
- #endif
 diff --git a/drivers/gpu/drm/xe/xe_guc_pagefault.c b/drivers/gpu/drm/xe/xe_guc_pagefault.c
 index e65e4962a..c4d75c489 100644
 --- a/drivers/gpu/drm/xe/xe_guc_pagefault.c
@@ -529,7 +529,7 @@ index e65e4962a..c4d75c489 100644
  
  static void xe_guc_pagefault_print(struct xe_pagefault *pf,
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index ba6c3f381..b0b6aa58e 100644
+index 3554fac01..4fff5adb8 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
 @@ -10,6 +10,7 @@
@@ -649,7 +649,7 @@ index ba6c3f381..b0b6aa58e 100644
  
  unlock_vm:
  	up_read(&vm->lock);
-@@ -620,7 +704,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -621,7 +705,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  
  	while (xe_pagefault_queue_pop(pf_queue, &pf, pf_work->id)) {
  		const struct xe_pagefault_ops *ops = pf->producer.ops;
@@ -658,7 +658,7 @@ index ba6c3f381..b0b6aa58e 100644
  		struct xe_gt *gt = pf->gt;
  		u32 asid = FIELD_GET(XE_PAGEFAULT_ASID_MASK, pf->consumer.id);
  		int err = 0;
-@@ -629,6 +713,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -631,6 +715,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  		/* Last fault same address, ack immediately */
  		if (xe_pagefault_match(pf, cache_start, cache_end, cache_asid)) {
  			xe_gt_stats_incr(gt, XE_GT_STATS_ID_LAST_PAGEFAULT_COUNT, 1);
@@ -666,7 +666,7 @@ index ba6c3f381..b0b6aa58e 100644
  			goto ack_fault;
  		}
  
-@@ -653,6 +738,12 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -656,6 +741,12 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  		}
  
  ack_fault:
@@ -677,9 +677,9 @@ index ba6c3f381..b0b6aa58e 100644
 +		private = pf->producer.private;
 +
  		xe_assert(xe, pf->consumer.alloc_state ==
- 			  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
+ 				XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
  		xe_assert(xe, pf == pf_work->cache.pf);
-@@ -692,7 +783,7 @@ ack_fault:
+@@ -695,7 +786,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  
  			spin_unlock_irq(&pf_queue->lock);
  		}
@@ -688,7 +688,7 @@ index ba6c3f381..b0b6aa58e 100644
  
  		if (time_after(jiffies, threshold)) {
  			queue_work(xe->usm.pagefault_wq, w);
-@@ -852,6 +943,7 @@ static void xe_pagefault_queue_reset(struct xe_device *xe, struct xe_gt *gt,
+@@ -855,6 +946,7 @@ static void xe_pagefault_queue_reset(struct xe_device *xe, struct xe_gt *gt,
  void xe_pagefault_reset(struct xe_device *xe, struct xe_gt *gt)
  {
  	xe_pagefault_queue_reset(xe, gt, &xe->usm.pf_queue);

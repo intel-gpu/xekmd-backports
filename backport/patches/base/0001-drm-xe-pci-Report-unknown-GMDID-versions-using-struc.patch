@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Date: Mon, 12 Oct 2026 17:55:18 +0530
+Subject: [PATCH] drm/xe/pci: Report unknown GMDID versions using structured
+ xe_log API
+
+Replace drm_err() with xe_log_err() using the REGS component tag when
+hardware reports unrecognized graphics or media IP versions during
+GMDID handling.
+
+Signed-off-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20261012122522.2307625-10-dnyaneshwar.bhadane@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit f18fbf00be0fe23b8d37e32555d79b0c04c37bac linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 333f28593..cda9a16d4 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -718,8 +718,9 @@ static int handle_gmdid(struct xe_device *xe,
+ 
+ 	*graphics_ip = find_graphics_ip(ver);
+ 	if (!*graphics_ip) {
+-		drm_err(&xe->drm, "Hardware reports unknown graphics version %u.%02u\n",
+-			ver / 100, ver % 100);
++		xe_log_err(xe, REGS, -EINVAL,
++			   "Hardware reports unknown graphics version %u.%02u\n",
++			   ver / 100, ver % 100);
+ 	}
+ 
+ 	ret = read_gmdid(xe, GMDID_MEDIA, &ver, media_revid);
+@@ -732,8 +733,9 @@ static int handle_gmdid(struct xe_device *xe,
+ 
+ 	*media_ip = find_media_ip(ver);
+ 	if (!*media_ip) {
+-		drm_err(&xe->drm, "Hardware reports unknown media version %u.%02u\n",
+-			ver / 100, ver % 100);
++		xe_log_err(xe, REGS, -EINVAL,
++			   "Hardware reports unknown media version %u.%02u\n",
++			   ver / 100, ver % 100);
+ 	}
+ 
+ 	return 0;
+-- 
+2.43.0
+

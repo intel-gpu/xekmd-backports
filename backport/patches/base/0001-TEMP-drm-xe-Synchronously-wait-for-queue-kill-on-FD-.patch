@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Daniel Charles <daniel.charles@intel.com>
 Date: Fri, 16 Oct 2026 12:59:04 -0700
-Subject: [TEMP]: drm/xe: Synchronously wait for queue kill on FD
- close
+Subject: [PATCH] [TEMP] drm/xe: Synchronously wait for queue kill on FD close
 
 The early KILL message disables GuC scheduling outside the serialized
 TDR path, but xe_file_close() does not wait for it to complete before
@@ -56,10 +55,10 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  8 files changed, 77 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index dee4be056..163faed00 100644
+index 9d124800d..7856f8291 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -190,8 +190,13 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -192,8 +192,13 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  		if (q->vm && q->hwe->hw_engine_group)
  			xe_hw_engine_group_del_exec_queue(q->hwe->hw_engine_group, q);
  		xe_exec_queue_kill(q);
@@ -74,10 +73,10 @@ index dee4be056..163faed00 100644
  		xe_vm_close_and_put(vm);
  
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 9a6ebc8b3..55ed8b868 100644
+index b56da21cc..6d6453f2d 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -1771,6 +1771,19 @@ void xe_exec_queue_kill(struct xe_exec_queue *q)
+@@ -1769,6 +1769,19 @@ void xe_exec_queue_kill(struct xe_exec_queue *q)
  	xe_vm_remove_compute_exec_queue(q->vm, q);
  }
  
@@ -110,10 +109,10 @@ index fb090704d..a8e1bdaa3 100644
  int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
  			       struct drm_file *file);
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index fea82e17f..69b89f07e 100644
+index 1079191aa..25d8d16d2 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-@@ -285,6 +285,8 @@ struct xe_exec_queue_ops {
+@@ -310,6 +310,8 @@ struct xe_exec_queue_ops {
  	int (*init)(struct xe_exec_queue *q);
  	/** @kill: Kill inflight submissions for backend */
  	void (*kill)(struct xe_exec_queue *q);
@@ -123,10 +122,10 @@ index fea82e17f..69b89f07e 100644
  	void (*fini)(struct xe_exec_queue *q);
  	/**
 diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
-index 0cd9d77f3..e3a956853 100644
+index 2a5f2064a..a1bea4ac1 100644
 --- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
 +++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
-@@ -863,6 +863,7 @@ static void vf_start_migration_recovery(struct xe_gt *gt)
+@@ -911,6 +911,7 @@ static void vf_start_migration_recovery(struct xe_gt *gt)
  		smp_wmb();	/* Ensure above writes visible before wake */
  
  		xe_guc_ct_wake_waiters(&gt->uc.guc.ct);
@@ -135,10 +134,10 @@ index 0cd9d77f3..e3a956853 100644
  		started = queue_work(gt->ordered_wq, &gt->sriov.vf.migration.worker);
  		xe_gt_sriov_info(gt, "VF migration recovery %s\n", started ?
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index fe1a48265..2f5b98218 100644
+index 5a87683cd..9265a872d 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -314,6 +314,7 @@ int xe_guc_submit_init(struct xe_guc *guc, unsigned int num_ids)
+@@ -315,6 +315,7 @@ int xe_guc_submit_init(struct xe_guc *guc, unsigned int num_ids)
  	gt->exec_queue_ops = &guc_exec_queue_ops;
  
  	xa_init(&guc->submission_state.exec_queue_lookup);
@@ -146,7 +145,7 @@ index fe1a48265..2f5b98218 100644
  
  	primelockdep(guc);
  
-@@ -540,6 +541,26 @@ static bool vf_recovery(struct xe_guc *guc)
+@@ -550,6 +551,26 @@ static bool vf_recovery(struct xe_guc *guc)
  	return xe_gt_recovery_pending(guc_to_gt(guc));
  }
  
@@ -173,7 +172,7 @@ index fe1a48265..2f5b98218 100644
  static void xe_guc_exec_queue_trigger_cleanup(struct xe_exec_queue *q)
  {
  	struct xe_guc *guc = exec_queue_to_guc(q);
-@@ -1358,6 +1379,7 @@ void xe_guc_submit_wedge(struct xe_guc *guc)
+@@ -1413,6 +1434,7 @@ void xe_guc_submit_wedge(struct xe_guc *guc)
  			if (xe_exec_queue_get_unless_zero(q))
  				set_exec_queue_wedged(q);
  		mutex_unlock(&guc->submission_state.lock);
@@ -181,7 +180,7 @@ index fe1a48265..2f5b98218 100644
  	} else {
  		/* Forcefully kill any remaining exec queues, signal fences */
  		guc_submit_reset_prepare(guc);
-@@ -2175,6 +2197,28 @@ static void guc_exec_queue_kill(struct xe_exec_queue *q)
+@@ -2279,6 +2301,28 @@ static void guc_exec_queue_kill(struct xe_exec_queue *q)
  	xe_guc_exec_queue_trigger_cleanup(q);
  }
  
@@ -210,7 +209,7 @@ index fe1a48265..2f5b98218 100644
  static void guc_exec_queue_add_msg(struct xe_exec_queue *q, struct xe_sched_msg *msg,
  				   u32 opcode)
  {
-@@ -2429,6 +2473,7 @@ static bool guc_exec_queue_active(struct xe_exec_queue *q)
+@@ -2756,6 +2800,7 @@ static u64 guc_exec_queue_reset_status(struct xe_exec_queue *q)
  static const struct xe_exec_queue_ops guc_exec_queue_ops = {
  	.init = guc_exec_queue_init,
  	.kill = guc_exec_queue_kill,
@@ -218,7 +217,7 @@ index fe1a48265..2f5b98218 100644
  	.fini = guc_exec_queue_fini,
  	.destroy = guc_exec_queue_destroy,
  	.set_priority = guc_exec_queue_set_priority,
-@@ -2508,6 +2553,7 @@ static int guc_submit_reset_prepare(struct xe_guc *guc)
+@@ -2837,6 +2882,7 @@ static int guc_submit_reset_prepare(struct xe_guc *guc)
  	ret = atomic_fetch_or(1, &guc->submission_state.stopped);
  	smp_wmb();
  	wake_up_all(&guc->ct.wq);
@@ -226,18 +225,18 @@ index fe1a48265..2f5b98218 100644
  
  	return ret;
  }
-@@ -2981,6 +3027,7 @@ static void handle_sched_done(struct xe_guc *guc, struct xe_exec_queue *q,
+@@ -3371,6 +3417,7 @@ static void handle_sched_done(struct xe_guc *guc, struct xe_exec_queue *q,
  		clear_exec_queue_pending_enable(q);
  		smp_wmb();
  		wake_up_all(&guc->ct.wq);
 +		guc_wake_kill_waiters(guc);
  	} else {
- 		xe_gt_assert(guc_to_gt(guc), runnable_state == 0);
- 		xe_gt_assert(guc_to_gt(guc), exec_queue_pending_disable(q));
-@@ -3009,6 +3056,7 @@ static void handle_sched_done(struct xe_guc *guc, struct xe_exec_queue *q,
- 				clear_exec_queue_pending_disable(q);
- 			}
- 		}
+ 		bool was_pending;
+ 
+@@ -3416,6 +3463,7 @@ static void handle_sched_done(struct xe_guc *guc, struct xe_exec_queue *q,
+ 		 */
+ 		smp_wmb();
+ 		wake_up_all(&guc->ct.wq);
 +		guc_wake_kill_waiters(guc);
  	}
  }
@@ -255,7 +254,7 @@ index e7a24f8ec..25e323598 100644
  int xe_guc_read_stopped(struct xe_guc *guc);
  int xe_guc_sched_done_handler(struct xe_guc *guc, u32 *msg, u32 len);
 diff --git a/drivers/gpu/drm/xe/xe_guc_types.h b/drivers/gpu/drm/xe/xe_guc_types.h
-index 31a2acb63..7e6a41df0 100644
+index 3dbcb1331..3f3138d67 100644
 --- a/drivers/gpu/drm/xe/xe_guc_types.h
 +++ b/drivers/gpu/drm/xe/xe_guc_types.h
 @@ -93,6 +93,12 @@ struct xe_guc {

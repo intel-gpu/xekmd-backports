@@ -108,8 +108,12 @@ XE_DKMS_MK_COPYRIGHT=$(BACKPORT_DIR)/scripts/backport-mkdebcopyright
 XE_RPM_MK_SPEC=$(BACKPORT_DIR)/scripts/backport-mkdrmdkmsspec
 XE_RPM_MK_DKMS=$(BACKPORT_DIR)/scripts/backport-mkdrmdkmsconf
 
-.PHONY: xe-dkms-deb-pkg
-xe-dkms-deb-pkg: clean
+.PHONY: xe-dkms-deb-pkg xe-dkms-deb-pkg-build
+xe-dkms-deb-pkg:
+	./oot-build.sh configure "$(KLIB_BUILD)"
+	$(MAKE) xe-dkms-deb-pkg-build
+
+xe-dkms-deb-pkg-build: clean
 	$(CONFIG_SHELL) $(XE_DKMS_MK_CONTROL) -n $(XE_PKG_NAME) -v $(XE_PKG_VERSION) -r $(XE_PKG_RELEASE) -z dkms > debian/control
 	$(CONFIG_SHELL) $(XE_DKMS_MK_RULES) -n $(XE_PKG_NAME) -v $(XE_PKG_VERSION) -r $(XE_PKG_RELEASE) -z dkms > debian/rules
 	cp debian/changelog.in debian/changelog
@@ -133,8 +137,12 @@ xe-dkms-deb-pkg: clean
 	+dch -l "+i${XE_PKG_RELEASE}-" -m "build ${XE_PKG_RELEASE}"
 	+dpkg-buildpackage -j`nproc --all` -us -uc -b -rfakeroot
 
-.PHONY: xe-dkms-rpm-pkg
-xe-dkms-rpm-pkg: clean
+.PHONY: xe-dkms-rpm-pkg xe-dkms-rpm-pkg-build
+xe-dkms-rpm-pkg:
+	./oot-build.sh configure "$(KLIB_BUILD)"
+	$(MAKE) xe-dkms-rpm-pkg-build
+
+xe-dkms-rpm-pkg-build: clean
 	mkdir -p rpm
 	mkdir -p ~/rpmbuild/SOURCES
 	@DOLLAR_SIGN@(CONFIG_SHELL) @DOLLAR_SIGN@(XE_RPM_MK_SPEC) -n @DOLLAR_SIGN@(XE_PKG_NAME) -v @DOLLAR_SIGN@(XE_RPM_PKG_VERSION) -r @DOLLAR_SIGN@(XE_RPM_PKG_RELEASE) @DOLLAR_SIGN@(if @DOLLAR_SIGN@(DISTRO_SUFFIX),-d @DOLLAR_SIGN@(DISTRO_SUFFIX)) -z dkms > rpm/@DOLLAR_SIGN@(XE_PKG_NAME).spec
@@ -203,8 +211,8 @@ help:
 	@echo "    mrproper            - Deep clean all generated files (debian, rpm, config)"
 	@echo ""
 	@echo "  Packaging targets:"
-	@echo "    xe-dkms-deb-pkg     - Build Intel XE DKMS Debian package (.deb)"
-	@echo "    xe-dkms-rpm-pkg     - Build Intel XE DKMS RPM package (.rpm)"
+	@echo "    xe-dkms-deb-pkg     - Configure and build Intel XE DKMS Debian package (.deb)"
+	@echo "    xe-dkms-rpm-pkg     - Configure and build Intel XE DKMS RPM package (.rpm)"
 	@echo ""
 	@echo "  Kernel config targets:"
 	@echo "    olddefconfig        - Update .config using default symbol values"

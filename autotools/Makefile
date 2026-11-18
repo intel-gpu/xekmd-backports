@@ -86,8 +86,12 @@ show-version:
 	@echo "Package Version (DEB) : $(XE_DEB_PKG_VERSION)"
 	@echo "Expected DEB Name     : $(XE_PKG_NAME)_$(XE_DEB_PKG_VERSION)+i$(XE_DEB_PKG_RELEASE)-1_all.deb"
 
-.PHONY: xe-dkms-rpm-pkg
-xe-dkms-rpm-pkg: clean
+.PHONY: xe-dkms-rpm-pkg xe-dkms-rpm-pkg-build
+xe-dkms-rpm-pkg:
+	./oot-build.sh configure "$(KLIB_BUILD)"
+	$(MAKE) xe-dkms-rpm-pkg-build
+
+xe-dkms-rpm-pkg-build: clean
 	@echo "========================================"
 	@echo "Building DKMS RPM package"
 	@echo "Target Kernel: $(TARGET_KERN_VER)"
@@ -104,8 +108,12 @@ xe-dkms-rpm-pkg: clean
 	cp -r src m4 debian Makefile* configure* aclocal.m4 AUTHORS ChangeLog COPYING INSTALL NEWS README oot-build.sh ~/rpmbuild/SOURCES/ 2>/dev/null || true
 	+rpmbuild -bb --define "_sourcedir $(PWD)" rpm/$(XE_PKG_NAME).spec
 
-.PHONY: xe-dkms-deb-pkg
-xe-dkms-deb-pkg: clean
+.PHONY: xe-dkms-deb-pkg xe-dkms-deb-pkg-build
+xe-dkms-deb-pkg:
+	./oot-build.sh configure "$(KLIB_BUILD)"
+	$(MAKE) xe-dkms-deb-pkg-build
+
+xe-dkms-deb-pkg-build: clean
 	@echo "========================================"
 	@echo "Building DKMS DEB package"
 	@echo "Target Kernel: $(TARGET_KERN_VER)"

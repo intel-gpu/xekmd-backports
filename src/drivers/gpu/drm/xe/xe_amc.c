@@ -196,7 +196,7 @@ out_reassert_interrupt:
 
 	switch (alert_reason) {
 	case AMC_ALERT_FW_DOWNLOAD:
-	case AMC_ALERT_THERMAL_TRIP:
+case AMC_ALERT_THERMAL_TRIP:
 	case AMC_ALERT_OOB_REQUEST:
 	case AMC_ALERT_OOB_RESET:
 	case AMC_ALERT_CATERR: {
@@ -226,7 +226,7 @@ int xe_amc_init(struct xe_i2c *i2c)
 	struct xe_amc *amc;
 	int ret;
 
-	amc = kzalloc(sizeof(*amc), GFP_KERNEL);
+	amc = kzalloc_obj(*amc);
 	if (!amc)
 		return -ENOMEM;
 

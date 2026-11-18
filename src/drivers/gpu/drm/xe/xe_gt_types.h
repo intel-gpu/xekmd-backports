@@ -154,7 +154,7 @@ struct xe_gt {
 		/** @info.gmdid: raw GMD_ID value from hardware */
 		u32 gmdid;
 		/**
-		 * @multi_queue_engine_class_mask: Bitmask of engine classes with
+		 * @info.multi_queue_engine_class_mask: Bitmask of engine classes with
 		 * multi queue support enabled.
 		 */
 		u16 multi_queue_engine_class_mask;
@@ -264,10 +264,16 @@ struct xe_gt {
 		 */
 		struct xe_sa_manager *bb_pool;
 		/**
-		 * @usm.reserved_bcs_instance: reserved BCS instance used for USM
-		 * operations (e.g. migrations, fixing page tables)
+		 * @usm.paging_hwe0: The first designated paging engine.
+		 * This is some reserved BCS instance used for USM operations
+		 * (e.g. migrations, fixing page tables)
 		 */
-		u16 reserved_bcs_instance;
+		struct xe_hw_engine *paging_hwe0;
+		/**
+		 * @usm.paging_logical_mask: logical mask of paging engines.
+		 * Should be densely populated.
+		 */
+		u32 paging_logical_mask;
 	} usm;
 
 	/** @eudebug: EU Debugger pagefault handling support */
@@ -301,6 +307,10 @@ struct xe_gt {
 			/** @eudebug.notify_queue.worker: to send eudebug events */
 			struct work_struct worker;
 		} notify_queue;
+		/**
+		 * @eudebug.gt_reset_work: eudebug reset work for that gt.
+		 */
+		struct work_struct gt_reset_work;
 	} eudebug;
 
 	/** @ordered_wq: used to serialize GT resets and TDRs */
@@ -429,7 +439,7 @@ struct xe_gt {
 	/** @user_engines: engines present in GT and available to userspace */
 	struct {
 		/**
-		 * @user_engines.mask: like @info->engine_mask, but take in
+		 * @user_engines.mask: like @info.engine_mask, but take in
 		 * consideration only engines available to userspace
 		 */
 		u64 mask;

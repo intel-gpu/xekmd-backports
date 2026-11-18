@@ -8,6 +8,8 @@
 #include <linux/delay.h>
 #include <linux/minmax.h>
 
+#include <kunit/visibility.h>
+
 #include <drm/drm_managed.h>
 #include <uapi/drm/xe_drm.h>
 
@@ -24,6 +26,7 @@
 #include "xe_device.h"
 #include "prelim/xe_eudebug.h"
 #include "xe_eu_stall.h"
+#include "prelim/xe_eudebug_pagefault.h"
 #include "xe_exec_queue.h"
 #include "xe_execlist.h"
 #include "xe_force_wake.h"
@@ -398,10 +401,7 @@ int xe_gt_record_default_lrcs(struct xe_gt *gt)
 		if (gt->default_lrc[hwe->class])
 			continue;
 
-		xe_reg_sr_init(&hwe->reg_lrc, hwe->name, xe);
-		xe_wa_process_lrc(hwe);
-		xe_hw_engine_setup_default_lrc_state(hwe);
-		xe_tuning_process_lrc(hwe);
+		xe_hw_engine_setup_reg_lrc(hwe);
 
 		default_lrc = drmm_kzalloc(&xe->drm,
 					   xe_gt_lrc_size(gt, hwe->class),
@@ -726,6 +726,7 @@ int xe_gt_init(struct xe_gt *gt)
 	int i;
 
 	INIT_WORK(&gt->reset.worker, gt_reset_worker);
+	prelim_xe_eudebug_pagefault_gt_init(gt);
 
 	for (i = 0; i < XE_ENGINE_CLASS_MAX; ++i) {
 		gt->ring_ops[i] = xe_ring_ops_get(gt, i);
@@ -802,6 +803,7 @@ void xe_gt_mmio_init(struct xe_gt *gt)
 	if (IS_SRIOV_VF(xe))
 		gt->mmio.sriov_vf_gt = gt;
 }
+EXPORT_SYMBOL_IF_KUNIT(xe_gt_mmio_init);
 
 void xe_gt_record_user_engines(struct xe_gt *gt)
 {
@@ -1050,7 +1052,6 @@ void xe_gt_reset_async(struct xe_gt *gt)
 
 void xe_gt_suspend_prepare(struct xe_gt *gt)
 {
-	CLASS(xe_force_wake, fw_ref)(gt_to_fw(gt), XE_FORCEWAKE_ALL);
 	xe_uc_suspend_prepare(&gt->uc);
 }
 

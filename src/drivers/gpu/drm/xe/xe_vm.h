@@ -261,6 +261,9 @@ struct dma_fence *xe_vm_range_rebind(struct xe_vm *vm,
 				     u8 tile_mask);
 struct dma_fence *xe_vm_range_unbind(struct xe_vm *vm,
 				     struct xe_svm_range *range);
+struct dma_fence *xe_vma_unbind(struct xe_vm *vm,
+				struct xe_vma *vma,
+				u8 tile_mask);
 
 #ifdef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
 int xe_vm_range_tilemask_tlb_inval(struct xe_vm *vm, u64 start,
@@ -302,6 +305,8 @@ int xe_vm_lock_vma(struct drm_exec *exec, struct xe_vma *vma);
 
 int xe_vm_validate_rebind(struct xe_vm *vm, struct drm_exec *exec,
 			  unsigned int num_fences);
+
+void xe_vm_bump_lru(struct xe_vm *vm, struct drm_exec *exec);
 
 struct dma_fence *xe_vm_bind_kernel_bo(struct xe_vm *vm, struct xe_bo *bo,
 				       struct xe_exec_queue *q, u64 addr,
@@ -455,5 +460,15 @@ static inline struct drm_exec *xe_vm_validation_exec(struct xe_vm *vm)
 	((READ_ONCE(tile_present) & ~READ_ONCE(tile_invalidated)) & BIT((tile)->id))
 
 void xe_vma_mem_attr_copy(struct xe_vma_mem_attr *to, struct xe_vma_mem_attr *from);
+
+int xe_vm_insert_vma(struct xe_vm *vm, struct xe_vma *vma);
 struct xe_vma *xe_vm_create_null_vma(struct xe_vm *vm, u64 addr);
+void xe_vm_prep_vma_destroy(struct xe_vm *vm, struct xe_vma *vma,
+			    bool post_commit);
+void xe_vm_destroy_vma(struct xe_vma *vma);
+void xe_vma_destroy(struct xe_vma *vma, struct dma_fence *fence);
+
+struct xe_vma *xe_vm_svm_vma_subtract(struct xe_vm *vm, struct xe_vma *vma, u64 sub_start,
+				      u64 sub_end);
+
 #endif

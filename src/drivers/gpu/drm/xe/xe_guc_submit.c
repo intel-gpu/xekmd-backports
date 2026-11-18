@@ -455,44 +455,40 @@ void xe_guc_submit_disable(struct xe_guc *guc)
 	guc->submission_state.enabled = false;
 }
 
-static void __release_guc_id(struct xe_guc *guc, struct xe_exec_queue *q, u32 xa_count)
+static void __release_guc_id(struct xe_guc *guc, struct xe_exec_queue *q,
+			     int count)
 {
 	int i;
 
-	lockdep_assert_held(&guc->submission_state.lock);
+	mutex_lock(&guc->submission_state.lock);
 
-	for (i = 0; i < xa_count; ++i)
-		xa_erase(&guc->submission_state.exec_queue_lookup, q->guc->id + i);
+	for (i = 0; i < count; ++i)
+		xa_erase(&guc->submission_state.exec_queue_lookup,
+			 q->guc->id + i);
 
 	xe_guc_id_mgr_release_locked(&guc->submission_state.idm,
 				     q->guc->id, q->width);
 
+	mutex_unlock(&guc->submission_state.lock);
 }
 
 static int alloc_guc_id(struct xe_guc *guc, struct xe_exec_queue *q)
 {
-	int ret;
-	int i;
+	int ret, i;
 
-	/*
-	 * Must use GFP_NOWAIT as this lock is in the dma fence signalling path,
-	 * worse case user gets -ENOMEM on engine create and has to try again.
-	 *
-	 * FIXME: Have caller pre-alloc or post-alloc /w GFP_KERNEL to prevent
-	 * failure.
-	 */
-	lockdep_assert_held(&guc->submission_state.lock);
-
+	mutex_lock(&guc->submission_state.lock);
 	ret = xe_guc_id_mgr_reserve_locked(&guc->submission_state.idm,
 					   q->width);
+	mutex_unlock(&guc->submission_state.lock);
 	if (ret < 0)
 		return ret;
 
 	q->guc->id = ret;
 
+	/* Reserve empty slots. */
 	for (i = 0; i < q->width; ++i) {
-		ret = xa_err(xa_store(&guc->submission_state.exec_queue_lookup,
-				      q->guc->id + i, q, GFP_NOWAIT));
+		ret = xa_insert(&guc->submission_state.exec_queue_lookup,
+				 q->guc->id + i, NULL, GFP_KERNEL);
 		if (ret)
 			goto err_release;
 	}
@@ -505,11 +501,24 @@ err_release:
 	return ret;
 }
 
+static void publish_guc_id(struct xe_guc *guc, struct xe_exec_queue *q)
+{
+	int i;
+
+	lockdep_assert_held(&guc->submission_state.lock);
+
+	for (i = 0; i < q->width; ++i) {
+		void *old;
+
+		old = xa_store(&guc->submission_state.exec_queue_lookup,
+			       q->guc->id + i, q, GFP_NOWAIT);
+		XE_WARN_ON(old || xa_is_err(old));
+	}
+}
+
 static void release_guc_id(struct xe_guc *guc, struct xe_exec_queue *q)
 {
-	mutex_lock(&guc->submission_state.lock);
 	__release_guc_id(guc, q, q->width);
-	mutex_unlock(&guc->submission_state.lock);
 }
 
 struct exec_queue_policy {
@@ -917,10 +926,27 @@ static void xe_guc_exec_queue_group_cgp_sync(struct xe_guc *guc,
 	xe_guc_ct_send(&guc->ct, action, len, G2H_LEN_DW_MULTI_QUEUE_CONTEXT, 1);
 }
 
-static void __register_exec_queue_group(struct xe_guc *guc,
-					struct xe_exec_queue *q,
+static void guc_exec_queue_send_cgp_sync(struct xe_exec_queue *q)
+{
+#define MAX_MULTI_QUEUE_CGP_SYNC_SIZE	(2)
+	struct xe_guc *guc = exec_queue_to_guc(q);
+	struct xe_exec_queue_group *group = q->multi_queue.group;
+	u32 action[MAX_MULTI_QUEUE_CGP_SYNC_SIZE];
+	int len = 0;
+
+	action[len++] = XE_GUC_ACTION_MULTI_QUEUE_CONTEXT_CGP_SYNC;
+	action[len++] = group->primary->guc->id;
+
+	xe_gt_assert(guc_to_gt(guc), len <= MAX_MULTI_QUEUE_CGP_SYNC_SIZE);
+#undef MAX_MULTI_QUEUE_CGP_SYNC_SIZE
+
+	xe_guc_exec_queue_group_cgp_sync(guc, q, action, len);
+}
+
+static void __register_exec_queue_group(struct xe_exec_queue *q,
 					struct guc_ctxt_registration_info *info)
 {
+	struct xe_guc *guc = exec_queue_to_guc(q);
 #define MAX_MULTI_QUEUE_REG_SIZE	(8)
 	u32 action[MAX_MULTI_QUEUE_REG_SIZE];
 	int len = 0;
@@ -939,29 +965,6 @@ static void __register_exec_queue_group(struct xe_guc *guc,
 
 	/*
 	 * The above XE_GUC_ACTION_REGISTER_CONTEXT_MULTI_QUEUE do expect a
-	 * XE_GUC_ACTION_NOTIFY_MULTI_QUEUE_CONTEXT_CGP_SYNC_DONE response
-	 * from guc.
-	 */
-	xe_guc_exec_queue_group_cgp_sync(guc, q, action, len);
-}
-
-static void xe_guc_exec_queue_group_add(struct xe_guc *guc,
-					struct xe_exec_queue *q)
-{
-#define MAX_MULTI_QUEUE_CGP_SYNC_SIZE  (2)
-	u32 action[MAX_MULTI_QUEUE_CGP_SYNC_SIZE];
-	int len = 0;
-
-	xe_gt_assert(guc_to_gt(guc), xe_exec_queue_is_multi_queue_secondary(q));
-
-	action[len++] = XE_GUC_ACTION_MULTI_QUEUE_CONTEXT_CGP_SYNC;
-	action[len++] = q->multi_queue.group->primary->guc->id;
-
-	xe_gt_assert(guc_to_gt(guc), len <= MAX_MULTI_QUEUE_CGP_SYNC_SIZE);
-#undef MAX_MULTI_QUEUE_CGP_SYNC_SIZE
-
-	/*
-	 * The above XE_GUC_ACTION_MULTI_QUEUE_CONTEXT_CGP_SYNC do expect a
 	 * XE_GUC_ACTION_NOTIFY_MULTI_QUEUE_CONTEXT_CGP_SYNC_DONE response
 	 * from guc.
 	 */
@@ -1044,6 +1047,27 @@ static void __register_exec_queue(struct xe_guc *guc,
 	xe_guc_ct_send(&guc->ct, action, ARRAY_SIZE(action), 0, 0);
 }
 
+static u32 xe_hwe_guc_logical_to_submit_mask(struct xe_hw_engine *hwe, u32 logical_mask)
+{
+	struct xe_gt *gt = hwe->gt;
+
+	if (xe_gt_is_usm_hwe(gt, hwe)) {
+		int shift = gt->usm.paging_hwe0->logical_instance;
+		u32 paging_logical_mask = gt->usm.paging_logical_mask;
+
+		xe_gt_assert(gt, (logical_mask & paging_logical_mask) == logical_mask);
+
+		/*
+		 * Remap to GUC_PAGING_CLASS logical instance mask, if
+		 * applicable.
+		 */
+		if (xe_guc_has_paging_engine(&hwe->gt->uc.guc))
+			return logical_mask >> shift;
+	}
+
+	return logical_mask;
+}
+
 int xe_guc_action_eu_kernel_debug(struct xe_guc *guc, u32 id, u32 cmd)
 {
 	const u32 action[] = {
@@ -1091,8 +1115,9 @@ static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
 
 	memset(&info, 0, sizeof(info));
 	info.context_idx = q->guc->id;
-	info.engine_class = xe_engine_class_to_guc_class(q->class);
-	info.engine_submit_mask = q->logical_mask;
+	info.engine_class = xe_hwe_to_guc_class(q->hwe);
+	info.engine_submit_mask =
+		xe_hwe_guc_logical_to_submit_mask(q->hwe, q->logical_mask);
 	info.hwlrca_lo = lower_32_bits(xe_lrc_descriptor(lrc));
 	info.hwlrca_hi = upper_32_bits(xe_lrc_descriptor(lrc));
 	info.flags = CONTEXT_REGISTRATION_FLAG_KMD |
@@ -1128,7 +1153,7 @@ static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
 	set_exec_queue_registered(q);
 	trace_xe_exec_queue_register(q);
 	if (xe_exec_queue_is_multi_queue_primary(q))
-		__register_exec_queue_group(guc, q, &info);
+		__register_exec_queue_group(q, &info);
 	else if (xe_exec_queue_is_parallel(q))
 		__register_mlrc_exec_queue(guc, q, &info);
 	else if (!xe_exec_queue_is_multi_queue_secondary(q))
@@ -1138,7 +1163,7 @@ static void register_exec_queue(struct xe_exec_queue *q, int ctx_type)
 		init_policies(guc, q);
 
 	if (xe_exec_queue_is_multi_queue_secondary(q))
-		xe_guc_exec_queue_group_add(guc, q);
+		guc_exec_queue_send_cgp_sync(q);
 
 	if (xe_exec_queue_is_debuggable(q)) {
 		xe_assert(xe, exec_queue_registered(q));
@@ -1275,7 +1300,7 @@ static void submit_exec_queue(struct xe_exec_queue *q, struct xe_sched_job *job)
 	if (exec_queue_suspended(q))
 		return;
 
-	if (!exec_queue_enabled(q) && !exec_queue_suspended(q)) {
+	if (!exec_queue_enabled(q)) {
 		action[len++] = XE_GUC_ACTION_SCHED_CONTEXT_MODE_SET;
 		action[len++] = q->guc->id;
 		action[len++] = GUC_CONTEXT_ENABLE;
@@ -1324,10 +1349,8 @@ guc_exec_queue_run_job(struct drm_sched_job *drm_job)
 		if (xe_exec_queue_is_multi_queue_secondary(q)) {
 			struct xe_exec_queue *primary = xe_exec_queue_multi_queue_primary(q);
 
-			if (exec_queue_killed_or_banned_or_wedged(primary)) {
-				killed_or_banned_or_wedged = true;
+			if (exec_queue_killed_or_banned_or_wedged(primary))
 				goto run_job_out;
-			}
 
 			if (!exec_queue_registered(primary))
 				register_exec_queue(primary, GUC_CONTEXT_NORMAL);
@@ -1812,11 +1835,36 @@ handle_vf_resume:
 	return DRM_GPU_SCHED_STAT_NO_HANG;
 }
 
+static void guc_exec_queue_multi_queue_drop_suspend(struct xe_exec_queue *q);
+static int guc_exec_queue_suspend_wait_blocking(struct xe_exec_queue *q);
+
 static void guc_exec_queue_fini(struct xe_exec_queue *q)
 {
 	struct xe_guc_exec_queue *ge = q->guc;
 	struct xe_guc *guc = exec_queue_to_guc(q);
 	struct drm_device *drm = &guc_to_xe(guc)->drm;
+
+	/*
+	 * A secondary can leave the group while still preempt suspended (e.g.
+	 * xe_vm_remove_compute_exec_queue() forces its preempt fence to signal,
+	 * which suspends it). It holds one forwarded suspend reference on the
+	 * primary, so drop it and resume the primary if it was the last member
+	 * that had it suspended. Primaries forward to nobody, so they don't need
+	 * this.
+	 *
+	 * First make sure the primary's forwarded suspend has completed. If the
+	 * secondary was killed/reset before its preempt fence worker ran, that
+	 * worker skips suspend_wait() (see preempt_fence_work_func()), leaving
+	 * the primary's suspend possibly in flight. drop_suspend() runs under a
+	 * spinlock and cannot wait, so drain it here with the uninterruptible
+	 * blocking wait; otherwise resuming the primary in drop_suspend() could
+	 * trip the !suspend_pending assert.
+	 */
+	if (xe_exec_queue_is_multi_queue_secondary(q)) {
+		if (READ_ONCE(q->guc->suspend_count))
+			guc_exec_queue_suspend_wait_blocking(q);
+		guc_exec_queue_multi_queue_drop_suspend(q);
+	}
 
 	if (xe_exec_queue_is_multi_queue_secondary(q)) {
 		struct xe_exec_queue_group *group = q->multi_queue.group;
@@ -1976,7 +2024,7 @@ static void __guc_exec_queue_process_msg_suspend(struct xe_sched_msg *msg,
 				xe_sleep_relaxed_ms(wait_ms);
 
 			set_exec_queue_suspended(q);
-			disable_scheduling(q, false);
+disable_scheduling(q, false);
 		}
 	} else if (q->guc->suspend_pending) {
 		set_exec_queue_suspended(q);
@@ -2002,25 +2050,12 @@ static void __guc_exec_queue_process_msg_resume(struct xe_sched_msg *msg,
 }
 
 static void __guc_exec_queue_process_msg_set_multi_queue_priority(struct xe_sched_msg *msg,
-								 bool bound)
+								  bool bound)
 {
 	struct xe_exec_queue *q = msg->private_data;
 
-	if (guc_exec_queue_allowed_to_change_state(q) && bound) {
-#define MAX_MULTI_QUEUE_CGP_SYNC_SIZE        (2)
-		struct xe_guc *guc = exec_queue_to_guc(q);
-		struct xe_exec_queue_group *group = q->multi_queue.group;
-		u32 action[MAX_MULTI_QUEUE_CGP_SYNC_SIZE];
-		int len = 0;
-
-		action[len++] = XE_GUC_ACTION_MULTI_QUEUE_CONTEXT_CGP_SYNC;
-		action[len++] = group->primary->guc->id;
-
-		xe_gt_assert(guc_to_gt(guc), len <= MAX_MULTI_QUEUE_CGP_SYNC_SIZE);
-#undef MAX_MULTI_QUEUE_CGP_SYNC_SIZE
-
-		xe_guc_exec_queue_group_cgp_sync(guc, q, action, len);
-	}
+	if (guc_exec_queue_allowed_to_change_state(q) && bound)
+		guc_exec_queue_send_cgp_sync(q);
 
 	kfree(msg);
 }
@@ -2147,6 +2182,14 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
 	timeout = (q->vm && xe_vm_in_lr_mode(q->vm)) ? MAX_SCHEDULE_TIMEOUT :
 		  msecs_to_jiffies(q->sched_props.job_timeout_ms);
 
+	err = alloc_guc_id(guc, q);
+	if (err)
+		goto err_free;
+
+	xe_exec_queue_assign_name(q, q->guc->id);
+
+	strscpy(ge->name, q->name, sizeof(ge->name));
+
 #ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
 	submit_wq = get_submit_wq(guc);
 #endif
@@ -2162,34 +2205,25 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
 		submit_wq = primary->guc->sched.base.submit_wq;
 	}
 
-	strscpy(ge->name, q->name, sizeof(ge->name));
-
 	err = xe_sched_init(&ge->sched, &drm_sched_ops, &xe_sched_ops,
 			    submit_wq, xe_lrc_ring_size() / MAX_JOB_SIZE_BYTES, 64,
 			    timeout, guc_to_gt(guc)->ordered_wq, NULL,
 			    ge->name, gt_to_xe(q->gt)->drm.dev);
 	if (err)
-		goto err_free;
+		goto err_release_id;
 
 	sched = &ge->sched;
 	err = xe_sched_entity_init(&ge->entity, sched);
 	if (err)
 		goto err_sched;
 
-	mutex_lock(&guc->submission_state.lock);
-
-	err = alloc_guc_id(guc, q);
-	if (err)
-		goto err_entity;
-
 	q->entity = &ge->entity;
 
+	mutex_lock(&guc->submission_state.lock);
 	if (xe_guc_read_stopped(guc) || vf_recovery(guc))
 		xe_sched_stop(sched);
-
+	publish_guc_id(guc, q);
 	mutex_unlock(&guc->submission_state.lock);
-
-	xe_exec_queue_assign_name(q, q->guc->id);
 
 	/*
 	 * Maintain secondary queues of the multi queue group in a list
@@ -2213,11 +2247,10 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
 
 	return 0;
 
-err_entity:
-	mutex_unlock(&guc->submission_state.lock);
-	xe_sched_entity_fini(&ge->entity);
 err_sched:
 	xe_sched_fini(&ge->sched);
+err_release_id:
+	release_guc_id(guc, q);
 err_free:
 	kfree(ge);
 	drm_dev_put(drm);
@@ -2427,23 +2460,147 @@ static int guc_exec_queue_set_multi_queue_priority(struct xe_exec_queue *q,
 	return 0;
 }
 
+/*
+ * Core suspend: take a suspend reference on @q and, on the first reference,
+ * disable its GuC context so the GPU is actually preempted. Caller must have
+ * ensured @q is not killed/banned/wedged. Returns true if this was the first
+ * suspend reference (the 0->1 transition).
+ */
+static bool __guc_exec_queue_suspend(struct xe_exec_queue *q)
+{
+	struct xe_guc_exec_queue *ge = q->guc;
+	struct xe_gpu_scheduler *sched = &ge->sched;
+	struct xe_sched_msg *msg = ge->static_msgs + STATIC_MSG_SUSPEND;
+	bool first;
+
+	xe_sched_msg_lock(sched);
+	first = (++ge->suspend_count == 1);
+	if (first) {
+		bool added = guc_exec_queue_try_add_msg(q, msg, SUSPEND);
+
+		/* slot must be free at 0->1 */
+		xe_gt_assert(guc_to_gt(exec_queue_to_guc(q)), added);
+		ge->suspend_pending = true;
+	}
+	xe_sched_msg_unlock(sched);
+
+	return first;
+}
+
+/*
+ * Core resume: drop a suspend reference on @q and, on the last reference,
+ * re-enable its GuC context. Returns true if this dropped the last suspend
+ * reference (the 1->0 transition).
+ */
+static bool __guc_exec_queue_resume(struct xe_exec_queue *q)
+{
+	struct xe_guc_exec_queue *ge = q->guc;
+	struct xe_gpu_scheduler *sched = &ge->sched;
+	struct xe_sched_msg *msg = ge->static_msgs + STATIC_MSG_RESUME;
+	struct xe_guc *guc = exec_queue_to_guc(q);
+	bool last;
+
+	xe_sched_msg_lock(sched);
+	xe_gt_assert(guc_to_gt(guc), !ge->suspend_pending);
+	xe_gt_assert(guc_to_gt(guc), ge->suspend_count > 0);
+	last = (--ge->suspend_count == 0);
+	if (last) {
+		bool added = guc_exec_queue_try_add_msg(q, msg, RESUME);
+
+		/* slot must be free at 1->0 */
+		xe_gt_assert(guc_to_gt(guc), added);
+	}
+	xe_sched_msg_unlock(sched);
+
+	return last;
+}
+
 static int guc_exec_queue_suspend(struct xe_exec_queue *q)
 {
-	struct xe_gpu_scheduler *sched = &q->guc->sched;
-	struct xe_sched_msg *msg = q->guc->static_msgs + STATIC_MSG_SUSPEND;
-
 	if (exec_queue_killed_or_banned_or_wedged(q))
 		return -EINVAL;
 
-	xe_sched_msg_lock(sched);
-	if (guc_exec_queue_try_add_msg(q, msg, SUSPEND))
-		q->guc->suspend_pending = true;
-	xe_sched_msg_unlock(sched);
+	/*
+	 * Non-multi-queue queues and multi-queue primaries suspend themselves
+	 * directly: their own msg_lock makes the suspend_count 0->1 transition
+	 * and the suspend_pending update atomic, so no group level serialization
+	 * is needed.
+	 */
+	if (!xe_exec_queue_is_multi_queue_secondary(q)) {
+		__guc_exec_queue_suspend(q);
+		return 0;
+	}
+
+	/*
+	 * A secondary's suspend is meaningless once the primary - which owns the
+	 * group's GuC context - is gone, so fail it too. This keeps the
+	 * secondary's effective state consistent with guc_exec_queue_reset_status(),
+	 * which already reports the primary's killed/banned/wedged state for
+	 * secondaries. A primary killed *after* this check is still handled at
+	 * message-processing time, where the SUSPEND is a no-op for a killed
+	 * context; this only covers an already-dead primary.
+	 */
+	if (exec_queue_killed_or_banned_or_wedged(xe_exec_queue_multi_queue_primary(q)))
+		return -EINVAL;
+
+	/*
+	 * A secondary doesn't interface with GuC: suspend it like any other
+	 * queue (its own suspend_count drives its internally handled scheduler
+	 * state) and, only on its own 0->1 transition, forward the suspend to the
+	 * primary so the GPU is actually preempted. Hold @suspend_lock so that
+	 * observing the secondary's transition and forwarding it to the primary
+	 * happen atomically; this keeps the primary's refcount paired with member
+	 * transitions even if the same secondary is suspended and resumed
+	 * concurrently across rebind cycles.
+	 */
+	scoped_guard(spinlock, &q->multi_queue.group->suspend_lock) {
+		if (__guc_exec_queue_suspend(q))
+			__guc_exec_queue_suspend(xe_exec_queue_multi_queue_primary(q));
+	}
 
 	return 0;
 }
 
-static int guc_exec_queue_suspend_wait(struct xe_exec_queue *q)
+static void guc_exec_queue_suspend_timeout_ban(struct xe_exec_queue *q)
+{
+	struct xe_guc *guc = exec_queue_to_guc(q);
+
+	xe_gt_warn(guc_to_gt(guc),
+		   "Suspend fence, guc_id=%d, failed to respond, banning queue",
+		   q->guc->id);
+	/*
+	 * The GuC failed to respond to the suspend within the timeout. This is
+	 * not recoverable for this context, so ban it and tear it down via
+	 * cleanup rather than leave it suspended forever. __suspend_fence_signal
+	 * clears suspend_pending and wakes any waiter.
+	 *
+	 * @q is the primary here; it owns the group's GuC context, so a failure
+	 * to suspend it wedges the whole group. Ban and tear down the entire
+	 * group in the multi-queue case.
+	 */
+	if (xe_exec_queue_is_multi_queue(q)) {
+		set_exec_queue_group_banned(q);
+		__suspend_fence_signal(q);
+		xe_guc_exec_queue_group_trigger_cleanup(q);
+	} else {
+		set_exec_queue_banned(q);
+		__suspend_fence_signal(q);
+		xe_guc_exec_queue_trigger_cleanup(q);
+	}
+}
+
+/*
+ * Wait for @q's own suspend to complete: suspend_pending cleared, or the queue
+ * killed / GuC stopped. With @blocking, wait uninterruptibly and do not handle
+ * VF recovery (for callers that must complete on behalf of a possibly
+ * cross-process queue); otherwise wait interruptibly.
+ *
+ * Returns 0 on completion or -ETIME on timeout. Interruptible waits may also
+ * return -EAGAIN (VF recovery in progress, retry) or -ERESTARTSYS (aborted by a
+ * signal; suspend_pending may still be set, so callers must not resume()
+ * without re-confirming the suspend).
+ */
+static int guc_exec_queue_wait_suspend_done(struct xe_exec_queue *q, bool blocking)
 {
 	struct xe_guc *guc = exec_queue_to_guc(q);
 	struct xe_device *xe = guc_to_xe(guc);
@@ -2459,44 +2616,146 @@ static int guc_exec_queue_suspend_wait(struct xe_exec_queue *q)
 	 xe_guc_read_stopped(guc))
 
 retry:
-	if (IS_SRIOV_VF(xe))
+	if (blocking) {
+		if (IS_SRIOV_VF(xe))
+			ret = wait_event_timeout(guc->ct.wq, WAIT_COND, HZ * 5);
+		else
+			ret = wait_event_timeout(q->guc->suspend_wait, WAIT_COND,
+						 HZ * 5);
+	} else if (IS_SRIOV_VF(xe)) {
 		ret = wait_event_interruptible_timeout(guc->ct.wq, WAIT_COND ||
-						       vf_recovery(guc),
-						       HZ * 5);
-	else
+						       vf_recovery(guc), HZ * 5);
+	} else {
 		ret = wait_event_interruptible_timeout(q->guc->suspend_wait,
 						       WAIT_COND, HZ * 5);
+	}
 
-	if (vf_recovery(guc) && !xe_device_wedged((guc_to_xe(guc))))
+	if (!blocking && vf_recovery(guc) && !xe_device_wedged(xe))
 		return -EAGAIN;
 
-	if (!ret) {
-		xe_gt_warn(guc_to_gt(guc),
-			   "Suspend fence, guc_id=%d, failed to respond",
-			   q->guc->id);
-		/* XXX: Trigger GT reset? */
+	if (!ret)
 		return -ETIME;
-	} else if (IS_SRIOV_VF(xe) && !WAIT_COND) {
+	else if (!blocking && IS_SRIOV_VF(xe) && !WAIT_COND)
 		/* Corner case on RESFIX DONE where vf_recovery() changes */
 		goto retry;
-	}
 
 #undef WAIT_COND
 
 	return ret < 0 ? ret : 0;
 }
 
+static int guc_exec_queue_suspend_wait_common(struct xe_exec_queue *q, bool blocking)
+{
+	int ret;
+
+	/*
+	 * A secondary's suspend rides the sched-message worker (short-circuited,
+	 * no GuC round-trip) and so is not synchronous with
+	 * guc_exec_queue_suspend(): its own suspend_pending may still be set
+	 * here. Waiting on the primary alone is not sufficient - if the primary
+	 * was already suspended, the forward is a refcount-only transition that
+	 * queues no new primary SUSPEND and leaves the primary's suspend_pending
+	 * clear, so the primary wait would return immediately while the
+	 * secondary's suspend is still in flight, and a later resume() would trip
+	 * the secondary's !suspend_pending assert. So first wait for the
+	 * secondary's own suspend to complete, then wait on the primary.
+	 *
+	 * A timeout on either bans the queue (being multi-queue, that tears down
+	 * the whole group). A secondary suspend has no real GuC round-trip, so
+	 * its timeout is a software scheduler stall rather than a GuC fault, but
+	 * banning is still the safe recovery: otherwise the queue is left with
+	 * suspend_pending set and a subsequent resume() trips the !suspend_pending
+	 * assert.
+	 */
+	if (xe_exec_queue_is_multi_queue_secondary(q)) {
+		ret = guc_exec_queue_wait_suspend_done(q, blocking);
+		if (ret == -ETIME)
+			guc_exec_queue_suspend_timeout_ban(q);
+		if (ret)
+			return ret;
+	}
+
+	q = xe_exec_queue_multi_queue_primary(q);
+	ret = guc_exec_queue_wait_suspend_done(q, blocking);
+	if (ret == -ETIME)
+		guc_exec_queue_suspend_timeout_ban(q);
+
+	return ret;
+}
+
+static int guc_exec_queue_suspend_wait(struct xe_exec_queue *q)
+{
+	return guc_exec_queue_suspend_wait_common(q, false);
+}
+
+/*
+ * Uninterruptible variant of guc_exec_queue_suspend_wait() for callers that
+ * must complete the wait on behalf of a queue possibly owned by a different
+ * process (e.g. cleanup/undo paths). An interruptible wait could return
+ * -ERESTARTSYS if the calling task is signalled, leaving that queue suspended
+ * forever (cross-process DoS). VF recovery is deliberately not handled (no
+ * -EAGAIN) since a blocking caller cannot retry.
+ */
+static int guc_exec_queue_suspend_wait_blocking(struct xe_exec_queue *q)
+{
+	return guc_exec_queue_suspend_wait_common(q, true);
+}
+
 static void guc_exec_queue_resume(struct xe_exec_queue *q)
 {
-	struct xe_gpu_scheduler *sched = &q->guc->sched;
-	struct xe_sched_msg *msg = q->guc->static_msgs + STATIC_MSG_RESUME;
-	struct xe_guc *guc = exec_queue_to_guc(q);
+	/*
+	 * Non-multi-queue queues and multi-queue primaries resume themselves
+	 * directly; their own msg_lock is sufficient.
+	 */
+	if (!xe_exec_queue_is_multi_queue_secondary(q)) {
+		__guc_exec_queue_resume(q);
+		return;
+	}
 
-	xe_gt_assert(guc_to_gt(guc), !q->guc->suspend_pending);
+	/*
+	 * Mirror of guc_exec_queue_suspend(): resume the secondary like any
+	 * other queue and, only on its own 1->0 transition, forward the resume
+	 * to the primary so the primary's GuC context is re-enabled once the
+	 * last member that suspended it resumes. @suspend_lock keeps the
+	 * secondary transition and the primary forward atomic.
+	 */
+	scoped_guard(spinlock, &q->multi_queue.group->suspend_lock) {
+		if (__guc_exec_queue_resume(q))
+			__guc_exec_queue_resume(xe_exec_queue_multi_queue_primary(q));
+	}
+}
 
-	xe_sched_msg_lock(sched);
-	guc_exec_queue_try_add_msg(q, msg, RESUME);
-	xe_sched_msg_unlock(sched);
+/*
+ * Drop a leaving secondary's forwarded suspend reference on the primary and
+ * resume the primary if this was the last member that had it suspended.
+ * See guc_exec_queue_fini().
+ */
+static void guc_exec_queue_multi_queue_drop_suspend(struct xe_exec_queue *q)
+{
+	scoped_guard(spinlock, &q->multi_queue.group->suspend_lock) {
+		struct xe_exec_queue *primary = xe_exec_queue_multi_queue_primary(q);
+
+		/*
+		 * A suspended secondary holds exactly one suspend reference on the
+		 * primary (forwarded on its 0->1 transition). If it leaves while
+		 * still suspended, release that reference so the primary is not
+		 * kept disabled forever.
+		 */
+		if (!READ_ONCE(q->guc->suspend_count))
+			break;
+
+		if (exec_queue_killed_or_banned_or_wedged(primary))
+			break;
+
+		/*
+		 * No suspend_wait() here (and we can't - suspend_lock is a
+		 * spinlock). guc_exec_queue_fini() has already drained the
+		 * primary's forwarded suspend with the blocking wait, so its
+		 * suspend has completed (suspend_pending cleared) by the time we
+		 * resume it here. __guc_exec_queue_resume() asserts this.
+		 */
+		__guc_exec_queue_resume(primary);
+	}
 }
 
 static u64 guc_exec_queue_reset_status(struct xe_exec_queue *q)
@@ -2524,14 +2783,6 @@ static u64 guc_exec_queue_reset_status(struct xe_exec_queue *q)
 	return 0;
 }
 
-static bool guc_exec_queue_active(struct xe_exec_queue *q)
-{
-	struct xe_exec_queue *primary = xe_exec_queue_multi_queue_primary(q);
-
-	return exec_queue_enabled(primary) &&
-		!exec_queue_pending_disable(primary);
-}
-
 /*
  * All of these functions are an abstraction layer which other parts of Xe can
  * use to trap into the GuC backend. All of these functions, aside from init,
@@ -2550,9 +2801,9 @@ static const struct xe_exec_queue_ops guc_exec_queue_ops = {
 	.set_multi_queue_priority = guc_exec_queue_set_multi_queue_priority,
 	.suspend = guc_exec_queue_suspend,
 	.suspend_wait = guc_exec_queue_suspend_wait,
+	.suspend_wait_blocking = guc_exec_queue_suspend_wait_blocking,
 	.resume = guc_exec_queue_resume,
 	.reset_status = guc_exec_queue_reset_status,
-	.active = guc_exec_queue_active,
 };
 
 static void guc_exec_queue_stop(struct xe_guc *guc, struct xe_exec_queue *q)
@@ -3217,9 +3468,10 @@ int xe_guc_exec_queue_reset_handler(struct xe_guc *guc, u32 *msg, u32 len)
 	if (unlikely(!q))
 		return -EPROTO;
 
-	xe_gt_info(gt, "Engine reset: engine_class=%s, logical_mask: 0x%x, guc_id=%d, state=0x%0x",
-		   xe_hw_engine_class_to_str(q->class), q->logical_mask, guc_id,
-		   atomic_read(&q->guc->state));
+	if (!exec_queue_killed(q))
+		xe_gt_info(gt, "Engine reset: engine_class=%s, logical_mask: 0x%x, guc_id=%d, state=0x%0x",
+			   xe_hw_engine_class_to_str(q->class), q->logical_mask, guc_id,
+			   atomic_read(&q->guc->state));
 
 	trace_xe_exec_queue_reset(q);
 

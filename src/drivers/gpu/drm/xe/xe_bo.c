@@ -188,19 +188,6 @@ mem_type_to_migrate(struct xe_device *xe, u32 mem_type)
 	return tile->migrate;
 }
 
-static struct xe_vram_region *res_to_mem_region(struct ttm_resource *res)
-{
-	struct xe_device *xe = ttm_to_xe_device(res->bo->bdev);
-	struct ttm_resource_manager *mgr;
-	struct xe_ttm_vram_mgr *vram_mgr;
-
-	xe_assert(xe, resource_is_vram(res));
-	mgr = ttm_manager_type(&xe->ttm, res->mem_type);
-	vram_mgr = to_xe_ttm_vram_mgr(mgr);
-
-	return container_of(vram_mgr, struct xe_vram_region, ttm);
-}
-
 static void try_add_system(struct xe_device *xe, struct xe_bo *bo,
 			   u32 bo_flags, u32 *c)
 {
@@ -358,6 +345,12 @@ static void xe_evict_flags(struct ttm_buffer_object *tbo,
 		return;
 	}
 
+	/* No resource: nothing is placed/mapped, so there is nothing to evict. */
+	if (!tbo->resource) {
+		placement->num_placement = 0;
+		return;
+	}
+
 	bo = ttm_to_xe_bo(tbo);
 	if (bo->flags & XE_BO_FLAG_CPU_ADDR_MIRROR) {
 		*placement = sys_placement;
@@ -366,6 +359,18 @@ static void xe_evict_flags(struct ttm_buffer_object *tbo,
 
 	if (device_unplugged && !tbo->base.dma_buf) {
 		*placement = purge_placement;
+		return;
+	}
+
+	if (xe_bo_madv_is_dontneed(bo)) {
+		/*
+		 * We can't use purge_placement here, since we need to trigger
+		 * our own purge procedure at the start of xe_bo_move(), which
+		 * would otherwise be skipped. At the same time we don't want
+		 * ttm to then populate the tt with dst pages, before the move
+		 * callback, hence use sys_placement here.
+		 */
+		*placement = sys_placement;
 		return;
 	}
 
@@ -469,6 +474,100 @@ static void xe_ttm_tt_account_subtract(struct xe_device *xe, struct ttm_tt *tt)
 		xe_shrinker_mod_pages(xe->mem.shrinker, 0, -(long)tt->num_pages);
 	else
 		xe_shrinker_mod_pages(xe->mem.shrinker, -(long)tt->num_pages, 0);
+}
+
+static bool xe_ttm_bo_is_imported(struct ttm_buffer_object *tbo)
+{
+	dma_resv_assert_held(tbo->base.resv);
+
+	return tbo->ttm &&
+		(tbo->ttm->page_flags & (TTM_TT_FLAG_EXTERNAL | TTM_TT_FLAG_EXTERNAL_MAPPABLE)) ==
+		TTM_TT_FLAG_EXTERNAL;
+}
+
+/*
+ * Account @bo's pages as pinned for the shrinker. Removes @bo's pages
+ * from the shrinker's shrinkable / purgeable counts on the transition
+ * from unpinned to pinned. Must be called with @bo's dma-resv held,
+ * after &ttm_buffer_object.pin_count has been incremented by
+ * ttm_bo_pin(). Safe to call unconditionally regardless of which pin
+ * path (kernel, external, framebuffer, backup object, ...) is pinning
+ * @bo, since it only acts on the true 0->1 pin_count transition.
+ *
+ * Imported bos (xe_ttm_bo_is_imported()) are excluded: for those,
+ * xe_ttm_tt_populate() never actually populates the tt or calls
+ * xe_ttm_tt_account_add(), but TTM core's ttm_tt_populate() still
+ * unconditionally marks the tt as populated on driver-hook success.
+ * Relying on ttm_tt_is_populated() for these would subtract pages that
+ * were never added, underflowing the shrinker's counts.
+ */
+static void xe_bo_account_pin(struct xe_bo *bo)
+{
+	struct xe_device *xe = xe_bo_device(bo);
+
+	if (bo->ttm.pin_count == 1 && bo->ttm.ttm && ttm_tt_is_populated(bo->ttm.ttm) &&
+	    !xe_ttm_bo_is_imported(&bo->ttm))
+		xe_ttm_tt_account_subtract(xe, bo->ttm.ttm);
+}
+
+/*
+ * Counterpart to xe_bo_account_pin(). Must be called with @bo's dma-resv
+ * held, before &ttm_buffer_object.pin_count is decremented by
+ * ttm_bo_unpin(), so that the check against the true 1->0 transition sees
+ * the pin count that is about to be released. See xe_bo_account_pin() for
+ * why imported bos are excluded.
+ *
+ * On the true last unpin, also removes @bo from whichever pinned-bo list
+ * (external or kernel_bo_present) it may currently be linked on, since a
+ * bo's final unpin can happen through a pin path (e.g. framebuffer,
+ * backup object) that has no notion of, or ownership over, that list.
+ * This is safe and list-agnostic: list_del_init() only needs the node
+ * itself, not knowledge of which list it is threaded through, and is a
+ * no-op if @bo is not linked.
+ */
+static void xe_bo_account_unpin(struct xe_bo *bo)
+{
+	struct xe_device *xe = xe_bo_device(bo);
+	bool last_unpin = bo->ttm.pin_count == 1;
+
+	if (last_unpin && !list_empty(&bo->pinned_link)) {
+		spin_lock(&xe->pinned.lock);
+		list_del_init(&bo->pinned_link);
+		spin_unlock(&xe->pinned.lock);
+	}
+
+	if (last_unpin && bo->ttm.ttm && ttm_tt_is_populated(bo->ttm.ttm) &&
+	    !xe_ttm_bo_is_imported(&bo->ttm))
+		xe_ttm_tt_account_add(xe, bo->ttm.ttm);
+}
+
+/**
+ * xe_bo_pin_account() - Pin a bo and account its pages for the shrinker
+ * @bo: The buffer object to pin.
+ *
+ * Pins @bo via ttm_bo_pin() and updates the shrinker's shrinkable /
+ * purgeable page accounting to match. Must be called with @bo's dma-resv
+ * held. Safe to call regardless of which pin path (kernel, external,
+ * framebuffer, backup object, ...) is pinning @bo.
+ */
+void xe_bo_pin_account(struct xe_bo *bo)
+{
+	ttm_bo_pin(&bo->ttm);
+	xe_bo_account_pin(bo);
+}
+
+/**
+ * xe_bo_unpin_account() - Unpin a bo and account its pages for the shrinker
+ * @bo: The buffer object to unpin.
+ *
+ * Counterpart to xe_bo_pin_account(). Updates the shrinker's shrinkable /
+ * purgeable page accounting to match, then unpins @bo via ttm_bo_unpin().
+ * Must be called with @bo's dma-resv held.
+ */
+void xe_bo_unpin_account(struct xe_bo *bo)
+{
+	xe_bo_account_unpin(bo);
+	ttm_bo_unpin(&bo->ttm);
 }
 
 static void update_global_total_pages(struct ttm_device *ttm_dev,
@@ -614,11 +713,17 @@ static void xe_ttm_tt_destroy(struct ttm_device *ttm_dev, struct ttm_tt *tt)
 	kfree(tt);
 }
 
-static bool xe_ttm_resource_visible(struct ttm_resource *mem)
+static bool xe_ttm_resource_visible(struct xe_device *xe, struct ttm_resource *mem)
 {
-	struct xe_ttm_vram_mgr_resource *vres =
-		to_xe_ttm_vram_mgr_resource(mem);
+	struct xe_ttm_vram_mgr_resource *vres;
 
+	if (mem->mem_type == XE_PL_STOLEN) {
+		struct xe_ttm_stolen_mgr *mgr = xe->mem.stolen_mgr;
+
+		return mgr->io_base && !xe_ttm_stolen_cpu_access_needs_ggtt(xe);
+	}
+
+	vres = to_xe_ttm_vram_mgr_resource(mem);
 	return vres->used_visible_size == mem->size;
 }
 
@@ -636,7 +741,7 @@ bool xe_bo_is_visible_vram(struct xe_bo *bo)
 	if (drm_WARN_ON(bo->ttm.base.dev, !xe_bo_is_vram(bo)))
 		return false;
 
-	return xe_ttm_resource_visible(bo->ttm.resource);
+	return xe_ttm_resource_visible(xe_bo_device(bo), bo->ttm.resource);
 }
 
 static int xe_ttm_io_mem_reserve(struct ttm_device *bdev,
@@ -650,9 +755,9 @@ static int xe_ttm_io_mem_reserve(struct ttm_device *bdev,
 		return 0;
 	case XE_PL_VRAM0:
 	case XE_PL_VRAM1: {
-		struct xe_vram_region *vram = res_to_mem_region(mem);
+		struct xe_vram_region *vram = xe_map_resource_to_region(mem);
 
-		if (!xe_ttm_resource_visible(mem))
+		if (!xe_ttm_resource_visible(xe, mem))
 			return -EINVAL;
 
 		mem->bus.offset = mem->start << PAGE_SHIFT;
@@ -692,7 +797,7 @@ static int xe_bo_trigger_rebind(struct xe_device *xe, struct xe_bo *bo,
 		dma_resv_iter_begin(&cursor, bo->ttm.base.resv,
 				    DMA_RESV_USAGE_BOOKKEEP);
 		dma_resv_for_each_fence_unlocked(&cursor, fence)
-			dma_fence_enable_sw_signaling(fence);
+			dma_fence_enable_signaling(fence);
 		dma_resv_iter_end(&cursor);
 	}
 
@@ -860,6 +965,8 @@ static int xe_bo_move_notify(struct xe_bo *bo,
  *
  * Transfers pages between shrinkable and purgeable buckets when the BO
  * purgeable state changes. Called automatically from xe_bo_set_purgeable_state().
+ * For pinned BOs, whose pages are not accounted, only the purgeable flag is
+ * updated, so that the correct bucket is used when the BO is unpinned.
  */
 static void xe_bo_set_purgeable_shrinker(struct xe_bo *bo,
 					 enum xe_madv_purgeable_state new_state)
@@ -876,7 +983,8 @@ static void xe_bo_set_purgeable_shrinker(struct xe_bo *bo,
 		return;
 
 	xe_tt = container_of(tt, struct xe_ttm_tt, ttm);
-	tt_pages = tt->num_pages;
+	/* Pinned bos are not accounted. Only update the purgeable flag. */
+	tt_pages = xe_bo_is_pinned(bo) ? 0 : tt->num_pages;
 
 	if (!xe_tt->purgeable && new_state == XE_MADV_PURGEABLE_DONTNEED) {
 		xe_tt->purgeable = true;
@@ -1044,6 +1152,13 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 		} else {
 			drm_dbg(&xe->drm, "Evict system allocator BO failed=%pe\n",
 				ERR_PTR(ret));
+			/*
+			 * The semantic we want upon SVM eviction failure
+			 * because of racing access is keep walking for
+			 * eviction, which is -ENOSPC.
+			 */
+			if (ret == -EBUSY)
+				ret = -ENOSPC;
 		}
 
 		goto out;
@@ -1389,7 +1504,8 @@ int xe_bo_notifier_prepare_pinned(struct xe_bo *bo)
 		}
 
 		backup->parent_obj = xe_bo_get(bo); /* Released by bo_destroy */
-		ttm_bo_pin(&backup->ttm);
+		/* Note: XE_BO_FLAG_SYSTEM resolves to XE_PL_TT so already populated. */
+		xe_bo_pin_account(backup);
 		bo->backup_obj = backup;
 	}
 
@@ -1409,7 +1525,7 @@ int xe_bo_notifier_unprepare_pinned(struct xe_bo *bo)
 {
 	xe_bo_lock(bo, false);
 	if (bo->backup_obj) {
-		ttm_bo_unpin(&bo->backup_obj->ttm);
+		xe_bo_unpin_account(bo->backup_obj);
 		xe_bo_put(bo->backup_obj);
 		bo->backup_obj = NULL;
 	}
@@ -1620,7 +1736,7 @@ out_backup:
 	xe_bo_vunmap(backup);
 	if (!bo->backup_obj) {
 		if (xe_bo_is_pinned(backup))
-			ttm_bo_unpin(&backup->ttm);
+			xe_bo_unpin_account(backup);
 		xe_bo_put(backup);
 	}
 out_unlock_bo:
@@ -1666,7 +1782,7 @@ static unsigned long xe_ttm_io_mem_pfn(struct ttm_buffer_object *ttm_bo,
 	if (ttm_bo->resource->mem_type == XE_PL_STOLEN)
 		return xe_ttm_stolen_io_offset(bo, page_offset << PAGE_SHIFT) >> PAGE_SHIFT;
 
-	vram = res_to_mem_region(ttm_bo->resource);
+	vram = xe_map_resource_to_region(ttm_bo->resource);
 	xe_res_first(ttm_bo->resource, (u64)page_offset << PAGE_SHIFT, 0, &cursor);
 	return (vram->io_start + cursor.start) >> PAGE_SHIFT;
 }
@@ -1806,7 +1922,7 @@ static int xe_ttm_access_memory(struct ttm_buffer_object *ttm_bo,
 		goto out;
 	}
 
-	vram = res_to_mem_region(ttm_bo->resource);
+	vram = xe_map_resource_to_region(ttm_bo->resource);
 	xe_res_first(ttm_bo->resource, offset & PAGE_MASK,
 		     xe_bo_size(bo) - (offset & PAGE_MASK), &cursor);
 
@@ -2020,15 +2136,6 @@ static vm_fault_t xe_err_to_fault_t(int err)
 		break;
 	}
 	return VM_FAULT_SIGBUS;
-}
-
-static bool xe_ttm_bo_is_imported(struct ttm_buffer_object *tbo)
-{
-	dma_resv_assert_held(tbo->base.resv);
-
-	return tbo->ttm &&
-		(tbo->ttm->page_flags & (TTM_TT_FLAG_EXTERNAL | TTM_TT_FLAG_EXTERNAL_MAPPABLE)) ==
-		TTM_TT_FLAG_EXTERNAL;
 }
 
 static vm_fault_t xe_bo_cpu_fault_fastpath(struct vm_fault *vmf, struct xe_device *xe,
@@ -3136,7 +3243,7 @@ uint64_t vram_region_gpu_offset(struct ttm_resource *res)
 	case XE_PL_SYSTEM:
 		return 0;
 	default:
-		return res_to_mem_region(res)->dpa_base;
+		return xe_map_resource_to_region(res)->dpa_base;
 	}
 	return 0;
 }
@@ -3171,23 +3278,27 @@ int xe_bo_pin_external(struct xe_bo *bo, bool in_place, struct drm_exec *exec)
 	struct xe_ttm_vram_mgr *mgr;
 	u64 size = xe_bo_size(bo);
 #endif
+	bool first_pin = !xe_bo_is_pinned(bo);
 	int err;
 
 	xe_assert(xe, !bo->vm);
 	xe_assert(xe, xe_bo_is_user(bo));
 
-	if (!xe_bo_is_pinned(bo)) {
+	if (first_pin) {
 		if (!in_place) {
 			err = xe_bo_validate(bo, NULL, false, exec);
 			if (err)
 				return err;
 		}
+
+		spin_lock(&xe->pinned.lock);
+		list_add_tail(&bo->pinned_link, &xe->pinned.late.external);
+		spin_unlock(&xe->pinned.lock);
 	}
 
 #ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
 	mgr = xe_bo_pin_vram_mgr(bo);
 	spin_lock(&xe->pinned.lock);
-
 	if (bo->dmabuf_pin_count++ == 0) {
 #ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
 		if (mgr && mgr->pin.dmabuf_limit &&
@@ -3196,6 +3307,8 @@ int xe_bo_pin_external(struct xe_bo *bo, bool in_place, struct drm_exec *exec)
 			u64 limit = mgr->pin.dmabuf_limit;
 
 			bo->dmabuf_pin_count--;
+			if (first_pin)
+				list_del_init(&bo->pinned_link);
 			spin_unlock(&xe->pinned.lock);
 			xe_err_ratelimited(xe,
 					   "dma-buf VRAM pin limit reached (used %lluM, limit %lluM), rejecting with -ENOSPC\n",
@@ -3212,20 +3325,10 @@ int xe_bo_pin_external(struct xe_bo *bo, bool in_place, struct drm_exec *exec)
 			mgr->pin.total_used += size;
 		}
 	}
-
-	if (!xe_bo_is_pinned(bo))
-		list_add_tail(&bo->pinned_link, &xe->pinned.late.external);
-
-	spin_unlock(&xe->pinned.lock);
-#else
-	spin_lock(&xe->pinned.lock);
-	list_add_tail(&bo->pinned_link, &xe->pinned.late.external);
 	spin_unlock(&xe->pinned.lock);
 #endif
-	
-	ttm_bo_pin(&bo->ttm);
-	if (bo->ttm.ttm && ttm_tt_is_populated(bo->ttm.ttm))
-		xe_ttm_tt_account_subtract(xe, bo->ttm.ttm);
+
+	xe_bo_pin_account(bo);
 
 	/*
 	 * FIXME: If we always use the reserve / unreserve functions for locking
@@ -3289,9 +3392,7 @@ int xe_bo_pin(struct xe_bo *bo, struct drm_exec *exec)
 		spin_unlock(&xe->pinned.lock);
 	}
 
-	ttm_bo_pin(&bo->ttm);
-	if (bo->ttm.ttm && ttm_tt_is_populated(bo->ttm.ttm))
-		xe_ttm_tt_account_subtract(xe, bo->ttm.ttm);
+	xe_bo_pin_account(bo);
 
 	/*
 	 * FIXME: If we always use the reserve / unreserve functions for locking
@@ -3304,7 +3405,6 @@ int xe_bo_pin(struct xe_bo *bo, struct drm_exec *exec)
 
 /**
  * xe_bo_unpin_external - unpin an external BO
-#endif
  * @bo: buffer object to be unpinned
  *
  * Unpin an external (not tied to a VM, can be exported via dma-buf / prime FD)
@@ -3325,26 +3425,19 @@ void xe_bo_unpin_external(struct xe_bo *bo)
 	xe_assert(xe, xe_bo_is_pinned(bo));
 	xe_assert(xe, xe_bo_is_user(bo));
 
-	spin_lock(&xe->pinned.lock);
 #ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	spin_lock(&xe->pinned.lock);
 	/* display may hold a concurrent pin; use dmabuf_pin_count not ttm pin_count */
 	if (--bo->dmabuf_pin_count == 0) {
 		if (mgr) {
 			mgr->pin.dmabuf_used -= size;
 			mgr->pin.total_used -= size;
 		}
-		if (!list_empty(&bo->pinned_link))
-			list_del_init(&bo->pinned_link);
 	}
-#else
-	if (bo->ttm.pin_count == 1 && !list_empty(&bo->pinned_link))
-		list_del_init(&bo->pinned_link);
-#endif
 	spin_unlock(&xe->pinned.lock);
+#endif
 
-	ttm_bo_unpin(&bo->ttm);
-	if (bo->ttm.ttm && ttm_tt_is_populated(bo->ttm.ttm))
-		xe_ttm_tt_account_add(xe, bo->ttm.ttm);
+	xe_bo_unpin_account(bo);
 
 	/*
 	 * FIXME: If we always use the reserve / unreserve functions for locking
@@ -3368,25 +3461,22 @@ void xe_bo_unpin(struct xe_bo *bo)
 #ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
 		struct xe_ttm_vram_mgr *mgr = xe_bo_pin_vram_mgr(bo);
 #endif
-		spin_lock(&xe->pinned.lock);
 #ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+		spin_lock(&xe->pinned.lock);
 		if (mgr)
 			mgr->pin.total_used -= xe_bo_size(bo);
+		spin_unlock(&xe->pinned.lock);
 #endif
 		xe_assert(xe, !list_empty(&bo->pinned_link));
-		list_del_init(&bo->pinned_link);
-		spin_unlock(&xe->pinned.lock);
 
 		if (bo->backup_obj) {
 			if (xe_bo_is_pinned(bo->backup_obj))
-				ttm_bo_unpin(&bo->backup_obj->ttm);
+				xe_bo_unpin_account(bo->backup_obj);
 			xe_bo_put(bo->backup_obj);
 			bo->backup_obj = NULL;
 		}
 	}
-	ttm_bo_unpin(&bo->ttm);
-	if (bo->ttm.ttm && ttm_tt_is_populated(bo->ttm.ttm))
-		xe_ttm_tt_account_add(xe, bo->ttm.ttm);
+	xe_bo_unpin_account(bo);
 }
 
 /**

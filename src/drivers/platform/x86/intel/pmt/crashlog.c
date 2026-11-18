@@ -585,11 +585,9 @@ static const struct crashlog_info *select_crashlog_info(u32 type, u32 version)
 	return &crashlog_type1_ver2;
 }
 
-static int pmt_crashlog_header_decode(struct intel_pmt_entry *entry,
-				      struct device *dev)
+static int pmt_crashlog_pre_decode(struct intel_vsec_device *ivdev,
+				   struct intel_pmt_entry *entry)
 {
-	void __iomem *disc_table = entry->disc_table;
-	struct intel_pmt_header *header = &entry->header;
 	struct crashlog_entry *crashlog;
 	u32 version;
 	u32 type;
@@ -602,6 +600,16 @@ static int pmt_crashlog_header_decode(struct intel_pmt_entry *entry,
 	mutex_init(&crashlog->control_mutex);
 
 	crashlog->info = select_crashlog_info(type, version);
+	entry->attr_grp = crashlog->info->attr_grp;
+
+	return 0;
+}
+
+static int pmt_crashlog_header_decode(struct intel_pmt_entry *entry,
+				      struct device *dev)
+{
+	void __iomem *disc_table = entry->disc_table;
+	struct intel_pmt_header *header = &entry->header;
 
 	header->access_type = GET_ACCESS(readl(disc_table));
 	header->guid = readl(disc_table + GUID_OFFSET);
@@ -610,8 +618,6 @@ static int pmt_crashlog_header_decode(struct intel_pmt_entry *entry,
 	/* Size is measured in DWORDS, but accessor returns bytes */
 	header->size = GET_SIZE(readl(disc_table + SIZE_OFFSET));
 
-	entry->attr_grp = crashlog->info->attr_grp;
-
 	return 0;
 }
 
@@ -619,6 +625,7 @@ static DEFINE_XARRAY_ALLOC(crashlog_array);
 static struct intel_pmt_namespace pmt_crashlog_ns = {
 	.name = "crashlog",
 	.xa = &crashlog_array,
+	.pmt_pre_decode = pmt_crashlog_pre_decode,
 	.pmt_header_decode = pmt_crashlog_header_decode,
 };
 

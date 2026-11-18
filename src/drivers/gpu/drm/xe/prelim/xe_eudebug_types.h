@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MIT */
+
 /*
  * Copyright © 2023-2025 Intel Corporation
  */
@@ -16,8 +17,8 @@
 #include <linux/xarray.h>
 
 #include <uapi/drm/xe_drm.h>
-
 #include "prelim/xe_gt_debug.h"
+#include "xe_gt_debug_types.h"
 
 struct xe_device;
 struct task_struct;
@@ -27,8 +28,6 @@ struct xe_hw_engine;
 struct workqueue_struct;
 struct xe_exec_queue;
 struct xe_lrc;
-struct xe_vm;
-struct xe_gt;
 
 #define CONFIG_DRM_XE_DEBUGGER_EVENT_QUEUE_SIZE 64
 
@@ -99,6 +98,17 @@ struct xe_eudebug_eu_control_ops {
 };
 
 /**
+ * struct xe_eudebug_stopped_queue - an exec queue stopped by the debugger
+ */
+struct xe_eudebug_stopped_queue {
+	/** @link: link into xe_eudebug::stopped_queues.list */
+	struct list_head link;
+
+	/** @queue: stopped exec queue, a reference is held by this entry */
+	struct xe_exec_queue *queue;
+};
+
+/**
  * struct xe_eudebug - Top level struct for eudebug: the connection
  */
 struct xe_eudebug {
@@ -113,11 +123,11 @@ struct xe_eudebug {
 
 	/** @connection: eu debug connection status */
 	struct {
-		/** @status: connected = 1, disconnected = error */
+		/** @connection.status: connected = 1, disconnected = error */
 #define XE_EUDEBUG_STATUS_CONNECTED 1
 		int status;
 
-		/** @lock: guards access to status */
+		/** @connection.lock: guards access to status */
 		spinlock_t lock;
 	} connection;
 
@@ -144,44 +154,84 @@ struct xe_eudebug {
 
 	/** @events: kfifo queue of to-be-delivered events */
 	struct {
-		/** @lock: guards access to fifo */
+		/** @events.lock: guards access to fifo */
 		spinlock_t lock;
 
-		/** @fifo: queue of events pending */
+		/** @events.fifo: queue of events pending */
 		DECLARE_KFIFO(fifo,
 			      struct xe_eudebug_event *,
 			      CONFIG_DRM_XE_DEBUGGER_EVENT_QUEUE_SIZE);
 
-		/** @write_done: waitqueue for signalling write to fifo */
+		/** @events.write_done: waitqueue for signalling write to fifo */
 		wait_queue_head_t write_done;
 
-		/** @read_done: waitqueue for signalling read from fifo */
+		/** @events.read_done: waitqueue for signalling read from fifo */
 		wait_queue_head_t read_done;
 
-		/** @event_seqno: seqno counter to stamp events for fifo */
+		/** @events.seqno: seqno counter to stamp events for fifo */
 		atomic_long_t seqno;
 	} events;
 
 	/** @acks: user fences tracked by this debugger */
 	struct {
-		/** @lock: guards access to tree */
+		/** @acks.lock: guards access to tree */
 		spinlock_t lock;
-
+		/** @acks.tree: container for acks */
 		struct rb_root tree;
 	} acks;
 
 	/** @ops: operations for eu_control */
 	struct xe_eudebug_eu_control_ops *ops;
 
-	/** @pf_lock: guards access to pagefaults list*/
-	struct mutex pf_lock;
-	/** @pagefaults: xe_eudebug_pagefault list for pagefault event queuing */
-	struct list_head pagefaults;
 	/**
-	 * @pf_fence: fence on operations of eus (eu thread control and attention)
-	 * when page faults are being handled, protected by @eu_lock.
+	 * @pf: Aggregates pagefault related fields.
 	 */
-	struct dma_fence *pf_fence;
+	struct {
+		/** @pf.lock: guards access to pagefaults list*/
+		struct mutex lock;
+
+		/** @pf.pagefaults: xe_eudebug_pagefault list for pagefault event queuing */
+		struct list_head pagefaults;
+
+		/**
+		 * @pf.fence: fence on operations of eus (eu thread control and attention)
+		 * when page faults are being handled, protected by @xe.eudebug.lock.
+		 */
+		struct dma_fence *fence;
+
+		/**
+		 * @pf.active: number of pagefaults that are being processed in
+		 * parallel by workers and that are after prelim_xe_eudebug_pagefault_start()
+		 * but before prelim_xe_eudebug_pagefault_end() (ack_fault_end() handler).
+		 *
+		 * Value 0 means that no other worker is currently handling eudebug
+		 * related pagefault but there still may be a pagefault queued and waiting.
+		 *
+		 * Protected by @xe.eudebug.lock.
+		 */
+		u32 active;
+
+		/**
+		 * @pf.first: first pagefault. Only this pagefault will be reported
+		 * with event.
+		 * Subsequent pagefaults with matching VM will be ACKed without
+		 * being handled by eudebug.
+		 * Valid until there are no more pagefaults with matching asid.
+		 *
+		 * This field may be set while @pf.active is 0 if eudebug related
+		 * pagefault is queued but not yet processed.
+		 * Protected by @xe.eudebug.lock.
+		 */
+		struct xe_eudebug_pagefault *first;
+
+		/**
+		 * @pf.asid: VM id of the first pagefault (@pf.first).
+		 */
+		u32 asid;
+	} pf;
+
+	/** @stopped_queues: exec queues currently stopped by this debugger */
+	struct list_head stopped_queues;
 };
 
 /**
@@ -427,41 +477,37 @@ struct xe_eudebug_event_pagefault {
  * struct xe_eudebug_pagefault - eudebug structure for queuing pagefault
  */
 struct xe_eudebug_pagefault {
-	/** @list: link into the xe_eudebug.pagefaults */
-	struct list_head list;
+	/** @link: link into the xe_eudebug.pagefaults */
+	struct list_head link;
+	/** @d: eudebug instance. */
+	struct xe_eudebug *d;
 	/** @q: exec_queue which raised pagefault */
 	struct xe_exec_queue *q;
 	/** @lrc_idx: lrc index of the workload which raised pagefault */
 	int lrc_idx;
-	/** @vm: vm involved in a pagefault **/
-	struct xe_vm *vm;
-	/** @gt: gt involved in a pagefault **/
-	struct xe_gt *gt;
 
-	/** @fault: pagefault raw partial data passed from guc*/
+	/** @fault: pagefault raw partial data passed from guc */
 	struct {
-		/** @addr: ppgtt address where the pagefault occurred */
+		/** @fault.addr: ppgtt address where the pagefault occurred */
 		u64 addr;
-		/** @type: type of fault */
-		int type;
-		/** @level: level of fault */
-		int level;
-		/** @access: access type */
-		int access;
+		/** @fault.type_level: mixed type & level */
+		u8 type_level;
+		/** @fault.access_type: access type */
+		u8 access_type;
 	} fault;
 
-	/** @attentions: struct holding aggregated attensions */
+	/** @attentions: attention states in different phases of fault */
 	struct {
-		/** @before: state of attention bits before page fault WA processing*/
+		/** @attentions.before: state of attention bits before page fault WA processing*/
 		struct prelim_xe_eu_attentions before;
 		/**
-		 * @after: status of attention bits during page fault WA processing.
+		 * @attentions.after: status of attention bits during page fault WA processing.
 		 * It includes eu threads where attention bits are turned on for
 		 * reasons other than page fault WA (breakpoint, interrupt, etc.).
 		 */
 		struct prelim_xe_eu_attentions after;
 		/**
-		 * @resolved: state of the attention bits after page fault WA.
+		 * @attentions.resolved: state of the attention bits after page fault WA.
 		 * It includes the eu thread that caused the page fault.
 		 * To determine the eu thread that caused the page fault,
 		 * do XOR attentions.after and attentions.resolved.
@@ -470,11 +516,23 @@ struct xe_eudebug_pagefault {
 	} attentions;
 
 	/**
-	 * @deferred_resolved: to update attentions.resolved again when attention
-	 * bits are ready if the eu thread fails to turn on attention bits within
-	 * a certain time after page fault WA processing.
+	 * @private: copied the (struct xe_pagefault *)->producer.private filed.
+	 * EU Debugger masks private field in the struct xe_pagefault.
+	 * The prelim_xe_eudebug_pagefault_get_private() function to extracts original
+	 * private field regardless if it was shadowed or not.
 	 */
-	bool deferred_resolved;
+	void *private;
+
+	/**
+	 * @null_vma_addr: address to look for temporary vma for handling pagefault.
+	 * Shall be removed when pagefault is handled.
+	 */
+	u64 null_vma_addr;
+	/**
+	 * @svm_vma: After handling SVM pagefault original mapping shall be restored.
+	 * The svm_vma is the vma which was removed from original SVM mapping.
+	 */
+	struct xe_vma *svm_vma;
 };
 
 /**

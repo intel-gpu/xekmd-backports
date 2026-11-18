@@ -8,9 +8,10 @@
 
 #include <linux/workqueue.h>
 
-struct xe_gt;
 struct xe_device;
+struct xe_gt;
 struct xe_pagefault;
+struct xe_eudebug_pagefault;
 
 /** enum xe_pagefault_access_type - Xe page fault access type */
 enum xe_pagefault_access_type {
@@ -32,8 +33,97 @@ enum xe_pagefault_type {
 	XE_PAGEFAULT_TYPE_ATOMIC_ACCESS_VIOLATION	= 2,
 };
 
+/**
+ * enum xe_pagefault_error - Xe page fault servicing error
+ *
+ * Uniquely identifies the high-level point at which servicing of a page
+ * fault failed. Encoded into the reserved low bits of
+ * &xe_pagefault.consumer.page_addr (which is always page aligned) so the
+ * failure reason can be threaded back up to xe_pagefault_print() without
+ * growing the size of struct xe_pagefault. See xe_pagefault_set_error() and
+ * xe_pagefault_error_to_str().
+ */
+enum xe_pagefault_error {
+	/** @XE_PAGEFAULT_ERROR_NONE: No error recorded */
+	XE_PAGEFAULT_ERROR_NONE = 0,
+	/**
+	 * @XE_PAGEFAULT_ERROR_VM_NOT_FOUND: VM lookup by ASID failed, e.g.
+	 * the VM's file descriptor was already closed and the ASID has been
+	 * torn down
+	 */
+	XE_PAGEFAULT_ERROR_VM_NOT_FOUND,
+	/**
+	 * @XE_PAGEFAULT_ERROR_VM_NOT_IN_FAULT_MODE: VM found by ASID lookup
+	 * but is not in fault mode
+	 */
+	XE_PAGEFAULT_ERROR_VM_NOT_IN_FAULT_MODE,
+	/** @XE_PAGEFAULT_ERROR_VM_CLOSED: VM found but already closed */
+	XE_PAGEFAULT_ERROR_VM_CLOSED,
+	/** @XE_PAGEFAULT_ERROR_VMA_NOT_FOUND: No VMA covers the faulted address */
+	XE_PAGEFAULT_ERROR_VMA_NOT_FOUND,
+	/**
+	 * @XE_PAGEFAULT_ERROR_READ_ONLY_VIOLATION: Write/atomic fault on a
+	 * read-only VMA
+	 */
+	XE_PAGEFAULT_ERROR_READ_ONLY_VIOLATION,
+	/**
+	 * @XE_PAGEFAULT_ERROR_VMA_NEEDS_VRAM_CHECK: Failed determining if VMA
+	 * requires VRAM for an atomic access
+	 */
+	XE_PAGEFAULT_ERROR_VMA_NEEDS_VRAM_CHECK,
+	/**
+	 * @XE_PAGEFAULT_ERROR_VMA_ATOMIC_USERPTR: Atomic access requires VRAM
+	 * but VMA is a userptr, which is unsupported
+	 */
+	XE_PAGEFAULT_ERROR_VMA_ATOMIC_USERPTR,
+	/** @XE_PAGEFAULT_ERROR_VMA_USERPTR_PIN: Userptr page pin/repin failed */
+	XE_PAGEFAULT_ERROR_VMA_USERPTR_PIN,
+	/**
+	 * @XE_PAGEFAULT_ERROR_VMA_VALIDATE: Failed to lock/validate VMA's BO
+	 * or migrate it to VRAM
+	 */
+	XE_PAGEFAULT_ERROR_VMA_VALIDATE,
+	/** @XE_PAGEFAULT_ERROR_VMA_REBIND: Failed to rebind VMA into page tables */
+	XE_PAGEFAULT_ERROR_VMA_REBIND,
+	/**
+	 * @XE_PAGEFAULT_ERROR_SVM_GARBAGE_COLLECTOR: Failed processing
+	 * pending SVM garbage collection (unmaps) prior to servicing the
+	 * fault
+	 */
+	XE_PAGEFAULT_ERROR_SVM_GARBAGE_COLLECTOR,
+	/**
+	 * @XE_PAGEFAULT_ERROR_SVM_RANGE_NOT_FOUND: Failed to find or insert
+	 * an SVM range covering the faulted address
+	 */
+	XE_PAGEFAULT_ERROR_SVM_RANGE_NOT_FOUND,
+	/** @XE_PAGEFAULT_ERROR_SVM_REBIND: Failed to rebind an SVM range into page tables */
+	XE_PAGEFAULT_ERROR_SVM_REBIND,
+	/**
+	 * @XE_PAGEFAULT_ERROR_SVM_NEEDS_VRAM_CHECK: Failed determining if SVM
+	 * VMA requires VRAM for an atomic access
+	 */
+	XE_PAGEFAULT_ERROR_SVM_NEEDS_VRAM_CHECK,
+	/**
+	 * @XE_PAGEFAULT_ERROR_SVM_VMA_NOT_FOUND: SVM VMA re-lookup after a
+	 * range split failed to find a covering VMA
+	 */
+	XE_PAGEFAULT_ERROR_SVM_VMA_NOT_FOUND,
+	/**
+	 * @XE_PAGEFAULT_ERROR_SVM_SERVICE_FAILED: SVM range population,
+	 * migration, or bind failed
+	 */
+	XE_PAGEFAULT_ERROR_SVM_SERVICE_FAILED,
+};
+
 /** struct xe_pagefault_ops - Xe pagefault ops (producer) */
 struct xe_pagefault_ops {
+	/**
+	 * @ack_fault_begin: Ack fault begin
+	 * @private: producer private data
+	 *
+	 * Page fault producer begins acknowledgment from the consumer.
+	 */
+	void (*ack_fault_begin)(void *private);
 	/**
 	 * @ack_fault: Ack fault
 	 * @pf: Page fault
@@ -43,6 +133,25 @@ struct xe_pagefault_ops {
 	 * sends the result to the HW/FW interface.
 	 */
 	void (*ack_fault)(struct xe_pagefault *pf, int err);
+	/**
+	 * @ack_fault_end: Ack fault end
+	 * @private: producer private data
+	 * @asid: address space ID
+	 * @err: Error state of fault
+	 *
+	 * Page fault producer ends acknowledgment from the consumer.
+	 */
+	void (*ack_fault_end)(void *private, u32 asid, int err);
+	/**
+	 * @print: Print pagefault info
+	 * @pf: Page fault
+	 * @err_str: Consumer servicing error string
+	 *
+	 * Print pagefault identification fields decoded from producer,
+	 * along with consumer-specific @err_str prints.
+	 * Must be implemented by all producers.
+	 */
+	void (*print)(struct xe_pagefault *pf, const char *err_str);
 };
 
 /**
@@ -61,34 +170,63 @@ struct xe_pagefault {
 	/**
 	 * @consumer: State for the software handling the fault. Populated by
 	 * the producer and may be modified by the consumer to communicate
-	 * information back to the producer upon fault acknowledgment.
+	 * information back to the producer upon fault acknowledgment. After
+	 * fault acknowledgment, the producer should only access consumer fields
+	 * via well defined helpers.
 	 */
 	struct {
-		/** @consumer.page_addr: address of page fault */
-		u64 page_addr;
-		/** @consumer.asid: address space ID */
-		u32 asid;
 		/**
-		 * @consumer.access_type: access type and prefetch flag packed
-		 * into a u8.
+		 * @consumer.page_addr: address of page fault, populated by
+		 * consumer after fault completion
 		 */
-		u8 access_type;
+		u64 page_addr;
+		union {
+			struct {
+				/**
+				 * @consumer.alloc_state: page fault allocation
+				 * state
+				 */
+				u8 alloc_state;
+				/**
+				 * @consumer.access_type: access type, u8 rather
+				 * than enum to keep size compact
+				 */
+				u8 access_type;
 #define XE_PAGEFAULT_ACCESS_TYPE_MASK	GENMASK(1, 0)
 #define XE_PAGEFAULT_ACCESS_PREFETCH	BIT(7)
-		/**
-		 * @consumer.fault_type_level: fault type and level, u8 rather
-		 * than enum to keep size compact
-		 */
-		u8 fault_type_level;
+				/**
+				 * @consumer.fault_type_level: fault type and
+				 * level, u8 rather than enum to keep size
+				 * compact
+				 */
+				u8 fault_type_level;
 #define XE_PAGEFAULT_TYPE_LEVEL_NACK		0xff	/* Producer indicates nack fault */
-#define XE_PAGEFAULT_LEVEL_MASK			GENMASK(3, 0)
-#define XE_PAGEFAULT_TYPE_MASK			GENMASK(7, 4)
-		/** @consumer.engine_class: engine class */
-		u8 engine_class;
-		/** @consumer.engine_instance: engine instance */
-		u8 engine_instance;
-		/** consumer.reserved: reserved bits for future expansion */
-		u64 reserved;
+#define XE_PAGEFAULT_LEVEL_MASK			GENMASK(2, 0)
+#define XE_PAGEFAULT_TYPE_MASK			GENMASK(6, 3)
+#define XE_PAGEFAULT_REQUEUE_MASK		BIT(7)
+				/** @consumer.engine_class_instance: engine class and instance */
+				u8 engine_class_instance;
+#define XE_PAGEFAULT_ENGINE_CLASS_MASK		GENMASK(3, 0)
+#define XE_PAGEFAULT_ENGINE_INSTANCE_MASK	GENMASK(7, 4)
+				/**
+				 * @consumer.id: address space ID and SRCID, folded into one
+				 * to keep size compact
+				 */
+				u32 id;
+#define XE_PAGEFAULT_ASID_MASK	GENMASK(23, 0)
+#define XE_PAGEFAULT_SRCID_MASK	GENMASK(31, 24)
+			};
+			/**
+			 * @consumer.end_addr: end address of page fault,
+			 * populated by consumer after fault completion
+			 */
+			u64 end_addr;
+		};
+		/**
+		 * @consumer.next: next pagefault chained to this fault,
+		 * protected by pf_queue lock
+		 */
+		struct xe_pagefault *next;
 	} consumer;
 	/**
 	 * @producer: State for the producer (i.e., HW/FW interface). Populated
@@ -113,13 +251,46 @@ struct xe_pagefault {
 };
 
 /**
- * struct xe_pagefault_queue: Xe pagefault queue (consumer)
+ * enum xe_pagefault_alloc_state - lifetime state for a page fault queue entry
+ * @XE_PAGEFAULT_ALLOC_STATE_FREE:
+ *	Entry is unused and may be overwritten by the producer, consumer retry
+ *	or requeue..
+ * @XE_PAGEFAULT_ALLOC_STATE_QUEUED:
+ *	Entry has been enqueued and may be dequeued by a worker.
+ * @XE_PAGEFAULT_ALLOC_STATE_ACTIVE:
+ *	Entry has been dequeued and is the worker's currently serviced fault.
+ *	The worker may attach additional faults to it via consumer.next.
+ * @XE_PAGEFAULT_ALLOC_STATE_CHAINED:
+ *	Entry is not independently serviced; it has been chained onto an
+ *	ACTIVE entry via consumer.next and will be acknowledged when the
+ *	leading fault completes.
+ * @XE_PAGEFAULT_ALLOC_STATE_COUNT:
+ *	Maximum enum value.
+ *
+ * The page fault queue provides stable storage for outstanding faults so the
+ * IRQ handler can chain new cache hits directly onto a worker's active fault.
+ * Because entries may remain referenced outside the consumer dequeue window,
+ * the producer must only write into entries in the FREE state.
+ *
+ * State transitions are protected by the page fault queue lock. Workers return
+ * entries to FREE after acknowledging the fault (either as ACTIVE or CHAINED).
+ */
+enum xe_pagefault_alloc_state {
+	XE_PAGEFAULT_ALLOC_STATE_FREE		= 0,
+	XE_PAGEFAULT_ALLOC_STATE_QUEUED		= 1,
+	XE_PAGEFAULT_ALLOC_STATE_CHAINED	= 2,
+	XE_PAGEFAULT_ALLOC_STATE_ACTIVE		= 3,
+	XE_PAGEFAULT_ALLOC_STATE_COUNT		= 4,
+};
+
+/**
+ * struct xe_pagefault_queue - Xe pagefault queue (consumer)
  *
  * Used to capture all device page faults for deferred processing. Size this
  * queue to absorb the device’s worst-case number of outstanding faults.
  */
 struct xe_pagefault_queue {
-	/** @xe: Xe device owning this page-fault queue */
+	/** @xe: Back-pointer to the Xe device */
 	struct xe_device *xe;
 	/**
 	 * @data: Data in queue containing struct xe_pagefault, protected by
@@ -132,10 +303,39 @@ struct xe_pagefault_queue {
 	u32 head;
 	/** @tail: Tail pointer in bytes, moved by consumer, protected by @lock */
 	u32 tail;
-	/** @lock: protects page fault queue */
+	/** @lock: protects page fault queue, workers caches */
 	spinlock_t lock;
-	/** @worker: to process page faults */
-	struct work_struct worker;
+};
+
+/**
+ * struct xe_pagefault_work - Xe page fault work item (consumer)
+ *
+ * Represents a worker that pops a &struct xe_pagefault from the page fault
+ * queue and processes it.
+ */
+struct xe_pagefault_work {
+	/** @xe: Back-pointer to the Xe device */
+	struct xe_device *xe;
+	/** @id: Identifier for this work item */
+	int id;
+	/**
+	 * @cache: Page fault cache for the currently processed fault
+	 *
+	 * Protected by the page fault queue lock.
+	 */
+	struct {
+#define XE_PAGEFAULT_CACHE_START_INVALID	U64_MAX
+		/** @cache.start: Start address of the current page fault */
+		u64 start;
+		/** @cache.end: End address of the current page fault */
+		u64 end;
+		/** @cache.asid: Address space ID of the current page fault */
+		u32 asid;
+		/** @cache.pf: Pointer to the current page fault */
+		struct xe_pagefault *pf;
+	} cache;
+	/** @work: Work item used to process the page fault */
+	struct work_struct work;
 };
 
 #endif

@@ -89,7 +89,7 @@ DEF_VER=@DOLLAR_SIGN@(shell cat debian/changelog.in | head -1 | cut -d '(' -f 2 
 
 export KBUILD_ONLYXEDIRS := src/drivers/gpu src/include src/scripts src/drivers/platform src/drivers/mtd src/drivers/misc
 export KBUILD_XEVFIOPCIDIRS := src/drivers/vfio
-export KBUILD_AUTOTOOLS := m4 AUTHORS  ChangeLog  configure.ac  COPYING  INSTALL Makefile  Makefile.am  NEWS  README.md compile.sh
+export KBUILD_AUTOTOOLS := m4 AUTHORS  ChangeLog  configure.ac  COPYING  INSTALL Makefile  Makefile.am  NEWS  README.md oot-build.sh
 XE_TAR_CONTENT=$(KBUILD_ONLYXEDIRS) $(KBUILD_AUTOTOOLS) $(KBUILD_XEVFIOPCIDIRS) src/Makefile* src/local-symbols src/MAINTAINERS src/local-symbols-autoconf \
 	src/Kconfig src/Kconfig.sources src/Kconfig.package.hacks src/Kconfig.drm_ras src/COPYING src/versions src/defconfigs src/backport-include src/kconf src/compat
 
@@ -139,7 +139,7 @@ xe-dkms-rpm-pkg: clean
 	mkdir -p ~/rpmbuild/SOURCES
 	@DOLLAR_SIGN@(CONFIG_SHELL) @DOLLAR_SIGN@(XE_RPM_MK_SPEC) -n @DOLLAR_SIGN@(XE_PKG_NAME) -v @DOLLAR_SIGN@(XE_RPM_PKG_VERSION) -r @DOLLAR_SIGN@(XE_RPM_PKG_RELEASE) @DOLLAR_SIGN@(if @DOLLAR_SIGN@(DISTRO_SUFFIX),-d @DOLLAR_SIGN@(DISTRO_SUFFIX)) -z dkms > rpm/@DOLLAR_SIGN@(XE_PKG_NAME).spec
 	@DOLLAR_SIGN@(CONFIG_SHELL) @DOLLAR_SIGN@(XE_RPM_MK_DKMS) -n @DOLLAR_SIGN@(XE_PKG_NAME) -v @DOLLAR_SIGN@(XE_RPM_PKG_VERSION) -r @DOLLAR_SIGN@(XE_RPM_PKG_RELEASE) > rpm/@DOLLAR_SIGN@(XE_PKG_NAME).dkms.conf
-	cp -r src m4 debian Makefile* configure* aclocal.m4 AUTHORS ChangeLog COPYING INSTALL NEWS README.md compile.sh ~/rpmbuild/SOURCES/ 2>/dev/null || true
+	cp -r src m4 debian Makefile* configure* aclocal.m4 AUTHORS ChangeLog COPYING INSTALL NEWS README.md oot-build.sh ~/rpmbuild/SOURCES/ 2>/dev/null || true
 	+rpmbuild -bb --define "_sourcedir @DOLLAR_SIGN@(PWD)" rpm/@DOLLAR_SIGN@(XE_PKG_NAME).spec
 
 all clean:

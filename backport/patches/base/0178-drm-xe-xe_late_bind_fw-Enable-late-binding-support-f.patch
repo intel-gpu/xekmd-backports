@@ -52,13 +52,13 @@ index 190674f6d..cc4bb9a54 100644
  		return 0;
  	}
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index 4f3a7bada..ba61ce257 100644
+index 246870792..122adafee 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -484,6 +484,8 @@ static const struct xe_device_desc cri_desc = {
- 	.has_soc_remapper_telem = true,
+@@ -486,6 +486,8 @@ static const struct xe_device_desc cri_desc = {
  	.has_sriov = true,
  	.has_sysctrl = true,
+ 	.has_temp_sentinel = true,
 +	.late_bind_mask = BIT(XE_LB_FW_FAN_CONTROL) |
 +			  BIT(XE_LB_FW_OCODE),
  	.max_gt_per_tile = 2,

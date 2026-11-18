@@ -87,10 +87,10 @@ index e07517d12..23045ed2a 100644
 +	  GPU idling and writeback to be reclaimed, in favour of purgeable
 +	  ones and other kernel caches.
 diff --git a/drivers/gpu/drm/xe/xe_device_sysfs.c b/drivers/gpu/drm/xe/xe_device_sysfs.c
-index a73e0e957..f53e2a5ee 100644
+index 18783a286..ff5d25dd8 100644
 --- a/drivers/gpu/drm/xe/xe_device_sysfs.c
 +++ b/drivers/gpu/drm/xe/xe_device_sysfs.c
-@@ -14,6 +14,7 @@
+@@ -15,6 +15,7 @@
  #include "xe_pcode_api.h"
  #include "xe_pcode.h"
  #include "xe_pm.h"
@@ -98,7 +98,7 @@ index a73e0e957..f53e2a5ee 100644
  
  /**
   * DOC: Xe device sysfs
-@@ -30,6 +31,12 @@
+@@ -31,6 +32,12 @@
   *
   * lb_voltage_regulator_version - Voltage regulator version provisioned by late
   * binding. Exposed only if supported by the device.
@@ -111,24 +111,24 @@ index a73e0e957..f53e2a5ee 100644
   */
  
  static ssize_t
-@@ -264,11 +271,54 @@ static const struct attribute_group auto_link_downgrade_attr_group = {
- 	.attrs = auto_link_downgrade_attrs,
+@@ -294,11 +301,54 @@ static const struct attribute_group device_uid_attr_group = {
+ 	.attrs = device_uid_attrs,
  };
  
 +static ssize_t
 +shrinker_non_purgeable_seeks_show(struct device *dev,
-+		struct device_attribute *attr, char *buf)
++				  struct device_attribute *attr, char *buf)
 +{
 +	struct xe_device *xe = pdev_to_xe_device(to_pci_dev(dev));
 +
 +	return sysfs_emit(buf, "%d\n",
-+			xe_shrinker_non_purgeable_seeks(xe->mem.shrinker));
++			  xe_shrinker_non_purgeable_seeks(xe->mem.shrinker));
 +}
 +
 +static ssize_t
 +shrinker_non_purgeable_seeks_store(struct device *dev,
-+		struct device_attribute *attr,
-+		const char *buf, size_t count)
++				   struct device_attribute *attr,
++				   const char *buf, size_t count)
 +{
 +	struct xe_device *xe = pdev_to_xe_device(to_pci_dev(dev));
 +	unsigned int seeks;
@@ -167,7 +167,7 @@ index a73e0e957..f53e2a5ee 100644
  		ret = devm_device_add_group(dev, &vram_attr_group);
  		if (ret)
 diff --git a/drivers/gpu/drm/xe/xe_shrinker.c b/drivers/gpu/drm/xe/xe_shrinker.c
-index baf3229f8..2cf25c3c2 100644
+index 378022c37..39aa0fad8 100644
 --- a/drivers/gpu/drm/xe/xe_shrinker.c
 +++ b/drivers/gpu/drm/xe/xe_shrinker.c
 @@ -14,6 +14,19 @@
@@ -208,7 +208,7 @@ index baf3229f8..2cf25c3c2 100644
  	struct work_struct pm_worker;
  };
  
-@@ -176,6 +191,19 @@ static int xe_shrinker_walk(struct xe_shrinker *shrinker,
+@@ -179,6 +194,19 @@ static int xe_shrinker_walk(struct xe_shrinker *shrinker,
  	return ret;
  }
  
@@ -228,7 +228,7 @@ index baf3229f8..2cf25c3c2 100644
  static unsigned long
  xe_shrinker_count(struct shrinker *shrink, struct shrink_control *sc)
  {
-@@ -191,7 +219,6 @@ xe_shrinker_count(struct shrinker *shrink, struct shrink_control *sc)
+@@ -194,7 +222,6 @@ xe_shrinker_count(struct shrinker *shrink, struct shrink_control *sc)
  	else
  		num_pages = 0;
  
@@ -236,7 +236,7 @@ index baf3229f8..2cf25c3c2 100644
  	read_unlock(&shrinker->lock);
  
  	return num_pages ? num_pages : SHRINK_EMPTY;
-@@ -204,8 +231,7 @@ xe_shrinker_count(struct shrinker *shrink, struct shrink_control *sc)
+@@ -207,8 +234,7 @@ xe_shrinker_count(struct shrinker *shrink, struct shrink_control *sc)
   * If bo shrinking needs an rpm reference and we don't have it (yet),
   * that bo will be skipped anyway.
   */
@@ -246,7 +246,7 @@ index baf3229f8..2cf25c3c2 100644
  {
  	struct xe_device *xe = shrinker->xe;
  
-@@ -213,63 +239,52 @@ static bool xe_shrinker_runtime_pm_get(struct xe_shrinker *shrinker, bool force,
+@@ -216,63 +242,52 @@ static bool xe_shrinker_runtime_pm_get(struct xe_shrinker *shrinker, bool force,
  	    !ttm_backup_bytes_avail())
  		return false;
  
@@ -335,7 +335,7 @@ index baf3229f8..2cf25c3c2 100644
  	return nr_scanned ? freed : SHRINK_STOP;
  }
  
-@@ -291,10 +306,45 @@ static void xe_shrinker_fini(struct drm_device *drm, void *arg)
+@@ -294,10 +309,45 @@ static void xe_shrinker_fini(struct drm_device *drm, void *arg)
  	xe_assert(shrinker->xe, !shrinker->purgeable_pages);
  	xe_assert(shrinker->xe, !shrinker->populated_tts);
  	shrinker_free(shrinker->shrink);
@@ -381,7 +381,7 @@ index baf3229f8..2cf25c3c2 100644
  /**
   * xe_shrinker_create() - Create an xe per-device shrinker
   * @xe: Pointer to the xe device.
-@@ -308,8 +358,15 @@ int xe_shrinker_create(struct xe_device *xe)
+@@ -311,8 +361,15 @@ int xe_shrinker_create(struct xe_device *xe)
  	if (!shrinker)
  		return -ENOMEM;
  
@@ -398,7 +398,7 @@ index baf3229f8..2cf25c3c2 100644
  		kfree(shrinker);
  		return -ENOMEM;
  	}
-@@ -317,10 +374,18 @@ int xe_shrinker_create(struct xe_device *xe)
+@@ -320,10 +377,18 @@ int xe_shrinker_create(struct xe_device *xe)
  	INIT_WORK(&shrinker->pm_worker, xe_shrinker_pm);
  	shrinker->xe = xe;
  	rwlock_init(&shrinker->lock);

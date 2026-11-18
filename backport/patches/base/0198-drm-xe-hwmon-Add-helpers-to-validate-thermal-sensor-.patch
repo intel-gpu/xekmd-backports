@@ -13,8 +13,6 @@ Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
 Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Link: https://patch.msgid.link/20261015071434.1063785-5-karthik.poosa@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
-Signed-off-by: Matthew Brost <matthew.brost@intel.com>
-Signed-off-by: Dave Airlie <airlied@redhat.com>
 ---
  drivers/gpu/drm/xe/xe_device_types.h |  2 ++
  drivers/gpu/drm/xe/xe_hwmon.c        | 27 +++++++++++++++++++++++++++
@@ -23,10 +21,10 @@ Signed-off-by: Dave Airlie <airlied@redhat.com>
  4 files changed, 32 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 3c634448f..2c9797e8d 100644
+index 8d95d4fe4..add6fa3ae 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -223,6 +223,8 @@ struct xe_device {
+@@ -222,6 +222,8 @@ struct xe_device {
  		u8 has_sriov:1;
  		/** @info.has_sysctrl: Supports System Controller */
  		u8 has_sysctrl:1;
@@ -36,7 +34,7 @@ index 3c634448f..2c9797e8d 100644
  		u8 has_usm:1;
  		/** @info.has_64bit_timestamp: Device supports 64-bit timestamps */
 diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
-index 1bfc3d1ea..ae166e56b 100644
+index e62ad456d..9c5adf847 100644
 --- a/drivers/gpu/drm/xe/xe_hwmon.c
 +++ b/drivers/gpu/drm/xe/xe_hwmon.c
 @@ -105,6 +105,9 @@ enum sensor_attr_power {
@@ -49,7 +47,7 @@ index 1bfc3d1ea..ae166e56b 100644
  /* Mailbox temperature is sign-magnitude: bit 7 sign, bits 6:0 magnitude. */
  #define TEMP_MBX_SIGN		BIT(7)
  #define TEMP_MBX_MAG		GENMASK(6, 0)
-@@ -813,6 +816,30 @@ static int xe_hwmon_pcode_read_thermal_info(struct xe_hwmon *hwmon)
+@@ -855,6 +858,30 @@ static int xe_hwmon_pcode_read_thermal_info(struct xe_hwmon *hwmon)
  	return ret;
  }
  
@@ -81,7 +79,7 @@ index 1bfc3d1ea..ae166e56b 100644
  static int mbx_temp_decode(u8 value)
  {
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index ba61ce257..8b305070d 100644
+index 4cf02f720..67204914d 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
 @@ -484,6 +484,7 @@ static const struct xe_device_desc cri_desc = {
@@ -89,10 +87,10 @@ index ba61ce257..8b305070d 100644
  	.has_sriov = true,
  	.has_sysctrl = true,
 +	.has_temp_sentinel = true,
- 	.late_bind_mask = BIT(XE_LB_FW_FAN_CONTROL) |
- 			  BIT(XE_LB_FW_OCODE),
  	.max_gt_per_tile = 2,
-@@ -818,6 +819,7 @@ static int xe_info_init_early(struct xe_device *xe,
+ 	MULTI_LRC_MASK,
+ 	.require_force_probe = true,
+@@ -817,6 +818,7 @@ static int xe_info_init_early(struct xe_device *xe,
  	xe->info.has_sriov = xe_configfs_primary_gt_allowed(to_pci_dev(xe->drm.dev)) &&
  		desc->has_sriov;
  	xe->info.has_sysctrl = desc->has_sysctrl;
@@ -101,7 +99,7 @@ index ba61ce257..8b305070d 100644
  	xe->info.skip_pcode = desc->skip_pcode;
  	xe->info.needs_scratch = desc->needs_scratch;
 diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
-index 0ea1aa57f..92135405b 100644
+index fe327323a..7cb372a83 100644
 --- a/drivers/gpu/drm/xe/xe_pci_types.h
 +++ b/drivers/gpu/drm/xe/xe_pci_types.h
 @@ -60,6 +60,7 @@ struct xe_device_desc {

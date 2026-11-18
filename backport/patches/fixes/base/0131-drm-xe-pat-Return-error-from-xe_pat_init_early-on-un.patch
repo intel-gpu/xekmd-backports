@@ -18,6 +18,9 @@ Signed-off-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
 Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20261012122522.2307625-8-dnyaneshwar.bhadane@intel.com
 Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry picked from commit e952337c3dbccf600ddae3bb1d38e996172ac8f8)
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Dave Airlie <airlied@redhat.com>
 ---
  drivers/gpu/drm/xe/xe_device.c |  4 +++-
  drivers/gpu/drm/xe/xe_pat.c    | 11 ++++++++++-
@@ -25,12 +28,12 @@ Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
  3 files changed, 16 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index f7e2e37ef..87e3effac 100644
+index 7e6027f49a4c..aa0bdf9c6caa 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -967,7 +967,9 @@ int xe_device_probe(struct xe_device *xe)
- 	int err;
- 	u8 id;
+@@ -888,7 +888,9 @@ int xe_device_probe(struct xe_device *xe)
+ 
+ 	xe_uid_probe(xe);
  
 -	xe_pat_init_early(xe);
 +	err = xe_pat_init_early(xe);
@@ -40,7 +43,7 @@ index f7e2e37ef..87e3effac 100644
  	err = xe_sriov_init(xe);
  	if (err)
 diff --git a/drivers/gpu/drm/xe/xe_pat.c b/drivers/gpu/drm/xe/xe_pat.c
-index a5fe1beec..0ac64a6a3 100644
+index a5fe1beec652..0ac64a6a3098 100644
 --- a/drivers/gpu/drm/xe/xe_pat.c
 +++ b/drivers/gpu/drm/xe/xe_pat.c
 @@ -590,7 +590,13 @@ static const struct xe_pat_ops xe3p_xpc_pat_ops = {
@@ -75,7 +78,7 @@ index a5fe1beec..0ac64a6a3 100644
  
  void xe_pat_init(struct xe_gt *gt)
 diff --git a/drivers/gpu/drm/xe/xe_pat.h b/drivers/gpu/drm/xe/xe_pat.h
-index 7060f66e1..6398c3ab4 100644
+index 7060f66e1d63..6398c3ab4805 100644
 --- a/drivers/gpu/drm/xe/xe_pat.h
 +++ b/drivers/gpu/drm/xe/xe_pat.h
 @@ -42,8 +42,10 @@ struct xe_pat_table_entry {

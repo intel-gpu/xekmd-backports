@@ -1,0 +1,94 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Date: Fri, 6 Nov 2026 02:06:33 +0530
+Subject: [PATCH] drm/xe/pf: Restore PF scheduling defaults when restoring auto
+ provisioning
+
+Any debugfs change to PF/VF scheduling (execution quantum, preemption
+timeout, priority or the sched_if_idle policy) switches the PF into
+custom provisioning mode. In custom mode, pf_disable_vfs() skips
+xe_sriov_pf_reprovision_default(), so the PF keeps its custom scheduling
+values after VFs are disabled.
+
+Writing to the restore_auto_provisioning debugfs attribute switches the
+mode back to auto and releases all VF configs, but it does not reset the
+PF scheduling configuration. On the next VF enable, pf_needs_provision_sched()
+finds non-default PF scheduling and skips fair scheduling provisioning:
+
+  PF: Tile0: GT0: PF already provisioned with EQ
+  PF: Tile0: GT0: PF already provisioned with PT
+  PF: Tile0: GT0: PF and VFs 1-12 already provisioned with PRIORITY
+  PF: Tile0: GT0: VFs 1-12 not provisioned with EQ
+  PF: Tile0: GT0: VFs 1-12 not provisioned with PT
+
+All VFs are then left with infinite execution quantum and preemption timeout.
+During a VF FLR, the PF must clear the VF LMEM using its migrate queue,
+but GuC never schedules that PF context, so the clear times out and FLR fails:
+
+  PF: Tile0: GT0: VF24 resource sanitizing failed (-ETIMEDOUT)
+  PF: Tile0: GT0: VF24 FLR didn't finish in 5000 ms (-ETIMEDOUT)
+  PF: Tile0: GT0: VF24 control command FLR_START failed (-EIO)
+
+The VF is left in an inconsistent state, the guest driver probe fails with
+emit_wa_job -ETIME, and the following PF GT reset breaks subsequent VF enabling.
+
+The same starvation also hits VF-to-VF: with sched_if_idle left enabled
+and infinite VF EQ/PT, a VF probe fails even without any FLR:
+
+  xe 0000:03:00.2: [drm] *ERROR* Tile0: GT0: hwe rcs0: emit_wa_job failed (-ETIME) guc_id=1
+  xe 0000:03:00.2: [drm] *ERROR* SIGID=101 FATAL (-ETIME) PROBE: driver loading failed for device 'e20b'
+
+Reproducer:
+
+  echo 2 > /sys/bus/pci/devices/0000:03:00.0/sriov_numvfs
+  echo 1 > /sys/kernel/debug/dri/0000:03:00.0/gt0/pf/sched_if_idle
+  echo 50 > /sys/kernel/debug/dri/0000:03:00.0/gt0/pf/exec_quantum_ms
+  echo 0 > /sys/bus/pci/devices/0000:03:00.0/sriov_numvfs
+  echo 1 > /sys/kernel/debug/dri/0000:03:00.0/sriov/restore_auto_provisioning
+  echo 2 > /sys/bus/pci/devices/0000:03:00.0/sriov_numvfs
+
+With a single VF the probe succeeds, but a subsequent VF FLR still fails
+since the PF migrate job is never scheduled:
+
+  echo 0000:03:00.1 > /sys/bus/pci/drivers/xe/unbind
+  echo 1 > /sys/bus/pci/devices/0000:03:00.1/reset
+
+  PF: Tile0: GT0: VF1 resource sanitizing failed (-ETIMEDOUT)
+  Tile0: GT0: Check job timeout: seqno=389, lrc_seqno=389, guc_id=0, not started
+
+Reset the PF scheduling defaults (sched_if_idle, PF execution quantum
+and preemption timeout) when switching back to auto provisioning, the
+same way it is already done when VFs are disabled in auto mode. This
+lets the next VF enable apply fair scheduling to PF and all VFs again.
+
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_pf_provision.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+@@ -168,12 +168,19 @@ int xe_sriov_pf_provision_set_mode(struct xe_device *xe, enum xe_sriov_provisioning_mode mode)
+ 		return 0;
+ 
+ 	if (mode == XE_SRIOV_PROVISIONING_MODE_AUTO) {
++		int err;
++
+ 		if (xe_sriov_pf_num_vfs(xe)) {
+ 			xe_sriov_dbg(xe, "can't restore %s: VFs must be disabled!\n",
+ 				     mode_to_string(mode));
+ 			return -EBUSY;
+ 		}
+ 		pf_unprovision_all_vfs(xe);
++
++		/* custom PF EQ/PT/sched_if_idle would block fair VF scheduling */
++		err = pf_reprovision_default(xe);
++		if (err)
++			return err;
+ 	}
+ 
+ 	xe_sriov_dbg(xe, "mode %s changed to %s by %ps\n",
+-- 
+2.43.0
+

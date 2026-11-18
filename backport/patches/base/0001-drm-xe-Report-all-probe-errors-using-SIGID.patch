@@ -15,28 +15,17 @@ Cc: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-20-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
-(backported from commit 9d91d2c1f947f7a1fa698f1881248feb602c4b15 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
-Signed-off-by: SYS SEOS AUTOBACKPORT <sys_seos_autobackport@intel.com>
+(cherry-picked from commit 9d91d2c1f947f7a1fa698f1881248feb602c4b15 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
- drivers/gpu/drm/xe/xe_pci.c | 28 +++++++++++++++++++++-------
- 1 file changed, 21 insertions(+), 7 deletions(-)
+ drivers/gpu/drm/xe/xe_pci.c | 27 +++++++++++++++++++++------
+ 1 file changed, 21 insertions(+), 6 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index 4068b6bf9eaa..f58ca5c9918c 100644
+index 4068b6bf9..1e04e8ef2 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -1118,8 +1118,7 @@ static void xe_pci_remove(struct pci_dev *pdev)
- 		return;
- 
- 	xe_device_remove(xe);
--
--	/*
-+/*
- 	 * Preserve remove-time flush after moving destroy work to module
- 	 * lifetime.
- 	 */
-@@ -1146,17 +1145,12 @@ static void xe_pci_remove(struct pci_dev *pdev)
+@@ -1146,17 +1146,12 @@ static void xe_pci_remove(struct pci_dev *pdev)
   * caller. Therefore there is no consequence on those specific callers when
   * function error injection skips the whole function.
   */
@@ -84,3 +73,4 @@ index 4068b6bf9eaa..f58ca5c9918c 100644
  	if (!group)
 -- 
 2.43.0
+

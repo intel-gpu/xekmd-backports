@@ -12,7 +12,7 @@ Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Link: https://patch.msgid.link/20261102172527.2794537-14-badal.nilawar@intel.com
 Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
 (cherry-picked from commit 6569aa6628799976b1c857afe8793c4fe70afb68 linux-next)
-Signed-off-by: Pravalika Gurram pravalika.gurram@intel.com
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_late_bind_fw.c | 43 ++++++++++++++++++++--------
  drivers/gpu/drm/xe/xe_late_bind_fw.h |  4 +--
@@ -20,10 +20,10 @@ Signed-off-by: Pravalika Gurram pravalika.gurram@intel.com
  3 files changed, 36 insertions(+), 17 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
-index f32d245e3..355d7c841 100644
+index cc4bb9a54..b67f99c7b 100644
 --- a/drivers/gpu/drm/xe/xe_late_bind_fw.c
 +++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
-@@ -230,7 +230,7 @@ static int xe_late_bind_fw_num_fans(struct xe_late_bind *late_bind, u32 *num_fan
+@@ -202,7 +202,7 @@ static int xe_late_bind_fw_num_fans(struct xe_late_bind *late_bind, u32 *num_fan
  			     PCODE_MBOX(FAN_SPEED_CONTROL, FSC_READ_NUM_FANS, 0), num_fans, NULL);
  }
  
@@ -32,7 +32,7 @@ index f32d245e3..355d7c841 100644
  {
  	struct xe_device *xe = late_bind_to_xe(late_bind);
  	struct xe_late_bind_fw *lbfw;
-@@ -306,18 +306,12 @@ static void xe_late_bind_work(struct work_struct *work)
+@@ -278,18 +278,12 @@ static void xe_late_bind_work(struct work_struct *work)
  	xe_pm_runtime_put(xe);
  }
  
@@ -52,7 +52,7 @@ index f32d245e3..355d7c841 100644
  	for (fw_id = 0; fw_id < XE_LB_FW_MAX_ID; fw_id++) {
  		lbfw = &late_bind->late_bind_fw[fw_id];
  		if (lbfw->payload) {
-@@ -325,7 +319,6 @@ int xe_late_bind_fw_load(struct xe_late_bind *late_bind)
+@@ -297,7 +291,6 @@ int xe_late_bind_fw_load(struct xe_late_bind *late_bind)
  			queue_work(late_bind->wq, &lbfw->work);
  		}
  	}
@@ -60,7 +60,7 @@ index f32d245e3..355d7c841 100644
  }
  
  static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
-@@ -458,7 +451,7 @@ static void xe_late_bind_component_unbind(struct device *xe_kdev,
+@@ -430,7 +423,7 @@ static void xe_late_bind_component_unbind(struct device *xe_kdev,
  	struct xe_device *xe = kdev_to_xe_device(xe_kdev);
  	struct xe_late_bind *late_bind = &xe->late_bind;
  
@@ -69,7 +69,7 @@ index f32d245e3..355d7c841 100644
  
  	late_bind->component.ops = NULL;
  }
-@@ -473,7 +466,7 @@ static void xe_late_bind_remove(void *arg)
+@@ -445,7 +438,7 @@ static void xe_late_bind_remove(void *arg)
  	struct xe_late_bind *late_bind = arg;
  	struct xe_device *xe = late_bind_to_xe(late_bind);
  
@@ -78,7 +78,7 @@ index f32d245e3..355d7c841 100644
  
  	late_bind->component_added = false;
  
-@@ -497,6 +490,30 @@ static bool late_bind_mei_enabled(struct xe_device *xe)
+@@ -469,6 +462,30 @@ static bool late_bind_mei_enabled(struct xe_device *xe)
  	return IS_ENABLED(CONFIG_INTEL_MEI_CSC);
  }
  
@@ -109,7 +109,7 @@ index f32d245e3..355d7c841 100644
  /**
   * xe_late_bind_init() - add xe mei late binding component
   * @late_bind: pointer to late bind structure.
-@@ -533,5 +550,7 @@ int xe_late_bind_init(struct xe_late_bind *late_bind)
+@@ -505,5 +522,7 @@ int xe_late_bind_init(struct xe_late_bind *late_bind)
  	if (err)
  		return err;
  
@@ -133,7 +133,7 @@ index 07e437390..8896fea30 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
-index 7de616bd2..a61afc613 100644
+index f7e277025..8d2e1400c 100644
 --- a/drivers/gpu/drm/xe/xe_pm.c
 +++ b/drivers/gpu/drm/xe/xe_pm.c
 @@ -184,7 +184,7 @@ int xe_pm_suspend(struct xe_device *xe)
@@ -154,7 +154,7 @@ index 7de616bd2..a61afc613 100644
  
  	drm_dbg(&xe->drm, "Device resumed\n");
  	xe_pm_block_end_signalling();
-@@ -736,7 +736,7 @@ int xe_pm_runtime_resume(struct xe_device *xe)
+@@ -730,7 +730,7 @@ int xe_pm_runtime_resume(struct xe_device *xe)
  		xe_sriov_vf_ccs_register_context(xe);
  
  	if (xe->d3cold.allowed)

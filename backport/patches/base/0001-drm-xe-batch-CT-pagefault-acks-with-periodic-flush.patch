@@ -29,7 +29,7 @@ Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Francois Dugast <francois.dugast@intel.com>
 Link: https://patch.msgid.link/20260806185202.3922432-12-matthew.brost@intel.com
 (cherry-picked from commit d4a7e1611716ac4c211f5f022363c2123d92d812 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_guc_ct.c          | 95 +++++++++++++++++++------
  drivers/gpu/drm/xe/xe_guc_ct.h          | 38 +++++++++-
@@ -113,7 +113,7 @@ index fe70c0fd8..5c4733da3 100644
  
  	/*
  	 * desc_read() performs an VRAM read which serializes the CPU and drains
-@@ -1052,7 +1049,7 @@ corrupted:
+@@ -1052,7 +1049,7 @@ static int h2g_write(struct xe_guc_ct *ct, const u32 *action, u32 len,
  
  static int __guc_ct_send_locked(struct xe_guc_ct *ct, const u32 *action,
  				u32 len, u32 g2h_len, u32 num_g2h,
@@ -122,7 +122,7 @@ index fe70c0fd8..5c4733da3 100644
  {
  	struct xe_gt *gt = ct_to_gt(ct);
  	u16 seqno;
-@@ -1112,7 +1109,7 @@ retry:
+@@ -1112,7 +1109,7 @@ static int __guc_ct_send_locked(struct xe_guc_ct *ct, const u32 *action,
  	if (unlikely(ret))
  		goto out_unlock;
  
@@ -131,7 +131,7 @@ index fe70c0fd8..5c4733da3 100644
  	if (unlikely(ret)) {
  		if (ret == -EAGAIN)
  			goto retry;
-@@ -1120,7 +1117,8 @@ retry:
+@@ -1120,7 +1117,8 @@ static int __guc_ct_send_locked(struct xe_guc_ct *ct, const u32 *action,
  	}
  
  	__g2h_reserve_space(ct, g2h_len, num_g2h);
@@ -376,10 +376,10 @@ index 2470faf3d..8f8210a73 100644
  
  /**
 diff --git a/drivers/gpu/drm/xe/xe_guc_types.h b/drivers/gpu/drm/xe/xe_guc_types.h
-index 7e6a41df0..3f3138d67 100644
+index 31a2acb63..3dbcb1331 100644
 --- a/drivers/gpu/drm/xe/xe_guc_types.h
 +++ b/drivers/gpu/drm/xe/xe_guc_types.h
-@@ -128,6 +128,12 @@ struct xe_guc {
+@@ -122,6 +122,12 @@ struct xe_guc {
  	struct xe_reg notify_reg;
  	/** @params: Control params for fw initialization */
  	u32 params[GUC_CTL_MAX_DWORDS];
@@ -393,10 +393,10 @@ index 7e6a41df0..3f3138d67 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index 790fc7fa9..dbcb9b0dd 100644
+index c30576d82..cb6cfaf05 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
-@@ -414,6 +414,10 @@ static bool xe_pagefault_try_chain(struct xe_pagefault_queue *pf_queue,
+@@ -413,6 +413,10 @@ static bool xe_pagefault_try_chain(struct xe_pagefault_queue *pf_queue,
  			xe_assert(xe, pf_work->cache.pf->consumer.alloc_state ==
  				  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
  
@@ -416,14 +416,14 @@ index 790fc7fa9..dbcb9b0dd 100644
  		struct xe_gt *gt = pf->gt;
  		u32 asid = pf->consumer.asid;
  		int err = 0;
-@@ -630,11 +636,14 @@ ack_fault:
- 			  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
+@@ -633,11 +639,14 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+ 				XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
  		xe_assert(xe, pf == pf_work->cache.pf);
  
 +		ops->ack_fault_begin(private);
  		while (pf) {
  			xe_assert(xe, pf->consumer.alloc_state ==
- 				  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
+ 					XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
 +			xe_assert(xe, ops == pf->producer.ops);
 +			xe_assert(xe, gt == pf->gt);
  
@@ -432,7 +432,7 @@ index 790fc7fa9..dbcb9b0dd 100644
  
  			spin_lock_irq(&pf_queue->lock);
  
-@@ -662,6 +671,7 @@ ack_fault:
+@@ -665,6 +674,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  
  			spin_unlock_irq(&pf_queue->lock);
  		}

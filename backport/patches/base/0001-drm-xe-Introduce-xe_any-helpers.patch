@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:27 +0200
-Subject: drm/xe: Introduce xe_any helpers
+Subject: [PATCH] drm/xe: Introduce xe_any helpers
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -22,7 +22,7 @@ Cc: Jani Nikula <jani.nikula@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-2-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit 4fb32222c0a5ef8d148454c3ee77cab64e65e3ab linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_any.h | 137 ++++++++++++++++++++++++++++++++++++
  1 file changed, 137 insertions(+)
@@ -30,7 +30,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 
 diff --git a/drivers/gpu/drm/xe/xe_any.h b/drivers/gpu/drm/xe/xe_any.h
 new file mode 100644
-index 000000000000..5d97afa76915
+index 000000000..5d97afa76
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/xe_any.h
 @@ -0,0 +1,137 @@

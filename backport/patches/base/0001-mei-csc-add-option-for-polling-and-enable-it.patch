@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alexander Usyskin <alexander.usyskin@intel.com>
 Date: Mon, 31 Aug 2026 14:38:32 +0300
-Subject: mei: csc: add option for polling and enable it
+Subject: [PATCH] mei: csc: add option for polling and enable it
 
 Add option to poll instead of waiting for the interrupt
 to wallpaper over hardware not releasing the interrupt line.
@@ -11,14 +11,16 @@ hardware is fixed.
 
 Reviewed-by: Menachem Adin <menachem.adin@intel.com>
 Signed-off-by: Alexander Usyskin <alexander.usyskin@intel.com>
-(backported from [mei: csc: add option for polling and enable it via char-misc-next])
-Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Link: https://patch.msgid.link/20260831-cri_polling-v1-2-d927315e6598@intel.com
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+(cherry-picked from commit 155c978d1b37993abea1a5ec6d8384916ce8f4cb linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
- drivers/misc/mei/pci-csc.c | 69 +++++++++++++++++++++++++++++---------
- 1 file changed, 54 insertions(+), 15 deletions(-)
+ drivers/misc/mei/pci-csc.c | 71 +++++++++++++++++++++++++++++---------
+ 1 file changed, 55 insertions(+), 16 deletions(-)
 
 diff --git a/drivers/misc/mei/pci-csc.c b/drivers/misc/mei/pci-csc.c
-index 40658b72e..57eb71306 100644
+index 6e1e8008f..f50ef93e2 100644
 --- a/drivers/misc/mei/pci-csc.c
 +++ b/drivers/misc/mei/pci-csc.c
 @@ -11,6 +11,7 @@
@@ -54,6 +56,13 @@ index 40658b72e..57eb71306 100644
  	}
  
 -	hw->irq = pci_irq_vector(pdev, 0);
+-
+-	/* request and enable interrupt */
+-	err = request_threaded_irq(hw->irq,
+-				   mei_me_irq_quick_handler, mei_me_irq_thread_handler,
+-				   IRQF_SHARED | IRQF_ONESHOT, KBUILD_MODNAME, mdev);
+-	if (err)
+-		goto err_free_irq_vectors;
 +	/* use polling */
 +	if (mei_me_hw_use_polling(hw)) {
 +		mei_disable_interrupts(mdev);
@@ -73,13 +82,7 @@ index 40658b72e..57eb71306 100644
 +			dev_err_probe(dev, err, "Failed to allocate IRQ.\n");
 +			goto err_mei_unreg;
 +		}
- 
--	/* request and enable interrupt */
--	err = request_threaded_irq(hw->irq,
--				   mei_me_irq_quick_handler, mei_me_irq_thread_handler,
--				   IRQF_SHARED | IRQF_ONESHOT, KBUILD_MODNAME, mdev);
--	if (err)
--		goto err_free_irq_vectors;
++
 +		hw->irq = pci_irq_vector(pdev, 0);
 +
 +		/* request and enable interrupt */
@@ -145,4 +148,5 @@ index 40658b72e..57eb71306 100644
  	/* Process all queues that wait for resume */
  	irq_ret = mei_me_irq_thread_handler(1, mdev);
 -- 
-2.34.1
+2.43.0
+

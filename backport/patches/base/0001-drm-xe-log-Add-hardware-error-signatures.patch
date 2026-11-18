@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:38 +0200
-Subject: drm/xe/log: Add hardware error signatures
+Subject: [PATCH] drm/xe/log: Add hardware error signatures
 
 Extend our error signatures definitions xe_sigid to cover also
 firmware/hardware-originated errors and make them distinguishable
@@ -15,13 +15,13 @@ Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-13-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit ceea43a746624fb3ec80188918408c8441625247 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/abi/xe_sigid_abi.h | 15 ++++++++++++++-
  1 file changed, 14 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/abi/xe_sigid_abi.h b/drivers/gpu/drm/xe/abi/xe_sigid_abi.h
-index ff7c97b4a78e..2f3440505f69 100644
+index ff7c97b4a..2f3440505 100644
 --- a/drivers/gpu/drm/xe/abi/xe_sigid_abi.h
 +++ b/drivers/gpu/drm/xe/abi/xe_sigid_abi.h
 @@ -137,12 +137,18 @@

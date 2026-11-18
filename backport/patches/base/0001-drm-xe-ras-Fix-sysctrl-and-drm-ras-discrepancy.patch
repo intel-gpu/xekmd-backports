@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Raag Jadav <raag.jadav@intel.com>
 Date: Mon, 12 Oct 2026 15:47:12 +0530
-Subject: drm/xe/ras: Fix sysctrl and drm-ras discrepancy
+Subject: [PATCH] drm/xe/ras: Fix sysctrl and drm-ras discrepancy
 
 There are cases where a reported error is valid for sysctrl but it's
 not exposed as a valid uapi through drm-ras. We allow such error to be
@@ -13,14 +13,14 @@ Signed-off-by: Raag Jadav <raag.jadav@intel.com>
 Reviewed-by: Riana Tauro <riana.tauro@intel.com>
 Link: https://patch.msgid.link/20261012101712.125146-1-raag.jadav@intel.com
 Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
-(cherry-picked from commit 505f803cfdea3a5f75d5f3b049a39024f966280f linux-next)
+(cherry-picked from commit 505f803cfdea3a5f75d5f3b049a39024f966280f drm-xe-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_drm_ras.c | 17 ++++++++++++++++-
  1 file changed, 16 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_drm_ras.c b/drivers/gpu/drm/xe/xe_drm_ras.c
-index 7f3695707611..30cf40ee5fe4 100644
+index 7f3695707..30cf40ee5 100644
 --- a/drivers/gpu/drm/xe/xe_drm_ras.c
 +++ b/drivers/gpu/drm/xe/xe_drm_ras.c
 @@ -16,6 +16,17 @@

@@ -1,25 +1,30 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Michael J. Ruhl" <michael.j.ruhl@intel.com>
-Date: Fri, 18 Sep 2026 06:17:54 -0700
-Subject: [Temp] platform/x86/intel/pmt: refactor rc with a return value
+Date: Wed, 23 Sep 2026 11:11:18 -0700
+Subject: [PATCH] platform/x86/intel/pmt: refactor rc with a return value
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 Upcoming changes will include possible failures from HW accesses.
 
-Refactor pmt_crashlog_rw() with a return value.
+Refactor pmt_crashlog_rc() with a return value.
 
 Update all necessary usage to use the return code.
 
 Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Signed-off-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
-(backported from https://patchwork.freedesktop.org/series/160717/#rev12)
-Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
-
+Link: https://patch.msgid.link/20260923181115.2514193-25-michael.j.ruhl@intel.com
+Reviewed-by: Ilpo Järvinen <ilpo.jarvinen@linux.intel.com>
+Signed-off-by: Ilpo Järvinen <ilpo.jarvinen@linux.intel.com>
+(cherry-picked from commit 8ee5b655e0a6fcfe65519d942114c4736bf601f3 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/platform/x86/intel/pmt/crashlog.c | 99 +++++++++++++++++------
  1 file changed, 73 insertions(+), 26 deletions(-)
 
 diff --git a/drivers/platform/x86/intel/pmt/crashlog.c b/drivers/platform/x86/intel/pmt/crashlog.c
-index 5a4c03368..87196a10f 100644
+index 831cff743..200373cbb 100644
 --- a/drivers/platform/x86/intel/pmt/crashlog.c
 +++ b/drivers/platform/x86/intel/pmt/crashlog.c
 @@ -144,24 +144,26 @@ static int pmt_crashlog_rmw(struct crashlog_entry *crashlog, u32 bit, bool set)

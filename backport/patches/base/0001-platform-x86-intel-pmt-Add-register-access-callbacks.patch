@@ -1,7 +1,10 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Michael J. Ruhl" <michael.j.ruhl@intel.com>
-Date: Fri, 18 Sep 2026 06:17:55 -0700
-Subject: [Temp] platform/x86/intel/pmt: Add register access callbacks
+Date: Wed, 23 Sep 2026 11:11:19 -0700
+Subject: [PATCH] platform/x86/intel/pmt: Add register access callbacks
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 Some HW does not have direct MMIO access to PMT control and data
 features.
@@ -11,16 +14,18 @@ a registered driver to customize read/write access to the control
 paths for PMT usage.
 
 Signed-off-by: Michael J. Ruhl <michael.j.ruhl@intel.com>
-(backported from https://patchwork.freedesktop.org/series/160717/#rev12)
-Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
-
+Link: https://patch.msgid.link/20260923181115.2514193-26-michael.j.ruhl@intel.com
+Reviewed-by: Ilpo Järvinen <ilpo.jarvinen@linux.intel.com>
+Signed-off-by: Ilpo Järvinen <ilpo.jarvinen@linux.intel.com>
+(cherry-picked from commit 7fdfccf87676a17ab7a24b67595c701dd8d913a5 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/platform/x86/intel/pmt/crashlog.c | 46 +++++++++++++++++++++--
  include/linux/intel_vsec.h                | 14 ++++++-
  2 files changed, 56 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/platform/x86/intel/pmt/crashlog.c b/drivers/platform/x86/intel/pmt/crashlog.c
-index 87196a10f..d0fe0359c 100644
+index 200373cbb..d7018b495 100644
 --- a/drivers/platform/x86/intel/pmt/crashlog.c
 +++ b/drivers/platform/x86/intel/pmt/crashlog.c
 @@ -11,10 +11,12 @@
@@ -107,10 +112,10 @@ index 87196a10f..d0fe0359c 100644
  	*state = !!(reg & bit);
  
 diff --git a/include/linux/intel_vsec.h b/include/linux/intel_vsec.h
-index 1fe5665a9..195896f69 100644
+index 843cda8f8..917d9397a 100644
 --- a/include/linux/intel_vsec.h
 +++ b/include/linux/intel_vsec.h
-@@ -89,13 +89,25 @@ enum intel_vsec_quirks {
+@@ -90,13 +90,25 @@ enum intel_vsec_quirks {
   * @read_telem: when specified, called by client driver to access PMT
   * data (instead of direct copy).
   * * dev:   device reference for the callback's use

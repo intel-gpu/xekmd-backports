@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Date: Mon, 12 Oct 2026 17:55:11 +0530
+Subject: [PATCH] drm/xe/ggtt: Report GGTT errors using structured logging
+
+Replace xe_tile_err() calls with xe_log_err_fatal() using the GGTT
+component tag in GGTT initialization error paths.
+
+Signed-off-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20261012122522.2307625-3-dnyaneshwar.bhadane@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit 4b89c9188b1d0bbdc7b0e2f3531eeef9e2732ec8 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ggtt.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_ggtt.c b/drivers/gpu/drm/xe/xe_ggtt.c
+index 8ec238624..162ee47b0 100644
+--- a/drivers/gpu/drm/xe/xe_ggtt.c
++++ b/drivers/gpu/drm/xe/xe_ggtt.c
+@@ -21,6 +21,7 @@
+ #include "xe_assert.h"
+ #include "xe_bo.h"
+ #include "xe_gt_printk.h"
++#include "xe_log.h"
+ #include "xe_gt_types.h"
+ #include "xe_map.h"
+ #include "xe_mmio.h"
+@@ -402,7 +403,8 @@ int xe_ggtt_init_early(struct xe_ggtt *ggtt)
+ 		else
+ 			gsm_size = probe_gsm_size(pdev);
+ 		if (gsm_size == 0) {
+-			xe_tile_err(ggtt->tile, "Hardware reported no preallocated GSM\n");
++			xe_log_err_fatal(ggtt->tile, GGTT, -ENOMEM,
++					 "Hardware reported no preallocated GSM\n");
+ 			return -ENOMEM;
+ 		}
+ 		ggtt_start = wopcm;
+@@ -413,8 +415,9 @@ int xe_ggtt_init_early(struct xe_ggtt *ggtt)
+ 
+ 		if (ggtt_start < wopcm ||
+ 		    ggtt_start + ggtt_size > GUC_GGTT_TOP) {
+-			xe_tile_err(ggtt->tile, "Invalid GGTT configuration: %#llx-%#llx\n",
+-				    ggtt_start, ggtt_start + ggtt_size - 1);
++			xe_log_err_fatal(ggtt->tile, GGTT, -ERANGE,
++					 "Invalid GGTT configuration: %#llx-%#llx\n",
++					 ggtt_start, ggtt_start + ggtt_size - 1);
+ 			return -ERANGE;
+ 		}
+ 	}
+-- 
+2.43.0
+

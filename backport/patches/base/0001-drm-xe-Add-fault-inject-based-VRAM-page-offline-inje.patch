@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Date: Thu, 3 Sep 2026 21:46:08 +0530
-Subject: drm/xe: Add fault-inject based VRAM page offline injection
+Subject: [PATCH] drm/xe: Add fault-inject based VRAM page offline injection
 
 Add a fault-inject based debugfs interface for testing VRAM page
 offlining. This replaces the previous standalone debugfs approach
@@ -50,10 +50,9 @@ v2(sashiko):
 Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
-Link: httips://patch.msgid.link/20260903161553.528932-32-tejas.upadhyay@intel.com
-(cherry-picked from 6ef3eb10aea4260f752c06489a5369c2b67848b0 drm-tip)
-Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
-
+Link: https://patch.msgid.link/20260903161553.528932-32-tejas.upadhyay@intel.com
+(cherry-picked from commit 6ef3eb10aea4260f752c06489a5369c2b67848b0 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_debugfs.c      | 48 +++++++++++++++++++++++
  drivers/gpu/drm/xe/xe_debugfs.h      |  2 +
@@ -62,7 +61,7 @@ Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
  4 files changed, 109 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.c b/drivers/gpu/drm/xe/xe_debugfs.c
-index cb24e001b142..80f62634fae5 100644
+index cb24e001b..80f62634f 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.c
 +++ b/drivers/gpu/drm/xe/xe_debugfs.c
 @@ -45,12 +45,18 @@
@@ -148,7 +147,7 @@ index cb24e001b142..80f62634fae5 100644
  
  static void read_residency_counter(struct xe_device *xe, struct xe_mmio *mmio,
 diff --git a/drivers/gpu/drm/xe/xe_debugfs.h b/drivers/gpu/drm/xe/xe_debugfs.h
-index 0dcd28fd7dc0..88d91c78036b 100644
+index 0dcd28fd7..88d91c780 100644
 --- a/drivers/gpu/drm/xe/xe_debugfs.h
 +++ b/drivers/gpu/drm/xe/xe_debugfs.h
 @@ -14,11 +14,13 @@ struct xe_device;
@@ -166,7 +165,7 @@ index 0dcd28fd7dc0..88d91c78036b 100644
  #endif
  
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-index 6aa24eb064eb..9a514d983e90 100644
+index 6aa24eb06..9a514d983 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 @@ -944,6 +944,64 @@ int xe_ttm_vram_handle_addr_fault(struct xe_device *xe, u64 addr)
@@ -235,16 +234,14 @@ index 6aa24eb064eb..9a514d983e90 100644
  {
  	struct xe_device *xe = m->private;
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h
-index 48f39fd20e44..d77f067d197b 100644
+index 48f39fd20..d77f067d1 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.h
-@@ -29,7 +29,8 @@ u64 xe_ttm_vram_get_avail(struct ttm_resource_manager *man);
- u64 xe_ttm_vram_get_cpu_visible_size(struct ttm_resource_manager *man);
+@@ -32,6 +32,7 @@ u64 xe_ttm_vram_get_cpu_visible_size(struct ttm_resource_manager *man);
  void xe_ttm_vram_get_used(struct ttm_resource_manager *man,
  			  u64 *used, u64 *used_visible);
  int xe_ttm_vram_handle_addr_fault(struct xe_device *xe, u64 addr);
 +int xe_ttm_vram_inject_fault(struct xe_device *xe);
- void xe_ttm_vram_debugfs_init(struct xe_device *xe, struct dentry *root);
  
  static inline struct xe_ttm_vram_mgr_resource *
  to_xe_ttm_vram_mgr_resource(struct ttm_resource *res)

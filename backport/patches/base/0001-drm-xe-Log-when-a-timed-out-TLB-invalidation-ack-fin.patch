@@ -1,0 +1,120 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Tales=20A=2E=20Mendon=C3=A7a?= <talesam@gmail.com>
+Date: Tue, 22 Sep 2026 11:46:33 -0300
+Subject: [PATCH] drm/xe: Log when a timed out TLB invalidation ack finally
+ arrives
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When a TLB invalidation fence times out we log the timeout, but if the
+ack for that seqno later shows up there is no record of it, making it
+impossible to tell from logs whether the ack was lost forever or merely
+(very) late.
+
+Track the most recent timed out seqno and log how late its ack arrives,
+relative to both the original request and the moment the fence was
+signaled with -ETIME.
+
+On ARL with GuC 70.53.0 this shows the acks are never lost: they
+consistently arrive ~2.3s after the request, tens of milliseconds after
+the TDR has already signaled the fence:
+
+  TLB invalidation fence timeout, seqno=10992 recv=10991
+  TLB invalidation late ack: seqno=10992 recv=10992,
+    request-to-ack=2314ms, timeout-to-ack=45ms
+
+Link: https://gitlab.freedesktop.org/drm/xe/kernel/-/work_items/8678
+Signed-off-by: Tales A. Mendonça <talesam@gmail.com>
+Reviewed-by: Matthew Brost <matthew.brost@intel.com>
+Signed-off-by: Matthew Brost <matthew.brost@intel.com>
+Link: https://patch.msgid.link/20260922144634.55130-3-talesam@gmail.com
+(cherry-picked from commit fc668a6e9c5f2d9800947bdd3d027f000030bcbc drm-tip)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_tlb_inval.c       | 19 +++++++++++++++++++
+ drivers/gpu/drm/xe/xe_tlb_inval_types.h | 17 +++++++++++++++++
+ 2 files changed, 36 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_tlb_inval.c b/drivers/gpu/drm/xe/xe_tlb_inval.c
+index f7d6640d34522..c9cc5842d65b6 100644
+--- a/drivers/gpu/drm/xe/xe_tlb_inval.c
++++ b/drivers/gpu/drm/xe/xe_tlb_inval.c
+@@ -14,6 +14,7 @@
+ #include "xe_guc_tlb_inval.h"
+ #include "xe_mmio.h"
+ #include "xe_pm.h"
++#include "xe_printk.h"
+ #include "xe_tlb_inval.h"
+ #include "xe_trace.h"
+ 
+@@ -110,6 +111,11 @@ static void xe_tlb_inval_fence_timeout(struct work_struct *work)
+ 		}
+ 
+ 		timedout_seqno = fence->seqno;
++		if (!tlb_inval->timedout_seqno) {
++			tlb_inval->timedout_seqno = fence->seqno;
++			tlb_inval->timedout_inval_time = fence->inval_time;
++			tlb_inval->timedout_time = ktime_get();
++		}
+ 
+ 		fence->base.error = -ETIME;
+ 		xe_tlb_inval_fence_signal(fence);
+@@ -242,6 +248,7 @@ void xe_tlb_inval_reset(struct xe_tlb_inval *tlb_inval)
+ 	else
+ 		pending_seqno = tlb_inval->seqno - 1;
+ 	WRITE_ONCE(tlb_inval->seqno_recv, pending_seqno);
++	tlb_inval->timedout_seqno = 0;
+ 
+ 	list_for_each_entry_safe(fence, next,
+ 				 &tlb_inval->pending_fences, link)
+@@ -470,6 +477,18 @@ void xe_tlb_inval_done_handler(struct xe_tlb_inval *tlb_inval, int seqno)
+ 
+ 	WRITE_ONCE(tlb_inval->seqno_recv, seqno);
+ 
++	if (tlb_inval->timedout_seqno &&
++	    xe_tlb_inval_seqno_past(tlb_inval, tlb_inval->timedout_seqno)) {
++		ktime_t now = ktime_get();
++
++		xe_warn(xe,
++			"TLB invalidation late ack: seqno=%d recv=%d, request-to-ack=%lldms, timeout-to-ack=%lldms",
++			tlb_inval->timedout_seqno, seqno,
++			ktime_ms_delta(now, tlb_inval->timedout_inval_time),
++			ktime_ms_delta(now, tlb_inval->timedout_time));
++		tlb_inval->timedout_seqno = 0;
++	}
++
+ 	list_for_each_entry_safe(fence, next,
+ 				 &tlb_inval->pending_fences, link) {
+ 		trace_xe_tlb_inval_fence_recv(xe, fence);
+diff --git a/drivers/gpu/drm/xe/xe_tlb_inval_types.h b/drivers/gpu/drm/xe/xe_tlb_inval_types.h
+index d77be1aedc918..80d2019fa20b4 100644
+--- a/drivers/gpu/drm/xe/xe_tlb_inval_types.h
++++ b/drivers/gpu/drm/xe/xe_tlb_inval_types.h
+@@ -112,6 +112,23 @@ struct xe_tlb_inval {
+ 	 * @pending_lock: protects @pending_fences and updating @seqno_recv.
+ 	 */
+ 	spinlock_t pending_lock;
++	/**
++	 * @timedout_seqno: seqno of the most recent timed out TLB
++	 * invalidation, 0 if none. Used to measure how late the ack for a
++	 * timed out invalidation actually arrives. Protected by
++	 * @pending_lock.
++	 */
++	int timedout_seqno;
++	/**
++	 * @timedout_inval_time: request time of @timedout_seqno. Protected by
++	 * @pending_lock.
++	 */
++	ktime_t timedout_inval_time;
++	/**
++	 * @timedout_time: time @timedout_seqno was signaled with -ETIME.
++	 * Protected by @pending_lock.
++	 */
++	ktime_t timedout_time;
+ 	/**
+ 	 * @fence_tdr: schedules a delayed call to xe_tlb_fence_timeout after
+ 	 * the timeout interval is over.
+-- 
+2.43.0
+

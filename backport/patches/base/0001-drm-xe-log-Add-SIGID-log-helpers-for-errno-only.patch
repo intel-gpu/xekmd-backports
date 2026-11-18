@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:36 +0200
-Subject: drm/xe/log: Add SIGID log helpers for errno-only
+Subject: [PATCH] drm/xe/log: Add SIGID log helpers for errno-only
 
 For the software based SIGID errors, we will usually want to pass
 only the errno value as the data to be logged in the dmesg line or
@@ -13,13 +13,13 @@ Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com> #v3
 Link: https://patch.msgid.link/20260814171801.13347-11-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit 9dae5c3b00f3f5e26e22d18156a1a10d8a783640 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_log.h | 65 +++++++++++++++++++++++++++++++++++++
  1 file changed, 65 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_log.h b/drivers/gpu/drm/xe/xe_log.h
-index c56306a183e7..8c74f809fb5b 100644
+index c56306a18..8c74f809f 100644
 --- a/drivers/gpu/drm/xe/xe_log.h
 +++ b/drivers/gpu/drm/xe/xe_log.h
 @@ -7,6 +7,7 @@

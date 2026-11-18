@@ -13,16 +13,16 @@ Cc: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://patch.msgid.link/20260811200906.10400-3-michal.wajdeczko@intel.com
 (cherry-picked from commit 81ba672a45f3f1d32b1b8e1530416e2af0689ce9 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_pagefault.c | 47 +++++++++++++------------------
  1 file changed, 19 insertions(+), 28 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index 15d815478..528413f9e 100644
+index d0d83df8e..f0829f4b6 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
-@@ -873,41 +873,32 @@ static int xe_pagefault_work_index(struct xe_device *xe)
+@@ -876,41 +876,32 @@ static int xe_pagefault_work_index(struct xe_device *xe)
  int xe_pagefault_handler(struct xe_device *xe, struct xe_pagefault *pf)
  {
  	struct xe_pagefault_queue *pf_queue = &xe->usm.pf_queue;

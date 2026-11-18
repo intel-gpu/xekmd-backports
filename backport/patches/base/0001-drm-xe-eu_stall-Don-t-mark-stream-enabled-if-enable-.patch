@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Fei Yang <fei.yang@intel.com>
+Date: Fri, 30 Oct 2026 23:02:34 -0700
+Subject: [PATCH] drm/xe/eu_stall: Don't mark stream enabled if enable fails
+
+xe_eu_stall_enable_locked() set stream->enabled before calling
+xe_eu_stall_stream_enable(). If the firmware ACK timed out, the enable
+path had already dropped its forcewake and runtime PM references, yet
+the stream stayed marked as enabled. On close, the disable path then
+released the same references a second time, tripping the forcewake
+refcount assert.
+
+Only mark the stream enabled, and queue the poll work, once enabling
+has succeeded.
+
+Signed-off-by: Fei Yang <fei.yang@intel.com>
+Assisted-by: LLM
+Reviewed-by: Harish Chegondi <harish.chegondi@intel.com>
+Link: https://patch.msgid.link/20261031060234.2404661-1-fei.yang@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit f026883cf7187658a72aae58004a166ace919432 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_eu_stall.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_eu_stall.c b/drivers/gpu/drm/xe/xe_eu_stall.c
+index 8a7c1b5d5..c918fe385 100644
+--- a/drivers/gpu/drm/xe/xe_eu_stall.c
++++ b/drivers/gpu/drm/xe/xe_eu_stall.c
+@@ -849,9 +849,11 @@ static int xe_eu_stall_enable_locked(struct xe_eu_stall_data_stream *stream)
+ 	if (stream->enabled)
+ 		return ret;
+ 
+-	stream->enabled = true;
+-
+ 	ret = xe_eu_stall_stream_enable(stream);
++	if (ret)
++		return ret;
++
++	stream->enabled = true;
+ 
+ 	queue_delayed_work(gt->eu_stall->buf_ptr_poll_wq,
+ 			   &stream->buf_poll_work,
+-- 
+2.43.0
+

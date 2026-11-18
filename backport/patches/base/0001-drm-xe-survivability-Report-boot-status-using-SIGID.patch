@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:46 +0200
-Subject: drm/xe/survivability: Report 'boot status' using SIGID
+Subject: [PATCH] drm/xe/survivability: Report 'boot status' using SIGID
 
 Report 'boot status' and other scratch registers details using
 the xe_log_info() macros. While around, add helper to decode
@@ -17,14 +17,13 @@ Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-21-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit 0e1c4b5de48135958ec55c22468c2e637eb49f57 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
-
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_survivability_mode.c | 29 ++++++++++++++++------
  1 file changed, 22 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
-index db64cac39c94..8a7fcb14b9c7 100644
+index 4c506027f..0ace10ae5 100644
 --- a/drivers/gpu/drm/xe/xe_survivability_mode.c
 +++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
 @@ -14,6 +14,7 @@
@@ -35,7 +34,7 @@ index db64cac39c94..8a7fcb14b9c7 100644
  #include "xe_mmio.h"
  #include "xe_nvm.h"
  #include "xe_pcode_api.h"
-@@ -164,18 +165,32 @@ static void populate_survivability_info(struct xe_device *xe)
+@@ -172,18 +173,32 @@ static void populate_survivability_info(struct xe_device *xe)
  	}
  }
  
@@ -74,7 +73,7 @@ index db64cac39c94..8a7fcb14b9c7 100644
  	}
  }
  
-@@ -449,7 +464,7 @@ int xe_survivability_mode_boot_enable(struct xe_device *xe)
+@@ -452,7 +467,7 @@ int xe_survivability_mode_boot_enable(struct xe_device *xe)
  	 * v2 supports survivability mode for critical errors
  	 */
  	if (survivability->version < 2  && survivability->boot_status == CRITICAL_FAILURE) {

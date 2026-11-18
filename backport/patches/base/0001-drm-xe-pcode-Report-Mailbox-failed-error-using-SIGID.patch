@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:52 +0200
-Subject: drm/xe/pcode: Report 'Mailbox failed' error using SIGID
+Subject: [PATCH] drm/xe/pcode: Report 'Mailbox failed' error using SIGID
 
 Report 'Mailbox failed' error using xe_log_err() helper.
 
@@ -14,14 +14,13 @@ Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-27-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit 29fea8370983ba0ece7fdcb6fcb1daced5ff3141 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
-
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_pcode.c | 5 ++---
  1 file changed, 2 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pcode.c b/drivers/gpu/drm/xe/xe_pcode.c
-index 22d89d08e3c0..87fef85c67c5 100644
+index ccc3bdeed..014632e11 100644
 --- a/drivers/gpu/drm/xe/xe_pcode.c
 +++ b/drivers/gpu/drm/xe/xe_pcode.c
 @@ -14,6 +14,7 @@

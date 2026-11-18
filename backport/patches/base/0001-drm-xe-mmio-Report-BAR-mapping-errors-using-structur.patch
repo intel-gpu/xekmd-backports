@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Date: Mon, 12 Oct 2026 17:55:13 +0530
+Subject: [PATCH] drm/xe/mmio: Report BAR mapping errors using structured
+ xe_log API
+
+Replace xe_err() calls with xe_log_err_fatal() using the REGS
+component tag for MMIO BAR probe failures
+
+Signed-off-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20261012122522.2307625-5-dnyaneshwar.bhadane@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit d268b81d652034f34393153126facf461ba42e6f linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_mmio.c | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_mmio.c b/drivers/gpu/drm/xe/xe_mmio.c
+index 455a07d79..2674146ce 100644
+--- a/drivers/gpu/drm/xe/xe_mmio.c
++++ b/drivers/gpu/drm/xe/xe_mmio.c
+@@ -15,6 +15,7 @@
+ #include "regs/xe_bars.h"
+ #include "xe_device.h"
+ #include "xe_gt_sriov_vf.h"
++#include "xe_log.h"
+ #include "xe_printk.h"
+ #include "xe_sriov.h"
+ #include "xe_tile_printk.h"
+@@ -71,8 +72,8 @@ int xe_mmio_probe_tiles(struct xe_device *xe)
+ 		return 0;
+ 
+ 	if (xe->mmio.size < xe->info.tile_count * tile_mmio_size) {
+-		xe_err(xe, "GTTMMADR_BAR is too small for %d tiles: %zu\n",
+-		       xe->info.tile_count, xe->mmio.size);
++		xe_log_err_fatal(xe, REGS, -EIO, "GTTMMADR_BAR is too small for %d tiles: %zu\n",
++				 xe->info.tile_count, xe->mmio.size);
+ 		return -EIO;
+ 	}
+ 
+@@ -105,13 +106,16 @@ int xe_mmio_probe_early(struct xe_device *xe)
+ 
+ 	xe->mmio.regs = pcim_iomap(pdev, GTTMMADR_BAR, 0);
+ 	if (!xe->mmio.regs) {
+-		xe_err(xe, "Failed to map GTTMMADR_BAR\n");
++		xe_log_err_fatal(xe, REGS, -EIO,
++				 "Failed to map GTTMMADR_BAR\n");
+ 		return -EIO;
+ 	}
+ 
+ 	xe->mmio.size = pci_resource_len(pdev, GTTMMADR_BAR);
+ 	if (xe->mmio.size < SZ_16M) {
+-		xe_err(xe, "GTTMMADR_BAR is too small: %zu\n", xe->mmio.size);
++		xe_log_err_fatal(xe, REGS, -EIO,
++				 "GTTMMADR_BAR is too small: %zu\n",
++				 xe->mmio.size);
+ 		return -EIO;
+ 	}
+ 
+-- 
+2.43.0
+

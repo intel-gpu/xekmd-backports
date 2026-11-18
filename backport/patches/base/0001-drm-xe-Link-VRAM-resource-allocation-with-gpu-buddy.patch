@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Tejas Upadhyay <tejas.upadhyay@intel.com>
-Date: Sat, 29 Aug 2026 19:17:41 +0200
-Subject: drm/xe: Link VRAM resource allocation with gpu buddy
+Date: Thu, 3 Sep 2026 21:45:54 +0530
+Subject: [PATCH] drm/xe: Link VRAM resource allocation with gpu buddy
 
 Setup to link allocation resource structure inside
 gpu buddy. This functionality is critical for
@@ -18,15 +18,14 @@ Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://patch.msgid.link/20260903161553.528932-18-tejas.upadhyay@intel.com
-(cherry-picked from c1b1906f86ee34bae4a80d0ed4176b64d82e8dec drm-tip)
-Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
-
+(cherry-picked from commit c1b1906f86ee34bae4a80d0ed4176b64d82e8dec linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_ttm_vram_mgr.c | 6 ++++++
  1 file changed, 6 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-index 05911904c1f9..51e983ee3bad 100644
+index 05911904c..0f9cf1c3a 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 @@ -57,6 +57,7 @@ static int xe_ttm_vram_mgr_new(struct ttm_resource_manager *man,
@@ -42,7 +41,7 @@ index 05911904c1f9..51e983ee3bad 100644
  
  	mgr->visible_avail -= vres->used_visible_size;
 +	list_for_each_entry(block, &vres->blocks, link)
-+		block->private = tbo;
++		block->private = &vres->base;
  	mutex_unlock(&mgr->lock);
  
  	if (!(vres->base.placement & TTM_PL_FLAG_CONTIGUOUS) &&
@@ -58,3 +57,6 @@ index 05911904c1f9..51e983ee3bad 100644
  	gpu_buddy_free_list(mm, &vres->blocks, 0);
  	mgr->visible_avail += vres->used_visible_size;
  	mutex_unlock(&mgr->lock);
+-- 
+2.43.0
+

@@ -18,19 +18,48 @@ v2:
 Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Link: https://patch.msgid.link/20261102172527.2794537-12-badal.nilawar@intel.com
 Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
-(backported from commit 918e85a4f597eac1f566bfc9f315d18def8ec8d3 linux-next)
-Signed-off-by: Pravalika Gurram pravalika.gurram@intel.com
+(cherry-picked from commit 918e85a4f597eac1f566bfc9f315d18def8ec8d3 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
+ drivers/gpu/drm/xe/abi/uc_fw_abi.h            | 11 ++++-
  drivers/gpu/drm/xe/xe_late_bind_fw.c          | 48 +++++++++++++++----
  drivers/gpu/drm/xe/xe_late_bind_fw_types.h    |  6 ++-
  drivers/gpu/drm/xe/xe_sysctrl.c               | 32 +++++++++++++
  drivers/gpu/drm/xe/xe_sysctrl.h               |  1 +
  drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h | 12 +++++
- drivers/gpu/drm/xe/abi/uc_fw_abi.h            | 11 ++++-
  6 files changed, 97 insertions(+), 13 deletions(-)
 
+diff --git a/drivers/gpu/drm/xe/abi/uc_fw_abi.h b/drivers/gpu/drm/xe/abi/uc_fw_abi.h
+index 198e94966..59699ba4d 100644
+--- a/drivers/gpu/drm/xe/abi/uc_fw_abi.h
++++ b/drivers/gpu/drm/xe/abi/uc_fw_abi.h
+@@ -316,6 +316,11 @@ struct gsc_cpd_entry {
+ 	u8 reserved[4];
+ } __packed;
+ 
++struct ocode_manifest_data {
++	u16 sdk_api_version;
++	u8 reserved[22];
++} __packed;
++
+ struct gsc_manifest_header {
+ 	u32 header_type; /* 0x4 for manifest type */
+ 	u32 header_length; /* in dwords */
+@@ -331,7 +336,11 @@ struct gsc_manifest_header {
+ 	struct gsc_version meu_kit_version;
+ 	u32 meu_manifest_version;
+ 	u8 general_data[4];
+-	u8 reserved3[56];
++	union {
++		u8 ip_specific_data[24];
++		struct ocode_manifest_data ocode_data;
++	};
++	u8 reserved3[32];
+ 	u32 modulus_size; /* in dwords */
+ 	u32 exponent_size; /* in dwords */
+ } __packed;
 diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
-index 8b6d7088b..c4f81fb1d 100644
+index 881a46abc..190674f6d 100644
 --- a/drivers/gpu/drm/xe/xe_late_bind_fw.c
 +++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
 @@ -17,6 +17,12 @@
@@ -67,7 +96,7 @@ index 8b6d7088b..c4f81fb1d 100644
  
  	return 0;
  }
-@@ -326,6 +335,7 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
+@@ -298,6 +307,7 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
  	struct xe_late_bind_fw *lb_fw;
  	const struct firmware *fw;
  	u32 num_fans;
@@ -75,7 +104,7 @@ index 8b6d7088b..c4f81fb1d 100644
  	int ret;
  
  	if (fw_id >= XE_LB_FW_MAX_ID)
-@@ -348,9 +358,23 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
+@@ -320,9 +330,23 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
  			return 0;
  	}
  
@@ -102,7 +131,7 @@ index 8b6d7088b..c4f81fb1d 100644
  
  	drm_dbg(&xe->drm, "Request late binding firmware %s\n", lb_fw->blob_path);
  	ret = firmware_request_nowarn(&fw, lb_fw->blob_path, xe->drm.dev);
-@@ -360,17 +384,17 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
+@@ -332,17 +356,17 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
  		return 0;
  	}
  
@@ -127,7 +156,7 @@ index 8b6d7088b..c4f81fb1d 100644
  	lb_fw->payload_size = fw->size;
  	lb_fw->payload = drmm_kzalloc(&xe->drm, lb_fw->payload_size, GFP_KERNEL);
  	if (!lb_fw->payload) {
-@@ -383,6 +407,10 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
+@@ -355,6 +379,10 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
  		 lb_fw->version.major, lb_fw->version.minor,
  		 lb_fw->version.hotfix, lb_fw->version.build);
  
@@ -139,11 +168,10 @@ index 8b6d7088b..c4f81fb1d 100644
  	INIT_WORK(&lb_fw->work, xe_late_bind_work);
  
 diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw_types.h b/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
-index 7fdb24e81..0be3913aa 100644
+index ee5efe607..c7b3ffc74 100644
 --- a/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
 +++ b/drivers/gpu/drm/xe/xe_late_bind_fw_types.h
-@@ -12,15 +12,15 @@
- #include <linux/workqueue.h>
+@@ -13,14 +13,14 @@
  
  #include "abi/uc_fw_abi.h"
  
@@ -160,7 +188,7 @@ index 7fdb24e81..0be3913aa 100644
  	/** @XE_LB_FW_MAX_ID: Number of IDs */
  	XE_LB_FW_MAX_ID
  };
-@@ -44,6 +44,8 @@ struct xe_late_bind_fw {
+@@ -45,6 +45,8 @@ struct xe_late_bind_fw {
  	struct work_struct work;
  	/** @version: late binding blob manifest version */
  	struct gsc_version version;
@@ -221,7 +249,7 @@ index b69a3f474..c0b6d4330 100644
  
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
-index f658c9c54..87f4ae104 100644
+index a0628eb47..05e1485d2 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox_types.h
 @@ -51,10 +51,12 @@ enum xe_sysctrl_gfsp_cmd {
@@ -254,35 +282,6 @@ index f658c9c54..87f4ae104 100644
  /**
   * struct xe_sysctrl_mailbox_command - System Controller mailbox command
   */
-diff --git a/drivers/gpu/drm/xe/abi/uc_fw_abi.h b/drivers/gpu/drm/xe/abi/uc_fw_abi.h
-index 3c9a63d13..7d02e147e 100644
---- a/drivers/gpu/drm/xe/abi/uc_fw_abi.h
-+++ b/drivers/gpu/drm/xe/abi/uc_fw_abi.h
-@@ -316,6 +316,11 @@ struct gsc_cpd_entry {
- 	u8 reserved[4];
- } __packed;
- 
-+struct ocode_manifest_data {
-+	u16 sdk_api_version;
-+	u8 reserved[22];
-+} __packed;
-+
- struct gsc_manifest_header {
- 	u32 header_type; /* 0x4 for manifest type */
- 	u32 header_length; /* in dwords */
-@@ -331,7 +336,11 @@ struct gsc_manifest_header {
- 	struct gsc_version meu_kit_version;
- 	u32 meu_manifest_version;
- 	u8 general_data[4];
--	u8 reserved3[56];
-+	union {
-+		u8 ip_specific_data[24];
-+		struct ocode_manifest_data ocode_data;
-+	};
-+	u8 reserved3[32];
- 	u32 modulus_size; /* in dwords */
- 	u32 exponent_size; /* in dwords */
- } __packed;
 -- 
 2.43.0
 

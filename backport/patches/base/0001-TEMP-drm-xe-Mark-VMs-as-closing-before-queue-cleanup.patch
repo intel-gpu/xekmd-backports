@@ -30,16 +30,16 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  drivers/gpu/drm/xe/xe_device.c    |  4 ++++
  drivers/gpu/drm/xe/xe_pagefault.c |  2 +-
  drivers/gpu/drm/xe/xe_svm.c       |  3 ++-
- drivers/gpu/drm/xe/xe_vm.c        | 18 +++++++++++++++++-
+ drivers/gpu/drm/xe/xe_vm.c        | 15 +++++++++++++++
  drivers/gpu/drm/xe/xe_vm.h        |  9 ++++++++-
  drivers/gpu/drm/xe/xe_vm_types.h  |  1 +
- 6 files changed, 33 insertions(+), 4 deletions(-)
+ 6 files changed, 31 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 12f257b6a..6416939e3 100644
+index 7856f8291..87a704cd1 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -173,6 +173,10 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -180,6 +180,10 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  
  	guard(xe_pm_runtime)(xe);
  
@@ -47,14 +47,15 @@ index 12f257b6a..6416939e3 100644
 +	xa_for_each(&xef->vm.xa, idx, vm)
 +		xe_vm_close_start(vm);
 +
+ 	prelim_xe_eudebug_file_close(xef);
+ 
  	/*
- 	 * No need for exec_queue.lock here as there is no contention for it
- 	 * when FD is closing as IOCTLs presumably can't be modifying the
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index 43d210d80..fbcad98ec 100644
+index 50a8c7187..49e38df0f 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
-@@ -283,7 +283,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
+@@ -240,7 +240,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
+ 
  	down_read(&vm->lock);
  
 -	if (xe_vm_is_closed(vm)) {
@@ -62,13 +63,11 @@ index 43d210d80..fbcad98ec 100644
  		err = -ENOENT;
  		xe_pagefault_set_error(pf, XE_PAGEFAULT_ERROR_VM_CLOSED);
  		goto unlock_vm;
- 	}
 diff --git a/drivers/gpu/drm/xe/xe_svm.c b/drivers/gpu/drm/xe/xe_svm.c
-index 1c0df523a..ea5bf9d32 100644
+index dd69ff5b8..72cd93a94 100644
 --- a/drivers/gpu/drm/xe/xe_svm.c
 +++ b/drivers/gpu/drm/xe/xe_svm.c
-@@ -211,8 +211,9 @@ xe_svm_range_notifier_event_end(struct xe_vm *vm, struct drm_gpusvm_range *r,
- 	xe_svm_assert_in_notifier(vm);
+@@ -217,7 +217,8 @@ xe_svm_range_notifier_event_end(struct xe_vm *vm, struct drm_gpusvm_range *r,
  
  	drm_gpusvm_unmap_pages(&vm->svm.gpusvm, &(to_xe_range(r)->pages),
  			       drm_gpusvm_range_size(r) >> PAGE_SHIFT, &ctx);
@@ -79,10 +78,10 @@ index 1c0df523a..ea5bf9d32 100644
  						   mmu_range);
  }
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 87eb6ac16..1358e6c2b 100644
+index f1eb3c2ed..0099212c6 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -1869,6 +1869,20 @@ static void xe_vm_close(struct xe_vm *vm)
+@@ -2086,6 +2086,20 @@ static void xe_vm_close(struct xe_vm *vm)
  		drm_dev_exit(idx);
  }
  
@@ -103,20 +102,16 @@ index 87eb6ac16..1358e6c2b 100644
  void xe_vm_close_and_put(struct xe_vm *vm)
  {
  	LIST_HEAD(contested);
-@@ -2170,8 +2184,10 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
- 		xa_erase(&xef->vm.xa, args->vm_id);
- 	mutex_unlock(&xef->vm.lock);
+@@ -2394,6 +2408,7 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
  
--	if (!err)
-+	if (!err) {
+ 	if (!err) {
+ 		prelim_xe_eudebug_vm_destroy(xef, vm);
 +		xe_vm_close_start(vm);
  		xe_vm_close_and_put(vm);
-+	}
+ 	}
  
- 	return err;
- }
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index c5b900f38..70456ffe2 100644
+index 7dcf5c98c..d86087814 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
 @@ -59,6 +59,11 @@ static inline bool xe_vm_is_closed(struct xe_vm *vm)
@@ -150,10 +145,10 @@ index c5b900f38..70456ffe2 100644
  static inline bool xe_vm_in_fault_mode(struct xe_vm *vm)
  {
 diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
-index a94827d7f..2268a1ca3 100644
+index e1eddf18b..997bf3421 100644
 --- a/drivers/gpu/drm/xe/xe_vm_types.h
 +++ b/drivers/gpu/drm/xe/xe_vm_types.h
-@@ -264,6 +264,7 @@ struct xe_vm {
+@@ -299,6 +299,7 @@ struct xe_vm {
  #define XE_VM_FLAG_SET_TILE_ID(tile)	FIELD_PREP(GENMASK(7, 6), (tile)->id)
  #define XE_VM_FLAG_GSC			BIT(8)
  #define XE_VM_FLAG_NO_VM_OVERCOMMIT     BIT(9)

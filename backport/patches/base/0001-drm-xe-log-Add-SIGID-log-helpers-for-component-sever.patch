@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:35 +0200
-Subject: drm/xe/log: Add SIGID log helpers for component & severity
+Subject: [PATCH] drm/xe/log: Add SIGID log helpers for component & severity
 
 There are only few CPER severity levels defined, add some helpers
 to avoid forcing developers to write full CPER severity enum name
@@ -14,13 +14,13 @@ Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-10-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit 23a71412009828c66690aa674af02f638eb5e39b linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_log.h | 12 ++++++++++++
  1 file changed, 12 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_log.h b/drivers/gpu/drm/xe/xe_log.h
-index c30db02950b0..c56306a183e7 100644
+index c30db0295..c56306a18 100644
 --- a/drivers/gpu/drm/xe/xe_log.h
 +++ b/drivers/gpu/drm/xe/xe_log.h
 @@ -103,4 +103,16 @@ void xe_log_emit(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigid,

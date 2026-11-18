@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Date: Thu, 3 Sep 2026 21:46:07 +0530
-Subject: drm/xe/uapi: Expose ban reason in EXEC_QUEUE_GET_PROPERTY_BAN
+Subject: [PATCH] drm/xe/uapi: Expose ban reason in EXEC_QUEUE_GET_PROPERTY_BAN
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -48,10 +48,9 @@ Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
-Link: httips://patch.msgid.link/20260903161553.528932-31-tejas.upadhyay@intel.com
-(cherry-picked from 69183b7062061ce9985a6e116890ffb7929bd1f4 drm-tip)
-Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
-
+Link: https://patch.msgid.link/20260903161553.528932-31-tejas.upadhyay@intel.com
+(cherry-picked from commit 69183b7062061ce9985a6e116890ffb7929bd1f4 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_exec_queue_types.h |  7 +++--
  drivers/gpu/drm/xe/xe_execlist.c         |  4 +--
@@ -61,10 +60,10 @@ Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
  5 files changed, 82 insertions(+), 10 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index 95f75d61a647..836f88fc0faa 100644
+index 95f75d61a..836f88fc0 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-@@ -148,6 +148,9 @@ struct xe_exec_queue {
+@@ -154,6 +154,9 @@ struct xe_exec_queue {
  	 */
  	unsigned long flags;
  
@@ -74,7 +73,8 @@ index 95f75d61a647..836f88fc0faa 100644
  	union {
  		/** @multi_gt_list: list head for VM bind engines if multi-GT */
  		struct list_head multi_gt_list;
-@@ -335,5 +338,5 @@ struct xe_exec_queue_ops {
+@@ -348,8 +351,8 @@ struct xe_exec_queue_ops {
+ 	 * signalled when this function is called.
  	 */
  	void (*resume)(struct xe_exec_queue *q);
 -	/** @reset_status: check exec queue reset status */
@@ -82,11 +82,13 @@ index 95f75d61a647..836f88fc0faa 100644
 +	/** @reset_status: check exec queue ban status, returns ban reason bitmask */
 +	u64 (*reset_status)(struct xe_exec_queue *q);
  };
+ 
+ #endif
 diff --git a/drivers/gpu/drm/xe/xe_execlist.c b/drivers/gpu/drm/xe/xe_execlist.c
-index 0d0db66c6ea2..a36db39dcda8 100644
+index 0d0db66c6..a36db39dc 100644
 --- a/drivers/gpu/drm/xe/xe_execlist.c
 +++ b/drivers/gpu/drm/xe/xe_execlist.c
-@@ -460,10 +460,10 @@ static void execlist_exec_queue_resume(struct xe_exec_queue *q)
+@@ -453,10 +453,10 @@ static void execlist_exec_queue_resume(struct xe_exec_queue *q)
  	/* NIY */
  }
  
@@ -100,7 +102,7 @@ index 0d0db66c6ea2..a36db39dcda8 100644
  
  static const struct xe_exec_queue_ops execlist_exec_queue_ops = {
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 99d8c807ff05..0a6e2b81b5a5 100644
+index 717ee0d64..8b101e942 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
 @@ -6,6 +6,7 @@
@@ -111,7 +113,7 @@ index 99d8c807ff05..0a6e2b81b5a5 100644
  #include <linux/bitmap.h>
  #include <linux/circ_buf.h>
  #include <linux/dma-fence-array.h>
-@@ -1586,6 +1587,12 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+@@ -1599,6 +1600,12 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
  	else
  		wedged = xe_device_wedged(xe);
  
@@ -124,7 +126,7 @@ index 99d8c807ff05..0a6e2b81b5a5 100644
  	set_exec_queue_banned(q);
  
  	/* Kick job / queue off hardware */
-@@ -1669,6 +1676,9 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+@@ -1682,6 +1689,9 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
  		if (timeout_needs_gt_reset(q, job, skip_timeout_check)) {
  			if (!xe_sched_invalidate_job(job, 2)) {
  				clear_exec_queue_banned(q);
@@ -134,7 +136,10 @@ index 99d8c807ff05..0a6e2b81b5a5 100644
  				xe_gt_reset_async(q->gt);
  				goto rearm;
  			}
-@@ -2530,8 +2540,24 @@ static bool guc_exec_queue_reset_status(struct xe_exec_queue *q)
+@@ -2580,13 +2590,29 @@ static void guc_exec_queue_multi_queue_drop_suspend(struct xe_exec_queue *q)
+ 	}
+ }
+ 
 -static bool guc_exec_queue_reset_status(struct xe_exec_queue *q)
 +static u64 guc_exec_queue_reset_status(struct xe_exec_queue *q)
  {
@@ -167,7 +172,7 @@ index 99d8c807ff05..0a6e2b81b5a5 100644
  
  /*
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-index 3dcee4590126..6aa24eb064eb 100644
+index 3dcee4590..6aa24eb06 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 @@ -10,6 +10,7 @@
@@ -178,7 +183,7 @@ index 3dcee4590126..6aa24eb064eb 100644
  
  #include <drm/ttm/ttm_placement.h>
  #include <drm/ttm/ttm_range_manager.h>
-@@ -570,6 +571,7 @@ u64 xe_ttm_vram_get_avail(struct ttm_resource_manager *man)
+@@ -625,6 +626,7 @@ u64 xe_ttm_vram_get_avail(struct ttm_resource_manager *man)
  
  static int xe_ttm_vram_purge_page(struct xe_device *xe, struct xe_bo *bo)
  {
@@ -186,7 +191,7 @@ index 3dcee4590126..6aa24eb064eb 100644
  	struct ttm_operation_ctx ctx = {};
  	struct xe_exec_queue *q_to_put = NULL;
  	struct xe_exec_queue *q = NULL;
-@@ -584,7 +586,30 @@ static int xe_ttm_vram_purge_page(struct xe_device *xe, struct xe_bo *bo)
+@@ -639,7 +641,30 @@ static int xe_ttm_vram_purge_page(struct xe_device *xe, struct xe_bo *bo)
  	xe_bo_unlock(bo);
  	/*  Ban VM if BO is PPGTT */
  	if (vm && (flags & XE_BO_FLAG_PAGETABLE)) {
@@ -217,7 +222,7 @@ index 3dcee4590126..6aa24eb064eb 100644
  		xe_vm_kill(vm, true);
  		up_write(&vm->lock);
  	}
-@@ -596,6 +621,8 @@ static int xe_ttm_vram_purge_page(struct xe_device *xe, struct xe_bo *bo)
+@@ -651,6 +676,8 @@ static int xe_ttm_vram_purge_page(struct xe_device *xe, struct xe_bo *bo)
  	/*  Ban exec queue if BO is lrc */
  	if (q && xe_exec_queue_get_unless_zero(q)) {
  		/* ban queue */
@@ -227,7 +232,7 @@ index 3dcee4590126..6aa24eb064eb 100644
  	}
  
 diff --git a/include/uapi/drm/xe_drm.h b/include/uapi/drm/xe_drm.h
-index 8c852abcacf0..578f0c1eb43e 100644
+index 8c852abca..578f0c1eb 100644
 --- a/include/uapi/drm/xe_drm.h
 +++ b/include/uapi/drm/xe_drm.h
 @@ -1491,6 +1491,12 @@ struct drm_xe_exec_queue_destroy {
@@ -264,3 +269,4 @@ index 8c852abcacf0..578f0c1eb43e 100644
  	/** @reserved: Reserved */
 -- 
 2.43.0
+

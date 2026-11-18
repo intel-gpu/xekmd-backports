@@ -87,7 +87,7 @@ apply_patches() {
 					;;
 			esac
 		else
-			git am -q -s "$WORKING_DIR/$p"
+			git am -q -s --keep-non-patch "$WORKING_DIR/$p"
 			if [ $? -ne 0 ]; then
 				echo "Failed to apply patch $p"
 				exit 1;

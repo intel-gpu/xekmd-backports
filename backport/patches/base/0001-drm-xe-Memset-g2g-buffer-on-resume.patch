@@ -1,0 +1,175 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Vinay Belgaumkar <vinay.belgaumkar@intel.com>
+Date: Tue, 27 Oct 2026 10:43:55 -0700
+Subject: [PATCH] drm/xe: Memset g2g buffer on resume
+
+KMD creates this buffer for use by GuC, it is also responsible for zeroing
+it during resume. The buffer is marked as XE_BO_FLAG_PINNED_NORESTORE,
+so we cannot trust its contents after a suspend cycle. This commit adds
+xe_*_resume_early() functions for handling this and the C6 disable
+during resume.
+
+v2: Maintain layering with _early functions for gt/uc/ct (Matt Brost)
+v3: Memset the g2g buffer in xe_guc_resume_early() (Daniele)
+
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Signed-off-by: Vinay Belgaumkar <vinay.belgaumkar@intel.com>
+Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
+Link: https://patch.msgid.link/20261027174351.619929-8-vinay.belgaumkar@intel.com
+(cherry-picked from commit 1f6ac7c86aa524f8a9c86298976d0f5ccdb97bf6 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt.c  | 13 +++++++++++++
+ drivers/gpu/drm/xe/xe_gt.h  |  1 +
+ drivers/gpu/drm/xe/xe_guc.c | 15 +++++++++++++++
+ drivers/gpu/drm/xe/xe_guc.h |  1 +
+ drivers/gpu/drm/xe/xe_pm.c  |  4 ++--
+ drivers/gpu/drm/xe/xe_uc.c  | 15 +++++++++++++++
+ drivers/gpu/drm/xe/xe_uc.h  |  1 +
+ 7 files changed, 48 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index 478e04703..116b51caf 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -1064,6 +1064,19 @@ int xe_gt_sanitize_freq(struct xe_gt *gt)
+ 	return ret;
+ }
+ 
++/**
++ * xe_gt_resume_early() - Early init for GT resume
++ * @gt: the GT object
++ *
++ * Handles GT related init before GT restart after a suspend cycle.
++ */
++void xe_gt_resume_early(struct xe_gt *gt)
++{
++	xe_gt_idle_disable_c6(gt);
++
++	xe_uc_resume_early(&gt->uc);
++}
++
+ int xe_gt_resume(struct xe_gt *gt)
+ {
+ 	int err;
+diff --git a/drivers/gpu/drm/xe/xe_gt.h b/drivers/gpu/drm/xe/xe_gt.h
+index 65a4655b0..5c57f5a45 100644
+--- a/drivers/gpu/drm/xe/xe_gt.h
++++ b/drivers/gpu/drm/xe/xe_gt.h
+@@ -58,6 +58,7 @@ void xe_gt_record_user_engines(struct xe_gt *gt);
+ void xe_gt_suspend_prepare(struct xe_gt *gt);
+ int xe_gt_suspend(struct xe_gt *gt);
+ void xe_gt_shutdown(struct xe_gt *gt);
++void xe_gt_resume_early(struct xe_gt *gt);
+ int xe_gt_resume(struct xe_gt *gt);
+ void xe_gt_reset_async(struct xe_gt *gt);
+ int xe_gt_runtime_resume(struct xe_gt *gt);
+diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
+index 3bb4aea30..373ba9e35 100644
+--- a/drivers/gpu/drm/xe/xe_guc.c
++++ b/drivers/gpu/drm/xe/xe_guc.c
+@@ -1739,6 +1739,21 @@ int xe_guc_start(struct xe_guc *guc)
+ 	return xe_guc_submit_start(guc);
+ }
+ 
++/**
++ * xe_guc_resume_early() - Early init for GuC resume
++ * @guc: the guc object
++ *
++ * GuC init after a suspend cycle
++ */
++void xe_guc_resume_early(struct xe_guc *guc)
++{
++	struct xe_device *xe = guc_to_xe(guc);
++
++	/* clear the g2g buffer which is marked as NORESTORE during alloc */
++	if (guc->g2g.bo && guc->g2g.owned)
++		xe_map_memset(xe, &guc->g2g.bo->vmap, 0, 0, xe_bo_size(guc->g2g.bo));
++}
++
+ /**
+  * xe_guc_runtime_suspend() - GuC runtime suspend
+  * @guc: The GuC object
+diff --git a/drivers/gpu/drm/xe/xe_guc.h b/drivers/gpu/drm/xe/xe_guc.h
+index 61e3ee19a..32d539960 100644
+--- a/drivers/gpu/drm/xe/xe_guc.h
++++ b/drivers/gpu/drm/xe/xe_guc.h
+@@ -37,6 +37,7 @@ int xe_guc_init(struct xe_guc *guc);
+ int xe_guc_init_post_hwconfig(struct xe_guc *guc);
+ int xe_guc_post_load_init(struct xe_guc *guc);
+ int xe_guc_reset(struct xe_guc *guc);
++void xe_guc_resume_early(struct xe_guc *guc);
+ int xe_guc_upload(struct xe_guc *guc);
+ int xe_guc_min_load_for_hwconfig(struct xe_guc *guc);
+ int xe_guc_enable_communication(struct xe_guc *guc);
+diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
+index 40b31127e..f7e277025 100644
+--- a/drivers/gpu/drm/xe/xe_pm.c
++++ b/drivers/gpu/drm/xe/xe_pm.c
+@@ -247,7 +247,7 @@ int xe_pm_resume(struct xe_device *xe)
+ 		return err;
+ 
+ 	for_each_gt(gt, xe, id)
+-		xe_gt_idle_disable_c6(gt);
++		xe_gt_resume_early(gt);
+ 
+ 	xe_display_pm_resume_early(xe);
+ 
+@@ -682,7 +682,7 @@ int xe_pm_runtime_resume(struct xe_device *xe)
+ 			goto out;
+ 
+ 		for_each_gt(gt, xe, id)
+-			xe_gt_idle_disable_c6(gt);
++			xe_gt_resume_early(gt);
+ 
+ 		xe_display_pm_resume_early(xe);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_uc.c b/drivers/gpu/drm/xe/xe_uc.c
+index 65f59f061..9c23c545c 100644
+--- a/drivers/gpu/drm/xe/xe_uc.c
++++ b/drivers/gpu/drm/xe/xe_uc.c
+@@ -12,6 +12,7 @@
+ #include "xe_gt_printk.h"
+ #include "xe_gt_sriov_vf.h"
+ #include "xe_guc.h"
++#include "xe_guc_ct.h"
+ #include "xe_guc_pc.h"
+ #include "xe_guc_rc.h"
+ #include "xe_guc_engine_activity.h"
+@@ -297,6 +298,20 @@ int xe_uc_suspend(struct xe_uc *uc)
+ 	return xe_guc_suspend(&uc->guc);
+ }
+ 
++/**
++ * xe_uc_resume_early() - Early init for UC resume
++ * @uc: the UC object
++ *
++ * UC init before a GT restart during resume.
++ */
++void xe_uc_resume_early(struct xe_uc *uc)
++{
++	if (!xe_device_uc_enabled(uc_to_xe(uc)))
++		return;
++
++	xe_guc_resume_early(&uc->guc);
++}
++
+ /**
+  * xe_uc_runtime_suspend() - UC runtime suspend
+  * @uc: the UC object
+diff --git a/drivers/gpu/drm/xe/xe_uc.h b/drivers/gpu/drm/xe/xe_uc.h
+index 255a54a8f..7a05f4a97 100644
+--- a/drivers/gpu/drm/xe/xe_uc.h
++++ b/drivers/gpu/drm/xe/xe_uc.h
+@@ -13,6 +13,7 @@ int xe_uc_init(struct xe_uc *uc);
+ int xe_uc_init_post_hwconfig(struct xe_uc *uc);
+ int xe_uc_load_hw(struct xe_uc *uc);
+ int xe_uc_reset_prepare(struct xe_uc *uc);
++void xe_uc_resume_early(struct xe_uc *uc);
+ void xe_uc_runtime_resume(struct xe_uc *uc);
+ void xe_uc_runtime_suspend(struct xe_uc *uc);
+ void xe_uc_stop_prepare(struct xe_uc *uc);
+-- 
+2.43.0
+

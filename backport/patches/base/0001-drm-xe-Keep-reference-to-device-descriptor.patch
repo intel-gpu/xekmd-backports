@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Date: Fri, 4 Sep 2026 19:05:26 +0200
+Subject: [PATCH] drm/xe: Keep reference to device descriptor
+
+While we already use struct intel_device_info, which has some fields
+copied or derived from the original struct xe_device_desc, we also
+want to keep the reference to the whole device descriptor, in case
+we would like to access more non-mutable device parameters.
+Similarly keep the reference to matched subplatform descriptor.
+
+Signed-off-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Reviewed-by: Gustavo Sousa <gustavo.sousa@intel.com>
+Link: https://patch.msgid.link/20260904170531.516-3-michal.wajdeczko@intel.com
+(cherry-picked from commit 3a7df8a43c783ed13bff8de9848fc179107727ea linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/tests/xe_pci.c    | 2 ++
+ drivers/gpu/drm/xe/xe_device_types.h | 6 ++++++
+ drivers/gpu/drm/xe/xe_pci.c          | 2 ++
+ 3 files changed, 10 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/tests/xe_pci.c b/drivers/gpu/drm/xe/tests/xe_pci.c
+index 4965a01f6..48d5ee478 100644
+--- a/drivers/gpu/drm/xe/tests/xe_pci.c
++++ b/drivers/gpu/drm/xe/tests/xe_pci.c
+@@ -374,6 +374,8 @@ int xe_pci_fake_device_init(struct xe_device *xe)
+ 		return -ENODEV;
+ 
+ done:
++	xe->desc = desc;
++	xe->subplatform_desc = subplatform_desc;
+ 	xe->sriov.__mode = data && data->sriov_mode ?
+ 			   data->sriov_mode : XE_SRIOV_MODE_NONE;
+ 
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index e3a49e7b0..b4c669331 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -105,6 +105,12 @@ struct xe_device {
+ 	/** @devcoredump: device coredump */
+ 	struct xe_devcoredump devcoredump;
+ 
++	/** @desc: device descriptor */
++	const struct xe_device_desc *desc;
++
++	/** @subplatform_desc: subplatform descriptor */
++	const struct xe_subplatform_desc *subplatform_desc;
++
+ 	/** @info: device info */
+ 	struct intel_device_info {
+ 		/** @info.platform_name: platform name */
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index a6da0a1e1..e8ffa2607 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -1216,6 +1216,8 @@ static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *des
+ 	if (IS_ERR(xe))
+ 		return PTR_ERR(xe);
+ 
++	xe->desc = desc;
++	xe->subplatform_desc = subplatform_desc;
+ 	xe->devres_group = group;
+ 
+ 	pci_set_drvdata(pdev, &xe->drm);
+-- 
+2.43.0
+

@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Karthik Poosa <karthik.poosa@intel.com>
-Date: Fri, 25 Sep 2026 02:24:28 +0530
-Subject: [TEMP] drm/xe/hwmon: Update memory controller temperature
- offset for CRI
+Date: Thu, 15 Oct 2026 12:44:30 +0530
+Subject: [PATCH] drm/xe/hwmon: Update memory controller temperature offset for
+ CRI
 
 On CRI the memory controller temperatures moved in the READ_THERMAL_DATA
 output: they now occupy bytes 16..19 instead of starting at byte 2.
@@ -12,17 +12,20 @@ keeping the existing byte 2..count-1 range for earlier platforms. Only
 the group(s) covering the used bytes are fetched.
 
 Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
-(backported from https://patchwork.freedesktop.org/series/174898/#rev3)
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20261015071434.1063785-13-karthik.poosa@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit ae4cd659d22dc00a6e9bf1802485e6ea5c1f74e2 linux-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
- drivers/gpu/drm/xe/xe_hwmon.c | 19 ++++++++++++++++---
- 1 file changed, 16 insertions(+), 3 deletions(-)
+ drivers/gpu/drm/xe/xe_hwmon.c | 20 ++++++++++++++++----
+ 1 file changed, 16 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
-index 48ff9750d..d8f5a4f25 100644
+index 4b168d96a..97d298786 100644
 --- a/drivers/gpu/drm/xe/xe_hwmon.c
 +++ b/drivers/gpu/drm/xe/xe_hwmon.c
-@@ -114,6 +114,10 @@ enum sensor_attr_power {
+@@ -110,6 +110,10 @@ enum sensor_attr_power {
  /* Index of memory controller in READ_THERMAL_DATA output */
  #define TEMP_INDEX_MCTRL	2
  
@@ -33,30 +36,34 @@ index 48ff9750d..d8f5a4f25 100644
  /* Mailbox sentinel reported for an unavailable temperature sensor */
  #define TEMP_MBX_INVALID	0xFF
  
-@@ -974,10 +978,19 @@ static int mbx_temp_decode(u8 value)
+@@ -1007,14 +1011,22 @@ static int mbx_temp_decode(u8 value)
  static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
  {
  	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
 -	int ret, i, count = 0;
 +	int ret, i, start, end, count = 0;
  	s32 average = 0;
++	u32 data = 0;
+ 
+ 	guard(mutex)(&hwmon->hwmon_lock);
  
 -	for (i = 0; i < DIV_ROUND_UP(hwmon->temp.count, sizeof(u32)); i++) {
+-		u32 data = 0;
 +	/* CRI relocated the memory controller temperatures to READ_THERMAL_DATA bytes 16..19. */
-+	if (hwmon->xe->info.platform >= XE_CRESCENTISLAND) {
++	if (hwmon->xe->info.platform == XE_CRESCENTISLAND) {
 +		start = CRI_TEMP_INDEX_MCTRL;
 +		end = CRI_TEMP_INDEX_MCTRL + CRI_TEMP_MCTRL_COUNT;
 +	} else {
 +		start = TEMP_INDEX_MCTRL;
 +		end = hwmon->temp.count - 1;
 +	}
-+
+ 
 +	for (i = start / sizeof(u32); i < DIV_ROUND_UP(end, sizeof(u32)); i++) {
  		ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_DATA, i),
- 				    &hwmon->temp.dword[i], NULL);
+ 				    &data, NULL);
  		if (ret)
-@@ -986,7 +999,7 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
- 			hwmon->temp.dword[i]);
+@@ -1023,7 +1035,7 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ 		hwmon->temp.dword[i] = cpu_to_le32(data);
  	}
  
 -	for (i = TEMP_INDEX_MCTRL; i < hwmon->temp.count - 1; i++) {

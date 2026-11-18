@@ -16,7 +16,7 @@ Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://patch.msgid.link/20260902124117.918018-11-matthew.auld@intel.com
 (cherry-picked from commit 6df8aa0e8a323201a1eb85a98864e90b6b59230a linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/display/xe_dsb_buffer.c | 2 +-
  drivers/gpu/drm/xe/display/xe_fb_pin.c     | 2 +-
@@ -25,7 +25,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  4 files changed, 6 insertions(+), 6 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/display/xe_dsb_buffer.c b/drivers/gpu/drm/xe/display/xe_dsb_buffer.c
-index a7158c73a14c..82974e933e8d 100644
+index a7158c73a..82974e933 100644
 --- a/drivers/gpu/drm/xe/display/xe_dsb_buffer.c
 +++ b/drivers/gpu/drm/xe/display/xe_dsb_buffer.c
 @@ -88,7 +88,7 @@ static void xe_dsb_buffer_flush_map(struct intel_dsb_buffer *dsb_buf)
@@ -38,7 +38,7 @@ index a7158c73a14c..82974e933e8d 100644
  
  const struct intel_display_dsb_interface xe_display_dsb_interface = {
 diff --git a/drivers/gpu/drm/xe/display/xe_fb_pin.c b/drivers/gpu/drm/xe/display/xe_fb_pin.c
-index f1dbdc802df8..4f5cee474c64 100644
+index f1dbdc802..4f5cee474 100644
 --- a/drivers/gpu/drm/xe/display/xe_fb_pin.c
 +++ b/drivers/gpu/drm/xe/display/xe_fb_pin.c
 @@ -203,7 +203,7 @@ static int __xe_pin_fb_vma_dpt(struct drm_gem_object *obj,
@@ -51,10 +51,10 @@ index f1dbdc802df8..4f5cee474c64 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 373fe4e805f0..0f2c9bbf1a1a 100644
+index 396d02eb2..fa98b2d12 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -1281,7 +1281,7 @@ bool xe_device_is_l2_flush_optimized(struct xe_device *xe)
+@@ -1270,7 +1270,7 @@ bool xe_device_is_l2_flush_optimized(struct xe_device *xe)
  	return false;
  }
  
@@ -63,7 +63,7 @@ index 373fe4e805f0..0f2c9bbf1a1a 100644
  {
  	struct xe_gt *gt;
  
-@@ -1289,7 +1289,7 @@ void xe_device_l2_flush(struct xe_device *xe)
+@@ -1278,7 +1278,7 @@ void xe_device_l2_flush(struct xe_device *xe)
  	if (!gt)
  		return;
  
@@ -72,7 +72,7 @@ index 373fe4e805f0..0f2c9bbf1a1a 100644
  		return;
  
  	CLASS(xe_force_wake, fw_ref)(gt_to_fw(gt), XE_FW_GT);
-@@ -1344,7 +1344,7 @@ void xe_device_td_flush(struct xe_device *xe)
+@@ -1333,7 +1333,7 @@ void xe_device_td_flush(struct xe_device *xe)
  
  	if (XE_GT_WA(root_gt, 16023588340)) {
  		/* A transient flush is not sufficient: flush the L2 */
@@ -82,10 +82,10 @@ index 373fe4e805f0..0f2c9bbf1a1a 100644
  		xe_guc_pc_apply_flush_freq_limit(&root_gt->uc.guc.pc);
  		tdf_request_sync(xe);
 diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
-index a1127ab7d1a2..f496ac9c65d7 100644
+index 6c4cfaebc..6d3d6d5eb 100644
 --- a/drivers/gpu/drm/xe/xe_device.h
 +++ b/drivers/gpu/drm/xe/xe_device.h
-@@ -200,7 +200,7 @@ u64 xe_device_uncanonicalize_addr(struct xe_device *xe, u64 address);
+@@ -205,7 +205,7 @@ u64 xe_device_uncanonicalize_addr(struct xe_device *xe, u64 address);
  
  bool xe_device_is_l2_flush_optimized(struct xe_device *xe);
  void xe_device_td_flush(struct xe_device *xe);
@@ -94,3 +94,6 @@ index a1127ab7d1a2..f496ac9c65d7 100644
  
  static inline bool xe_device_wedged(struct xe_device *xe)
  {
+-- 
+2.43.0
+

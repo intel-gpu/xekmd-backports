@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:56 +0200
-Subject: drm/xe/gt: Report 'reset failed' errors using SIGID
+Subject: [PATCH] drm/xe/gt: Report 'reset failed' errors using SIGID
 
 Report 'reset' related err/info messages using xe_log() helpers.
 
@@ -15,17 +15,16 @@ Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-31-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit 968ec2cdcd6ed4a271932581f27566b29870fa9c linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
-
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_gt.c | 7 ++++---
  1 file changed, 4 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
-index c7464af74f60..a16784d2c440 100644
+index dfdacc0f6..6805e0d3b 100644
 --- a/drivers/gpu/drm/xe/xe_gt.c
 +++ b/drivers/gpu/drm/xe/xe_gt.c
-@@ -46,6 +46,7 @@
+@@ -48,6 +48,7 @@
  #include "xe_hw_engine_class_sysfs.h"
  #include "xe_irq.h"
  #include "xe_lmtt.h"

@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Karthik Poosa <karthik.poosa@intel.com>
+Date: Thu, 15 Oct 2026 12:44:33 +0530
+Subject: [PATCH] drm/xe: Validate thermal sensor count before reads
+
+Check that READ_THERMAL_CONFIG reports enough thermal entries for the
+platform-specific MCTRL range and PCIe sensor index before reading
+READ_THERMAL_DATA.
+
+Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20261015071434.1063785-16-karthik.poosa@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit a3d7376b9d6711ad45060f73b951130399a1ff9b linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hwmon.c | 44 ++++++++++++++++++++++++-----------
+ 1 file changed, 30 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
+index ef3b930d3..221d7a3bd 100644
+--- a/drivers/gpu/drm/xe/xe_hwmon.c
++++ b/drivers/gpu/drm/xe/xe_hwmon.c
+@@ -941,6 +941,17 @@ static int mbx_temp_decode(u8 value)
+ 	return (value & TEMP_MBX_SIGN) ? -temp : temp;
+ }
+ 
++static u8 xe_hwmon_pcie_temp_index(const struct xe_hwmon *hwmon)
++{
++	if (hwmon->xe->info.platform == XE_CRESCENTISLAND)
++		return CRI_TEMP_INDEX_PCIE;
++
++	if (hwmon->xe->info.subplatform == XE_SUBPLATFORM_BATTLEMAGE_G21)
++		return BMG_G21_TEMP_INDEX_PCIE;
++
++	return TEMP_INDEX_PCIE;
++}
++
+ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ {
+ 	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
+@@ -956,7 +967,14 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ 		end = CRI_TEMP_INDEX_MCTRL + CRI_TEMP_MCTRL_COUNT;
+ 	} else {
+ 		start = TEMP_INDEX_MCTRL;
+-		end = hwmon->temp.count - 1;
++		end = min_t(int, hwmon->temp.count - 1, xe_hwmon_pcie_temp_index(hwmon));
++	}
++
++	if (end <= start || end > hwmon->temp.count) {
++		drm_warn(&hwmon->xe->drm,
++			 "memory controller range [%d, %d) is invalid for temperature count %d\n",
++			 start, end, hwmon->temp.count);
++		return -ENODATA;
+ 	}
+ 
+ 	for (i = start / sizeof(u32); i < DIV_ROUND_UP(end, sizeof(u32)); i++) {
+@@ -988,30 +1006,28 @@ static int get_mc_temp(struct xe_hwmon *hwmon, long *val)
+ 	return 0;
+ }
+ 
+-static u8 xe_hwmon_pcie_temp_index(const struct xe_hwmon *hwmon)
+-{
+-	if (hwmon->xe->info.platform == XE_CRESCENTISLAND)
+-		return CRI_TEMP_INDEX_PCIE;
+-
+-	if (hwmon->xe->info.subplatform == XE_SUBPLATFORM_BATTLEMAGE_G21)
+-		return BMG_G21_TEMP_INDEX_PCIE;
+-
+-	return TEMP_INDEX_PCIE;
+-}
+-
+ static int get_pcie_temp(const struct xe_hwmon *hwmon, long *val)
+ {
+ 	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
+ 	u32 data = 0;
++	int index;
+ 	int ret;
+ 
++	index = xe_hwmon_pcie_temp_index(hwmon);
++	if (index >= hwmon->temp.count) {
++		drm_warn(&hwmon->xe->drm,
++			 "PCIe temperature index %d out of range for temperature count %d\n",
++			 index, hwmon->temp.count);
++		return -ENODATA;
++	}
++
+ 	ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_THERMAL_INFO, READ_THERMAL_DATA,
+-						  xe_hwmon_pcie_temp_index(hwmon) / sizeof(data)),
++						  index / sizeof(data)),
+ 						  &data, NULL);
+ 	if (ret)
+ 		return ret;
+ 
+-	data >>= (xe_hwmon_pcie_temp_index(hwmon) % sizeof(data)) * BITS_PER_BYTE;
++	data >>= (index % sizeof(data)) * BITS_PER_BYTE;
+ 	data = REG_FIELD_GET(TEMP_MASK, data);
+ 	if (!mbx_temp_valid(hwmon, data)) {
+ 		drm_dbg(&hwmon->xe->drm, "PCIe temperature not available\n");
+-- 
+2.43.0
+

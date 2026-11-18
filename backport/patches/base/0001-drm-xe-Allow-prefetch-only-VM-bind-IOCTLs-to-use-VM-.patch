@@ -13,14 +13,14 @@ Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Francois Dugast <francois.dugast@intel.com>
 Link: https://patch.msgid.link/20260806185202.3922432-3-matthew.brost@intel.com
 (cherry-picked from commit 53e76bde11df43bc10a395a5ef7604ab96d56964 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_vm.c       | 36 +++++++++++++++++++++++++++-----
  drivers/gpu/drm/xe/xe_vm_types.h |  2 ++
  2 files changed, 33 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 6ff8b7653..b203d4aae 100644
+index b2e7ec6bf..36cdb1cea 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -2473,10 +2473,12 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
@@ -148,7 +148,7 @@ index 6ff8b7653..b203d4aae 100644
  	err = xe_vma_ops_alloc(&vops, args->num_binds > 1);
  	if (err)
  		goto unwind_ops;
-@@ -4152,7 +4175,10 @@ put_obj:
+@@ -4152,7 +4175,10 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
  free_bos:
  	kvfree(bos);
  release_vm_lock:

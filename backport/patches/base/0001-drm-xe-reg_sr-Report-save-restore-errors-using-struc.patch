@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Date: Mon, 12 Oct 2026 17:55:15 +0530
+Subject: [PATCH] drm/xe/reg_sr: Report save-restore errors using structured
+ xe_log API
+
+Replace xe_gt_notice() and xe_gt_err() calls with xe_log_info() and
+xe_log_err() using the RTP and REGS component tags for register
+save-restore operations.
+
+Signed-off-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20261012122522.2307625-7-dnyaneshwar.bhadane@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit e03d31e703357fceceada79f3ea3b3b078686874 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_reg_sr.c | 11 ++++++-----
+ 1 file changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_reg_sr.c b/drivers/gpu/drm/xe/xe_reg_sr.c
+index e328f5072..eab84a528 100644
+--- a/drivers/gpu/drm/xe/xe_reg_sr.c
++++ b/drivers/gpu/drm/xe/xe_reg_sr.c
+@@ -21,6 +21,7 @@
+ #include "xe_gt_printk.h"
+ #include "xe_gt_types.h"
+ #include "xe_hw_engine_types.h"
++#include "xe_log.h"
+ #include "xe_lrc.h"
+ #include "xe_mmio.h"
+ #include "xe_rtp_types.h"
+@@ -87,15 +88,15 @@ static struct xe_reg sanitize_mcr(struct xe_reg_sr *sr,
+ 
+ 	if (is_mcr && !reg.mcr) {
+ 		reg.mcr = 1;
+-		xe_gt_notice(gt, "xe_reg_sr_entry using non-MCR register for address 0x%x, forcing MCR\n",
+-			     reg.addr);
++		xe_log_info(gt, RTP, "xe_reg_sr_entry using non-MCR register for address 0x%x, forcing MCR\n",
++			    reg.addr);
+ 		reg_sr_inc_error(sr);
+ 	}
+ 
+ 	if (!is_mcr && reg.mcr) {
+ 		reg.mcr = 0;
+-		xe_gt_notice(gt, "xe_reg_sr_entry using MCR register for address 0x%x, forcing non-MCR\n",
+-			     reg.addr);
++		xe_log_info(gt, RTP, "xe_reg_sr_entry using MCR register for address 0x%x, forcing non-MCR\n",
++			    reg.addr);
+ 		reg_sr_inc_error(sr);
+ 	}
+ 
+@@ -219,7 +220,7 @@ void xe_reg_sr_apply_mmio(struct xe_reg_sr *sr, struct xe_gt *gt)
+ 
+ 	CLASS(xe_force_wake, fw_ref)(gt_to_fw(gt), XE_FORCEWAKE_ALL);
+ 	if (!xe_force_wake_ref_has_domain(fw_ref.domains, XE_FORCEWAKE_ALL)) {
+-		xe_gt_err(gt, "Failed to apply, err=-ETIMEDOUT\n");
++		xe_log_err(gt, REGS, -ETIMEDOUT, "Failed to apply\n");
+ 		return;
+ 	}
+ 
+-- 
+2.43.0
+

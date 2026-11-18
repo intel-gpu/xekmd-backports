@@ -1,11 +1,16 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Date: Thu, 24 Sep 2026 11:39:09 +0530
-Subject: drm/xe/sysctrl: Improve firmware response error logging
+Subject: [PATCH] drm/xe/sysctrl: Improve firmware response error logging
 
 Use xe_log_err() helper and include additional details when a
 response header mismatch occurs.
 
+Suggested-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Link: https://patch.msgid.link/20260924060900.146167-20-mallesh.koujalagi@intel.com
 (cherry-picked from commit 3215ff2b71b7b8117657019ec3b6b64e585563c6 linux-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
@@ -13,7 +18,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  1 file changed, 5 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
-index 488c64d8b..798ed1961 100644
+index cbc73c920..faaec7f38 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
 @@ -233,13 +233,15 @@ static int sysctrl_receive_frames(struct xe_sysctrl *sc,

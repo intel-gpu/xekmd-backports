@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:29 +0200
-Subject: drm/xe/log: Introduce structured component/location
+Subject: [PATCH] drm/xe/log: Introduce structured component/location
  identifiers
 
 Introduce structured identifiers for each component type that
@@ -16,7 +16,7 @@ Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com> #v3
 Link: https://patch.msgid.link/20260814171801.13347-4-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit c3bd292810818d8b8e6a01e023f1d5134f8f61ec linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/abi/xe_log_abi.h | 187 ++++++++++++++++++++++++++++
  1 file changed, 187 insertions(+)
@@ -24,7 +24,7 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 
 diff --git a/drivers/gpu/drm/xe/abi/xe_log_abi.h b/drivers/gpu/drm/xe/abi/xe_log_abi.h
 new file mode 100644
-index 000000000000..b38db5e9fcb5
+index 000000000..b38db5e9f
 --- /dev/null
 +++ b/drivers/gpu/drm/xe/abi/xe_log_abi.h
 @@ -0,0 +1,187 @@

@@ -1,23 +1,39 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Badal Nilawar <badal.nilawar@intel.com>
-Date: Sun, 6 Sep 2026 22:56:13 +0530
-Subject: [TEMP] drm/xe/xe_ras: Report device memory errors using SIGID
+Date: Thu, 29 Oct 2026 17:07:01 +0530
+Subject: [PATCH] drm/xe/xe_ras: Report device memory errors using SIGID
 
-Use xe_log_comp_info helper to report device memory errors.
+Use xe_log_comp_info helper to report device memory errors using the
+corresponding SIGID.
 
-Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+Example:
+	xe 0000:03:00.0: [drm] SIGID=202 (020100020008002000300000)
+DEVICE_MEMORY: Double-bit ECC error at sw address 0x63000
+
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Cc: Riana Tauro <riana.tauro@intel.com>
-(backported from https://patchwork.freedesktop.org/series/169692/#rev3)
+Reviewed-by: Raag Jadav <raag.jadav@intel.com>
+Link: https://patch.msgid.link/20261029113653.1860286-19-badal.nilawar@intel.com
+Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
+(cherry-picked from commit 2dd54f5f37451a78be1e96189e0bfd27ce0ada37 linux-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
- drivers/gpu/drm/xe/xe_ras.c | 11 +++++++----
- 1 file changed, 7 insertions(+), 4 deletions(-)
+ drivers/gpu/drm/xe/xe_ras.c | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
-index 5e0e078e4..acc26d868 100644
+index 6b3b68df2..a8c9751ca 100644
 --- a/drivers/gpu/drm/xe/xe_ras.c
 +++ b/drivers/gpu/drm/xe/xe_ras.c
-@@ -386,14 +386,17 @@ static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_
+@@ -644,6 +644,7 @@ static u8 handle_soc_internal_errors(struct xe_device *xe, struct xe_ras_error_a
+ static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
+ {
+ 	struct xe_ras_memory_error *info = (void *)arr->details;
++	u8 cper_sev = ras_sev_to_cper_sev(arr->counter.common.severity);
+ 	int ret;
+ 
+ 	/*
+@@ -655,17 +656,25 @@ static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_
  	 */
  	switch (info->category) {
  	case XE_RAS_MEMORY_POISON:
@@ -31,15 +47,20 @@ index 5e0e078e4..acc26d868 100644
 +				 "Data parity error detected\n");
  		break;
  	case XE_RAS_MEMORY_DB_ECC:
--		xe_info(xe, "[RAS]: Double-bit ECC error detected at sw address 0x%llx\n",
--			info->sw_address);
-+		xe_log_comp_info(xe, DEVICE_MEMORY, &arr->counter, sizeof(arr->counter),
-+				 "Double-bit ECC error detected at sw address 0x%llx\n",
-+				 info->sw_address);
- 		/* TODO: Add page offlining for Double-bit ECC error */
- 		fallthrough;
+ 		ret = handle_page_offline(xe, info->sw_address, true);
++		xe_log_comp(xe, ret ? cper_sev : CPER_SEV_INFORMATIONAL,
++			    DEVICE_MEMORY, &arr->counter, sizeof(arr->counter),
++			    "Double-bit ECC error detected at sw address 0x%llx\n",
++			    info->sw_address);
+ 		if (ret)
+ 			return XE_RAS_RECOVERY_ACTION_RESET;
+ 		break;
  	default:
----
++		xe_log_comp(xe, cper_sev, DEVICE_MEMORY, &arr->counter, sizeof(arr->counter),
++			    "Unknown error detected\n");
+ 		return XE_RAS_RECOVERY_ACTION_RESET;
+ 	}
+ 
 -- 
 2.43.0
 

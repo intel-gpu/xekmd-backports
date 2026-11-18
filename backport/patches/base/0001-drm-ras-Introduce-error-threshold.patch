@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Raag Jadav <raag.jadav@intel.com>
 Date: Tue, 18 Aug 2026 19:22:06 +0530
-Subject: drm/ras: Introduce error threshold
+Subject: [PATCH] drm/ras: Introduce error threshold
 
 Add get-error-threshold and set-error-threshold command support which
 allows querying/setting error threshold of the counter. Threshold in RAS
@@ -15,8 +15,8 @@ Acked-by: Joshua Santhosh Ranjan <joshua.santosh.ranjan@intel.com>
 Link: https://patch.msgid.link/20260818135304.497098-3-raag.jadav@intel.com
 Acked-by: Maarten Lankhorst <maarten.lankhorst@linux.intel.com>
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
-(backported from commit b2207d4c4e84347a3a6b26b77e218cfc606d0109 linux-next)
-Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+(cherry-picked from commit b2207d4c4e84347a3a6b26b77e218cfc606d0109 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  Documentation/gpu/drm-ras.rst            |  18 +++
  Documentation/netlink/specs/drm_ras.yaml |  32 +++++
@@ -28,10 +28,10 @@ Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
  7 files changed, 271 insertions(+)
 
 diff --git a/Documentation/gpu/drm-ras.rst b/Documentation/gpu/drm-ras.rst
-index de07e9ae0..7a51ced2b 100644
+index 406e4c49b..c4ce24067 100644
 --- a/Documentation/gpu/drm-ras.rst
 +++ b/Documentation/gpu/drm-ras.rst
-@@ -55,6 +55,10 @@ User space tools can:
+@@ -57,6 +57,10 @@ User space tools can:
  * Clear specific error counters with the ``clear-error-counter`` command, using both
    ``node-id`` and ``error-id`` as parameters.
  * Subscribe to the ``error-report`` multicast group to receive ``error-event``.
@@ -42,7 +42,7 @@ index de07e9ae0..7a51ced2b 100644
  
  YAML-based Interface
  --------------------
-@@ -130,3 +134,17 @@ Example: Subscribe to ``error-report`` multicast group
+@@ -132,3 +136,17 @@ Example: Subscribe to ``error-report`` multicast group
              "error-value": 1
          }
      }
@@ -382,10 +382,10 @@ index 03ec275ac..9aef097ea 100644
  enum {
  	DRM_RAS_NLGRP_ERROR_REPORT,
 diff --git a/include/drm/drm_ras.h b/include/drm/drm_ras.h
-index ed8175f62..aa9a9e93d 100644
+index ee2caa0ed..1765a3130 100644
 --- a/include/drm/drm_ras.h
 +++ b/include/drm/drm_ras.h
-@@ -69,6 +69,35 @@ struct drm_ras_node {
+@@ -71,6 +71,35 @@ struct drm_ras_node {
  	 */
  	int (*clear_error_counter)(struct drm_ras_node *node, u32 error_id);
  
@@ -442,3 +442,6 @@ index eab8231aa..2f832275e 100644
  
  	__DRM_RAS_CMD_MAX,
  	DRM_RAS_CMD_MAX = (__DRM_RAS_CMD_MAX - 1)
+-- 
+2.43.0
+

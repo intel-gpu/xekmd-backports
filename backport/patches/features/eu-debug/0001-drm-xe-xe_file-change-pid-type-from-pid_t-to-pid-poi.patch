@@ -21,12 +21,12 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  4 files changed, 8 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_devcoredump.c b/drivers/gpu/drm/xe/xe_devcoredump.c
-index 5f2b90b18..74ca42f25 100644
+index ffecd73a3..364ad6403 100644
 --- a/drivers/gpu/drm/xe/xe_devcoredump.c
 +++ b/drivers/gpu/drm/xe/xe_devcoredump.c
-@@ -336,7 +336,7 @@ static void devcoredump_snapshot(struct xe_devcoredump *coredump,
+@@ -666,7 +666,7 @@ static void devcoredump_snapshot(struct xe_devcoredump *coredump,
  
- 	if (q->vm && q->vm->xef) {
+ 	if (q && q->vm && q->vm->xef) {
  		process_name = q->vm->xef->process_name;
 -		ss->pid = q->vm->xef->pid;
 +		ss->pid = pid_nr(q->vm->xef->pid);
@@ -34,10 +34,10 @@ index 5f2b90b18..74ca42f25 100644
  
  	strscpy(ss->process_name, process_name);
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 68750a09b..23f921348 100644
+index 9b13154d0..f3cdcf2be 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -116,10 +116,10 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
+@@ -117,10 +117,10 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
  	file->driver_priv = xef;
  	kref_init(&xef->refcount);
  
@@ -50,7 +50,7 @@ index 68750a09b..23f921348 100644
  		put_task_struct(task);
  	}
  
-@@ -136,6 +136,7 @@ static void xe_file_destroy(struct kref *ref)
+@@ -137,6 +137,7 @@ static void xe_file_destroy(struct kref *ref)
  	mutex_destroy(&xef->exec_queue.lock);
  	xa_destroy(&xef->vm.xa);
  	mutex_destroy(&xef->vm.lock);
@@ -59,10 +59,10 @@ index 68750a09b..23f921348 100644
  	xe_drm_client_put(xef->client);
  	kfree(xef->process_name);
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 00ec543f7..0852301ad 100644
+index aa9c0b82c..1a51e8292 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -735,10 +735,10 @@ struct xe_file {
+@@ -712,10 +712,10 @@ struct xe_file {
  	char *process_name;
  
  	/**
@@ -77,10 +77,10 @@ index 00ec543f7..0852301ad 100644
  	/** @refcount: ref count of this xe file */
  	struct kref refcount;
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index cfee8abfc..a0863e346 100644
+index cfaa6a589..b3fb7abc7 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -1689,7 +1689,7 @@ trigger_reset:
+@@ -1705,7 +1705,7 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
  
  	if (q->vm && q->vm->xef) {
  		process_name = q->vm->xef->process_name;

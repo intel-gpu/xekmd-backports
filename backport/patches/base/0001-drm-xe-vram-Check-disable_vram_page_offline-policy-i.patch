@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Date: Thu, 3 Sep 2026 21:46:05 +0530
-Subject: drm/xe/vram: Check disable_vram_page_offline policy in fault
+Subject: [PATCH] drm/xe/vram: Check disable_vram_page_offline policy in fault
  handler
 
 Before reserving a page at a faulting address, check the cached
@@ -16,15 +16,14 @@ Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://patch.msgid.link/20260903161553.528932-29-tejas.upadhyay@intel.com
-(cherry-picked from 6ff99f4335f7ff5c210a2130438535c625f61f06 drm-tip)
-Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
-
+(cherry-picked from commit 6ff99f4335f7ff5c210a2130438535c625f61f06 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_ttm_vram_mgr.c | 7 +++++++
  1 file changed, 7 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
-index aea4cb0b66fd..f4810cb961df 100644
+index aea4cb0b6..f4810cb96 100644
 --- a/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 +++ b/drivers/gpu/drm/xe/xe_ttm_vram_mgr.c
 @@ -21,6 +21,7 @@

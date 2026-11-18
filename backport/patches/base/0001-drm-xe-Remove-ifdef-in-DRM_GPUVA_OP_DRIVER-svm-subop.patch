@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Date: Thu, 3 Sep 2026 17:59:32 +0300
+Subject: [PATCH] drm/xe: Remove ifdef in DRM_GPUVA_OP_DRIVER svm subop
+ checking
+
+Always emit the DRM_GPUVA_OP_DRIVER case so the previous break is
+effective and we never fall through to the default warning.
+This also allows adding more subops in the future without ifdef dancing.
+
+Cc: Matthew Auld <matthew.auld@intel.com>
+Signed-off-by: Mika Kuoppala <mika.kuoppala@linux.intel.com>
+Reviewed-by: Matthew Auld <matthew.auld@intel.com>
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Link: https://patch.msgid.link/20260903145952.848051-9-mika.kuoppala@linux.intel.com
+(cherry-picked from commit 5a3931cdaaf0f10531687cf599b2ba04dc4935b2 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pt.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pt.c b/drivers/gpu/drm/xe/xe_pt.c
+index 426e8a29c..a41108adf 100644
+--- a/drivers/gpu/drm/xe/xe_pt.c
++++ b/drivers/gpu/drm/xe/xe_pt.c
+@@ -1624,7 +1624,6 @@ static int op_check_svm_userptr(struct xe_vm *vm, struct xe_vma_op *op,
+ 			err = vma_check_userptr(vm, gpuva_to_vma(op->base.prefetch.va), pt_update);
+ 		}
+ 		break;
+-#if IS_ENABLED(CONFIG_DRM_XE_GPUSVM)
+ 	case DRM_GPUVA_OP_DRIVER:
+ 		if (op->subop == XE_VMA_SUBOP_MAP_RANGE) {
+ 			struct xe_svm_range *range = op->map_range.range;
+@@ -1639,7 +1638,6 @@ static int op_check_svm_userptr(struct xe_vm *vm, struct xe_vma_op *op,
+ 			}
+ 		}
+ 		break;
+-#endif
+ 	default:
+ 		drm_warn(&vm->xe->drm, "NOT POSSIBLE");
+ 	}
+-- 
+2.43.0
+

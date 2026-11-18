@@ -33,14 +33,14 @@ Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Reviewed-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://patch.msgid.link/20260902124117.918018-10-matthew.auld@intel.com
 (cherry-picked from commit bab69ad31cd35b282921efe825a496cf89dd7374 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/display/xe_panic.c |  3 ++-
  drivers/gpu/drm/xe/xe_vram.c          | 14 +++++++++-----
  2 files changed, 11 insertions(+), 6 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/display/xe_panic.c b/drivers/gpu/drm/xe/display/xe_panic.c
-index 12c6fb99015d..1a6cee25e9d7 100644
+index 12c6fb990..1a6cee25e 100644
 --- a/drivers/gpu/drm/xe/display/xe_panic.c
 +++ b/drivers/gpu/drm/xe/display/xe_panic.c
 @@ -52,7 +52,8 @@ static void xe_panic_page_set_pixel(struct drm_scanout_buffer *sb, unsigned int
@@ -54,7 +54,7 @@ index 12c6fb99015d..1a6cee25e9d7 100644
  			if (panic->page < 0 || new_page < panic->page) {
  				xe_res_first(bo->ttm.resource, new_page * PAGE_SIZE,
 diff --git a/drivers/gpu/drm/xe/xe_vram.c b/drivers/gpu/drm/xe/xe_vram.c
-index 56cff1e44530..04d831b101bd 100644
+index 56cff1e44..04d831b10 100644
 --- a/drivers/gpu/drm/xe/xe_vram.c
 +++ b/drivers/gpu/drm/xe/xe_vram.c
 @@ -55,9 +55,6 @@ static int determine_lmem_bar_size(struct xe_device *xe, struct xe_vram_region *
@@ -93,3 +93,6 @@ index 56cff1e44530..04d831b101bd 100644
  	vram->usable_size = usable_size;
  
  	print_vram_region_info(xe, vram);
+-- 
+2.43.0
+

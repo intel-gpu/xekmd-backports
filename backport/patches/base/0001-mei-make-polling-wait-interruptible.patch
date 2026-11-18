@@ -1,23 +1,26 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
-Date: Wed, 9 Sep 2026 20:22:25 +0530
-Subject: mei: make polling wait interruptible
+From: Alexander Usyskin <alexander.usyskin@intel.com>
+Date: Mon, 31 Aug 2026 14:38:31 +0300
+Subject: [PATCH] mei: make polling wait interruptible
 
 Polling thread wait should be interruptible to avoid stuck task.
 
 Reviewed-by: Menachem Adin <menachem.adin@intel.com>
 Signed-off-by: Alexander Usyskin <alexander.usyskin@intel.com>
-(backported from [mei: make polling wait interruptible via char-misc-next])
-Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Link: https://patch.msgid.link/20260831-cri_polling-v1-1-d927315e6598@intel.com
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+(cherry-picked from commit fa013b91c082fff6bbf8990299dff0e6a567ccbe linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/misc/mei/gsc-me.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ drivers/misc/mei/hw-me.c  | 6 +++---
+ 2 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/misc/mei/gsc-me.c b/drivers/misc/mei/gsc-me.c
-index 73d5beeb9..1deee6594 100644
+index 376840b2c..b38ddb04f 100644
 --- a/drivers/misc/mei/gsc-me.c
 +++ b/drivers/misc/mei/gsc-me.c
-@@ -244,7 +244,7 @@ static int __maybe_unused mei_gsc_pm_runtime_resume(struct device *device)
+@@ -242,7 +242,7 @@ static int __maybe_unused mei_gsc_pm_runtime_resume(struct device *device)
  
  	if (mei_me_hw_use_polling(hw)) {
  		hw->is_active = true;
@@ -26,5 +29,23 @@ index 73d5beeb9..1deee6594 100644
  	}
  
  	mutex_unlock(&dev->device_lock);
+diff --git a/drivers/misc/mei/hw-me.c b/drivers/misc/mei/hw-me.c
+index e7fbc02fb..ef7e1289a 100644
+--- a/drivers/misc/mei/hw-me.c
++++ b/drivers/misc/mei/hw-me.c
+@@ -1441,9 +1441,9 @@ int mei_me_polling_thread(void *_dev)
+ 		struct mei_me_hw *hw = to_me_hw(dev);
+ 		u32 hcsr;
+ 
+-		wait_event_timeout(hw->wait_active,
+-				   hw->is_active || kthread_should_stop(),
+-				   msecs_to_jiffies(MEI_POLLING_TIMEOUT_IDLE));
++		wait_event_interruptible_timeout(hw->wait_active,
++						 hw->is_active || kthread_should_stop(),
++						 msecs_to_jiffies(MEI_POLLING_TIMEOUT_IDLE));
+ 
+ 		if (kthread_should_stop())
+ 			break;
 -- 
-2.34.1
+2.43.0
+

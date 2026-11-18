@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:59 +0200
-Subject: drm/xe/pci: Report 'cannot re-enable' error using SIGID
+Subject: [PATCH] drm/xe/pci: Report 'cannot re-enable' error using SIGID
 
 Report 'cannot re-enable PCI device' error using xe_log() helper.
 
@@ -14,14 +14,13 @@ Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-34-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit b4f95affc66ef76342c1f6bf3849f6c8ade6b9d6 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
-
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_pci_error.c | 7 +++++--
  1 file changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pci_error.c b/drivers/gpu/drm/xe/xe_pci_error.c
-index e41af2ac7f23..fb965f52be5e 100644
+index e41af2ac7..fb965f52b 100644
 --- a/drivers/gpu/drm/xe/xe_pci_error.c
 +++ b/drivers/gpu/drm/xe/xe_pci_error.c
 @@ -7,6 +7,7 @@

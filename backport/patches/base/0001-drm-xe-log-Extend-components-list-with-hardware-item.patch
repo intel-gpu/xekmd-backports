@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:39 +0200
-Subject: drm/xe/log: Extend components list with hardware items
+Subject: [PATCH] drm/xe/log: Extend components list with hardware items
 
 Update our super macro with new top level hardware components.
 
@@ -14,13 +14,13 @@ Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-14-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit 5fec1a2f4f7e760acd108a242c24ff620900d3e1 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/abi/xe_log_abi.h | 12 ++++++++++++
  1 file changed, 12 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/abi/xe_log_abi.h b/drivers/gpu/drm/xe/abi/xe_log_abi.h
-index b38db5e9fcb5..d6105520173e 100644
+index b38db5e9f..d61055201 100644
 --- a/drivers/gpu/drm/xe/abi/xe_log_abi.h
 +++ b/drivers/gpu/drm/xe/abi/xe_log_abi.h
 @@ -130,6 +130,10 @@ enum xe_log_location_bits {

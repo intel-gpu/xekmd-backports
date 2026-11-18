@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Raag Jadav <raag.jadav@intel.com>
 Date: Tue, 18 Aug 2026 19:22:08 +0530
-Subject: drm/xe/drm_ras: Wire up error threshold callbacks
+Subject: [PATCH] drm/xe/drm_ras: Wire up error threshold callbacks
 
 Now that we have get/set error threshold support in xe driver, wire them
 up to drm_ras so that userspace can make use of the functionality.
@@ -18,14 +18,14 @@ Signed-off-by: Raag Jadav <raag.jadav@intel.com>
 Reviewed-by: Riana Tauro <riana.tauro@intel.com>
 Link: https://patch.msgid.link/20260818135304.497098-5-raag.jadav@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
-(backported from commit 1b2a3db0049b4512737abd98d11e4abcc9be079c linux-next)
-Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+(cherry-picked from commit 1b2a3db0049b4512737abd98d11e4abcc9be079c linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_drm_ras.c | 34 +++++++++++++++++++++++++++++++++
  1 file changed, 34 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_drm_ras.c b/drivers/gpu/drm/xe/xe_drm_ras.c
-index bf1b921f4..8b6be1da7 100644
+index 78184b6ea..7f3695707 100644
 --- a/drivers/gpu/drm/xe/xe_drm_ras.c
 +++ b/drivers/gpu/drm/xe/xe_drm_ras.c
 @@ -86,6 +86,38 @@ static int clear_correctable_error_counter(struct drm_ras_node *node, u32 error_
@@ -76,3 +76,6 @@ index bf1b921f4..8b6be1da7 100644
  	} else {
  		node->query_error_counter = query_uncorrectable_error_counter;
  		node->clear_error_counter = clear_uncorrectable_error_counter;
+-- 
+2.43.0
+

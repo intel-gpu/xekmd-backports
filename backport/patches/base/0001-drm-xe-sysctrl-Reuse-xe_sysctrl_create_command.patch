@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Raag Jadav <raag.jadav@intel.com>
 Date: Tue, 18 Aug 2026 19:22:09 +0530
-Subject: drm/xe/sysctrl: Reuse xe_sysctrl_create_command()
+Subject: [PATCH] drm/xe/sysctrl: Reuse xe_sysctrl_create_command()
 
 Now that we have a helper to create sysctrl command, reuse it for
 threshold crossed events.
@@ -10,8 +10,8 @@ Signed-off-by: Raag Jadav <raag.jadav@intel.com>
 Reviewed-by: Riana Tauro <riana.tauro@intel.com>
 Link: https://patch.msgid.link/20260818135304.497098-6-raag.jadav@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
-(backported from commit 4686fcca694c00fd73eee0f453f32b197baccf9b linux-next)
-Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+(cherry-picked from commit 4686fcca694c00fd73eee0f453f32b197baccf9b linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_sysctrl_event.c | 28 ++++++++-------------------
  1 file changed, 8 insertions(+), 20 deletions(-)
@@ -64,3 +64,6 @@ index da395148e..15ddd2d8b 100644
  
  	guard(mutex)(&sc->event_lock);
  	get_pending_event(sc, &command);
+-- 
+2.43.0
+

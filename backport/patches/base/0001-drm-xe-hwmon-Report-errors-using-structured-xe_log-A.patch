@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Date: Mon, 12 Oct 2026 17:55:12 +0530
+Subject: [PATCH] drm/xe/hwmon: Report errors using structured xe_log API
+
+Replace drm_err() calls with xe_log_err() using the HWMON component
+tag to enable structured error reporting with SIGID for hardware
+monitor failures:
+
+Signed-off-by: Dnyaneshwar Bhadane <dnyaneshwar.bhadane@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Link: https://patch.msgid.link/20261012122522.2307625-4-dnyaneshwar.bhadane@intel.com
+Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
+(cherry-picked from commit 58c84a1dffe219139a086c2ab6e79f8c9072446c linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_hwmon.c | 15 +++++++++------
+ 1 file changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
+index 5c0f9f272..0195bdae4 100644
+--- a/drivers/gpu/drm/xe/xe_hwmon.c
++++ b/drivers/gpu/drm/xe/xe_hwmon.c
+@@ -15,6 +15,7 @@
+ #include "regs/xe_pcode_regs.h"
+ #include "xe_device.h"
+ #include "xe_hwmon.h"
++#include "xe_log.h"
+ #include "xe_mmio.h"
+ #include "xe_pcode.h"
+ #include "xe_pcode_api.h"
+@@ -558,9 +559,9 @@ xe_hwmon_power_max_interval_show(struct device *dev, struct device_attribute *at
+ 	if (hwmon->xe->info.has_mbx_power_limits) {
+ 		ret = xe_hwmon_pcode_read_power_limit(hwmon, power_attr, channel, &reg_val);
+ 		if (ret) {
+-			drm_err(&hwmon->xe->drm,
+-				"power interval read fail, ch %d, attr %d, val 0x%08x, ret %d\n",
+-				channel, power_attr, reg_val, ret);
++			xe_log_err(hwmon->xe, HWMON, ret,
++				   "Power interval read fail, ch %d, attr %d, val 0x%08x\n",
++				   channel, power_attr, reg_val);
+ 			reg_val = 0;
+ 		}
+ 	} else {
+@@ -1563,7 +1564,7 @@ int xe_hwmon_register(struct xe_device *xe)
+ {
+ 	struct device *dev = xe->drm.dev;
+ 	struct xe_hwmon *hwmon;
+-	int ret;
++	int ret, err;
+ 
+ 	/* hwmon is available only for dGfx */
+ 	if (!IS_DGFX(xe))
+@@ -1594,9 +1595,11 @@ int xe_hwmon_register(struct xe_device *xe)
+ 								&hwmon_chip_info,
+ 								hwmon_groups);
+ 	if (IS_ERR(hwmon->hwmon_dev)) {
+-		drm_err(&xe->drm, "Failed to register xe hwmon (%pe)\n", hwmon->hwmon_dev);
++		err = PTR_ERR(hwmon->hwmon_dev);
++		xe_log_err(xe, HWMON, err,
++			   "Failed to register xe hwmon\n");
+ 		xe->hwmon = NULL;
+-		return PTR_ERR(hwmon->hwmon_dev);
++		return err;
+ 	}
+ 
+ 	return 0;
+-- 
+2.43.0
+

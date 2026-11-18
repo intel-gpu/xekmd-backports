@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:48 +0200
-Subject: drm/xe/survivability: Report 'boot status' on sysfs failure
+Subject: [PATCH] drm/xe/survivability: Report 'boot status' on sysfs failure
 
 If we fail to create any of the survivability sysfs files, the user
 can't view boot status registers any more. Report them into dmesg
@@ -16,14 +16,13 @@ Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-23-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit 3cc5107bd611544531799a8c45fe8452d7cc3fc6 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
-
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_survivability_mode.c | 10 +++++++---
  1 file changed, 7 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
-index 7afeca6ff7af..889af3f84e3e 100644
+index 8b74bbc96..e14553295 100644
 --- a/drivers/gpu/drm/xe/xe_survivability_mode.c
 +++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
 @@ -305,8 +305,10 @@ static const struct attribute_group survivability_info_group = {

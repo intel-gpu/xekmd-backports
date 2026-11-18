@@ -1,13 +1,17 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Date: Thu, 24 Sep 2026 11:39:08 +0530
-Subject: drm/xe/sysctrl: Replace FIELD_GET() with
- REG_FIELD_GET()
+Subject: [PATCH] drm/xe/sysctrl: Replace FIELD_GET() with REG_FIELD_GET()
 
 Use REG_FIELD_GET() and REG_FIELD_PREP() when working with fields
 from SysCtrl and application headers. This better reflects that
 the masks represent register-style bitfields and improves consistency.
 
+Suggested-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Reviewed-by: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Signed-off-by: Umesh Nerlige Ramappa <umesh.nerlige.ramappa@intel.com>
+Link: https://patch.msgid.link/20260924060900.146167-19-mallesh.koujalagi@intel.com
 (cherry-picked from commit 10b59a4c3196cf5ccb27adc0abb8e32b9cee5acc linux-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
@@ -16,7 +20,7 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  2 files changed, 13 insertions(+), 13 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
-index 06263e1b8..488c64d8b 100644
+index 3566868c6..cbc73c920 100644
 --- a/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
 +++ b/drivers/gpu/drm/xe/xe_sysctrl_mailbox.c
 @@ -24,16 +24,16 @@ struct xe_sysctrl_mailbox_msg_hdr {
@@ -39,7 +43,7 @@ index 06263e1b8..488c64d8b 100644
 +	REG_FIELD_GET(SYSCTRL_HDR_RESULT_MASK, (hdr)->data)
  
  static int sysctrl_wait_bit_clear(struct xe_sysctrl *sc, u32 bit_mask,
- 				  unsigned int timeout_ms)
+ 				   unsigned int timeout_ms)
 @@ -112,8 +112,8 @@ static int sysctrl_prepare_command(struct xe_device *xe,
  		return -ENOMEM;
  

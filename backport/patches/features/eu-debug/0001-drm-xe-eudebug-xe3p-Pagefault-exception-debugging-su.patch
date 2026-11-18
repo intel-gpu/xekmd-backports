@@ -49,14 +49,14 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  7 files changed, 28 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/regs/xe_lrc_layout.h b/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
-index 9cf18eac6..51a3463c8 100644
+index a2795aa9f..629ba9311 100644
 --- a/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
 +++ b/drivers/gpu/drm/xe/regs/xe_lrc_layout.h
-@@ -45,4 +45,6 @@
- #define INDIRECT_CTX_RING_START_UDW	(0x08 + 1)
- #define INDIRECT_CTX_RING_CTL		(0x0a + 1)
+@@ -48,4 +48,6 @@
+ #define CTX_INDIRECT_CTX_OFFSET_MASK	REG_GENMASK(15, 6)
+ #define CTX_INDIRECT_CTX_OFFSET_DEFAULT	REG_FIELD_PREP(CTX_INDIRECT_CTX_OFFSET_MASK, 0xd)
  
-+#define SUP_TRANS_CATERR		BIT(24)
++#define SUP_TRANS_CATERR               BIT(24)
 +
  #endif
 diff --git a/drivers/gpu/drm/xe/xe_eudebug_pagefault.c b/drivers/gpu/drm/xe/xe_eudebug_pagefault.c
@@ -74,7 +74,7 @@ index 4a2b68fc6..06bfa2dd2 100644
  		return -EOPNOTSUPP;
  
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index e43ff90e1..c3ab112da 100644
+index 1c2ff3842..b8705369a 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -415,9 +415,13 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q, u32 exec_queue_flags)
@@ -115,10 +115,10 @@ index e43ff90e1..c3ab112da 100644
  }
  
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue_types.h b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-index 14de1b828..1a815b050 100644
+index aa22611bd..e6d6db3d7 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_exec_queue_types.h
-@@ -154,7 +154,8 @@ struct xe_exec_queue {
+@@ -161,7 +161,8 @@ struct xe_exec_queue {
  	 * @eudebug_flags: immutable eudebug flags for this exec queue.
  	 * Set up with DRM_XE_EXEC_QUEUE_SET_PROPERTY_EUDEBUG.
  	 */
@@ -129,7 +129,7 @@ index 14de1b828..1a815b050 100644
  
  	union {
 diff --git a/drivers/gpu/drm/xe/xe_lrc.c b/drivers/gpu/drm/xe/xe_lrc.c
-index e72b76945..328887bf6 100644
+index 6619ac2d4..c03fcc422 100644
 --- a/drivers/gpu/drm/xe/xe_lrc.c
 +++ b/drivers/gpu/drm/xe/xe_lrc.c
 @@ -1616,6 +1616,7 @@ static int xe_lrc_ctx_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe, struct

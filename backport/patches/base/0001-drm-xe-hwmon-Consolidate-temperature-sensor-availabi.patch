@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Karthik Poosa <karthik.poosa@intel.com>
-Date: Fri, 25 Sep 2026 02:24:23 +0530
-Subject: [TEMP] drm/xe/hwmon: Consolidate temperature sensor
- availability checks
+Date: Thu, 15 Oct 2026 12:44:25 +0530
+Subject: [PATCH] drm/xe/hwmon: Consolidate temperature sensor availability
+ checks
 
 Replace is_vram_ch_available() with a generalized is_temp_available()
 that validates PKG, VRAM, per-channel VRAM, memory controller and PCIe
@@ -14,17 +14,20 @@ sensors that are not present are not exposed during hwmon registration.
 
 Signed-off-by: Karthik Poosa <karthik.poosa@intel.com>
 Assisted-by: LLM
-(backported from https://patchwork.freedesktop.org/series/174898/#rev3)
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20261015071434.1063785-8-karthik.poosa@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from commit 0d4033d899609df88b2b7f8a4d1a0f275f289670 linux-next)
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_hwmon.c | 64 ++++++++++++++++++++++-------------
  1 file changed, 40 insertions(+), 24 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_hwmon.c b/drivers/gpu/drm/xe/xe_hwmon.c
-index e3bd6ab5e..672f7cb69 100644
+index 63adee455..678479c74 100644
 --- a/drivers/gpu/drm/xe/xe_hwmon.c
 +++ b/drivers/gpu/drm/xe/xe_hwmon.c
-@@ -1013,19 +1013,39 @@ static void xe_hwmon_get_voltage(struct xe_hwmon *hwmon, int channel, long *valu
+@@ -1050,19 +1050,39 @@ static void xe_hwmon_get_voltage(struct xe_hwmon *hwmon, int channel, long *valu
  	*value = DIV_ROUND_CLOSEST(REG_FIELD_GET(VOLTAGE_MASK, reg_val) * 2500, SF_VOLTAGE);
  }
  
@@ -73,7 +76,7 @@ index e3bd6ab5e..672f7cb69 100644
  }
  
  static umode_t
-@@ -1035,14 +1055,13 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
+@@ -1072,14 +1092,13 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
  	case hwmon_temp_emergency:
  		switch (channel) {
  		case CHANNEL_PKG:
@@ -92,7 +95,7 @@ index e3bd6ab5e..672f7cb69 100644
  				hwmon->temp.limit[TEMP_LIMIT_MEM_SHUTDOWN]) ? 0444 : 0;
  		default:
  			return 0;
-@@ -1050,14 +1069,13 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
+@@ -1087,14 +1106,13 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
  	case hwmon_temp_crit:
  		switch (channel) {
  		case CHANNEL_PKG:
@@ -111,7 +114,7 @@ index e3bd6ab5e..672f7cb69 100644
  				hwmon->temp.limit[TEMP_LIMIT_MEM_CRIT]) ? 0444 : 0;
  		default:
  			return 0;
-@@ -1065,7 +1083,8 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
+@@ -1102,7 +1120,8 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
  	case hwmon_temp_max:
  		switch (channel) {
  		case CHANNEL_PKG:
@@ -121,7 +124,7 @@ index e3bd6ab5e..672f7cb69 100644
  		default:
  			return 0;
  		}
-@@ -1074,13 +1093,10 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
+@@ -1111,13 +1130,10 @@ xe_hwmon_temp_is_visible(struct xe_hwmon *hwmon, u32 attr, int channel)
  		switch (channel) {
  		case CHANNEL_PKG:
  		case CHANNEL_VRAM:

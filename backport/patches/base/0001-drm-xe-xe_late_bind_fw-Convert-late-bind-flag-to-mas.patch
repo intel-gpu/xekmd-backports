@@ -11,8 +11,8 @@ No functional change intended.
 Reviewed-by: Daniele Ceraolo Spurio <daniele.ceraolospurio@intel.com>
 Link: https://patch.msgid.link/20261102172527.2794537-11-badal.nilawar@intel.com
 Signed-off-by: Badal Nilawar <badal.nilawar@intel.com>
-(backported from commit b3a6e42af57df74c19093d32a6fa3a3fa8b5b592 linux-next)
-Signed-off-by: Pravalika Gurram pravalika.gurram@intel.com
+(cherry-picked from commit b3a6e42af57df74c19093d32a6fa3a3fa8b5b592 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_device.c       | 2 +-
  drivers/gpu/drm/xe/xe_device_types.h | 4 ++--
@@ -22,11 +22,10 @@ Signed-off-by: Pravalika Gurram pravalika.gurram@intel.com
  5 files changed, 10 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 7745387ad..411dcd54c 100644
+index a91d5988a..b5376c55c 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -694,8 +694,8 @@ static void vf_update_device_info(struct xe_device *xe)
- 	xe->info.probe_display = 0;
+@@ -756,7 +756,7 @@ static void vf_update_device_info(struct xe_device *xe)
  	xe->info.has_heci_cscfi = 0;
  	xe->info.has_heci_gscfi = 0;
  	xe->info.has_i2c = 0;
@@ -36,10 +35,10 @@ index 7745387ad..411dcd54c 100644
  	xe->info.skip_pcode = 1;
  	xe->info.has_drm_ras = false;
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index a7787cc41..b8ab143a0 100644
+index 18510d12c..fac8d724c 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -156,6 +156,8 @@ struct xe_device {
+@@ -158,6 +158,8 @@ struct xe_device {
  		u8 vm_max_level;
  		/** @info.va_bits: Maximum bits of a virtual address */
  		u8 va_bits;
@@ -58,10 +57,10 @@ index a7787cc41..b8ab143a0 100644
  		u8 has_llc:1;
  		/** @info.has_mbx_power_limits: Device has support to manage power limits using
 diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
-index 7f10e00ca..8b6d7088b 100644
+index 1bddfaf0f..881a46abc 100644
 --- a/drivers/gpu/drm/xe/xe_late_bind_fw.c
 +++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
-@@ -393,6 +393,7 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
+@@ -365,6 +365,7 @@ static int __xe_late_bind_fw_init(struct xe_late_bind *late_bind, u32 fw_id)
  
  static int xe_late_bind_fw_init(struct xe_late_bind *late_bind)
  {
@@ -69,7 +68,7 @@ index 7f10e00ca..8b6d7088b 100644
  	int ret;
  	int fw_id;
  
-@@ -401,6 +402,8 @@ static int xe_late_bind_fw_init(struct xe_late_bind *late_bind)
+@@ -373,6 +374,8 @@ static int xe_late_bind_fw_init(struct xe_late_bind *late_bind)
  		return -ENOMEM;
  
  	for (fw_id = 0; fw_id < XE_LB_FW_MAX_ID; fw_id++) {
@@ -78,7 +77,7 @@ index 7f10e00ca..8b6d7088b 100644
  		ret = __xe_late_bind_fw_init(late_bind, fw_id);
  		if (ret)
  			return ret;
-@@ -464,7 +467,7 @@ int xe_late_bind_init(struct xe_late_bind *late_bind)
+@@ -436,7 +439,7 @@ int xe_late_bind_init(struct xe_late_bind *late_bind)
  	struct xe_device *xe = late_bind_to_xe(late_bind);
  	int err;
  
@@ -88,10 +87,10 @@ index 7f10e00ca..8b6d7088b 100644
  
  	if (!IS_ENABLED(CONFIG_INTEL_MEI_LB) || !IS_ENABLED(CONFIG_INTEL_MEI_GSC)) {
 diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
-index 1ab1e3f0d..e0e2a43d3 100644
+index 4cf02f720..4f3a7bada 100644
 --- a/drivers/gpu/drm/xe/xe_pci.c
 +++ b/drivers/gpu/drm/xe/xe_pci.c
-@@ -421,10 +421,10 @@ static const struct xe_device_desc bmg_desc = {
+@@ -422,10 +422,10 @@ static const struct xe_device_desc bmg_desc = {
  	.has_gsc_nvm = 1,
  	.has_heci_cscfi = 1,
  	.has_i2c = true,
@@ -103,7 +102,7 @@ index 1ab1e3f0d..e0e2a43d3 100644
  	.max_gt_per_tile = 2,
  	MULTI_LRC_MASK,
  	.needs_scratch = true,
-@@ -784,7 +784,6 @@ static int xe_info_init_early(struct xe_device *xe,
+@@ -806,7 +806,6 @@ static int xe_info_init_early(struct xe_device *xe,
  	xe->info.has_heci_gscfi = desc->has_heci_gscfi;
  	xe->info.has_heci_cscfi = desc->has_heci_cscfi;
  	xe->info.has_i2c = desc->has_i2c;
@@ -111,7 +110,7 @@ index 1ab1e3f0d..e0e2a43d3 100644
  	xe->info.has_llc = desc->has_llc;
  	xe->info.has_mert = desc->has_mert;
  	xe->info.has_page_reclaim_hw_assist = desc->has_page_reclaim_hw_assist;
-@@ -801,6 +800,7 @@ static int xe_info_init_early(struct xe_device *xe,
+@@ -822,6 +821,7 @@ static int xe_info_init_early(struct xe_device *xe,
  	xe->info.needs_scratch = desc->needs_scratch;
  	xe->info.needs_shared_vf_gt_wq = desc->needs_shared_vf_gt_wq;
  	xe->info.multi_lrc_mask = desc->multi_lrc_mask;
@@ -120,7 +119,7 @@ index 1ab1e3f0d..e0e2a43d3 100644
  	xe->info.probe_display = IS_ENABLED(CONFIG_DRM_XE_DISPLAY) &&
  				 xe_modparam.probe_display &&
 diff --git a/drivers/gpu/drm/xe/xe_pci_types.h b/drivers/gpu/drm/xe/xe_pci_types.h
-index 0ff05b0e2..1be996854 100644
+index fe327323a..0ea1aa57f 100644
 --- a/drivers/gpu/drm/xe/xe_pci_types.h
 +++ b/drivers/gpu/drm/xe/xe_pci_types.h
 @@ -28,6 +28,7 @@ struct xe_device_desc {

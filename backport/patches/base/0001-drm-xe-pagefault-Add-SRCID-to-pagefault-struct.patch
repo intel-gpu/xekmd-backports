@@ -28,7 +28,7 @@ Cc: Simona Vetter <simona@ffwll.ch>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Link: https://patch.msgid.link/20260902214358.348399-2-jonathan.cavitt@intel.com
 (cherry-picked from commit e0ba981c317209e8464ead7dc81439b1210a2fe3 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_guc_pagefault.c   |  8 +++++++-
  drivers/gpu/drm/xe/xe_pagefault.c       | 24 +++++++++++++++---------
@@ -55,7 +55,7 @@ index 8f8210a73..df237fd40 100644
  		(FIELD_GET(PFD_PREFETCH, msg[2]) ? XE_PAGEFAULT_ACCESS_PREFETCH : 0);
  	if (FIELD_GET(XE2_PFD_TRVA_FAULT, msg[0]))
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index d348ec408..aeb56ff5d 100644
+index 4bcdbe69f..dc43d3737 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
 @@ -253,12 +253,13 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
@@ -132,7 +132,7 @@ index d348ec408..aeb56ff5d 100644
  	if (vm)
  		xe_vm_get(vm);
  	else
-@@ -619,7 +625,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -620,7 +626,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  		const struct xe_pagefault_ops *ops = pf->producer.ops;
  		void *private = pf->producer.private;
  		struct xe_gt *gt = pf->gt;

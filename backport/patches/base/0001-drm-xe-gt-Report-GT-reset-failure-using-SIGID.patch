@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Arvind Yadav <arvind.yadav@intel.com>
+Date: Thu, 3 Sep 2026 11:16:10 +0530
+Subject: [PATCH] drm/xe/gt: Report GT reset failure using SIGID
+
+Route the GT reset failure log through the structured SIGID logging helper.
+
+Failure to complete the full graphics reset means GT reset did not finish
+as expected. Use the GT component, which maps to XE_SIGID_GT_TDR, and pass
+the reset errno value to the helper.
+
+Also update the message to describe the actual failure. The driver does not
+clear GRDOM_FULL directly. The reset should complete and clear it within
+the timeout.
+
+Cc: Badal Nilawar <badal.nilawar@intel.com>
+Cc: Matthew Brost <matthew.brost@intel.com>
+Cc: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Cc: Michal Wajdeczko <michal.wajdeczko@intel.com>
+Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Suggested-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
+Signed-off-by: Arvind Yadav <arvind.yadav@intel.com>
+Link: https://patchwork.freedesktop.org/patch/msgid/20260903054610.3640788-5-arvind.yadav@intel.com
+Signed-off-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+(cherry-picked from commit 39592150387d7e7382999ddef8714245a1b91c12 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt.c | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index f6ff4f44a..c9428d162 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -70,6 +70,8 @@
+ #include "xe_wa.h"
+ #include "xe_wopcm.h"
+ 
++#define GRDOM_RESET_TIMEOUT_MS	5
++
+ struct xe_gt *xe_gt_alloc(struct xe_tile *tile)
+ {
+ 	struct xe_device *xe = tile_to_xe(tile);
+@@ -851,10 +853,13 @@ static int do_gt_reset(struct xe_gt *gt)
+ 	xe_gsc_wa_14015076503(gt, true);
+ 
+ 	xe_mmio_write32(&gt->mmio, GDRST, GRDOM_FULL);
+-	err = xe_mmio_wait32(&gt->mmio, GDRST, GRDOM_FULL, 0, 5000, NULL, false);
++	err = xe_mmio_wait32(&gt->mmio, GDRST, GRDOM_FULL, 0,
++			     GRDOM_RESET_TIMEOUT_MS * USEC_PER_MSEC,
++			     NULL, false);
+ 	if (err)
+-		xe_gt_err(gt, "failed to clear GRDOM_FULL (%pe)\n",
+-			  ERR_PTR(err));
++		xe_log_err(gt, GT, err,
++			   "full graphics reset not completed in %u ms\n",
++			   GRDOM_RESET_TIMEOUT_MS);
+ 
+ 	xe_gsc_wa_14015076503(gt, false);
+ 
+-- 
+2.43.0
+

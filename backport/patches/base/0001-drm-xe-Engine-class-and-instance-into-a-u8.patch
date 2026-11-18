@@ -10,7 +10,7 @@ Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Link: https://patch.msgid.link/20260806185202.3922432-7-matthew.brost@intel.com
 (cherry-picked from commit 24fca684c4461a4f0565d07775ca51b39a43862d linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_guc_pagefault.c   |  7 +++++--
  drivers/gpu/drm/xe/xe_pagefault.c       | 12 ++++++++----
@@ -37,10 +37,10 @@ index 607e32392..2470faf3d 100644
  	pf.producer.private = guc;
  	pf.producer.ops = &guc_pagefault_ops;
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index 9d1c02207..0944e087d 100644
+index 79fa98e61..0346a3859 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
-@@ -241,13 +241,16 @@ static bool xe_pagefault_queue_pop(struct xe_pagefault_queue *pf_queue,
+@@ -240,13 +240,16 @@ static bool xe_pagefault_queue_pop(struct xe_pagefault_queue *pf_queue,
  
  static void xe_pagefault_print(struct xe_pagefault *pf)
  {
@@ -58,7 +58,7 @@ index 9d1c02207..0944e087d 100644
  		   pf->consumer.asid,
  		   upper_32_bits(pf->consumer.page_addr),
  		   lower_32_bits(pf->consumer.page_addr),
-@@ -257,9 +260,10 @@ static void xe_pagefault_print(struct xe_pagefault *pf)
+@@ -256,9 +259,10 @@ static void xe_pagefault_print(struct xe_pagefault *pf)
  			     pf->consumer.access_type),
  		   FIELD_GET(XE_PAGEFAULT_LEVEL_MASK,
  			     pf->consumer.fault_type_level),
@@ -94,7 +94,7 @@ index f27821489..2f4e2a221 100644
  		u64 reserved;
  	} consumer;
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index 130924d33..2c350517d 100644
+index 6d69953ac..950a665c4 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -640,10 +640,13 @@ void xe_vm_add_fault_entry_pf(struct xe_vm *vm, struct xe_pagefault *pf)

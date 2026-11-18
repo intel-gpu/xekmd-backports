@@ -1,7 +1,7 @@
-From 5184ae07376f64586aee8dd91ff4c9f9a85de110 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Raag Jadav <raag.jadav@intel.com>
 Date: Wed, 19 Aug 2026 17:05:19 +0530
-Subject: drm/xe/pci_error: Allow debugging PCI errors
+Subject: [PATCH] drm/xe/pci_error: Allow debugging PCI errors
 
 Update PCI error handling path to disconnect the device when
 XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET is set. This prevents bus
@@ -12,8 +12,8 @@ Signed-off-by: Raag Jadav <raag.jadav@intel.com>
 Reviewed-by: Riana Tauro <riana.tauro@intel.com>
 Link: https://patch.msgid.link/20260819113519.510853-1-raag.jadav@intel.com
 Signed-off-by: Matt Roper <matthew.d.roper@intel.com>
-(backported from commit 9b8234d176bb linux-next)
-Signed-off-by:  Pravalika Gurram <pravalika.gurram@intel.com>
+(cherry-picked from commit 9b8234d176bb98e8612ddc4c3dbfd014219d5f6f linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_pci_error.c | 6 ++++++
  1 file changed, 6 insertions(+)

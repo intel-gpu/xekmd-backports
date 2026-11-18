@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alexander Usyskin <alexander.usyskin@intel.com>
 Date: Wed, 2 Sep 2026 15:05:50 +0300
-Subject: mei: csc: add pci error handling
+Subject: [PATCH] mei: csc: add pci error handling
 
 Add PCI error handler callbacks.
 Stop and disable communication when error is detected;
@@ -11,8 +11,10 @@ restored.
 Co-developed-by: Menachem Adin <menachem.adin@intel.com>
 Signed-off-by: Menachem Adin <menachem.adin@intel.com>
 Signed-off-by: Alexander Usyskin <alexander.usyskin@intel.com>
-(backported from [mei: csc: add pci error handling via char-misc-next])
-Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Link: https://patch.msgid.link/20260902-cri_aer-v1-1-b0571c399265@intel.com
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+(cherry-picked from commit ff7472afb37d85192f305120d1d93cb9a2dae689 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/misc/mei/init.c    | 33 +++++++++++++++--
  drivers/misc/mei/mei_dev.h |  1 +
@@ -72,10 +74,10 @@ index 766f119f7..82444d67d 100644
  	mei_clear_interrupts(dev);
  	mei_synchronize_irq(dev);
 diff --git a/drivers/misc/mei/mei_dev.h b/drivers/misc/mei/mei_dev.h
-index d8634a726..9b12e6a6d 100644
+index e651b0670..79a7c3e63 100644
 --- a/drivers/misc/mei/mei_dev.h
 +++ b/drivers/misc/mei/mei_dev.h
-@@ -715,6 +715,7 @@ int mei_reset(struct mei_device *dev);
+@@ -736,6 +736,7 @@ int mei_reset(struct mei_device *dev);
  int mei_start(struct mei_device *dev);
  int mei_restart(struct mei_device *dev);
  void mei_stop(struct mei_device *dev);
@@ -84,10 +86,10 @@ index d8634a726..9b12e6a6d 100644
  
  void mei_set_devstate(struct mei_device *dev, enum mei_dev_state state);
 diff --git a/drivers/misc/mei/pci-csc.c b/drivers/misc/mei/pci-csc.c
-index 70792bf9b..40658b72e 100644
+index f50ef93e2..fc09cfb5c 100644
 --- a/drivers/misc/mei/pci-csc.c
 +++ b/drivers/misc/mei/pci-csc.c
-@@ -230,6 +230,77 @@ static int mei_csc_pm_runtime_resume(struct device *dev)
+@@ -269,6 +269,77 @@ static int mei_csc_pm_runtime_resume(struct device *dev)
  	return 0;
  }
  
@@ -165,7 +167,7 @@ index 70792bf9b..40658b72e 100644
  static const struct dev_pm_ops mei_csc_pm_ops = {
  	.prepare = pm_sleep_ptr(mei_csc_pci_prepare),
  	.complete = pm_sleep_ptr(mei_csc_pci_complete),
-@@ -250,6 +321,7 @@ static struct pci_driver mei_csc_driver = {
+@@ -289,6 +360,7 @@ static struct pci_driver mei_csc_driver = {
  	.probe = mei_csc_probe,
  	.remove = mei_csc_remove,
  	.shutdown = mei_csc_shutdown,
@@ -174,4 +176,5 @@ index 70792bf9b..40658b72e 100644
  		.pm = &mei_csc_pm_ops,
  		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 -- 
-2.34.1
+2.43.0
+

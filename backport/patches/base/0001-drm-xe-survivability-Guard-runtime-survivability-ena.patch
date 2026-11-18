@@ -20,14 +20,14 @@ already being unbound.
 Reviewed-by: Mallesh Koujalagi <mallesh.koujalagi@intel.com>
 Link: https://patch.msgid.link/20261112060701.3327125-13-riana.tauro@intel.com
 Signed-off-by: Riana Tauro <riana.tauro@intel.com>
-(cherry-picked from 042d84d7e69f4da41c58707d558a95421e565869 linux-next)
-Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+(cherry-picked from commit 042d84d7e69f4da41c58707d558a95421e565869 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
- drivers/gpu/drm/xe/xe_survivability_mode.c | 9 +++++++++
- 1 file changed, 9 insertions(+)
+ drivers/gpu/drm/xe/xe_survivability_mode.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_survivability_mode.c b/drivers/gpu/drm/xe/xe_survivability_mode.c
-index d73cdad0b3a9..91a0680e449b 100644
+index d73cdad0b..91a0680e4 100644
 --- a/drivers/gpu/drm/xe/xe_survivability_mode.c
 +++ b/drivers/gpu/drm/xe/xe_survivability_mode.c
 @@ -10,6 +10,8 @@
@@ -39,14 +39,15 @@ index d73cdad0b3a9..91a0680e449b 100644
  #include "xe_configfs.h"
  #include "xe_device.h"
  #include "xe_heci_gsc.h"
-@@ -437,11 +439,16 @@ void xe_survivability_mode_runtime_enable(struct xe_device *xe)
+@@ -435,12 +437,18 @@ void xe_survivability_mode_runtime_enable(struct xe_device *xe)
  {
  	struct xe_survivability *survivability = &xe->survivability;
  	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
 +	int idx;
++
  
  	if (!IS_DGFX(xe) || IS_SRIOV_VF(xe) || xe->info.platform < XE_BATTLEMAGE) {
- 		dev_err(&pdev->dev, "Runtime Survivability Mode not supported\n");
+ 		xe_log_err(xe, SURVIVABILITY, -EOPNOTSUPP, "Runtime Mode not supported!\n");
  		return;
  	}
  
@@ -55,13 +56,17 @@ index d73cdad0b3a9..91a0680e449b 100644
 +		return;
 +
  	populate_survivability_info(xe);
+ 	create_survivability_sysfs(pdev);
  
-@@ -456,3 +463,5 @@ void xe_survivability_mode_runtime_enable(struct xe_device *xe)
- 	xe_device_declare_wedged(xe);
- 	dev_err(&pdev->dev, "Firmware flash required, Please refer to the userspace documentation for more details!\n");
+@@ -452,6 +460,8 @@ void xe_survivability_mode_runtime_enable(struct xe_device *xe)
+ 	xe_log_err(xe, SURVIVABILITY, 0, "Firmware flash required!\n");
+ 	xe_info(xe, "Please refer to the userspace documentation for more details how to flash the firmware on %s!\n",
+ 		xe->info.platform_name);
 +
 +	drm_dev_exit(idx);
  }
+ 
+ /**
 -- 
 2.43.0
 

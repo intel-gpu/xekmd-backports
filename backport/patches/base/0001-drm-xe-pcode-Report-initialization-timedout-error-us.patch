@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Michal Wajdeczko <michal.wajdeczko@intel.com>
 Date: Fri, 14 Aug 2026 19:17:54 +0200
-Subject: drm/xe/pcode: Report 'initialization timedout' error using
+Subject: [PATCH] drm/xe/pcode: Report 'initialization timedout' error using
  SIGID
 
 Report 'initialization timedout' error using xe_log_err() helper.
@@ -16,17 +16,16 @@ Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 Link: https://patch.msgid.link/20260814171801.13347-29-michal.wajdeczko@intel.com
 Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
 (cherry-picked from commit 35241a7a8e57a150944340ec9ccd6de9fb4bb304 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
-
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_pcode.c | 6 +++---
  1 file changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pcode.c b/drivers/gpu/drm/xe/xe_pcode.c
-index 6cf579317152..75cc8c3373a8 100644
+index 14b13a11d..e1b806254 100644
 --- a/drivers/gpu/drm/xe/xe_pcode.c
 +++ b/drivers/gpu/drm/xe/xe_pcode.c
-@@ -293,7 +293,7 @@ int xe_pcode_ready(struct xe_device *xe, bool locked)
+@@ -297,7 +297,7 @@ int xe_pcode_ready(struct xe_device *xe, bool locked)
  {
  	u32 status, request = DGFX_GET_INIT_STATUS;
  	struct xe_tile *tile = xe_device_get_root_tile(xe);
@@ -35,7 +34,7 @@ index 6cf579317152..75cc8c3373a8 100644
  	int ret;
  
  	if (xe->info.skip_pcode)
-@@ -314,8 +314,8 @@ int xe_pcode_ready(struct xe_device *xe, bool locked)
+@@ -318,8 +318,8 @@ int xe_pcode_ready(struct xe_device *xe, bool locked)
  		mutex_unlock(&tile->pcode.lock);
  
  	if (ret)

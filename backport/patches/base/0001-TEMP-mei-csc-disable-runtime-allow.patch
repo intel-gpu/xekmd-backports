@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Alexander Usyskin <alexander.usyskin@intel.com>
 Date: Mon, 29 Jun 2026 15:24:59 +0300
-Subject: TEMP mei: csc: disable runtime allow
+Subject: [PATCH] [TEMP] mei: csc: disable runtime allow
 
 Do not auto-enable runtime power management.
 
@@ -13,7 +13,7 @@ Signed-off-by:  Pravalika Gurram <pravalika.gurram@intel.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/drivers/misc/mei/pci-csc.c b/drivers/misc/mei/pci-csc.c
-index 57eb71306..440326d53 100644
+index fc09cfb5c..3399a1ffa 100644
 --- a/drivers/misc/mei/pci-csc.c
 +++ b/drivers/misc/mei/pci-csc.c
 @@ -145,7 +145,7 @@ static int mei_csc_probe(struct pci_dev *pdev, const struct pci_device_id *ent)

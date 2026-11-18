@@ -15,7 +15,7 @@ Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Link: https://patch.msgid.link/20260806185202.3922432-13-matthew.brost@intel.com
 (cherry-picked from commit aa8216142a6c8bbc6cb4b83d8782d4fa34c97baa linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_gt_stats.c       |  1 +
  drivers/gpu/drm/xe/xe_gt_stats_types.h |  3 +++
@@ -56,10 +56,10 @@ index ab5506f91..24abeb9f2 100644
  	XE_GT_STATS_ID_SVM_PAGEFAULT_COUNT,
  	XE_GT_STATS_ID_TLB_INVAL,
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index dbcb9b0dd..c3634981b 100644
+index cb6cfaf05..5ca3e945e 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
-@@ -462,9 +462,10 @@ static bool xe_pagefault_queue_pop(struct xe_pagefault_queue *pf_queue,
+@@ -461,9 +461,10 @@ static bool xe_pagefault_queue_pop(struct xe_pagefault_queue *pf_queue,
  {
  	struct xe_device *xe = container_of(pf_queue, typeof(*xe),
  					    usm.pf_queue);
@@ -71,7 +71,7 @@ index dbcb9b0dd..c3634981b 100644
  
  	guard(spinlock_irq)(&pf_queue->lock);
  
-@@ -501,6 +502,21 @@ static bool xe_pagefault_queue_pop(struct xe_pagefault_queue *pf_queue,
+@@ -500,6 +501,21 @@ static bool xe_pagefault_queue_pop(struct xe_pagefault_queue *pf_queue,
  	pf_work->cache.pf = lpf;
  	lpf->consumer.alloc_state = XE_PAGEFAULT_ALLOC_STATE_ACTIVE;
  

@@ -31,8 +31,8 @@ Cc: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Francois Dugast <francois.dugast@intel.com>
 Link: https://patch.msgid.link/20260806185202.3922432-4-matthew.brost@intel.com
-(backported from commit 65d3bfa42c14caeb87274e9c6df03b7545977f2e linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+(cherry-picked from commit 65d3bfa42c14caeb87274e9c6df03b7545977f2e linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_device_types.h |   6 +-
  drivers/gpu/drm/xe/xe_pagefault.c    |  29 +++--
@@ -44,10 +44,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  7 files changed, 167 insertions(+), 58 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 4c79c0af3..234196081 100644
+index e5f896636..a2c8d88f5 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -335,8 +335,10 @@ struct xe_device {
+@@ -324,8 +324,10 @@ struct xe_device {
  		u32 current_pf_queue;
  		/** @usm.lock: protects UM state */
  		struct rw_semaphore lock;
@@ -61,10 +61,10 @@ index 4c79c0af3..234196081 100644
  		 * We pick 4 here because, in the current implementation, it
  		 * yields the best bandwidth utilization of the kernel paging
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index 66aadb938..1e4561470 100644
+index 82cc91837..edff0eb3c 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
-@@ -313,8 +313,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -312,8 +312,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  
  		err = xe_pagefault_service(&pf);
  		if (err) {
@@ -72,8 +72,8 @@ index 66aadb938..1e4561470 100644
  			if (!(pf.consumer.access_type & XE_PAGEFAULT_ACCESS_PREFETCH)) {
 +				xe_pagefault_save_to_vm(gt_to_xe(pf.gt), &pf);
  				xe_pagefault_print(&pf);
- 				xe_log_err_info(pf.gt, PAGEFAULT, err, "Unsuccessful response\n");
- 			} else {
+ 				xe_gt_info(pf.gt, "Fault response: Unsuccessful %pe\n",
+ 					   ERR_PTR(err));
 @@ -327,7 +327,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  		pf.producer.ops->ack_fault(&pf, err);
  
@@ -220,7 +220,7 @@ index 0d1f1107a..46be2e5c6 100644
  	return false;
  }
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index b203d4aae..4f8bc64fd 100644
+index 36cdb1cea..19c7efe22 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -2547,7 +2547,7 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
@@ -232,7 +232,7 @@ index b203d4aae..4f8bc64fd 100644
  
  			if (xe_vma_is_userptr(vma))
  				vops->flags |= XE_VMA_OPS_FLAG_MODIFIES_GPUVA;
-@@ -2593,8 +2593,10 @@ alloc_next_range:
+@@ -2593,8 +2593,10 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
  				goto unwind_prefetch_ops;
  			}
  
@@ -244,7 +244,7 @@ index b203d4aae..4f8bc64fd 100644
  				need_put = true;
  				goto check_next_range;
  			}
-@@ -2610,6 +2612,8 @@ alloc_next_range:
+@@ -2610,6 +2612,8 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
  
  			op->prefetch_range.ranges_count++;
  			vops->flags |= XE_VMA_OPS_FLAG_HAS_SVM_PREFETCH;

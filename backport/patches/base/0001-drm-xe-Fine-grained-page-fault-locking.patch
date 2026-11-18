@@ -29,7 +29,7 @@ Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Gwan-gyeong Mun <gwan-gyeong.mun@intel.com>
 Link: https://patch.msgid.link/20260806185202.3922432-2-matthew.brost@intel.com
 (cherry-picked from commit 941bcc1a4bbf0749f80d13883468cd2c9f7763b1 linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_device_types.h |   2 +
  drivers/gpu/drm/xe/xe_pagefault.c    | 102 ++++++++++++----------
@@ -41,10 +41,10 @@ Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
  7 files changed, 300 insertions(+), 131 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
-index 746f00a5a..4c79c0af3 100644
+index 03a7bb08a..e5f896636 100644
 --- a/drivers/gpu/drm/xe/xe_device_types.h
 +++ b/drivers/gpu/drm/xe/xe_device_types.h
-@@ -331,6 +331,8 @@ struct xe_device {
+@@ -320,6 +320,8 @@ struct xe_device {
  		struct xarray asid_to_vm;
  		/** @usm.next_asid: next ASID, used to cyclical alloc asids */
  		u32 next_asid;
@@ -54,10 +54,10 @@ index 746f00a5a..4c79c0af3 100644
  		struct rw_semaphore lock;
  		/** @usm.pf_wq: page fault work queue, unbound, high priority */
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index 23c967543..66aadb938 100644
+index a4986df83..82cc91837 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
-@@ -86,9 +86,9 @@ static int xe_pagefault_handle_vma(struct xe_gt *gt, struct xe_vma *vma,
+@@ -85,9 +85,9 @@ static int xe_pagefault_handle_vma(struct xe_gt *gt, struct xe_vma *vma,
  	struct xe_validation_ctx ctx;
  	struct drm_exec exec;
  	struct dma_fence *fence;
@@ -69,7 +69,7 @@ index 23c967543..66aadb938 100644
  
  	needs_vram = xe_vma_need_vram_for_atomic(vm->xe, vma, atomic);
  	if (needs_vram < 0 || (needs_vram && xe_vma_is_userptr(vma)))
-@@ -100,50 +100,52 @@ static int xe_pagefault_handle_vma(struct xe_gt *gt, struct xe_vma *vma,
+@@ -99,50 +99,52 @@ static int xe_pagefault_handle_vma(struct xe_gt *gt, struct xe_vma *vma,
  
  	trace_xe_vma_pagefault(vma);
  
@@ -156,7 +156,7 @@ index 23c967543..66aadb938 100644
  
  	return err;
  }
-@@ -186,10 +188,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
+@@ -185,10 +187,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
  	if (IS_ERR(vm))
  		return PTR_ERR(vm);
  
@@ -168,7 +168,7 @@ index 23c967543..66aadb938 100644
  
  	if (xe_vm_is_closed(vm)) {
  		err = -ENOENT;
-@@ -217,9 +216,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
+@@ -216,9 +215,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
  		err = xe_pagefault_handle_vma(gt, vma, atomic);
  
  unlock_vm:
@@ -442,7 +442,7 @@ index b228a737c..cc36addb4 100644
  	/* Always process UNMAPs first so view SVM ranges is current */
  	err = xe_svm_garbage_collector(vm);
  	if (err)
-@@ -1276,10 +1311,17 @@ retry:
+@@ -1276,10 +1311,17 @@ static int __xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
  
  	xe_svm_range_fault_count_stats_incr(gt, range);
  
@@ -462,7 +462,7 @@ index b228a737c..cc36addb4 100644
  
  	if (xe_svm_range_is_valid(range, tile, ctx.devmem_only, dpagemap)) {
  		xe_svm_range_valid_fault_count_stats_incr(gt, range);
-@@ -1317,7 +1359,7 @@ retry:
+@@ -1317,7 +1359,7 @@ static int __xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
  				drm_err(&vm->xe->drm,
  					"VRAM allocation failed, retry count exceeded, asid=%u, errno=%pe\n",
  					vm->usm.asid, ERR_PTR(err));
@@ -471,7 +471,7 @@ index b228a737c..cc36addb4 100644
  			}
  		}
  	}
-@@ -1344,7 +1386,7 @@ get_pages:
+@@ -1344,7 +1386,7 @@ static int __xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
  	}
  	if (err) {
  		range_debug(range, "PAGE FAULT - FAIL PAGE COLLECT");
@@ -480,7 +480,7 @@ index b228a737c..cc36addb4 100644
  	} else if (IS_ENABLED(CONFIG_DRM_XE_DEBUG_VM)) {
  		drm_dbg(&vm->xe->drm, "After page collect data location is %sin \"%s\".\n",
  			xe_svm_range_has_pagemap(range, dpagemap) ? "" : "NOT ",
-@@ -1379,6 +1421,8 @@ get_pages:
+@@ -1379,6 +1421,8 @@ static int __xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
  
  out:
  	xe_svm_range_fault_us_stats_incr(gt, range, start);
@@ -489,7 +489,7 @@ index b228a737c..cc36addb4 100644
  	return 0;
  
  err_out:
-@@ -1388,6 +1432,9 @@ err_out:
+@@ -1388,6 +1432,9 @@ static int __xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
  		goto retry;
  	}
  
@@ -680,7 +680,7 @@ index 8b2d461ea..90ac141fc 100644
  
  	if (vma->gpuva.flags & XE_VMA_DESTROYED)
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index fab72f27a..6ff8b7653 100644
+index 99e42bd29..b2e7ec6bf 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -714,6 +714,17 @@ static int xe_vma_ops_alloc(struct xe_vma_ops *vops, bool array_of_binds)
@@ -923,7 +923,7 @@ index fab72f27a..6ff8b7653 100644
  			svm_range = xe_svm_range_find_or_insert(vm, addr, vma, &ctx);
  
  			if (PTR_ERR(svm_range) == -ENOENT) {
-@@ -2575,6 +2589,7 @@ alloc_next_range:
+@@ -2575,6 +2589,7 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
  
  			if (xe_svm_range_validate(vm, svm_range, tile_mask, dpagemap)) {
  				xe_svm_range_debug(svm_range, "PREFETCH - RANGE IS VALID");
@@ -931,7 +931,7 @@ index fab72f27a..6ff8b7653 100644
  				goto check_next_range;
  			}
  
-@@ -2582,8 +2597,10 @@ alloc_next_range:
+@@ -2582,8 +2597,10 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
  				       &i, svm_range, xa_limit_32b,
  				       GFP_KERNEL);
  
@@ -943,7 +943,7 @@ index fab72f27a..6ff8b7653 100644
  
  			op->prefetch_range.ranges_count++;
  			vops->flags |= XE_VMA_OPS_FLAG_HAS_SVM_PREFETCH;
-@@ -2592,8 +2609,13 @@ check_next_range:
+@@ -2592,8 +2609,13 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
  			if (range_end > xe_svm_range_end(svm_range) &&
  			    xe_svm_range_end(svm_range) < xe_vma_end(vma)) {
  				addr = xe_svm_range_end(svm_range);

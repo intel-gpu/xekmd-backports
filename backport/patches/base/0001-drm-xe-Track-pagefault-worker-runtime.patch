@@ -11,8 +11,8 @@ behavior with CPU time spent in the fault handler.
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Reviewed-by: Maciej Patelczyk <maciej.patelczyk@intel.com>
 Link: https://patch.msgid.link/20260806185202.3922432-8-matthew.brost@intel.com
-(backported from commit 107156dc6b9cc5710c9b1545d1e61a47a46c72bf linux-next)
-Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
+(cherry-picked from commit 107156dc6b9cc5710c9b1545d1e61a47a46c72bf linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_gt_stats.c       | 1 +
  drivers/gpu/drm/xe/xe_gt_stats_types.h | 3 +++
@@ -53,10 +53,10 @@ index 425491bed..a7021a298 100644
  	XE_GT_STATS_ID_SVM_4K_PAGEFAULT_COUNT,
  	XE_GT_STATS_ID_SVM_64K_PAGEFAULT_COUNT,
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index 0944e087d..ecad76dcb 100644
+index 8db7c7648..5c21e6584 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
-@@ -298,6 +298,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -297,6 +297,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  	struct xe_device *xe = pf_work->xe;
  	struct xe_pagefault_queue *pf_queue = &xe->usm.pf_queue;
  	struct xe_pagefault pf;
@@ -65,7 +65,7 @@ index 0944e087d..ecad76dcb 100644
  	unsigned long threshold;
  
  	/*
-@@ -316,6 +318,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+@@ -315,6 +317,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
  		if (!pf.gt)	/* Fault squashed during reset */
  			continue;
  

@@ -1,0 +1,173 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
+Date: Thu, 29 Oct 2026 22:57:59 +0530
+Subject: [PATCH] drm/xe: capture L3 node status registers in devcoredump
+
+Add L3_NODE_IDLE and L3STAT_LBCF_GFX register definitions and include
+them in the devcoredump snapshot as a node status section.
+
+Extend the register descriptor to mark MCR registers so the snapshot
+code can read them through xe_gt_mcr_unicast_read_any(), then print and
+free the captured node status registers alongside the existing dump
+sections.
+
+v2:(Sashiko)
+- change L3 node registers as XE_REG_MCR type
+- identify mcr register type from reg.mcr
+- As generic capture function ensure VF check this will not execute
+  on VF Mode.
+
+v4:(Tejas)
+- Add L3_NODE type into the enum as changed/added in initial patch
+
+v5:
+- Rebase
+
+v7:(Sashiko)
+-Use a Xe_LP-specific L3 capture list to avoid unsupported L3_NODE_IDLE MCR
+reads while retaining L3STAT_LBCF_GFX capture
+
+Signed-off-by: Nareshkumar Gollakoti <naresh.kumar.g@intel.com>
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Link: https://patch.msgid.link/20261029172800.2150325-7-naresh.kumar.g@intel.com
+Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+(cherry-picked from commit 5988ac26652e9790328b3b87b2237e9567d8e12e drm-tip)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_gt_regs.h      |  3 ++
+ drivers/gpu/drm/xe/xe_devcoredump.c       | 35 ++++++++++++++++++++++-
+ drivers/gpu/drm/xe/xe_devcoredump_types.h |  2 ++
+ 3 files changed, 39 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_gt_regs.h b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+index e6b63a2496f1..73aa78d30679 100644
+--- a/drivers/gpu/drm/xe/regs/xe_gt_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_gt_regs.h
+@@ -454,6 +454,9 @@
+ #define   L3_ESC_MASK				REG_BIT(0)
+ #define   L3_ESC(value)				REG_FIELD_PREP(L3_ESC_MASK, value)
+ 
++#define L3_NODE_IDLE				XE_REG_MCR(0xb0b0)
++#define L3STAT_LBCF_GFX				XE_REG_MCR(0xb128)
++
+ #define XEHP_L3NODEARBCFG			XE_REG_MCR(0xb0b4)
+ #define   XEHP_LNESPARE				REG_BIT(19)
+ 
+diff --git a/drivers/gpu/drm/xe/xe_devcoredump.c b/drivers/gpu/drm/xe/xe_devcoredump.c
+index 67e38a4dda8d..7634246d7725 100644
+--- a/drivers/gpu/drm/xe/xe_devcoredump.c
++++ b/drivers/gpu/drm/xe/xe_devcoredump.c
+@@ -122,6 +122,15 @@ static const struct xe_reg_desc xe_dbg_gam_pf_reglist[] = {
+ 	XE_REG_DESC_MCR(PAGE_FLTRPTQ_TAIL, "PAGE_FLTRPTQ_TAIL"),
+ };
+ 
++static const struct xe_reg_desc xe_dbg_xelp_l3_reglist[] = {
++	XE_REG_DESC_MCR(L3STAT_LBCF_GFX, "L3STAT_LBCF_GFX"),
++};
++
++static const struct xe_reg_desc xe_dbg_l3_node_reglist[] = {
++	XE_REG_DESC_MCR(L3_NODE_IDLE, "L3_NODE_IDLE"),
++	XE_REG_DESC_MCR(L3STAT_LBCF_GFX, "L3STAT_LBCF_GFX"),
++};
++
+ /**
+  * struct xe_gt_regset - Struct for register descriptor list for GT
+  *
+@@ -142,6 +151,8 @@ struct xe_gt_regset {
+  * @XE_DBG_REGSET_RPM: RPM register set
+  * @XE_DBG_REGSET_GUC: GUC register set
+  * @XE_DBG_REGSET_GAM_PF: GAM Pagefault registers set
++ * @XE_DBG_REGSET_XELP_L3: Xe_LP L3 register set
++ * @XE_DBG_REGSET_L3_NODE: L3 Node register Set
+  * @XE_DBG_REGSET_MAX: Number of debug register set types
+  */
+ enum xe_dbg_regset_type {
+@@ -149,6 +160,8 @@ enum xe_dbg_regset_type {
+ 	XE_DBG_REGSET_RPM,
+ 	XE_DBG_REGSET_GUC,
+ 	XE_DBG_REGSET_GAM_PF,
++	XE_DBG_REGSET_XELP_L3,
++	XE_DBG_REGSET_L3_NODE,
+ 	XE_DBG_REGSET_MAX,
+ };
+ 
+@@ -175,6 +188,14 @@ static const struct xe_gt_regset xe_dbg_regsets[XE_DBG_REGSET_MAX] = {
+ 		.gt[XE_GT_TYPE_MAIN] = { xe_dbg_gam_pf_reglist,
+ 					ARRAY_SIZE(xe_dbg_gam_pf_reglist) },
+ 	},
++	[XE_DBG_REGSET_XELP_L3] = {
++		.gt[XE_GT_TYPE_MAIN] = { xe_dbg_xelp_l3_reglist,
++					 ARRAY_SIZE(xe_dbg_xelp_l3_reglist) },
++	},
++	[XE_DBG_REGSET_L3_NODE] = {
++		.gt[XE_GT_TYPE_MAIN] = { xe_dbg_l3_node_reglist,
++					 ARRAY_SIZE(xe_dbg_l3_node_reglist) },
++	},
+ };
+ 
+ static void xe_dbg_reg_snapshot_print(struct drm_printer *p,
+@@ -359,6 +380,8 @@ static ssize_t __xe_devcoredump_read(char *buffer, ssize_t count,
+ 
+ 	xe_gam_pf_snapshot_print(&p, "GAM PF Report", ss->gam_pf_report);
+ 
++	xe_dbg_reg_snapshot_print(&p, "Node Status", ss->ns);
++
+ 	drm_puts(&p, "\n**** Contexts ****\n");
+ 	xe_guc_exec_queue_snapshot_print(ss->ge, &p);
+ 
+@@ -416,6 +439,9 @@ static void xe_devcoredump_snapshot_free(struct xe_devcoredump_snapshot *ss)
+ 	xe_dbg_reg_snapshot_free(ss->gam_pf_report);
+ 	ss->gam_pf_report = NULL;
+ 
++	xe_dbg_reg_snapshot_free(ss->ns);
++	ss->ns = NULL;
++
+ 	xe_guc_exec_queue_snapshot_free(ss->ge);
+ 	ss->ge = NULL;
+ 
+@@ -588,6 +614,10 @@ static void xe_devcoredump_deferred_snap_work(struct work_struct *work)
+ static void xe_devcoredump_capture_gt_regs(struct xe_devcoredump_snapshot *ss,
+ 					   struct xe_gt *gt, struct xe_gt *other_gt)
+ {
++	enum xe_dbg_regset_type l3_regset =
++		GRAPHICS_VERx100(gt_to_xe(gt)) < 1250 ?
++		XE_DBG_REGSET_XELP_L3 : XE_DBG_REGSET_L3_NODE;
++
+ 	ss->gt_fuse      = xe_dbg_gt_snapshot_capture(gt,
+ 						      other_gt,
+ 						      XE_DBG_REGSET_FUSE,
+@@ -616,6 +646,10 @@ static void xe_devcoredump_capture_gt_regs(struct xe_devcoredump_snapshot *ss,
+ 						       other_gt,
+ 						       XE_DBG_REGSET_GAM_PF,
+ 						       XE_GT_TYPE_MAIN);
++	ss->ns = xe_dbg_gt_snapshot_capture(gt,
++					    other_gt,
++					    l3_regset,
++					    XE_GT_TYPE_MAIN);
+ }
+ 
+ static void devcoredump_snapshot(struct xe_devcoredump *coredump,
+@@ -667,7 +701,6 @@ static void devcoredump_snapshot(struct xe_devcoredump *coredump,
+ 		if (job)
+ 			ss->job = xe_sched_job_snapshot_capture(job);
+ 		ss->vm = xe_vm_snapshot_capture(q->vm);
+-
+ 		xe_engine_snapshot_capture_for_queue(q);
+ 	}
+ 
+diff --git a/drivers/gpu/drm/xe/xe_devcoredump_types.h b/drivers/gpu/drm/xe/xe_devcoredump_types.h
+index fba3d23040b9..e4fb3e12e068 100644
+--- a/drivers/gpu/drm/xe/xe_devcoredump_types.h
++++ b/drivers/gpu/drm/xe/xe_devcoredump_types.h
+@@ -110,6 +110,8 @@ struct xe_devcoredump_snapshot {
+ 
+ 	/** @gam_pf_report: GAM PF report snapshot */
+ 	struct xe_dbg_reg_snapshot *gam_pf_report;
++	/** @ns: Node status snapshot */
++	struct xe_dbg_reg_snapshot *ns;
+ 
+ 	/** @ge: GuC Submission Engine snapshot */
+ 	struct xe_guc_submit_exec_queue_snapshot *ge;
+-- 
+2.43.0
+

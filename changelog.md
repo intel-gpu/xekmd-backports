@@ -39,6 +39,59 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.0_261118.0` | | | Rebase from 7.1KV to 7.3KV |
+| | oot-backport/main | [`67414e727`](<https://github.com/intel-gpu/xekmd-backports/commit/67414e727d141fa108ef62edf0f758960b617eae>) | patches: guard TTM dmem eviction helpers on older kernels |
+| | oot-backport/main | [`2c0f18373`](<https://github.com/intel-gpu/xekmd-backports/commit/2c0f183731bc1c0c242f3dbe660a5b4a49b722e2>) | pagemap.h: Backport linear_page_delta() support |
+| | oot-backport/main | [`7f9a9de1d`](<https://github.com/intel-gpu/xekmd-backports/commit/7f9a9de1db9a479beaaf4ab66463982219a42ffd>) | patches: extend VFIO non_mappable_bars compatibility |
+| | oot-backport/main | [`d05104f74`](<https://github.com/intel-gpu/xekmd-backports/commit/d05104f74e926b3d68d38f1b3d8a08abae988f9b>) | drm/xe: restore DRIVER_GEM_GPUVA on older kernels |
+| | oot-backport/main | [`6b28cac89`](<https://github.com/intel-gpu/xekmd-backports/commit/6b28cac893ff16e09ba96c9cdf17cce8c0dfda62>) | args.h: Backport 15-argument COUNT_ARGS() support |
+| | oot-backport/main | [`054f2e15b`](<https://github.com/intel-gpu/xekmd-backports/commit/054f2e15bed3f81ae638dd1ff8558153f8ca246d>) | patches: extend assign_str compatibility to queue timestamp |
+| | oot-backport/main | [`c86040b8e`](<https://github.com/intel-gpu/xekmd-backports/commit/c86040b8ec63681f4937c57e0bfbfebd7bbea965>) | dma-fence-array: Backport create and init API changes |
+| | oot-backport/main | [`f6f24898a`](<https://github.com/intel-gpu/xekmd-backports/commit/f6f24898ac38e1649af530b205b3c519d1620859>) | perf_event.h: Backport observation permission checks |
+| | oot-backport/main | [`9f50ff306`](<https://github.com/intel-gpu/xekmd-backports/commit/9f50ff306240db97b2e95879035d2ceea01129fe>) | memremap.h: Backport folio_set_zone_device_data() api |
+| | oot-backport/main | [`345465658`](<https://github.com/intel-gpu/xekmd-backports/commit/345465658e01d4264e9d58986343ad63ff0881fd>) | drm/pagemap: disable compound migration on older kernels |
+| | oot-backport/main | [`0ae72dc65`](<https://github.com/intel-gpu/xekmd-backports/commit/0ae72dc65700c0b3fe9875cd006882defab3ccfb>) | hmm.h: Backport hmm_range_fault_unlocked_timeout() api |
+| | oot-backport/main | [`e2724f7b8`](<https://github.com/intel-gpu/xekmd-backports/commit/e2724f7b8c08cc05eac8cb5a2eb5a70396c727a7>) | mm.h: Backport VMA compatibility helpers |
+| | oot-backport/main | [`10dac58aa`](<https://github.com/intel-gpu/xekmd-backports/commit/10dac58aa2117c34d22da46ba28af42dac7d3577>) | dma-fence: Backport dma_fence_enable_signaling() api |
+| | oot-backport/main | [`328f3544d`](<https://github.com/intel-gpu/xekmd-backports/commit/328f3544d1b842330bcd6918b53c651a10f0707a>) | autotools: detect shmem_write_folio() availability |
+| | oot-backport/main | [`8d6341bb9`](<https://github.com/intel-gpu/xekmd-backports/commit/8d6341bb9e67851642242d2970ec20e64797bc5f>) | hmm.h: Backport hmm_pfn_to_phys() api |
+| | oot-backport/main | [`67e9215ea`](<https://github.com/intel-gpu/xekmd-backports/commit/67e9215eaf1e438966616c369ffa086601582cd4>) | drm/xe: guard XE_DISPLAY_DRIVER_OPS .fbdev_probe |
+| | oot-backport/main | [`dd0ec0658`](<https://github.com/intel-gpu/xekmd-backports/commit/dd0ec0658c6fe42314998ac16df98d0b5a405d52>) | dma-mapping: Backport struct dma_iova_state() api |
+| | oot-backport/main | [`0245c7a43`](<https://github.com/intel-gpu/xekmd-backports/commit/0245c7a43a747d83506e120405c2475d4ae4ed7a>) | backport-include/ktime: backport us_to_ktime() api |
+| | oot-backport/main | [`87148fce2`](<https://github.com/intel-gpu/xekmd-backports/commit/87148fce2acf8455167e3f43fb9ea6fe6e213185>) | pagemap.h: Backport folio_next_index() api |
+| | oot-backport/main | [`aefbcf1c3`](<https://github.com/intel-gpu/xekmd-backports/commit/aefbcf1c318cfce10660adf5121df764d4cd43bf>) | mei_cl.h: backport device-id/mei_cl.h header file |
+| | oot-backport/main | [`a2b8525fe`](<https://github.com/intel-gpu/xekmd-backports/commit/a2b8525fe918633ef3fed7fd0a9e1ead447744e5>) | drm/intel: Backport step.h header |
+| | oot-backport/main | [`f0fb513ce`](<https://github.com/intel-gpu/xekmd-backports/commit/f0fb513ce3bc37da7c3709348a30ec4aca9e9848>) | patches: fix hunk offsets to resolve hunk failures |
+| | linux-next | [`dd157120f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=dd157120f71f843b79f3684d9da48240776d3382>) | drm/xe: Add debugfs pagefault_info |
+| | linux-next | [`fd831e3af`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=fd831e3af1e0858cdf12b49635c4ffb4600442fa>) | drm/xe: Add mnemonic error reason to page fault diagnostics |
+| | linux-next | [`b56f37907`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b56f37907ae7169de58209917b6cc4e259436829>) | drm/xe: Add num_pf_work modparam |
+| | linux-next | [`d67f04046`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=d67f04046641b7aa1607d66111581226d4da681f>) | drm/xe: Add pagefault chaining stats |
+| | linux-next | [`53e76bde1`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=53e76bde11df43bc10a395a5ef7604ab96d56964>) | drm/xe: Allow prefetch-only VM bind IOCTLs to use VM read lock |
+| | linux-next | [`f2b4b3f81`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f2b4b3f81466291bde7553c097350f9e08ec59ca>) | drm/xe: Chain page faults via queue-resident cache to avoid fault storms |
+| | linux-next | [`24fca684c`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=24fca684c4461a4f0565d07775ca51b39a43862d>) | drm/xe: Engine class and instance into a u8 |
+| | linux-next | [`941bcc1a4`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=941bcc1a4bbf0749f80d13883468cd2c9f7763b1>) | drm/xe: Fine grained page fault locking |
+| | linux-next | [`965f62434`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=965f624349945ad15c86f44c72fafa11ed962794>) | drm/xe: Implement print vfunc for page fault info logging |
+| | linux-next | [`81ba672a4`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=81ba672a45f3f1d32b1b8e1530416e2af0689ce9>) | drm/xe: Remove redundant full pagefault queue check |
+| | linux-next | [`65d3bfa42`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=65d3bfa42c14caeb87274e9c6df03b7545977f2e>) | drm/xe: Thread prefetch of SVM ranges |
+| | linux-next | [`107156dc6`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=107156dc6b9cc5710c9b1545d1e61a47a46c72bf>) | drm/xe: Track pagefault worker runtime |
+| | linux-next | [`aa8216142`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=aa8216142a6c8bbc6cb4b83d8782d4fa34c97baa>) | drm/xe: Track parallel page fault activity in GT stats |
+| | linux-next | [`6c1004142`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=6c1004142270f7c52f3809050a962a5795d49cc1>) | drm/xe: Use a single page-fault queue with multiple workers |
+| | linux-next | [`bcd8734f2`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=bcd8734f2afeb1bfb81f06e5af0e49a3573e0873>) | drm/xe: Use guard(spinlock_irqsave) in pagefault handler |
+| | linux-next | [`6df8aa0e8`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=6df8aa0e8a323201a1eb85a98864e90b6b59230a>) | drm/xe: add force option for global invalidation |
+| | linux-next | [`d4a7e1611`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=d4a7e1611716ac4c211f5f022363c2123d92d812>) | drm/xe: batch CT pagefault acks with periodic flush |
+| | linux-next | [`08efc2ef4`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=08efc2ef4cb5375c9e1da8d92b4fe00c928be14f>) | drm/xe/gt: Report 'Queue full' pagefault error using SIGID |
+| | linux-next | [`188d81399`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=188d8139945c8dc37374efbf8552d0c2b13659a8>) | drm/xe/migrate: support 4K PTEs for identity map |
+| | linux-next | [`e0ba981c3`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=e0ba981c317209e8464ead7dc81439b1210a2fe3>) | drm/xe/pagefault: Add SRCID to pagefault struct |
+| | linux-next | [`88064894b`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=88064894bcce6d239804e54bd7f577645d4739ab>) | drm/xe/vm: Add srcid to xe_vm_get_property_ioctl fault report |
+| | linux-next | [`c874bc70c`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c874bc70c897c554cc460cfe1fa2c715f780d368>) | drm/xe/vram: add early VRAM health check |
+| | linux-next | [`bab69ad31`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=bab69ad31cd35b282921efe825a496cf89dd7374>) | drm/xe/vram: revamp CPU VRAM mapping |
+| | eudebug-v3-xe3p-prelim | `af20fe1e9` | drm/xe: Support for xe_vma_unbind() |
+| | | Backport-only change | Backport-only: drm/xe/eudebug: Do not warn when debugging is unsupported |
+| | eudebug-v3-xe3p-prelim | `ceec46134` | drm/xe/eudebug: Use correct pagefault event structure on queueing |
+| | eudebug-v3-xe3p-prelim | `88ac27a48` | drm/xe: export prep_vma_destroy as xe_vm_prep_vma_destroy |
+| | eudebug-v3-xe3p-prelim | `5983d61dc` | drm/xe/pagefault: export pagefault queue properties |
+| | eudebug-v3-xe3p-prelim | `f15d30a9c` | drm/xe/svm: Add xe_svm_remove_address_range() to remove whole range |
+| | eudebug-v3-xe3p-prelim | `875fb611e` | drm/xe/vm: Add xe_vm_svm_vma_subtract() to carve out a sub-range from an SVM VMA |
 | `xebr_v7.1.4.75_260728.53` | | | |
 | | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/759600/?series=175989&rev=1>) | TEMP: drm/xe/cri: Implement workaround Wa_15020021844 |
 | | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/172710/#rev3>) | &#91;TEMP&#93;: drm/xe/xe_ras: Add function to get maximum pages firmware can store |
@@ -853,3 +906,4 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 | | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/729254/?series=167572&rev=1>) | &#91;TEMP&#93; topic/for-xe-CI: drm/xe/cri: Define GuC firmware for CRI |
 | | drm-tip-eudebug | [`865a5da97`](<https://github.com/mpatelcz/drivers.gpu.linux-xe.kernel/commit/865a5da9722d80aa8495cf4f893ed13afe4f7154>) | drm/xe/xe3p: disable EU thread hang on exception |
 | | drm-tip-eudebug | [`852ec9ae5`](<https://github.com/mpatelcz/drivers.gpu.linux-xe.kernel/commit/852ec9ae5909ca0b4a213d5bd06f34c0826f5cac>) | drm/xe: Add EUDEBUG_ENABLE exec queue property |
+

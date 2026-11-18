@@ -155,10 +155,10 @@ static int toggle_reg_value(struct xe_device *xe)
 
 	check_regs(xe, enable_eudebug);
 
-	xe_eudebug_enable(xe, !enable_eudebug);
+	prelim_xe_eudebug_enable(xe, !enable_eudebug);
 	check_regs(xe, !enable_eudebug);
 
-	xe_eudebug_enable(xe, enable_eudebug);
+	prelim_xe_eudebug_enable(xe, enable_eudebug);
 	check_regs(xe, enable_eudebug);
 
 	return 0;

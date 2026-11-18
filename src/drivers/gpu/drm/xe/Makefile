@@ -159,8 +159,10 @@ xe-y += xe_bb.o \
 
 xe-$(CONFIG_I2C)	+= xe_i2c.o \
 			   xe_amc.o
+
 xe-$(CPTCFG_PRELIM_DRM_XE_EUDEBUG) += prelim/xe_eudebug.o \
-	prelim/xe_debug_metadata.o
+		prelim/xe_debug_metadata.o \
+		prelim/xe_eudebug_pagefault.o
 xe-$(CPTCFG_DRM_GPUSVM) += xe_svm.o
 xe-$(CPTCFG_DRM_GPUSVM) += xe_userptr.o
 
@@ -227,7 +229,6 @@ $(obj)/i915-display/%.o: $(backport_srctree)/drivers/gpu/drm/i915/display/%.c FO
 
 # Display code specific to xe
 xe-$(CPTCFG_DRM_XE_DISPLAY) += \
-	display/intel_fbdev_fb.o \
 	display/xe_display.o \
 	display/xe_display_bo.o \
 	display/xe_display_pcode.o \
@@ -277,6 +278,7 @@ xe-$(CPTCFG_DRM_XE_DISPLAY) += \
 	i915-display/intel_display_power.o \
 	i915-display/intel_display_power_map.o \
 	i915-display/intel_display_power_well.o \
+	i915-display/intel_display_reset.o \
 	i915-display/intel_display_rpm.o \
 	i915-display/intel_display_rps.o \
 	i915-display/intel_display_trace.o \
@@ -289,6 +291,7 @@ xe-$(CPTCFG_DRM_XE_DISPLAY) += \
 	i915-display/intel_dp_aux.o \
 	i915-display/intel_dp_aux_backlight.o \
 	i915-display/intel_dp_hdcp.o \
+	i915-display/intel_dp_link_caps.o \
 	i915-display/intel_dp_link_training.o \
 	i915-display/intel_dp_mst.o \
 	i915-display/intel_dp_test.o \
@@ -320,6 +323,7 @@ xe-$(CPTCFG_DRM_XE_DISPLAY) += \
 	i915-display/intel_link_bw.o \
 	i915-display/intel_lspcon.o \
 	i915-display/intel_lt_phy.o \
+	i915-display/intel_mchbar.o \
 	i915-display/intel_modeset_lock.o \
 	i915-display/intel_modeset_setup.o \
 	i915-display/intel_modeset_verify.o \
@@ -346,7 +350,8 @@ xe-$(CPTCFG_DRM_XE_DISPLAY) += \
 	i915-display/skl_prefill.o \
 	i915-display/skl_scaler.o \
 	i915-display/skl_universal_plane.o \
-	i915-display/skl_watermark.o
+	i915-display/skl_watermark.o \
+	i915-display/vlv_sideband.o
 
 ifeq ($(CONFIG_ACPI),y)
 	xe-$(CPTCFG_DRM_XE_DISPLAY) += \
@@ -381,6 +386,9 @@ xe-$(CPTCFG_DRM_XE_DP_TUNNEL) += \
 
 obj-$(CPTCFG_DRM_XE) += xe.o
 obj-$(CPTCFG_DRM_XE_KUNIT_TEST) += tests/
+ifeq ($(CPTCFG_DRM_XE_DISPLAY),y)
+	obj-$(CPTCFG_DRM_XE_KUNIT_TEST) += display/tests/
+endif
 
 # header test
 hdrtest_find_args := -not -path xe_rtp_helpers.h

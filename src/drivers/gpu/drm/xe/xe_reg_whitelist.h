@@ -3,8 +3,8 @@
  * Copyright © 2023 Intel Corporation
  */
 
-#ifndef _XE_REG_WHITELIST_
-#define _XE_REG_WHITELIST_
+#ifndef _XE_REG_WHITELIST_H_
+#define _XE_REG_WHITELIST_H_
 
 #include <linux/types.h>
 
@@ -13,6 +13,10 @@ struct xe_gt;
 struct xe_hw_engine;
 struct xe_reg_sr;
 struct xe_reg_sr_entry;
+
+#if IS_ENABLED(CPTCFG_DRM_XE_KUNIT_TEST)
+extern const struct xe_rtp_table_sr register_whitelist;
+#endif
 
 void xe_reg_whitelist_process_engine(struct xe_hw_engine *hwe);
 

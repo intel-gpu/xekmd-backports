@@ -129,10 +129,8 @@ static inline bool xe_gt_is_media_type(struct xe_gt *gt)
 
 static inline bool xe_gt_is_usm_hwe(struct xe_gt *gt, struct xe_hw_engine *hwe)
 {
-	struct xe_device *xe = gt_to_xe(gt);
-
-	return xe->info.has_usm && hwe->class == XE_ENGINE_CLASS_COPY &&
-		hwe->instance == gt->usm.reserved_bcs_instance;
+	return hwe->class == XE_ENGINE_CLASS_COPY &&
+	       (gt->usm.paging_logical_mask & BIT(hwe->logical_instance));
 }
 
 /**
@@ -148,16 +146,18 @@ static inline bool xe_gt_recovery_pending(struct xe_gt *gt)
 }
 
 /**
- * xe_gt_has_multi_queue() - Check if gt supports multi-queue on
- * any engine class.
+ * xe_gt_supports_multi_queue() - Check if gt supports multi queue for the
+ * specified engine class.
  *
- * @gt: the GT object (may be NULL)
+ * @gt: the GT object
+ * @class: hwe class type
  *
- * Return: true if any engine class on @gt supports multi queue, else false
+ * Return: true if the hw engine class supports multi queue, else false
  */
-static inline bool xe_gt_has_multi_queue(const struct xe_gt *gt)
+static inline bool xe_gt_supports_multi_queue(const struct xe_gt *gt,
+					      enum xe_engine_class class)
 {
-	return gt && gt->info.multi_queue_engine_class_mask;
+	return gt->info.multi_queue_engine_class_mask & BIT(class);
 }
 
 #endif

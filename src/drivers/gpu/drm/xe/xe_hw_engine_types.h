@@ -79,7 +79,7 @@ struct xe_hw_engine_class_intf {
 	 * @defaults: default scheduling properties
 	 */
 	struct {
-		/** @sched_props.set_job_timeout: Set job timeout in ms for engine */
+		/** @sched_props.job_timeout_ms: Set job timeout in ms for engine */
 		u32 job_timeout_ms;
 		/** @sched_props.job_timeout_min: Min job timeout in ms for engine */
 		u32 job_timeout_min;
@@ -114,7 +114,12 @@ struct xe_hw_engine {
 	enum xe_engine_class class;
 	/** @instance: physical instance of this hw engine */
 	u16 instance;
-	/** @logical_instance: logical instance of this hw engine */
+	/**
+	 * @logical_instance: logical instance of this hw engine.
+	 *
+	 * Note: For GuC usage, always use xe_hwe_guc_logical_instance().
+	 * For GuC usage, we should no longer use the raw logical instance.
+	 */
 	u16 logical_instance;
 	/** @irq_offset: IRQ offset of this hw engine */
 	u16 irq_offset;

@@ -4,6 +4,7 @@
  * Copyright (C) 2021-2022 Red Hat
  */
 
+#include <linux/cgroup_dmem.h>
 #include <linux/debugfs.h>
 
 #include <drm/drm_managed.h>
@@ -373,6 +374,41 @@ static const struct ttm_resource_manager_func xe_ttm_vram_mgr_func = {
 	.debug	= xe_ttm_vram_mgr_debug
 };
 
+static const struct dmem_cgroup_ops xe_ttm_vram_mgr_dmem_ops;
+
+static int xe_ttm_vram_mgr_dmem_reclaim(struct dmem_cgroup_pool_state *pool,
+					u64 target_bytes, void *priv)
+{
+	struct ttm_resource_manager *man = priv;
+	struct xe_device *xe = ttm_to_xe_device(man->bdev);
+	int ret, idx;
+
+	if (!drm_dev_enter(&xe->drm, &idx))
+return -ENODEV;
+
+	{
+		ACQUIRE(xe_pm_runtime_ioctl, pm)(xe);
+
+		ret = ACQUIRE_ERR(xe_pm_runtime_ioctl, &pm);
+		if (ret >= 0)
+			ret = ttm_resource_manager_dmem_reclaim(pool, target_bytes, priv);
+	}
+
+	drm_dev_exit(idx);
+	return ret;
+}
+
+static const struct dmem_cgroup_ops xe_ttm_vram_mgr_dmem_ops = {
+	.reclaim = xe_ttm_vram_mgr_dmem_reclaim,
+};
+
+static void xe_ttm_vram_mgr_set_unused(struct drm_device *dev, void *arg)
+{
+	struct ttm_resource_manager *man = arg;
+
+	ttm_resource_manager_set_used(man, false);
+}
+
 static void xe_ttm_vram_free_bad_pages(struct xe_ttm_vram_mgr *mgr)
 {
 	struct xe_ttm_vram_offline_resource *pos, *n;
@@ -400,7 +436,7 @@ static void xe_ttm_vram_mgr_fini(struct drm_device *dev, void *arg)
 
 	mutex_lock(&mgr->lock);
 	xe_ttm_vram_free_bad_pages(mgr);
-	mutex_unlock(&mgr->lock);
+mutex_unlock(&mgr->lock);
 
 	ttm_resource_manager_set_used(man, false);
 
@@ -414,8 +450,6 @@ static void xe_ttm_vram_mgr_fini(struct drm_device *dev, void *arg)
 	ttm_resource_manager_cleanup(&mgr->manager);
 
 	ttm_set_driver_manager(&xe->ttm, mgr->mem_type, NULL);
-
-	mutex_destroy(&mgr->lock);
 }
 
 int __xe_ttm_vram_mgr_init(struct xe_device *xe, struct xe_ttm_vram_mgr *mgr,
@@ -423,16 +457,11 @@ int __xe_ttm_vram_mgr_init(struct xe_device *xe, struct xe_ttm_vram_mgr *mgr,
 			   u64 default_page_size)
 {
 	struct ttm_resource_manager *man = &mgr->manager;
-	int err;
-
 #ifndef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
-	if (mem_type != XE_PL_STOLEN) {
-		const char *name = mem_type == XE_PL_VRAM0 ? "vram0" : "vram1";
-		man->cg = drmm_cgroup_register_region(&xe->drm, name, size);
-		if (IS_ERR(man->cg))
-			return PTR_ERR(man->cg);
-	}
+	struct dmem_cgroup_region *cg;
+	const char *name;
 #endif
+	int err;
 
 	man->func = &xe_ttm_vram_mgr_func;
 	mgr->mem_type = mem_type;
@@ -441,7 +470,9 @@ int __xe_ttm_vram_mgr_init(struct xe_device *xe, struct xe_ttm_vram_mgr *mgr,
 		mgr->pin.dmabuf_limit =
 			mul_u64_u32_div(size, xe_modparam.pin_vram_percent, 100);
 #endif
-	mutex_init(&mgr->lock);
+	err = drmm_mutex_init(&xe->drm, &mgr->lock);
+	if (err)
+		return err;
 	INIT_LIST_HEAD(&mgr->offlined_pages);
 	INIT_LIST_HEAD(&mgr->queued_pages);
 	mgr->default_page_size = default_page_size;
@@ -455,9 +486,32 @@ int __xe_ttm_vram_mgr_init(struct xe_device *xe, struct xe_ttm_vram_mgr *mgr,
 
 	gpu_buddy_driver_set_lock(&mgr->mm, &mgr->lock);
 	ttm_set_driver_manager(&xe->ttm, mem_type, &mgr->manager);
-	ttm_resource_manager_set_used(&mgr->manager, true);
 
-	return drmm_add_action_or_reset(&xe->drm, xe_ttm_vram_mgr_fini, mgr);
+	/*
+	 * Register the fini action before the cgroup region so that devres
+	 * LIFO teardown runs unregister_region before manager teardown
+	 * (draining any in-flight reclaim callbacks) and the manager fini second.
+	 */
+	err = drmm_add_action_or_reset(&xe->drm, xe_ttm_vram_mgr_fini, mgr);
+	if (err)
+		return err;
+
+#ifndef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+	name = mem_type == XE_PL_VRAM0 ? "vram0" : "vram1";
+	cg = drmm_cgroup_register_region(&xe->drm, name,
+					 &(struct dmem_cgroup_init){
+						.size = size,
+						.ops = &xe_ttm_vram_mgr_dmem_ops,
+						.reclaim_priv = man,
+					 });
+	if (IS_ERR(cg))
+		return PTR_ERR(cg);
+
+	ttm_resource_manager_set_dmem_region(man, cg);
+#endif
+	ttm_resource_manager_set_used(man, true);
+
+	return drmm_add_action_or_reset(&xe->drm, xe_ttm_vram_mgr_set_unused, man);
 }
 
 /**

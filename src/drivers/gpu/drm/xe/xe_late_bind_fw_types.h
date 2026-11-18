@@ -10,7 +10,8 @@
 #include <linux/mutex.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
-#include "xe_uc_fw_abi.h"
+
+#include "abi/uc_fw_abi.h"
 
 /**
  * enum xe_late_bind_fw_id - enum to determine late binding fw index

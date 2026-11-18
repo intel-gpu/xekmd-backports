@@ -77,7 +77,7 @@ struct xe_bo {
 	/** @attr: User controlled attributes for bo */
 	struct {
 		/**
-		 * @atomic_access: type of atomic access bo needs
+		 * @attr.atomic_access: type of atomic access bo needs
 		 * protected by bo dma-resv lock
 		 */
 		u32 atomic_access;
@@ -101,7 +101,7 @@ struct xe_bo {
 #ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
 	/**
 	 * @dmabuf_pin_count: number of active dma-buf pins. 0->1 charges the
-	 * VRAM limit and adds to the restore list; N->0 uncharges and removes.
+	 * VRAM limit; N->0 uncharges. Restore-list lifetime follows ttm pins.
 	 * Independent of ttm pin_count, which also counts display pins that
 	 * bypass xe_bo_pin_external.
 	 */

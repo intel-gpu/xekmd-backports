@@ -11,6 +11,8 @@
 struct drm_device;
 struct drm_file;
 struct xe_file;
+struct xe_vma;
+struct xe_vma_op;
 
 #if IS_ENABLED(CPTCFG_PRELIM_DRM_XE_EUDEBUG)
 

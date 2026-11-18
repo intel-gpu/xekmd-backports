@@ -9,20 +9,11 @@
 #include <linux/bits.h>
 #include <linux/math.h>
 
+struct prelim_xe_eu_attentions;
 struct xe_gt;
 struct xe_guc;
 
-#define PRELIM_XE_GT_ATTENTION_TIMEOUT_MS 100
-#define PRELIM_XE_GT_EU_ATT_ROWS 2u
-
-struct prelim_xe_eu_attentions {
-#define PRELIM_XE_MAX_EUS 1024
-#define PRELIM_XE_MAX_THREADS 10
-
-	u8 att[DIV_ROUND_UP(PRELIM_XE_MAX_EUS * PRELIM_XE_MAX_THREADS, BITS_PER_BYTE)];
-	unsigned int size;
-	ktime_t ts;
-};
+#define PRELIM_XE_GT_ATTENTION_TIMEOUT_MS 150
 
 unsigned int prelim_xe_gt_eu_att_regs(struct xe_gt *gt);
 
@@ -42,7 +33,7 @@ int prelim_xe_gt_eu_attention_bitmap_size(struct xe_gt *gt);
 int prelim_xe_gt_eu_attention_bitmap(struct xe_gt *gt, u8 *bits,
 			      unsigned int bitmap_size);
 
-void prelim_xe_gt_eu_attentions_read(struct xe_gt *gt,
+int prelim_xe_gt_eu_attentions_read(struct xe_gt *gt,
 			      struct prelim_xe_eu_attentions *a,
 			      const unsigned int settle_time_ms);
 

@@ -45,6 +45,7 @@ struct xe_ggtt;
 struct xe_i2c;
 struct xe_pat_ops;
 struct xe_pxp;
+struct xe_ttm_stolen_mgr;
 struct xe_vram_region;
 
 /**
@@ -142,6 +143,8 @@ struct xe_device {
 		u8 revid;
 		/** @info.step: stepping information for each IP */
 		struct xe_step_info step;
+		/** @info.num_pf_work: Number of page fault work thread */
+		int num_pf_work;
 		/** @info.dma_mask_size: DMA address bits */
 		u8 dma_mask_size;
 		/** @info.vram_flags: Vram flags */
@@ -165,8 +168,6 @@ struct xe_device {
 		 * Keep all flags below alphabetically sorted
 		 */
 
-		/** @info.force_execlist: Forced execlist submission */
-		u8 force_execlist:1;
 		/** @info.has_access_counter: Device supports access counter */
 		u8 has_access_counter:1;
 		/** @info.has_asid: Has address space ID */
@@ -246,8 +247,6 @@ struct xe_device {
 		u8 probe_display:1;
 		/** @info.skip_guc_pc: Skip GuC based PM feature init */
 		u8 skip_guc_pc:1;
-		/** @info.skip_mtcfg: skip Multi-Tile configuration from MTCFG register */
-		u8 skip_mtcfg:1;
 		/** @info.skip_pcode: skip access to PCODE uC */
 		u8 skip_pcode:1;
 		/** @info.needs_shared_vf_gt_wq: needs shared GT WQ on VF */
@@ -313,8 +312,10 @@ struct xe_device {
 		 * for P2P), which consume no local system memory.
 		 */
 		atomic64_t sys_mgr_charged;
-		/** @mem.sys_mgr: system memory shrinker. */
+		/** @mem.shrinker: system memory shrinker. */
 		struct xe_shrinker *shrinker;
+		/** @mem.stolen_mgr: stolen memory manager. */
+		struct xe_ttm_stolen_mgr *stolen_mgr;
 	} mem;
 
 	/** @sriov: device level virtualization data */
@@ -346,24 +347,25 @@ struct xe_device {
 
 	/** @usm: unified memory state */
 	struct {
-		/** @usm.asid: convert a ASID to VM */
+		/** @usm.asid_to_vm: convert an ASID to VM */
 		struct xarray asid_to_vm;
 		/** @usm.next_asid: next ASID, used to cyclical alloc asids */
 		u32 next_asid;
+		/** @usm.current_pf_work: current page fault work item */
+		u32 current_pf_work;
 		/** @usm.lock: protects UM state */
 		struct rw_semaphore lock;
-		/** @usm.pf_wq: page fault work queue, unbound, high priority */
-		struct workqueue_struct *pf_wq;
-		/*
-		 * We pick 4 here because, in the current implementation, it
-		 * yields the best bandwidth utilization of the kernel paging
-		 * engine.
-		 */
-#define XE_PAGEFAULT_QUEUE_COUNT	4
-		/** @usm.pf_queue: Page fault queues */
-		struct xe_pagefault_queue pf_queue[XE_PAGEFAULT_QUEUE_COUNT];
+		/** @usm.pagefault_wq: page fault work queue, unbound, high priority */
+		struct workqueue_struct *pagefault_wq;
+		/** @usm.prefetch_wq: threaded prefetch work queue, unbound */
+		struct workqueue_struct *prefetch_wq;
+#define XE_PAGEFAULT_WORK_MAX	8
+		/** @usm.pf_workers: Page fault workers */
+		struct xe_pagefault_work pf_workers[XE_PAGEFAULT_WORK_MAX];
+		/** @usm.pf_queue: Page fault queue */
+		struct xe_pagefault_queue pf_queue;
 #if IS_ENABLED(CPTCFG_DRM_XE_PAGEMAP)
-		/** @usm.pagemap_shrinker: Shrinker for unused pagemaps */
+		/** @usm.dpagemap_shrinker: Shrinker for unused pagemaps */
 		struct drm_pagemap_shrinker *dpagemap_shrinker;
 #endif
 	} usm;
@@ -385,7 +387,7 @@ struct xe_device {
 			struct list_head kernel_bo_present;
 			/** @pinned.late.evicted: pinned BO that have been evicted */
 			struct list_head evicted;
-			/** @pinned.external: pinned external and dma-buf. */
+			/** @pinned.late.external: pinned external and dma-buf. */
 			struct list_head external;
 		} late;
 	} pinned;
@@ -420,7 +422,7 @@ struct xe_device {
 		struct {
 			/**
 			 * @mem_access.vram_userfault.lock: Protects access to
-			 * @vram_usefault.list Using mutex instead of spinlock
+			 * @mem_access.vram_userfault.list Using mutex instead of spinlock
 			 * as lock is applied to entire list operation which
 			 * may sleep
 			 */
@@ -451,7 +453,11 @@ struct xe_device {
 		const struct xe_pat_table_entry *pat_primary_pta;
 		/** @pat.pat_media_pta: media GT PAT entry for page table accesses */
 		const struct xe_pat_table_entry *pat_media_pta;
-		u32 idx[__XE_CACHE_LEVEL_COUNT];
+		/** @pat.pat_primary_tr_pta: primary GT PAT entry for TRTT page table accesses */
+		const struct xe_pat_table_entry *pat_primary_tr_pta;
+		/** @pat.pat_media_tr_pta: media GT PAT entry for TRTT page table accesses */
+		const struct xe_pat_table_entry *pat_media_tr_pta;
+		u16 idx[__XE_CACHE_LEVEL_COUNT];
 	} pat;
 
 	/** @d3cold: Encapsulate d3cold related stuff */
@@ -642,7 +648,7 @@ struct xe_device {
 	/** @eudebug: connection list and globals for device */
 	struct {
 		/** @eudebug.lock: protects the list of connections */
-		spinlock_t lock;
+		struct mutex lock;
 
 		/** @eudebug.list: list of connections, aka debuggers */
 		struct list_head list;
@@ -661,6 +667,9 @@ struct xe_device {
 
 		/** @eudebug.attention_scan: attention scan worker */
 		struct delayed_work attention_scan;
+
+		/** @eudebug.pagefault_reset_wq: used when there is a GT reset during pagefault */
+		struct workqueue_struct *pagefault_reset_wq;
 	} eudebug;
 #endif
 
@@ -692,7 +701,7 @@ struct xe_file {
 
 	/** @vm: VM state for file */
 	struct {
-		/** @vm.xe: xarray to store VMs */
+		/** @vm.xa: xarray to store VMs */
 		struct xarray xa;
 		/**
 		 * @vm.lock: Protects VM lookup + reference and removal from

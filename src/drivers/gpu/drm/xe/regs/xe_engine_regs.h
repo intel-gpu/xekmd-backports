@@ -119,7 +119,6 @@
 
 #define CS_DEBUG_MODE2(base)			XE_REG((base) + 0xd8, XE_REG_OPTION_MASKED)
 #define   INSTRUCTION_STATE_CACHE_INVALIDATE	REG_BIT(6)
-#define   GLOBAL_DEBUG_ENABLE			REG_BIT(5)
 
 #define FF_SLICE_CS_CHICKEN1(base)		XE_REG((base) + 0xe0, XE_REG_OPTION_MASKED)
 #define   FFSC_PERCTX_PREEMPT_CTRL		REG_BIT(14)
@@ -129,6 +128,10 @@
 #define   REPLAY_MODE_GRANULARITY		REG_BIT(0)
 
 #define INDIRECT_RING_STATE(base)		XE_REG((base) + 0x108)
+
+#define CS_DEBUG_MODE2(base)			XE_REG((base) + 0xd8, XE_REG_OPTION_MASKED)
+#define   INST_STATE_CACHE_INVALIDATE		REG_BIT(6)
+#define   GLOBAL_DEBUG_ENABLE			REG_BIT(5)
 
 #define RING_BBADDR(base)			XE_REG((base) + 0x140)
 #define RING_BBADDR_UDW(base)			XE_REG((base) + 0x168)
@@ -167,18 +170,21 @@
 #define	  CTX_CTRL_INHIBIT_SYN_CTX_SWITCH	REG_BIT(3)
 #define	  CTX_CTRL_ENGINE_CTX_RESTORE_INHIBIT	REG_BIT(0)
 
-#define RING_MODE(base)				XE_REG((base) + 0x29c)
-#define   GFX_DISABLE_LEGACY_MODE		REG_BIT(3)
+#define GFX_MODE(base)				XE_REG((base) + 0x29c, XE_REG_OPTION_MASKED)
 #define   GFX_MSIX_INTERRUPT_ENABLE		REG_BIT(13)
+#define   GFX_DISABLE_LEGACY_MODE		REG_BIT(3)
 
 #define RING_CSMQDEBUG(base)			XE_REG((base) + 0x2b0)
+#define   CURRENT_ACTIVE_QUEUE_ID_MASK		REG_GENMASK(7, 0)
+
+#define RING_QUEUE_TIMESTAMP(base)		XE_REG((base) + 0x4c0)
+#define RING_QUEUE_TIMESTAMP_UDW(base)		XE_REG((base) + 0x4c0 + 4)
 
 #define RING_TIMESTAMP(base)			XE_REG((base) + 0x358)
 
 #define RING_TIMESTAMP_UDW(base)		XE_REG((base) + 0x358 + 4)
 #define   RING_VALID_MASK			0x00000001
 #define   RING_VALID				0x00000001
-#define   STOP_RING				REG_BIT(8)
 
 #define RING_CTX_TIMESTAMP(base)		XE_REG((base) + 0x3a8)
 #define RING_CTX_TIMESTAMP_UDW(base)		XE_REG((base) + 0x3ac)

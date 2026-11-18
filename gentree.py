@@ -930,7 +930,7 @@ def process(kerneldir, copy_list_file, git_revision=None,
         'Makefile',
         'NEWS',
         'debian/',
-        'compile.sh',
+        'oot-build.sh',
     ]]
 
     if not bpid.integrate:

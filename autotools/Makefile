@@ -61,7 +61,7 @@ XE_DKMS_MK_README=$(BACKPORT_DIR)/scripts/backport-mkdebreadme
 XE_DKMS_MK_COPYRIGHT=$(BACKPORT_DIR)/scripts/backport-mkdebcopyright
 KBUILD_ONLYXEDIRS := src/drivers/gpu src/include src/scripts src/drivers/platform src/drivers/mtd
 KBUILD_XEVFIOPCIDIRS := src/drivers/vfio/pci/xe
-KBUILD_AUTOTOOLS := m4 AUTHORS ChangeLog configure.ac COPYING INSTALL Makefile Makefile.am NEWS README.md compile.sh
+KBUILD_AUTOTOOLS := m4 AUTHORS ChangeLog configure.ac COPYING INSTALL Makefile Makefile.am NEWS README.md oot-build.sh
 XE_TAR_CONTENT=$(KBUILD_ONLYXEDIRS) $(KBUILD_AUTOTOOLS) $(KBUILD_XEVFIOPCIDIRS) src/Makefile* src/local-symbols src/MAINTAINERS src/local-symbols-autoconf \
 	src/Kconfig src/Kconfig.sources src/Kconfig.package.hacks src/COPYING src/versions src/defconfigs src/backport-include src/kconf src/compat
 
@@ -101,7 +101,7 @@ xe-dkms-rpm-pkg: clean
 	mkdir -p ~/rpmbuild/SOURCES
 	$(CONFIG_SHELL) $(XE_RPM_MK_SPEC) -n $(XE_PKG_NAME) -v $(XE_PKG_VERSION) -r $(XE_PKG_RELEASE) $(if $(DISTRO_SUFFIX),-d $(DISTRO_SUFFIX)) -z dkms > rpm/$(XE_PKG_NAME).spec
 	$(CONFIG_SHELL) $(XE_RPM_MK_DKMS) -n $(XE_PKG_NAME) -v $(XE_PKG_VERSION) -r $(XE_PKG_RELEASE) > rpm/$(XE_PKG_NAME).dkms.conf
-	cp -r src m4 debian Makefile* configure* aclocal.m4 AUTHORS ChangeLog COPYING INSTALL NEWS README compile.sh ~/rpmbuild/SOURCES/ 2>/dev/null || true
+	cp -r src m4 debian Makefile* configure* aclocal.m4 AUTHORS ChangeLog COPYING INSTALL NEWS README oot-build.sh ~/rpmbuild/SOURCES/ 2>/dev/null || true
 	+rpmbuild -bb --define "_sourcedir $(PWD)" rpm/$(XE_PKG_NAME).spec
 
 .PHONY: xe-dkms-deb-pkg

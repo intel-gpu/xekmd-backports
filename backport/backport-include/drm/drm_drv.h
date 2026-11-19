@@ -5,6 +5,20 @@
 #include <linux/types.h>
 #include_next <drm/drm_drv.h>
 
+#ifdef BPM_DRMM_CGROUP_REGISTER_REGION_SIZE_ARG
+#include <linux/cgroup_dmem.h>
+
+static inline struct dmem_cgroup_region *
+backport_drmm_cgroup_register_region(struct drm_device *dev,
+                                    const char *region_name,
+                                    const struct dmem_cgroup_init *init)
+{
+        return drmm_cgroup_register_region(dev, region_name, init->size);
+}
+
+#define drmm_cgroup_register_region backport_drmm_cgroup_register_region
+#endif
+
 #ifndef BPM_DRV_DATE_NOT_PRESENT
 #define DRIVER_DATE             "20201103"
 #endif

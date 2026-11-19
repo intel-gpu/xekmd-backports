@@ -3,6 +3,8 @@ From: Varun Gupta <varun.gupta@intel.com>
 Date: Tue, 26 May 2026 11:41:55 +0530
 Subject: drm/pagemap: Provide compat for dev_pagemap_ops folio_free
 
+v1: Mask ZDD flag bits from zone_device_data in page_free [Varun]
+
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
@@ -20,7 +22,7 @@ index 5002049..08871c5 100644
 +#ifdef BPM_DEV_PAGEMAP_OPS_FOLIO_FREE_NOT_PRESENT
 +static void drm_pagemap_folio_free(struct page *page)
 +{
-+	drm_pagemap_zdd_put(page->zone_device_data);
++	drm_pagemap_zdd_put(drm_pagemap_page_zone_device_data(page));
 +}
 +#else
  static void drm_pagemap_folio_free(struct folio *folio)

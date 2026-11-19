@@ -91,10 +91,10 @@ Install the build dependencies described in the [README](README.md) and the head
 **Always pass the target kernel headers/build-tree path explicitly** for debug validation. Without it, the script defaults to `/lib/modules/$(uname -r)/build`, which belongs to the booted kernel and may not be supported by this driver release. Do not assume the booted kernel is the intended target.
 
 ```sh
-sh -e ./compile.sh compile /path/to/target/kernel/headers
+sh -e ./oot-build.sh compile /path/to/target/kernel/headers
 ```
 
-The [compile script](compile.sh) configures the tree, selects the Xe configuration, and builds the kernel modules without installing them. Invoke it with `sh -e` so a failed configure or build command stops execution with a nonzero status; the script's final completion message alone is not proof of success.
+The [compile script](autotools/oot-build.sh) configures the tree, selects the Xe configuration, and builds the kernel modules without installing them. Invoke it with `sh -e` so a failed configure or build command stops execution with a nonzero status; the script's final completion message alone is not proof of success.
 
 **If compilation fails, stop here.** Fix the debug changes and repeat the build until it succeeds. Only then proceed with packaging below. Repeat validation for each supported target kernel you intend to test; a successful build for one kernel does not establish compatibility with another. Runtime testing and the installation-time DKMS build are still required.
 

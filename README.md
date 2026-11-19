@@ -31,7 +31,7 @@ Install the required build dependencies for your distribution:
 | Distribution | Package type | Packages | Install command |
 |---|---|---|---|
 | Ubuntu / Debian | DEB | `automake`, `dkms`, `make`, `debhelper`, `devscripts`, `dh-dkms` | `sudo apt install automake dkms make debhelper devscripts dh-dkms` |
-| Red Hat / RHEL | RPM | `automake`, `dkms`, `make`, `rpm-build`, `rpmdevtools`, `bison`, `flex` | `sudo dnf install automake dkms make rpm-build rpmdevtools bison flex` |
+| Redhat / RHEL | RPM | `automake`, `dkms`, `make`, `rpm-build`, `rpmdevtools`, `bison`, `flex` | `sudo dnf install automake dkms make rpm-build rpmdevtools bison flex` |
 
 ## Dependencies
 
@@ -87,8 +87,8 @@ Build the DKMS package for your distribution:
 
 | Distribution | Package type | Build command | Generated package |
 |---|---|---|---|
-| Debian / Ubuntu | DEB | `./compile.sh configure`<br>`make xe-dkms-deb-pkg` | Parent folder<br>`intel-xe-dkms_<kernel-version>-<release-version>+i1-1_all.deb`<br>Example: `intel-xe-dkms_6.14.0.37-6.17.13.62.260409.9+i102-1_all.deb` |
-| Red Hat / RHEL | RPM | `./compile.sh configure`<br>`make xe-dkms-rpm-pkg` | `~/rpmbuild/RPMS/x86_64/`<br>`intel-xe-dkms-<kernel-version>-<release-version>.<distro-suffix>.x86_64.rpm`<br>Example: `intel-xe-dkms-6.12.0.124.8.1-6.17.13.54.260409.4.1.el10_1.x86_64.rpm` |
+| Debian / Ubuntu | DEB | `make xe-dkms-deb-pkg` | Parent folder<br>`intel-xe-dkms_<kernel-version>-<release-version>+i1-1_all.deb`<br>Example: `intel-xe-dkms_6.14.0.37-6.17.13.62.260409.9+i102-1_all.deb` |
+| Redhat / RHEL | RPM | `make xe-dkms-rpm-pkg` | `~/rpmbuild/RPMS/x86_64/`<br>`intel-xe-dkms-<kernel-version>-<release-version>.<distro-suffix>.x86_64.rpm`<br>Example: `intel-xe-dkms-6.12.0.124.8.1-6.17.13.54.260409.4.1.el10_1.x86_64.rpm` |
 
 **Note:** You can check the expected package version and name before building:
 
@@ -102,7 +102,7 @@ Install the package for your distribution:
 | Distribution | Package type | Install command |
 |---|---|---|
 | Ubuntu / Debian | DEB | `sudo dpkg -i intel-xe*.deb` |
-| Red Hat / RHEL | RPM | `sudo rpm -ivh ~/rpmbuild/RPMS/x86_64/intel-xe-dkms-*.rpm` |
+| Redhat / RHEL | RPM | `sudo rpm -ivh ~/rpmbuild/RPMS/x86_64/intel-xe-dkms-*.rpm` |
 
 Reboot the device after installation of all packages.
 ```
@@ -133,7 +133,7 @@ From the above example, we can extract version from which dkms was created(xebr_
 | Distribution | Package type | Uninstall command |
 |---|---|---|
 | Ubuntu / Debian | DEB | `sudo dpkg -r intel-xe*` |
-| Red Hat / RHEL | RPM | `sudo rpm -e intel-xe-dkms*` |
+| Redhat / RHEL | RPM | `sudo rpm -e intel-xe-dkms*` |
 
 Reboot the device after uninstallation of all packages.
 ```
@@ -148,7 +148,7 @@ to make life simple, use script created.
 Command to compile:
 
 `
-./compile.sh compile <headers-path>
+./oot-build.sh compile /path/to/target/kernel/headers
 `
 
 By default, "<headers-path>" is set as standard headers path of currently booted kernel i.e., /lib/modules/<uname -r>/build

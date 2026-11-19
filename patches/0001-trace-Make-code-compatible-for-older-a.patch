@@ -12,6 +12,7 @@ Reference-id:
 	tracing/treewide: Remove second parameter of __assign_str()
 
 v1: Rebase to v7.3 kernel [Raju]
+v2: Rebase to v7.3.0.2
 
 Signed-off-by: S A Muqthyar Ahmed <syed.abdul.muqthyar.ahmed@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
@@ -210,15 +211,15 @@ index 6d2dbf5..a831661 100644
 @@ -36,7 +36,11 @@ TRACE_EVENT(xe_error_cper,
  	    ),
  
- 	TP_fast_assign(
+ 	    TP_fast_assign(
 +#ifdef BPM_ASSIGN_STR_SECOND_ARG_PRESENT
-+	    __assign_str(dev, __dev_name_xe(xe));
++		__assign_str(dev, __dev_name_xe(xe));
 +#else
- 	    __assign_str(dev);
+ 		__assign_str(dev);
 +#endif
- 	    __entry->sev = severity;
- 	    memcpy(__entry->platform_id, platform_id, UUID_SIZE);
- 	    memcpy(__entry->fru_id, fru_id, UUID_SIZE);
+ 		__entry->sev = severity;
+ 		memcpy(__entry->platform_id, platform_id, UUID_SIZE);
+ 		memcpy(__entry->fru_id, fru_id, UUID_SIZE);
 diff --git a/drivers/gpu/drm/xe/xe_trace_guc.h b/drivers/gpu/drm/xe/xe_trace_guc.h
 index 78949db..2a97c31 100644
 --- a/drivers/gpu/drm/xe/xe_trace_guc.h

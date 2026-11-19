@@ -18,25 +18,38 @@ Reference:
 
 v1: support register_shrinker for multiple kernels [Raju]
 v2: Move register_shrinker to backports [Jagadeesh]
+v3: Rebase to v7.3.0.2
 
 Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/gpu/drm/xe/xe_shrinker.c | 21 +++++++++++++++++++++
- 1 file changed, 21 insertions(+)
+ drivers/gpu/drm/xe/xe_shrinker.c | 51 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 51 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_shrinker.c b/drivers/gpu/drm/xe/xe_shrinker.c
-index 83374cd..5818f76 100644
 --- a/drivers/gpu/drm/xe/xe_shrinker.c
 +++ b/drivers/gpu/drm/xe/xe_shrinker.c
-@@ -28,13 +28,22 @@ struct xe_shrinker {
- 	rwlock_t lock;
- 	long shrinkable_pages;
- 	long purgeable_pages;
+@@ -27,6 +27,13 @@
+ #define XE_SHRINKER_NON_PURGEABLE_SEEKS_MIN 1
+ #define XE_SHRINKER_NON_PURGEABLE_SEEKS_MAX 64
+ 
 +#ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
++struct xe_shrinker_compat {
 +	struct shrinker shrink;
-+#else
++	struct xe_shrinker *private_data;
++};
++#endif
++
+ /**
+  * struct xe_shrinker - per-device shrinker
+  * @xe: Back pointer to the device.
+@@ -48,12 +55,20 @@ struct xe_shrinker {
+ 	long batch_avg;
  	struct shrinker *shrink;
+ 	struct shrinker *purge_shrink;
++#ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
++	struct xe_shrinker_compat shrink_compat;
++	struct xe_shrinker_compat purge_shrink_compat;
 +#endif
  	struct work_struct pm_worker;
  };
@@ -44,33 +57,47 @@ index 83374cd..5818f76 100644
  static struct xe_shrinker *to_xe_shrinker(struct shrinker *shrink)
  {
 +#ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
-+	struct xe_shrinker *shrinker = container_of(shrink, typeof(*shrinker) , shrink);
-+	return shrinker;
++	return container_of(shrink, struct xe_shrinker_compat, shrink)->private_data;
 +#else
  	return shrink->private_data;
 +#endif
  }
  
  /**
-@@ -269,7 +278,11 @@ static void xe_shrinker_fini(struct drm_device *drm, void *arg)
- 
- 	xe_assert(shrinker->xe, !shrinker->shrinkable_pages);
+@@ -344,7 +359,12 @@ static void xe_shrinker_fini(struct drm_device *drm, void *arg)
  	xe_assert(shrinker->xe, !shrinker->purgeable_pages);
+ 	xe_assert(shrinker->xe, !shrinker->populated_tts);
 +#ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
-+	unregister_shrinker(&shrinker->shrink);
++	unregister_shrinker(shrinker->shrink);
++	unregister_shrinker(shrinker->purge_shrink);
 +#else
  	shrinker_free(shrinker->shrink);
+ 	shrinker_free(shrinker->purge_shrink);
 +#endif
  	flush_work(&shrinker->pm_worker);
  	kfree(shrinker);
  }
-@@ -287,19 +300,27 @@ int xe_shrinker_create(struct xe_device *xe)
+@@ -396,9 +416,19 @@ int xe_shrinker_create(struct xe_device *xe)
+ {
+ 	struct xe_shrinker *shrinker = kzalloc_obj(*shrinker);
++#ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
++	int ret;
++#endif
+ 
  	if (!shrinker)
  		return -ENOMEM;
  
-+#ifndef BPM_SHRINKER_ALLOC_NOT_PRESENT
- 	shrinker->shrink = shrinker_alloc(0, "drm-xe_gem:%s", xe->drm.unique);
- 	if (!shrinker->shrink) {
++#ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
++	shrinker->purge_shrink = &shrinker->purge_shrink_compat.shrink;
++	shrinker->purge_shrink_compat.private_data = shrinker;
++	shrinker->shrink = &shrinker->shrink_compat.shrink;
++	shrinker->shrink_compat.private_data = shrinker;
++	shrinker->purge_shrink->seeks = DEFAULT_SEEKS;
++#else
+ 	shrinker->purge_shrink = shrinker_alloc(0, "drm-xe_gem-purgeable:%s", xe->drm.unique);
+ 	if (!shrinker->purge_shrink) {
+ 		kfree(shrinker);
+@@ -412,6 +442,7 @@ int xe_shrinker_create(struct xe_device *xe)
  		kfree(shrinker);
  		return -ENOMEM;
  	}
@@ -78,19 +105,41 @@ index 83374cd..5818f76 100644
  
  	INIT_WORK(&shrinker->pm_worker, xe_shrinker_pm);
  	shrinker->xe = xe;
+@@ -419,15 +450,35 @@ int xe_shrinker_create(struct xe_device *xe)
  	rwlock_init(&shrinker->lock);
+ 
+ 	shrinker->purge_shrink->count_objects = xe_shrinker_count_purgeable;
+ 	shrinker->purge_shrink->scan_objects = xe_shrinker_scan_purgeable;
 +#ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
-+	shrinker->shrink.count_objects = xe_shrinker_count;
-+        shrinker->shrink.scan_objects = xe_shrinker_scan;
-+	register_shrinker(&shrinker->shrink, "drm-xe_gem");
++	ret = register_shrinker(shrinker->purge_shrink, "drm-xe_gem-purgeable:%s",
++				xe->drm.unique);
++	if (ret) {
++		kfree(shrinker);
++		return ret;
++	}
 +#else
+ 	shrinker->purge_shrink->private_data = shrinker;
+ 	shrinker_register(shrinker->purge_shrink);
++#endif
+ 
  	shrinker->shrink->count_objects = xe_shrinker_count;
  	shrinker->shrink->scan_objects = xe_shrinker_scan;
++#ifndef BPM_SHRINKER_ALLOC_NOT_PRESENT
  	shrinker->shrink->private_data = shrinker;
++#endif
+ 	shrinker->shrink->seeks = CONFIG_DRM_XE_SHRINKER_NON_PURGEABLE_SEEKS;
++#ifdef BPM_SHRINKER_ALLOC_NOT_PRESENT
++	ret = register_shrinker(shrinker->shrink, "drm-xe_gem-shrinkable:%s", xe->drm.unique);
++	if (ret) {
++		unregister_shrinker(shrinker->purge_shrink);
++		kfree(shrinker);
++		return ret;
++	}
++#else
  	shrinker_register(shrinker->shrink);
 +#endif
+ 
  	xe->mem.shrinker = shrinker;
  
- 	return drmm_add_action_or_reset(&xe->drm, xe_shrinker_fini, shrinker);
 -- 
 2.43.0

@@ -11,28 +11,36 @@ is conditionally disabled due to pagemap API gaps.
 - Keep xe_vm map-op creation compatible with both req and legacy gpuvm signatures
 
 v1: Rebase to v7.3 kernel [Raju]
+v2: Rebase to v7.3.0.2
 
 Signed-off-by: Varun Gupta <varun.gupta@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
 ---
- drivers/gpu/drm/xe/xe_pt.c  | 2 +-
+ drivers/gpu/drm/xe/xe_pt.c  | 2 ++
  drivers/gpu/drm/xe/xe_svm.c | 4 ++++
  drivers/gpu/drm/xe/xe_vm.c  | 3 +--
- 3 files changed, 6 insertions(+), 3 deletions(-)
+ 3 files changed, 7 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_pt.c b/drivers/gpu/drm/xe/xe_pt.c
 index 5d990c1..cc379c6 100644
 --- a/drivers/gpu/drm/xe/xe_pt.c
 +++ b/drivers/gpu/drm/xe/xe_pt.c
-@@ -1622,7 +1622,7 @@ static int op_check_svm_userptr(struct xe_vm *vm, struct xe_vma_op *op,
+@@ -1624,6 +1624,7 @@ static int op_check_svm_userptr(struct xe_vm *vm, struct xe_vma_op *op,
  			err = vma_check_userptr(vm, gpuva_to_vma(op->base.prefetch.va), pt_update);
  		}
  		break;
--#if IS_ENABLED(CONFIG_DRM_XE_GPUSVM)
 +#if XE_FULL_SVM
  	case DRM_GPUVA_OP_DRIVER:
  		if (op->subop == XE_VMA_SUBOP_MAP_RANGE) {
  			struct xe_svm_range *range = op->map_range.range;
+@@ -1638,6 +1639,7 @@ static int op_check_svm_userptr(struct xe_vm *vm, struct xe_vma_op *op,
+ 			}
+ 		}
+ 		break;
++#endif
+ 	default:
+ 		drm_warn(&vm->xe->drm, "NOT POSSIBLE");
+ 	}
 diff --git a/drivers/gpu/drm/xe/xe_svm.c b/drivers/gpu/drm/xe/xe_svm.c
 index feefe48..9ea2b5d 100644
 --- a/drivers/gpu/drm/xe/xe_svm.c

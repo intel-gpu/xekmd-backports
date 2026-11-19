@@ -11,6 +11,7 @@ V2: Rebase to v6.17.13.36 [Akanksha]
 V3: Restore the missing alloc_submit_wq(guc) call [Raju]
 V4: Restore missing submit_wq assignment in guc_exec_queue_init [Varun]
 V5: Rebase to v7.1.4.57 [Raju]
+V6: Rebase to v7.3.0.2
 
 Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
 Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
@@ -107,9 +108,9 @@ index f3b3427..7418e2a 100644
  	err = drmm_add_action_or_reset(&xe->drm, guc_submit_sw_fini, guc);
  	if (err)
  		return err;
-@@ -2062,6 +2125,10 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
- 	timeout = (q->vm && xe_vm_in_lr_mode(q->vm)) ? MAX_SCHEDULE_TIMEOUT :
- 		  msecs_to_jiffies(q->sched_props.job_timeout_ms);
+@@ -2200,6 +2263,10 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
+ 
+ 	strscpy(ge->name, q->name, sizeof(ge->name));
  
 +#ifdef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
 +	submit_wq = get_submit_wq(guc);

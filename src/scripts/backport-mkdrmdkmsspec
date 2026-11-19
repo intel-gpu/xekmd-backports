@@ -67,6 +67,7 @@ sed -e 's/^[[:space:]]*//' -e '/^DEL/d' <<EOF
 	$BIN BuildRequires: gcc, make, kernel-devel
 
 	Requires: dkms, kernel-devel, gcc, make, flex, bison
+	$DKMS Requires: autoconf, automake
 
 	Provides: xe-modules
 
@@ -82,7 +83,7 @@ sed -e 's/^[[:space:]]*//' -e '/^DEL/d' <<EOF
 	$DKMS cp -r %{_sourcedir}/m4 %{buildroot}/usr/src/%{name}-%{version}/ 2>/dev/null || true
 	$DKMS cp -r %{_sourcedir}/debian %{buildroot}/usr/src/%{name}-%{version}/ 2>/dev/null || true
 	$DKMS cp %{_sourcedir}/Makefile* %{_sourcedir}/configure* %{_sourcedir}/aclocal.m4 %{buildroot}/usr/src/%{name}-%{version}/ 2>/dev/null || true
-	$DKMS cp %{_sourcedir}/AUTHORS %{_sourcedir}/ChangeLog %{_sourcedir}/COPYING %{_sourcedir}/INSTALL %{_sourcedir}/NEWS %{_sourcedir}/README.md %{_sourcedir}/compile.sh %{buildroot}/usr/src/%{name}-%{version}/ 2>/dev/null || true
+	$DKMS cp %{_sourcedir}/AUTHORS %{_sourcedir}/ChangeLog %{_sourcedir}/COPYING %{_sourcedir}/INSTALL %{_sourcedir}/NEWS %{_sourcedir}/README.md %{_sourcedir}/oot-build.sh %{buildroot}/usr/src/%{name}-%{version}/ 2>/dev/null || true
 	$DKMS cp -r %{_sourcedir}/src/backport-include %{buildroot}/usr/src/%{name}-%{version}/ 2>/dev/null || true
 	$DKMS cp -r %{_sourcedir}/src/include %{buildroot}/usr/src/%{name}-%{version}/ 2>/dev/null || true
 	$DKMS cp %{_sourcedir}/rpm/%{name}.dkms.conf %{buildroot}/usr/src/%{name}-%{version}/dkms.conf 2>/dev/null || true

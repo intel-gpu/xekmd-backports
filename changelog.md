@@ -39,6 +39,13 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.0_261118.4` | | | |
+| | oot-backport/main | [`c04e883ac`](<https://github.com/intel-gpu/xekmd-backports/commit/c04e883ac2b6042733d179fb66e7dfb3ee16c775>) | autotools: drop obsolete local build documentation |
+| | oot-backport/main | [`3040f6441`](<https://github.com/intel-gpu/xekmd-backports/commit/3040f6441ae3b4693f4f858400a464ac3c37912c>) | autotools: configure before building dkms packages |
+| | oot-backport/main | [`66a85b010`](<https://github.com/intel-gpu/xekmd-backports/commit/66a85b0103c4290a4421065b9874ad6b94604696>) | autotools: Align the filename with its usage for oot driver build |
+| | oot-backport/main | [`f62259ac0`](<https://github.com/intel-gpu/xekmd-backports/commit/f62259ac0da913f033dabd3256c44a16d7fe6712>) | drm/pagemap: Mask ZDD flags in page_free compat callback |
+| | oot-backport/main | [`3a451b46e`](<https://github.com/intel-gpu/xekmd-backports/commit/3a451b46e25653097118fb3b6befa966dac93b88>) | backport/scripts: Add autoconf and automake to DKMS package dependencies |
+| | oot-backport/main | [`1834a77af`](<https://github.com/intel-gpu/xekmd-backports/commit/1834a77af563abac96fc3b0de9fabbeeb2f95ac3>) | gentree: Stop copying README on generated target source |
 | `xebr_v7.3.0_261118.0` | | | Rebase from 7.1KV to 7.3KV |
 | | oot-backport/main | [`67414e727`](<https://github.com/intel-gpu/xekmd-backports/commit/67414e727d141fa108ef62edf0f758960b617eae>) | patches: guard TTM dmem eviction helpers on older kernels |
 | | oot-backport/main | [`2c0f18373`](<https://github.com/intel-gpu/xekmd-backports/commit/2c0f183731bc1c0c242f3dbe660a5b4a49b722e2>) | pagemap.h: Backport linear_page_delta() support |
@@ -906,4 +913,3 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 | | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/729254/?series=167572&rev=1>) | &#91;TEMP&#93; topic/for-xe-CI: drm/xe/cri: Define GuC firmware for CRI |
 | | drm-tip-eudebug | [`865a5da97`](<https://github.com/mpatelcz/drivers.gpu.linux-xe.kernel/commit/865a5da9722d80aa8495cf4f893ed13afe4f7154>) | drm/xe/xe3p: disable EU thread hang on exception |
 | | drm-tip-eudebug | [`852ec9ae5`](<https://github.com/mpatelcz/drivers.gpu.linux-xe.kernel/commit/852ec9ae5909ca0b4a213d5bd06f34c0826f5cac>) | drm/xe: Add EUDEBUG_ENABLE exec queue property |
-

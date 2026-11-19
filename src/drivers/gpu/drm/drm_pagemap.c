@@ -1576,7 +1576,7 @@ err_out:
 #ifdef BPM_DEV_PAGEMAP_OPS_FOLIO_FREE_NOT_PRESENT
 static void drm_pagemap_folio_free(struct page *page)
 {
-	drm_pagemap_zdd_put(page->zone_device_data);
+	drm_pagemap_zdd_put(drm_pagemap_page_zone_device_data(page));
 }
 #else
 static void drm_pagemap_folio_free(struct folio *folio)

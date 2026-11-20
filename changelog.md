@@ -39,6 +39,8 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.0_261118.5` | | | |
+| | oot-backport/main | [`4e9a579a2`](<https://github.com/intel-gpu/xekmd-backports/commit/4e9a579a2b8b60e5ceb71f718b2e3579e4b274f2>) | drm/drv: handle legacy cgroup region registration |
 | `xebr_v7.3.0_261118.4` | | | |
 | | oot-backport/main | [`c04e883ac`](<https://github.com/intel-gpu/xekmd-backports/commit/c04e883ac2b6042733d179fb66e7dfb3ee16c775>) | autotools: drop obsolete local build documentation |
 | | oot-backport/main | [`3040f6441`](<https://github.com/intel-gpu/xekmd-backports/commit/3040f6441ae3b4693f4f858400a464ac3c37912c>) | autotools: configure before building dkms packages |

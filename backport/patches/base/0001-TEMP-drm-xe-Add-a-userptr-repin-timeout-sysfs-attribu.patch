@@ -1,0 +1,184 @@
+From b6f543fc9e1e861ef5bd527822dd583858e9798f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Thomas=20Hellstr=C3=B6m?= <thomas.hellstrom@linux.intel.com>
+Date: Fri, 20 Nov 2026 13:02:19 +0000
+Subject: [PATCH] [TEMP] drm/xe: Add a userptr repin timeout sysfs attribute
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add a per-device sysfs attribute, userptr_repin_timeout_ms, to be used
+to bound the overall time a userptr repin is retried when the CPU
+mappings keep changing during the repin. The default is 10000 ms on
+single-node systems and 30000 ms on multi-node NUMA systems, and zero
+means retry indefinitely. The value can be changed at any time and is
+read each time the timeout is checked.
+
+v2 (Matt):
+- Reject values above INT_MAX (or reaching MAX_JIFFY_OFFSET) with
+  -EINVAL in userptr_repin_timeout_ms_store() so msecs_to_jiffies() does
+  not treat them as an infinite timeout.
+- Lower the default from 100000 ms to 10000 ms on single-node systems
+  and 30000 ms on multi-node NUMA systems (Himal).
+
+Signed-off-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Co-developed-by: Matthew Auld <matthew.auld@intel.com>
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+Reviewed-by: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/179052/#rev2)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c       |  5 +++
+ drivers/gpu/drm/xe/xe_device.h       |  3 ++
+ drivers/gpu/drm/xe/xe_device_sysfs.c | 57 ++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_device_types.h |  8 ++++
+ 4 files changed, 73 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index ededbe053..c88bd241d 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -9,6 +9,7 @@
+ #include <linux/delay.h>
+ #include <linux/fault-inject.h>
+ #include <linux/jiffies.h>
++#include <linux/nodemask.h>
+ #include <linux/units.h>
+ 
+ #include <drm/drm_client.h>
+@@ -584,6 +585,10 @@ struct xe_device *xe_device_create(struct pci_dev *pdev)
+ 	if (err)
+ 		return ERR_PTR(err);
+ 
++	xe->userptr_repin_timeout_ms = num_online_nodes() > 1 ?
++		XE_USERPTR_REPIN_TIMEOUT_MS_NUMA_DEFAULT :
++		XE_USERPTR_REPIN_TIMEOUT_MS_DEFAULT;
++
+ 	return xe;
+ }
+ ALLOW_ERROR_INJECTION(xe_device_create, ERRNO); /* See xe_pci_probe() */
+diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
+index afd8557c7..87a96fb62 100644
+--- a/drivers/gpu/drm/xe/xe_device.h
++++ b/drivers/gpu/drm/xe/xe_device.h
+@@ -44,6 +44,9 @@ static inline struct xe_device *ttm_to_xe_device(struct ttm_device *ttm)
+ 	return container_of(ttm, struct xe_device, ttm);
+ }
+ 
++#define XE_USERPTR_REPIN_TIMEOUT_MS_DEFAULT		10000
++#define XE_USERPTR_REPIN_TIMEOUT_MS_NUMA_DEFAULT	30000
++
+ struct xe_device *xe_device_create(struct pci_dev *pdev);
+ int xe_device_init_early(struct xe_device *xe);
+ int xe_device_probe_early(struct xe_device *xe);
+diff --git a/drivers/gpu/drm/xe/xe_device_sysfs.c b/drivers/gpu/drm/xe/xe_device_sysfs.c
+index ff5d25dd8..f6275e74e 100644
+--- a/drivers/gpu/drm/xe/xe_device_sysfs.c
++++ b/drivers/gpu/drm/xe/xe_device_sysfs.c
+@@ -4,7 +4,9 @@
+  */
+ 
+ #include <linux/device.h>
++#include <linux/jiffies.h>
+ #include <linux/kobject.h>
++#include <linux/limits.h>
+ #include <linux/pci.h>
+ #include <linux/sysfs.h>
+ 
+@@ -38,6 +40,16 @@
+  * reclaimed by the shrinker. Higher values reduce reclaim pressure on
+  * non-purgeable buffer objects. Valid values are 1 to 64. Defaults to
+  * CONFIG_DRM_XE_SHRINKER_NON_PURGEABLE_SEEKS.
++ *
++ * userptr_repin_timeout_ms - Report/change the overall time, in
++ * milliseconds, a userptr repin is retried, with all locks dropped between
++ * the attempts, when the CPU mappings keep changing during the repin. The
++ * time is measured from the first repin attempt after an invalidation. When
++ * it expires the repin fails with -EBUSY. Zero means retry indefinitely.
++ * Valid values are 0 to INT_MAX (capped by MAX_JIFFY_OFFSET). The value is
++ * read each time the timeout is checked, so a change takes effect
++ * immediately. Defaults to 10000 on single-node systems and 30000 on
++ * multi-node NUMA systems.
+  */
+ 
+ static ssize_t
+@@ -340,6 +352,47 @@ static const struct attribute_group shrinker_attr_group = {
+ 	.attrs = shrinker_attrs,
+ };
+ 
++static ssize_t
++userptr_repin_timeout_ms_show(struct device *dev,
++			      struct device_attribute *attr, char *buf)
++{
++	struct xe_device *xe = pdev_to_xe_device(to_pci_dev(dev));
++
++	return sysfs_emit(buf, "%u\n", READ_ONCE(xe->userptr_repin_timeout_ms));
++}
++
++static ssize_t
++userptr_repin_timeout_ms_store(struct device *dev,
++			       struct device_attribute *attr,
++			       const char *buf, size_t count)
++{
++	struct xe_device *xe = pdev_to_xe_device(to_pci_dev(dev));
++	u32 val;
++	int ret;
++
++	ret = kstrtou32(buf, 0, &val);
++	if (ret)
++		return ret;
++
++	if (val > INT_MAX || msecs_to_jiffies(val) >= MAX_JIFFY_OFFSET)
++		return -EINVAL;
++
++	WRITE_ONCE(xe->userptr_repin_timeout_ms, val);
++
++	return count;
++}
++
++static DEVICE_ATTR_RW(userptr_repin_timeout_ms);
++
++static struct attribute *userptr_attrs[] = {
++	&dev_attr_userptr_repin_timeout_ms.attr,
++	NULL
++};
++
++static const struct attribute_group userptr_attr_group = {
++	.attrs = userptr_attrs,
++};
++
+ int xe_device_sysfs_init(struct xe_device *xe)
+ {
+ 	struct device *dev = xe->drm.dev;
+@@ -349,6 +402,10 @@ int xe_device_sysfs_init(struct xe_device *xe)
+ 	if (ret)
+ 		return ret;
+ 
++	ret = devm_device_add_group(dev, &userptr_attr_group);
++	if (ret)
++		return ret;
++
+ 	if (xe->d3cold.capable) {
+ 		ret = devm_device_add_group(dev, &vram_attr_group);
+ 		if (ret)
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index 07bf1bd2d..a773afc5e 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -454,6 +454,14 @@ struct xe_device {
+ 		u16 idx[__XE_CACHE_LEVEL_COUNT];
+ 	} pat;
+ 
++	/**
++	 * @userptr_repin_timeout_ms: Overall time in milliseconds a userptr
++	 * repin is retried before failing with -EBUSY. Zero means retry
++	 * indefinitely. Accessed with READ_ONCE() / WRITE_ONCE() and tunable
++	 * through sysfs.
++	 */
++	u32 userptr_repin_timeout_ms;
++
+ 	/** @d3cold: Encapsulate d3cold related stuff */
+ 	struct {
+ 		/** @d3cold.capable: Indicates if root port is d3cold capable */
+-- 
+2.43.0
+

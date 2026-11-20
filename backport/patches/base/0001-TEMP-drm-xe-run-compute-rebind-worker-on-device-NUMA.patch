@@ -1,0 +1,132 @@
+From 4f884108cdbbc743c8767f209af3b36fbf89ab02 Mon Sep 17 00:00:00 2001
+From: Matthew Auld <matthew.auld@intel.com>
+Date: Fri, 20 Nov 2026 13:02:21 +0000
+Subject: [PATCH] [TEMP] drm/xe: run compute rebind worker on device NUMA node
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+preempt_rebind_work_func() currently runs on xe->ordered_wq, whose
+unbound worker pool spans all NUMA nodes. On multi-socket systems, if
+the rebind worker runs on a remote socket when faulting userptr pages
+marked PROT_NONE by AutoNUMA, hmm_range_fault() invokes do_numa_page()
+using the worker's NUMA node and triggers migrate_misplaced_folio(),
+pulling pages away from the GPU's local node and causing self-inflicted
+MMU notifier invalidations.
+
+Historically, xe->ordered_wq also serialised compute VM rebinds across
+the device to avoid eviction ping-pong, which should no longer be
+necessary since commit 8f25e5abcbfb ("drm/xe: Convert existing drm_exec
+transactions for exhaustive eviction") serialises OOM eviction via
+xe_validation_ctx.
+
+Move vm->preempt.rebind_work onto a dedicated WQ_UNBOUND workqueue
+queued via queue_work_node() with dev_to_node(), leaving user-fence
+signalling on xe->ordered_wq.
+
+v2 (Thomas):
+ - Drop the whole 1-at-a-time ordered wq requirement for the worker.
+ - Move the rebind destroy before destroy_wq; much safer.
+
+Suggested-by: Thomas Hellström <thomas.hellstrom@linux.intel.com>
+Signed-off-by: Matthew Auld <matthew.auld@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/179052/#rev2)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_device.c       | 7 ++++++-
+ drivers/gpu/drm/xe/xe_device_types.h | 5 ++++-
+ drivers/gpu/drm/xe/xe_vm.c           | 2 +-
+ drivers/gpu/drm/xe/xe_vm.h           | 6 +++++-
+ 4 files changed, 16 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index c88bd241d..f79edde94 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -11,6 +11,7 @@
+ #include <linux/jiffies.h>
+ #include <linux/nodemask.h>
+ #include <linux/units.h>
++#include <linux/workqueue.h>
+ 
+ #include <drm/drm_client.h>
+ #include <drm/drm_gem_ttm_helper.h>
+@@ -535,6 +536,9 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
+ 	if (xe->preempt_fence_wq)
+ 		destroy_workqueue(xe->preempt_fence_wq);
+ 
++	if (xe->rebind_wq)
++		destroy_workqueue(xe->rebind_wq);
++
+ 	if (xe->ordered_wq)
+ 		destroy_workqueue(xe->ordered_wq);
+ 
+@@ -668,10 +672,11 @@ int xe_device_init_early(struct xe_device *xe)
+ 
+ 	xe->preempt_fence_wq = alloc_ordered_workqueue("xe-preempt-fence-wq",
+ 						       WQ_MEM_RECLAIM);
++	xe->rebind_wq = alloc_workqueue("xe-rebind-wq", WQ_UNBOUND, 0);
+ 	xe->ordered_wq = alloc_ordered_workqueue("xe-ordered-wq", 0);
+ 	xe->unordered_wq = alloc_workqueue("xe-unordered-wq", WQ_PERCPU, 0);
+ 	xe->destroy_wq = alloc_workqueue("xe-destroy-wq", WQ_PERCPU | WQ_MEM_RECLAIM, 0);
+-	if (!xe->ordered_wq || !xe->unordered_wq ||
++	if (!xe->ordered_wq || !xe->unordered_wq || !xe->rebind_wq ||
+ 	    !xe->preempt_fence_wq || !xe->destroy_wq) {
+ 		/*
+ 		 * Cleanup done in xe_device_destroy via
+diff --git a/drivers/gpu/drm/xe/xe_device_types.h b/drivers/gpu/drm/xe/xe_device_types.h
+index a773afc5e..285cb768a 100644
+--- a/drivers/gpu/drm/xe/xe_device_types.h
++++ b/drivers/gpu/drm/xe/xe_device_types.h
+@@ -392,7 +392,10 @@ struct xe_device {
+ 	/** @preempt_fence_wq: used to serialize preempt fences */
+ 	struct workqueue_struct *preempt_fence_wq;
+ 
+-	/** @ordered_wq: used to serialize compute mode resume */
++	/** @rebind_wq: used to run compute mode rebind work on device node */
++	struct workqueue_struct *rebind_wq;
++
++	/** @ordered_wq: used to serialize ordered work */
+ 	struct workqueue_struct *ordered_wq;
+ 
+ 	/** @unordered_wq: used to serialize unordered work */
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index dcdc77511..cf9833d18 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -511,7 +511,7 @@ static bool vm_suspend_rebind_worker(struct xe_vm *vm)
+  */
+ void xe_vm_resume_rebind_worker(struct xe_vm *vm)
+ {
+-	queue_work(vm->xe->ordered_wq, &vm->preempt.rebind_work);
++	xe_vm_queue_rebind_worker(vm);
+ }
+ 
+ #if IS_ENABLED(CONFIG_DRM_XE_USERPTR_INVAL_INJECT)
+diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
+index d6e0e4c96..fb770475e 100644
+--- a/drivers/gpu/drm/xe/xe_vm.h
++++ b/drivers/gpu/drm/xe/xe_vm.h
+@@ -6,6 +6,9 @@
+ #ifndef _XE_VM_H_
+ #define _XE_VM_H_
+ 
++#include <linux/device.h>
++#include <linux/workqueue.h>
++
+ #include "xe_assert.h"
+ #include "xe_bo_types.h"
+ #include "xe_macros.h"
+@@ -274,7 +277,8 @@ int xe_vm_validate_protected(struct xe_vm *vm);
+ static inline void xe_vm_queue_rebind_worker(struct xe_vm *vm)
+ {
+ 	xe_assert(vm->xe, xe_vm_in_preempt_fence_mode(vm));
+-	queue_work(vm->xe->ordered_wq, &vm->preempt.rebind_work);
++	queue_work_node(dev_to_node(vm->xe->drm.dev), vm->xe->rebind_wq,
++			&vm->preempt.rebind_work);
+ }
+ 
+ /**
+-- 
+2.43.0
+

@@ -28,7 +28,7 @@ index 93edaa7..1f89907 100644
  
  static int __init pmt_class_init(void)
  {
-+	printk(KERN_INFO "VSEC CLASS Backport init, Module is backported from " CPTCFG_BACKPORTS_RELEASE_TAG "\n");
++	printk(KERN_INFO "VSEC CLASS Backport init, Backported from " CPTCFG_BASE_KERNEL_TAG " and oot-module version " CPTCFG_BACKPORTS_RELEASE_TAG "\n");
  	return class_register(&intel_pmt_class);
  }
  
@@ -48,7 +48,7 @@ index 7b657ff..8ee1194 100644
  
  static int __init pmt_crashlog_init(void)
  {
-+	printk(KERN_INFO "VSEC CRASHLOG Backport init, Module is backported from " CPTCFG_BACKPORTS_RELEASE_TAG "\n");
++	printk(KERN_INFO "VSEC CRASHLOG Backport init, Backported from " CPTCFG_BASE_KERNEL_TAG " and oot-module version " CPTCFG_BACKPORTS_RELEASE_TAG "\n");
  	return auxiliary_driver_register(&pmt_crashlog_aux_driver);
  }
  
@@ -68,7 +68,7 @@ index 6999121..cff89fc 100644
  
  static int __init pmt_telem_init(void)
  {
-+	printk(KERN_INFO "VSEC TELEMETRY Backport init, Module is backported from " CPTCFG_BACKPORTS_RELEASE_TAG "\n");
++	printk(KERN_INFO "VSEC TELEMETRY Backport init, Backported from " CPTCFG_BASE_KERNEL_TAG " and oot-module version " CPTCFG_BACKPORTS_RELEASE_TAG "\n");
  	return auxiliary_driver_register(&pmt_telem_aux_driver);
  }
  module_init(pmt_telem_init);
@@ -88,7 +88,7 @@ index 439c0c8..937214f 100644
  int intel_vsec_register(struct device *dev,
  			const struct intel_vsec_platform_info *info)
  {
-+	printk(KERN_INFO "VSEC Backport init, Module is backported from " CONFIG_BACKPORTS_RELEASE_TAG "\n");
++	printk(KERN_INFO "VSEC Backport init, Backported from " CPTCFG_BASE_KERNEL_TAG " and oot-module version " CPTCFG_BACKPORTS_RELEASE_TAG "\n");
  	if (!dev || !info || !info->headers)
  		return -EINVAL;
  

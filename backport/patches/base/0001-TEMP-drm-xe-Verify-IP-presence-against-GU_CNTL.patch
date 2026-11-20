@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stuart Summers <stuart.summers@intel.com>
+Date: Fri, 20 Nov 2026 05:47:18 +0000
+Subject: [PATCH] [TEMP] drm/xe: Verify IP presence against GU_CNTL
+GMD_ID is the only thing consulted today to decide whether the graphics
+and media IPs exist. Hardware also fuses presence bits into
+GU_CNTL_PROTECTED, so check GTPresent and IMPresent as a second level of
+verification and leave an IP alone when the two disagree.
+
+Either IP can be dropped this way without failing driver load: an IP
+hardware says is absent is simply not detected, which is the same state
+as it reporting version 0, and probe then applies the usual rule that
+at least one IP has to be left.
+
+VFs have no access to the register, so they keep going by GMD_ID alone.
+
+Signed-off-by: Stuart Summers <stuart.summers@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/179173/#rev1)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/regs/xe_regs.h |  2 ++
+ drivers/gpu/drm/xe/xe_pci.c       | 28 ++++++++++++++++++++++++++--
+ 2 files changed, 28 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/regs/xe_regs.h b/drivers/gpu/drm/xe/regs/xe_regs.h
+index 437485b5a..5f2c8d348 100644
+--- a/drivers/gpu/drm/xe/regs/xe_regs.h
++++ b/drivers/gpu/drm/xe/regs/xe_regs.h
+@@ -12,6 +12,8 @@
+ #define SOC_BASE				0x280000
+ 
+ #define GU_CNTL_PROTECTED			XE_REG(0x10100C)
++#define   GT_PRESENT				REG_BIT(8)
++#define   IM_PRESENT				REG_BIT(10)
+ #define   DRIVERINT_FLR_DIS			REG_BIT(31)
+ 
+ #define GU_CNTL					XE_REG(0x101010)
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 581836222..4c111c572 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -705,12 +705,28 @@ static const struct xe_ip *find_media_ip(unsigned int verx100)
+ 
+ static const struct xe_gmdid_desc {
+ 	const char *name;
++	u32 present;
+ 	const struct xe_ip *(*find_ip)(unsigned int verx100);
+ } gmdid_descs[] = {
+-	[GMDID_GRAPHICS] = { "graphics", find_graphics_ip },
+-	[GMDID_MEDIA] = { "media", find_media_ip },
++	[GMDID_GRAPHICS] = { "graphics", GT_PRESENT, find_graphics_ip },
++	[GMDID_MEDIA] = { "media", IM_PRESENT, find_media_ip },
+ };
+ 
++/*
++ * Besides the IP version in GMD_ID, hardware reports whether an IP is present
++ * at all through the fuse backed presence bits in GU_CNTL_PROTECTED.  Use
++ * those as a second level of verification, so an IP hardware says is not there
++ * is left alone whatever GMD_ID claims.
++ */
++static bool gt_fused(struct xe_device *xe, u32 present)
++{
++	/* VFs have no access to GU_CNTL_PROTECTED, so go by GMD_ID alone */
++	if (IS_SRIOV_VF(xe))
++		return false;
++
++	return !(xe_mmio_read32(xe_root_tile_mmio(xe), GU_CNTL_PROTECTED) & present);
++}
++
+ /*
+  * Read IP version from hardware and select graphics/media IP descriptors
+  * based on the result.
+@@ -752,6 +768,14 @@ static int handle_gmdid(struct xe_device *xe,
+ 			continue;
+ 		}
+ 
++		if (gt_fused(xe, desc->present)) {
++			xe_log_info(xe, REGS,
++				    "Hardware reports the %s IP is not present, ignoring version %u.%02u\n",
++				    desc->name, ver / 100, ver % 100);
++			*revids[type] = 0;
++			continue;
++		}
++
+ 		*ips[type] = desc->find_ip(ver);
+ 		if (!*ips[type])
+ 			xe_log_err(xe, REGS, -EINVAL,
+-- 
+2.43.0
+

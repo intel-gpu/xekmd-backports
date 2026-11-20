@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stuart Summers <stuart.summers@intel.com>
+Date: Fri, 20 Nov 2026 05:47:23 +0000
+Subject: [PATCH] [TEMP] drm/xe: Document that gt_types_allowed=media now probes
+The media only configuration no longer fails probe, so drop the warning
+that said it would.
+
+Signed-off-by: Stuart Summers <stuart.summers@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/179173/#rev1)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_configfs.c | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_configfs.c b/drivers/gpu/drm/xe/xe_configfs.c
+index ae82dd7a5..f7952a53e 100644
+--- a/drivers/gpu/drm/xe/xe_configfs.c
++++ b/drivers/gpu/drm/xe/xe_configfs.c
+@@ -113,15 +113,14 @@
+  *	# echo 'primary' > /sys/kernel/config/xe/0000:03:00.0/gt_types_allowed
+  *
+  * Allow only the media GT of each tile to be initialized and used,
+- * effectively disabling the primary GT.  **This configuration will cause
+- * device probe failure on all current platforms, but may be allowed on
+- * igpu platforms in the future**::
++ * effectively disabling the primary GT.  Note that only media workloads
++ * are usable in this configuration::
+  *
+  *	# echo 'media' > /sys/kernel/config/xe/0000:03:00.0/gt_types_allowed
+  *
+  * Disable all GTs.  Only other GPU IP (such as display) is potentially usable.
+  * **This configuration will cause device probe failure on all current
+- * platforms, but may be allowed on igpu platforms in the future**::
++ * platforms**::
+  *
+  *	# echo '' > /sys/kernel/config/xe/0000:03:00.0/gt_types_allowed
+  *
+-- 
+2.43.0
+

@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stuart Summers <stuart.summers@intel.com>
+Date: Fri, 20 Nov 2026 05:47:19 +0000
+Subject: [PATCH] [TEMP] drm/xe: Guard per-tile primary GT accesses
+A tile's primary GT is now optional, just like its media GT already was.
+The TLB invalidation and memory interrupt paths walk both GTs of a tile
+but only test the media one for presence, so they would dereference NULL
+on a device whose graphics IP is absent.  Mirror the existing media
+checks for the primary GT.
+
+Signed-off-by: Stuart Summers <stuart.summers@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/179173/#rev1)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_memirq.c    |  3 ++-
+ drivers/gpu/drm/xe/xe_tlb_inval.c | 20 +++++++++++---------
+ 2 files changed, 13 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_memirq.c b/drivers/gpu/drm/xe/xe_memirq.c
+index 3433518cc..0ef3df10a 100644
+--- a/drivers/gpu/drm/xe/xe_memirq.c
++++ b/drivers/gpu/drm/xe/xe_memirq.c
+@@ -578,7 +578,8 @@ void xe_memirq_handler(struct xe_memirq *memirq)
+ 
+ 	/* GuC and media GuC (if present) must be checked separately */
+ 
+-	if (memirq_received(memirq, &memirq->source, ilog2(INTR_GUC), "SRC")) {
++	if (tile->primary_gt &&
++	    memirq_received(memirq, &memirq->source, ilog2(INTR_GUC), "SRC")) {
+ 		map = IOSYS_MAP_INIT_OFFSET(&memirq->bo->vmap,
+ 					    XE_MEMIRQ_VECTOR_OFFSET(0, ilog2(INTR_GUC)));
+ 		memirq_dispatch_guc(memirq, &map, &tile->primary_gt->uc.guc);
+diff --git a/drivers/gpu/drm/xe/xe_tlb_inval.c b/drivers/gpu/drm/xe/xe_tlb_inval.c
+index c9cc5842d..5c6870467 100644
+--- a/drivers/gpu/drm/xe/xe_tlb_inval.c
++++ b/drivers/gpu/drm/xe/xe_tlb_inval.c
+@@ -624,15 +624,17 @@ int xe_tlb_inval_range_tilemask_submit(struct xe_device *xe, u32 asid,
+ 		if (!(tile_mask & BIT(id)))
+ 			continue;
+ 
+-		xe_tlb_inval_fence_init(&tile->primary_gt->tlb_inval,
+-					&fence[fence_id], true);
+-
+-		err = xe_tlb_inval_range(&tile->primary_gt->tlb_inval,
+-					 &fence[fence_id], start, end,
+-					 asid, NULL);
+-		if (err)
+-			goto wait;
+-		++fence_id;
++		if (tile->primary_gt) {
++			xe_tlb_inval_fence_init(&tile->primary_gt->tlb_inval,
++						&fence[fence_id], true);
++
++			err = xe_tlb_inval_range(&tile->primary_gt->tlb_inval,
++						 &fence[fence_id], start, end,
++						 asid, NULL);
++			if (err)
++				goto wait;
++			++fence_id;
++		}
+ 
+ 		if (!tile->media_gt)
+ 			continue;
+-- 
+2.43.0
+

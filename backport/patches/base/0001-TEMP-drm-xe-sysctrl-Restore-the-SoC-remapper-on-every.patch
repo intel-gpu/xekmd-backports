@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stuart Summers <stuart.summers@intel.com>
+Date: Fri, 20 Nov 2026 05:47:14 +0000
+Subject: [PATCH] [TEMP] drm/xe/sysctrl: Restore the SoC remapper on every runtime resume
+The SoC remapper configuration is lost whenever the device loses power,
+and @d3cold.allowed only records the state xe asked the PCI core for.
+The platform can still drop power behind our back when the bridge above
+us runtime suspends, which leaves the remapper unprogrammed and any
+later System Controller access pointed at nothing.
+
+Restore it on every runtime resume instead.
+
+Fixes: 02eca6edcb32 ("drm/xe/xe_sysctrl: Add System Controller power management support")
+Signed-off-by: Stuart Summers <stuart.summers@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/179173/#rev1)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pm.c      | 9 +++++++--
+ drivers/gpu/drm/xe/xe_sysctrl.c | 6 ++++--
+ 2 files changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pm.c b/drivers/gpu/drm/xe/xe_pm.c
+index 3c6734b41..6a43451e7 100644
+--- a/drivers/gpu/drm/xe/xe_pm.c
++++ b/drivers/gpu/drm/xe/xe_pm.c
+@@ -709,8 +709,13 @@ int xe_pm_runtime_resume(struct xe_device *xe)
+ 
+ 	xe_i2c_pm_resume(xe, xe->d3cold.allowed);
+ 
+-	if (xe->d3cold.allowed)
+-		xe_sysctrl_pm_resume(xe);
++	/*
++	 * Done unconditionally: @d3cold.allowed is only the state xe asked the
++	 * PCI core for, the platform can still drop power when the bridge
++	 * above us runtime suspends, taking the SoC remapper configuration
++	 * with it.
++	 */
++	xe_sysctrl_pm_resume(xe);
+ 
+ 	xe_display_pm_runtime_resume_early(xe);
+ 
+diff --git a/drivers/gpu/drm/xe/xe_sysctrl.c b/drivers/gpu/drm/xe/xe_sysctrl.c
+index 27a59e8e4..a3fff95d1 100644
+--- a/drivers/gpu/drm/xe/xe_sysctrl.c
++++ b/drivers/gpu/drm/xe/xe_sysctrl.c
+@@ -129,8 +129,10 @@ void xe_sysctrl_irq_handler(struct xe_device *xe, u32 master_ctl)
+  * xe_sysctrl_pm_resume() - System Controller resume handler
+  * @xe: xe device instance
+  *
+- * Invoked during system resume (S3/S4 to S0) and runtime resume from D3cold.
+- * Restores SoC remapper configuration.
++ * Invoked during system resume (S3/S4 to S0) and on every runtime resume.
++ * Restores SoC remapper configuration, which is lost whenever the device
++ * loses power - including when the platform drops power behind our back
++ * because the bridge above us runtime suspended.
+  */
+ void xe_sysctrl_pm_resume(struct xe_device *xe)
+ {
+-- 
+2.43.0
+

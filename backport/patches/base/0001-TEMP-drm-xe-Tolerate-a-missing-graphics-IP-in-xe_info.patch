@@ -1,0 +1,81 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stuart Summers <stuart.summers@intel.com>
+Date: Fri, 20 Nov 2026 05:47:17 +0000
+Subject: [PATCH] [TEMP] drm/xe: Tolerate a missing graphics IP in xe_info_init()
+A device without a graphics IP is still rejected a few lines further
+down, but handle_gmdid() can already hand back a NULL graphics_ip, so
+stop dereferencing it unconditionally and mirror what is done for media
+instead. alloc_primary_gt() gets the same treatment, since it reads the
+descriptor for every field it fills in.
+
+No functional change: the graphics IP is still required.
+
+Signed-off-by: Stuart Summers <stuart.summers@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/179173/#rev1)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c | 31 +++++++++++++++++++++----------
+ 1 file changed, 21 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 8bb93b662..581836222 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -926,6 +926,9 @@ static struct xe_gt *alloc_primary_gt(struct xe_tile *tile,
+ 	struct xe_device *xe = tile_to_xe(tile);
+ 	struct xe_gt *gt;
+ 
++	if (!graphics_desc)
++		return NULL;
++
+ 	if (!xe_configfs_primary_gt_allowed(to_pci_dev(xe->drm.dev))) {
+ 		xe_tile_info(tile, "Primary GT disabled via configfs\n");
+ 		return NULL;
+@@ -1078,9 +1081,14 @@ static int xe_info_init(struct xe_device *xe,
+ 	xe->info.step.graphics = probed_info->step.graphics;
+ 	xe->info.step.media = probed_info->step.media;
+ 
+-	xe->info.graphics_verx100 = graphics_ip->verx100;
+-	xe->info.graphics_name = graphics_ip->name;
+-	graphics_desc = graphics_ip->desc;
++	if (graphics_ip) {
++		xe->info.graphics_verx100 = graphics_ip->verx100;
++		xe->info.graphics_name = graphics_ip->name;
++		graphics_desc = graphics_ip->desc;
++	} else {
++		xe->info.graphics_name = "none";
++		graphics_desc = NULL;
++	}
+ 
+ 	if (media_ip) {
+ 		xe->info.media_verx100 = media_ip->verx100;
+@@ -1091,16 +1099,19 @@ static int xe_info_init(struct xe_device *xe,
+ 		media_desc = NULL;
+ 	}
+ 
+-	xe->info.has_access_counter = graphics_desc->has_access_counter;
+-	xe->info.has_asid = graphics_desc->has_asid;
+-	xe->info.has_atomic_enable_pte_bit = graphics_desc->has_atomic_enable_pte_bit;
++	if (graphics_desc) {
++		xe->info.has_access_counter = graphics_desc->has_access_counter;
++		xe->info.has_asid = graphics_desc->has_asid;
++		xe->info.has_atomic_enable_pte_bit = graphics_desc->has_atomic_enable_pte_bit;
++		xe->info.has_range_tlb_inval = graphics_desc->has_range_tlb_inval;
++		xe->info.has_ctx_tlb_inval = graphics_desc->has_ctx_tlb_inval;
++		xe->info.has_usm = graphics_desc->has_usm;
++		xe->info.has_64bit_timestamp = graphics_desc->has_64bit_timestamp;
++	}
++
+ 	if (xe->info.platform != XE_PVC)
+ 		xe->info.has_device_atomics_on_smem = 1;
+ 
+-	xe->info.has_range_tlb_inval = graphics_desc->has_range_tlb_inval;
+-	xe->info.has_ctx_tlb_inval = graphics_desc->has_ctx_tlb_inval;
+-	xe->info.has_usm = graphics_desc->has_usm;
+-	xe->info.has_64bit_timestamp = graphics_desc->has_64bit_timestamp;
+ 	xe->info.has_mem_copy_instr = GRAPHICS_VER(xe) >= 20;
+ 
+ 	if (IS_SRIOV_VF(xe)) {
+-- 
+2.43.0
+

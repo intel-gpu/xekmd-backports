@@ -1,0 +1,152 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stuart Summers <stuart.summers@intel.com>
+Date: Fri, 20 Nov 2026 05:47:24 +0000
+Subject: [PATCH] [TEMP] drm/xe: Fall back to CPU copies when the tile cannot blit
+xe_migrate_copy() and xe_migrate_clear() emit blitter commands, and the
+copy engine they need lives on the primary GT.  A tile without one can
+still run the migration context for page table updates, but it has no way
+to move data.
+
+On an integrated device this never comes up, since every move either ends
+in ttm_bo_move_null() or needs no clear.  With VRAM it does, so let
+xe_bo_move() hand the work to ttm_bo_move_memcpy(), which reaches VRAM
+through the BAR mapping xe already sets up in xe_ttm_io_mem_reserve(),
+and which covers the clear case by way of an unpopulated source.  The
+pinned save and restore paths grow the same check, falling back to the
+vmap and memcpy branch they already have.
+
+Reads come back over PCIe uncached and are correspondingly slow, so this
+is only meant to keep a media only device working, not to perform.
+
+Signed-off-by: Stuart Summers <stuart.summers@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/179173/#rev1)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_bo.c      | 43 ++++++++++++++++++++++-----------
+ drivers/gpu/drm/xe/xe_migrate.c | 16 ++++++++++++
+ drivers/gpu/drm/xe/xe_migrate.h |  2 ++
+ 3 files changed, 47 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_bo.c b/drivers/gpu/drm/xe/xe_bo.c
+index 4d5e6bd55..8be405a12 100644
+--- a/drivers/gpu/drm/xe/xe_bo.c
++++ b/drivers/gpu/drm/xe/xe_bo.c
+@@ -1274,6 +1274,19 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
+ 		xe_pm_runtime_get_noresume(xe);
+ 	}
+ 
++	/*
++	 * A tile with no copy engine cannot blit, so move the data with the
++	 * CPU instead.  For VRAM that means going over the PCIe BAR, which is
++	 * slow, but a device with no graphics IP offers no alternative.
++	 * ttm_bo_move_memcpy() covers the clear case too, by way of an
++	 * unpopulated source.
++	 */
++	if (!xe_migrate_can_blit(migrate)) {
++		ret = ttm_bo_move_memcpy(ttm_bo, ctx, new_mem);
++		xe_pm_runtime_put(xe);
++		goto out;
++	}
++
+ 	/*
+ 	 * Attach CCS BBs before submitting the copy job below so a VF
+ 	 * migration racing the copy sees valid, up to date attach state.
+@@ -1575,17 +1588,18 @@ int xe_bo_notifier_unprepare_pinned(struct xe_bo *bo)
+ static int xe_bo_evict_pinned_copy(struct xe_bo *bo, struct xe_bo *backup)
+ {
+ 	struct xe_device *xe = xe_bo_device(bo);
++	struct xe_migrate *migrate;
+ 	bool unmap = false;
+ 	int ret = 0;
+ 
+-	if (xe_bo_is_user(bo) || (bo->flags & XE_BO_FLAG_PINNED_LATE_RESTORE)) {
+-		struct xe_migrate *migrate;
+-		struct dma_fence *fence;
++	if (bo->tile)
++		migrate = bo->tile->migrate;
++	else
++		migrate = mem_type_to_migrate(xe, bo->ttm.resource->mem_type);
+ 
+-		if (bo->tile)
+-			migrate = bo->tile->migrate;
+-		else
+-			migrate = mem_type_to_migrate(xe, bo->ttm.resource->mem_type);
++	if ((xe_bo_is_user(bo) || (bo->flags & XE_BO_FLAG_PINNED_LATE_RESTORE)) &&
++	    xe_migrate_can_blit(migrate)) {
++		struct dma_fence *fence;
+ 
+ 		xe_assert(xe, bo->ttm.base.resv == backup->ttm.base.resv);
+ 		ret = dma_resv_reserve_fences(bo->ttm.base.resv, 1);
+@@ -1714,6 +1728,7 @@ int xe_bo_restore_pinned(struct xe_bo *bo)
+ 	};
+ 	struct xe_device *xe = ttm_to_xe_device(bo->ttm.bdev);
+ 	struct xe_bo *backup = bo->backup_obj;
++	struct xe_migrate *migrate;
+ 	bool unmap = false;
+ 	int ret;
+ 
+@@ -1728,14 +1743,14 @@ int xe_bo_restore_pinned(struct xe_bo *bo)
+ 			goto out_unlock_bo;
+ 	}
+ 
+-	if (xe_bo_is_user(bo) || (bo->flags & XE_BO_FLAG_PINNED_LATE_RESTORE)) {
+-		struct xe_migrate *migrate;
+-		struct dma_fence *fence;
++	if (bo->tile)
++		migrate = bo->tile->migrate;
++	else
++		migrate = mem_type_to_migrate(xe, bo->ttm.resource->mem_type);
+ 
+-		if (bo->tile)
+-			migrate = bo->tile->migrate;
+-		else
+-			migrate = mem_type_to_migrate(xe, bo->ttm.resource->mem_type);
++	if ((xe_bo_is_user(bo) || (bo->flags & XE_BO_FLAG_PINNED_LATE_RESTORE)) &&
++	    xe_migrate_can_blit(migrate)) {
++		struct dma_fence *fence;
+ 
+ 		ret = dma_resv_reserve_fences(bo->ttm.base.resv, 1);
+ 		if (ret)
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 9bac29d5a..2dade8703 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -2112,6 +2112,22 @@ void xe_migrate_wait(struct xe_migrate *m)
+ 		dma_fence_wait(m->fence, false);
+ }
+ 
++/**
++ * xe_migrate_can_blit() - Whether a migration context can issue blits
++ * @m: The migration context
++ *
++ * xe_migrate_copy() and xe_migrate_clear() emit blitter commands, which only
++ * the copy engine understands, and the copy engine lives on the primary GT.
++ * A tile without one can still update page tables, so its migration context
++ * is usable, but callers that want to move data have to do it themselves.
++ *
++ * Return: true if blit based copy and clear are available on @m.
++ */
++bool xe_migrate_can_blit(struct xe_migrate *m)
++{
++	return m->tile->primary_gt;
++}
++
+ static u32 pte_update_cmd_size(u64 size)
+ {
+ 	u32 num_dword;
+diff --git a/drivers/gpu/drm/xe/xe_migrate.h b/drivers/gpu/drm/xe/xe_migrate.h
+index a9acc62f7..7623d6e87 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.h
++++ b/drivers/gpu/drm/xe/xe_migrate.h
+@@ -171,6 +171,8 @@ xe_migrate_update_pgtables(struct xe_migrate *m,
+ 
+ void xe_migrate_wait(struct xe_migrate *m);
+ 
++bool xe_migrate_can_blit(struct xe_migrate *m);
++
+ #if IS_ENABLED(CONFIG_PROVE_LOCKING)
+ void xe_migrate_job_lock_assert(struct xe_exec_queue *q);
+ #else
+-- 
+2.43.0
+

@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stuart Summers <stuart.summers@intel.com>
+Date: Fri, 20 Nov 2026 05:47:25 +0000
+Subject: [PATCH] [TEMP] drm/xe: Require a fully visible VRAM BAR without a primary GT
+CPU copies can only reach VRAM that the BAR maps: xe_ttm_io_mem_reserve()
+rejects any resource that is not entirely CPU visible.  With no primary
+GT there is no copy engine to fall back on, so a small BAR would leave
+most of VRAM unreachable.
+
+Refuse to probe such a device rather than fail later on the first move.
+
+Signed-off-by: Stuart Summers <stuart.summers@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/179173/#rev1)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_vram.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_vram.c b/drivers/gpu/drm/xe/xe_vram.c
+index 1c02889ba..4d399a834 100644
+--- a/drivers/gpu/drm/xe/xe_vram.c
++++ b/drivers/gpu/drm/xe/xe_vram.c
+@@ -23,6 +23,7 @@
+ #include "xe_mmio.h"
+ #include "xe_sriov.h"
+ #include "xe_tile.h"
++#include "xe_tile_printk.h"
+ #include "xe_tile_sriov_vf.h"
+ #include "xe_ttm_vram_mgr.h"
+ #include "xe_vram.h"
+@@ -346,6 +347,20 @@ int xe_vram_probe(struct xe_device *xe)
+ 		if (err)
+ 			return err;
+ 
++		/*
++		 * Without a primary GT there is no copy engine, so VRAM is
++		 * moved with the CPU through the BAR.  That only works if the
++		 * BAR covers all of it.
++		 */
++		if (!tile->primary_gt &&
++		    tile->mem.vram->io_size < tile->mem.vram->usable_size) {
++			xe_tile_err(tile,
++				    "VRAM is not fully CPU visible (%pa of %pa); a resizable BAR is required without a primary GT\n",
++				    &tile->mem.vram->io_size,
++				    &tile->mem.vram->usable_size);
++			return -ENODEV;
++		}
++
+ 		if (total_size > lmem_bar.io_size) {
+ 			xe_log_info(xe, VRAM,
+ 				    "Total size %#llx is larger than resource %#llx\n",
+-- 
+2.43.0
+

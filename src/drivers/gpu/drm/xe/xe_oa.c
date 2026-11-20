@@ -2041,6 +2041,23 @@ out:
 	return ret;
 }
 
+/*
+ * OA unit IDs are handed out in GT iteration order, so the first unit of the
+ * first GT that has one is OA unit 0. The primary GT may be absent, in which
+ * case unit 0 lives on the media GT.
+ */
+static struct xe_oa_unit *xe_oa_first_unit(struct xe_device *xe)
+{
+	struct xe_gt *gt;
+	u8 id;
+
+	for_each_gt(gt, xe, id)
+		if (gt->oa.num_oa_units)
+			return &gt->oa.oa_unit[0];
+
+	return NULL;
+}
+
 /**
  * xe_oa_stream_open_ioctl - Opens an OA stream
  * @dev: @drm_device
@@ -2073,8 +2090,11 @@ int xe_oa_stream_open_ioctl(struct drm_device *dev, u64 data, struct drm_file *f
 		return ret;
 
 	/* If not provided, OA unit defaults to OA unit 0 as per uapi */
-	if (!param.oa_unit)
-		param.oa_unit = &xe_root_mmio_gt(oa->xe)->oa.oa_unit[0];
+	if (!param.oa_unit) {
+		param.oa_unit = xe_oa_first_unit(oa->xe);
+		if (XE_IOCTL_DBG(xe, !param.oa_unit))
+			return -ENODEV;
+	}
 
 	if (param.exec_queue_id > 0) {
 		/* An exec_queue is only needed for OAR/OAC functionality on OAG */

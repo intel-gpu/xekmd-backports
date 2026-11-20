@@ -578,7 +578,8 @@ void xe_memirq_handler(struct xe_memirq *memirq)
 
 	/* GuC and media GuC (if present) must be checked separately */
 
-	if (memirq_received(memirq, &memirq->source, ilog2(INTR_GUC), "SRC")) {
+	if (tile->primary_gt &&
+	    memirq_received(memirq, &memirq->source, ilog2(INTR_GUC), "SRC")) {
 		map = IOSYS_MAP_INIT_OFFSET(&memirq->bo->vmap,
 					    XE_MEMIRQ_VECTOR_OFFSET(0, ilog2(INTR_GUC)));
 		memirq_dispatch_guc(memirq, &map, &tile->primary_gt->uc.guc);

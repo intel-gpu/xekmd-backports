@@ -1813,7 +1813,7 @@ static void xe_vm_init_prove_locking(struct xe_device *xe, struct xe_vm *vm)
 	fs_reclaim_release(GFP_KERNEL);
 
 	down_read(&vm->exec_queues.lock);
-	might_lock(&xe_root_mmio_gt(xe)->uc.guc.ct.lock);
+	might_lock(&xe_device_any_gt(xe)->uc.guc.ct.lock);
 	up_read(&vm->exec_queues.lock);
 }
 

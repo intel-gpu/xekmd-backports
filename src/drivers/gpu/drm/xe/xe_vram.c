@@ -23,6 +23,7 @@
 #include "xe_mmio.h"
 #include "xe_sriov.h"
 #include "xe_tile.h"
+#include "xe_tile_printk.h"
 #include "xe_tile_sriov_vf.h"
 #include "xe_ttm_vram_mgr.h"
 #include "xe_vram.h"
@@ -345,6 +346,20 @@ int xe_vram_probe(struct xe_device *xe)
 				       region_size, remain_io_size);
 		if (err)
 			return err;
+
+		/*
+		 * Without a primary GT there is no copy engine, so VRAM is
+		 * moved with the CPU through the BAR.  That only works if the
+		 * BAR covers all of it.
+		 */
+		if (!tile->primary_gt &&
+		    tile->mem.vram->io_size < tile->mem.vram->usable_size) {
+			xe_tile_err(tile,
+				    "VRAM is not fully CPU visible (%pa of %pa); a resizable BAR is required without a primary GT\n",
+				    &tile->mem.vram->io_size,
+				    &tile->mem.vram->usable_size);
+			return -ENODEV;
+		}
 
 		if (total_size > lmem_bar.io_size) {
 			xe_log_info(xe, VRAM,

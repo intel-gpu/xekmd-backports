@@ -3,9 +3,8 @@
 #define _BACKPORT_LINUX_KERNEL_SPRINTF_H_
 
 #ifdef HAVE_LINUX_SPRINTF_H
+#include <linux/stdarg.h>
 #include_next <linux/sprintf.h>
-#else
-#include_next <linux/kernel.h>
 #endif
 
 #endif

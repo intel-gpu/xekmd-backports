@@ -15,11 +15,13 @@
  *
  * @XE_SYSCTRL_GROUP_GFSP: GFSP group
  * @XE_SYSCTRL_GROUP_DIAG: Diag group
+ * @XE_SYSCTRL_GROUP_RUNTIME: Runtime group
  * @XE_SYSCTRL_GROUP_CORE: Core group
  */
 enum xe_sysctrl_group {
 	XE_SYSCTRL_GROUP_GFSP			= 0x01,
 	XE_SYSCTRL_GROUP_DIAG			= 0x02,
+	XE_SYSCTRL_GROUP_RUNTIME		= 0x31,
 	XE_SYSCTRL_GROUP_CORE			= 0xFF,
 };
 
@@ -94,6 +96,38 @@ struct xe_sysctrl_diag_ras_err_inj_req {
 	u16 err_type;
 	u16 reserved;
 	u32 params;
+} __packed;
+
+/**
+ * enum xe_sysctrl_runtime_cmd - Commands supported by Runtime group
+ *
+ * @XE_SYSCTRL_CMD_MEDIA_DEFEATURE: Disable feature in media
+ */
+enum xe_sysctrl_runtime_cmd {
+	XE_SYSCTRL_CMD_MEDIA_DEFEATURE		= 0x11,
+};
+
+#define XE_SYSCTRL_MEDIA_DEFEATURE_DISABLE	0x01
+#define XE_SYSCTRL_MEDIA_DEFEATURE_ATS_DISABLE	0x02
+
+/**
+ * struct xe_sysctrl_media_defeature_req - Media defeature request
+ *
+ * @feature: Media feature to defeature, one of
+ *	XE_SYSCTRL_MEDIA_DEFEATURE_DISABLE or
+ *	XE_SYSCTRL_MEDIA_DEFEATURE_ATS_DISABLE
+ */
+struct xe_sysctrl_media_defeature_req {
+	u8 feature;
+} __packed;
+
+/**
+ * struct xe_sysctrl_media_defeature_resp - Media defeature response
+ *
+ * @flags: Firmware status flags
+ */
+struct xe_sysctrl_media_defeature_resp {
+	u32 flags;
 } __packed;
 
 /**

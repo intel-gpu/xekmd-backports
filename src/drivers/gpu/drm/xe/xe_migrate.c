@@ -40,6 +40,7 @@
 #include "xe_sriov_vf_ccs.h"
 #include "xe_svm.h"
 #include "xe_sync.h"
+#include "xe_tile.h"
 #include "xe_trace_bo.h"
 #include "xe_validation.h"
 #include "xe_vm.h"
@@ -300,7 +301,7 @@ static void xe_migrate_prepare_vm(struct xe_tile *tile, struct xe_migrate *m,
 		if (xe->info.has_usm) {
 			xe_tile_assert(tile, xe_bo_size(batch) == SZ_1M);
 
-			batch = tile->primary_gt->usm.bb_pool->bo;
+			batch = xe_tile_pt_gt(tile)->usm.bb_pool->bo;
 			m->usm_batch_base_ofs = m->batch_base_ofs + SZ_1M;
 			xe_tile_assert(tile, xe_bo_size(batch) == SZ_512K);
 
@@ -321,7 +322,7 @@ static void xe_migrate_prepare_vm(struct xe_tile *tile, struct xe_migrate *m,
 		m->batch_base_ofs = xe_migrate_vram_ofs(xe, batch_addr, false);
 
 		if (xe->info.has_usm) {
-			batch = tile->primary_gt->usm.bb_pool->bo;
+			batch = xe_tile_pt_gt(tile)->usm.bb_pool->bo;
 			batch_addr = xe_bo_addr(batch, 0, XE_PAGE_SIZE);
 			m->usm_batch_base_ofs = xe_migrate_vram_ofs(xe, batch_addr, false);
 		}
@@ -480,7 +481,7 @@ static int xe_migrate_lock_prepare_vm(struct xe_tile *tile, struct xe_migrate *m
 int xe_migrate_init(struct xe_migrate *m)
 {
 	struct xe_tile *tile = m->tile;
-	struct xe_gt *primary_gt = tile->primary_gt;
+	struct xe_gt *gt = xe_tile_pt_gt(tile);
 	struct xe_device *xe = tile_to_xe(tile);
 	struct xe_vm *vm;
 	int err;
@@ -496,8 +497,8 @@ int xe_migrate_init(struct xe_migrate *m)
 		goto err_out;
 
 	if (xe->info.has_usm) {
-		struct xe_hw_engine *hwe0 = primary_gt->usm.paging_hwe0;
-		u32 logical_mask = primary_gt->usm.paging_logical_mask;
+		struct xe_hw_engine *hwe0 = gt->usm.paging_hwe0;
+		u32 logical_mask = gt->usm.paging_logical_mask;
 
 		if (!hwe0 || !logical_mask) {
 			err = -EINVAL;
@@ -514,8 +515,8 @@ int xe_migrate_init(struct xe_migrate *m)
 					    EXEC_QUEUE_FLAG_MIGRATE |
 					    EXEC_QUEUE_FLAG_LOW_LATENCY, 0);
 	} else {
-		m->q = xe_exec_queue_create_class(xe, primary_gt, vm,
-						  XE_ENGINE_CLASS_COPY,
+		m->q = xe_exec_queue_create_class(xe, gt, vm,
+						  xe_tile_pt_class(tile),
 						  EXEC_QUEUE_FLAG_KERNEL |
 						  EXEC_QUEUE_FLAG_MIGRATE, 0);
 	}
@@ -858,7 +859,7 @@ static u32 xe_migrate_ccs_copy(struct xe_migrate *m,
 			       u64 dst_ofs, bool dst_is_indirect, u32 dst_size,
 			       u64 ccs_ofs, bool copy_ccs)
 {
-	struct xe_gt *gt = m->tile->primary_gt;
+	struct xe_gt *gt = xe_tile_pt_gt(m->tile);
 	u32 flush_flags = 0;
 
 	if (!copy_ccs && dst_is_indirect) {
@@ -902,7 +903,7 @@ static struct dma_fence *__xe_migrate_copy(struct xe_migrate *m,
 					   bool copy_only_ccs,
 					   bool is_vram_resolve)
 {
-	struct xe_gt *gt = m->tile->primary_gt;
+	struct xe_gt *gt = xe_tile_pt_gt(m->tile);
 	struct xe_device *xe = gt_to_xe(gt);
 	struct dma_fence *fence = NULL;
 	u64 size = xe_bo_size(src_bo);
@@ -1199,7 +1200,7 @@ int xe_migrate_ccs_rw_copy(struct xe_tile *tile, struct xe_exec_queue *q,
 	bool dst_is_pltt = read_write == XE_SRIOV_VF_CCS_WRITE_CTX;
 	struct ttm_resource *src = new_mem;
 	struct xe_migrate *m = tile->migrate;
-	struct xe_gt *gt = tile->primary_gt;
+	struct xe_gt *gt = xe_tile_pt_gt(tile);
 	u32 batch_size, batch_size_allocated;
 	struct xe_device *xe = gt_to_xe(gt);
 	struct xe_res_cursor src_it, ccs_it;
@@ -1401,7 +1402,7 @@ struct dma_fence *xe_migrate_vram_copy_chunk(struct xe_bo *vram_bo, u64 vram_off
 {
 	struct xe_device *xe = xe_bo_device(vram_bo);
 	struct xe_tile *tile = vram_bo->tile;
-	struct xe_gt *gt = tile->primary_gt;
+	struct xe_gt *gt = xe_tile_pt_gt(tile);
 	struct xe_migrate *m = tile->migrate;
 	struct dma_fence *fence = NULL;
 	struct ttm_resource *vram = vram_bo->ttm.resource;
@@ -1619,7 +1620,7 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
 	bool clear_vram = mem_type_is_vram(dst->mem_type);
 	bool clear_bo_data = XE_MIGRATE_CLEAR_FLAG_BO_DATA & clear_flags;
 	bool clear_ccs = XE_MIGRATE_CLEAR_FLAG_CCS_DATA & clear_flags;
-	struct xe_gt *gt = m->tile->primary_gt;
+	struct xe_gt *gt = xe_tile_pt_gt(m->tile);
 	struct xe_device *xe = gt_to_xe(gt);
 	bool clear_only_system_ccs = false;
 	struct dma_fence *fence = NULL;
@@ -2110,6 +2111,22 @@ void xe_migrate_wait(struct xe_migrate *m)
 		dma_fence_wait(m->fence, false);
 }
 
+/**
+ * xe_migrate_can_blit() - Whether a migration context can issue blits
+ * @m: The migration context
+ *
+ * xe_migrate_copy() and xe_migrate_clear() emit blitter commands, which only
+ * the copy engine understands, and the copy engine lives on the primary GT.
+ * A tile without one can still update page tables, so its migration context
+ * is usable, but callers that want to move data have to do it themselves.
+ *
+ * Return: true if blit based copy and clear are available on @m.
+ */
+bool xe_migrate_can_blit(struct xe_migrate *m)
+{
+	return m->tile->primary_gt;
+}
+
 static u32 pte_update_cmd_size(u64 size)
 {
 	u32 num_dword;
@@ -2313,7 +2330,7 @@ static struct dma_fence *xe_migrate_vram(struct xe_migrate *m,
 					 struct dma_fence *deps,
 					 const enum xe_migrate_copy_dir dir)
 {
-	struct xe_gt *gt = m->tile->primary_gt;
+	struct xe_gt *gt = xe_tile_pt_gt(m->tile);
 	struct xe_device *xe = gt_to_xe(gt);
 	bool use_usm_batch = xe->info.has_usm;
 	struct dma_fence *fence = NULL;
@@ -2793,7 +2810,7 @@ int xe_migrate_debug_ccs_overlap(struct xe_migrate *m,
 				 bool write_to_ccs)
 {
 	struct xe_device *xe = tile_to_xe(m->tile);
-	struct xe_gt *gt = m->tile->primary_gt;
+	struct xe_gt *gt = xe_tile_pt_gt(m->tile);
 	struct dma_fence *fence;
 	struct xe_bb *bb;
 	struct xe_sched_job *job;

@@ -94,7 +94,7 @@ Install the build dependencies described in the [README](README.md) and the head
 sh -e ./oot-build.sh compile /path/to/target/kernel/headers
 ```
 
-The [compile script](autotools/oot-build.sh) configures the tree, selects the Xe configuration, and builds the kernel modules without installing them. Invoke it with `sh -e` so a failed configure or build command stops execution with a nonzero status; the script's final completion message alone is not proof of success.
+The [compile script](oot-build.sh) configures the tree, selects the Xe configuration, and builds the kernel modules without installing them. Invoke it with `sh -e` so a failed configure or build command stops execution with a nonzero status; the script's final completion message alone is not proof of success.
 
 **If compilation fails, stop here.** Fix the debug changes and repeat the build until it succeeds. Only then proceed with packaging below. Repeat validation for each supported target kernel you intend to test; a successful build for one kernel does not establish compatibility with another. Runtime testing and the installation-time DKMS build are still required.
 

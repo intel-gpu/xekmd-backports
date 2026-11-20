@@ -1,0 +1,153 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Raag Jadav <raag.jadav@intel.com>
+Date: Thu, 19 Nov 2026 15:52:18 +0530
+Subject: [PATCH] [TEMP] drm/xe/wedge: Introduce xe_wedge_mode_is_no_reset()
+Convert open-coded XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET check into its
+own helper.
+
+Signed-off-by: Raag Jadav <raag.jadav@intel.com>
+Reviewed-by: Riana Tauro <riana.tauro@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/178946/#rev3)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_drm_ras.c     | 2 +-
+ drivers/gpu/drm/xe/xe_guc_ads.c     | 3 ++-
+ drivers/gpu/drm/xe/xe_guc_capture.c | 3 ++-
+ drivers/gpu/drm/xe/xe_guc_submit.c  | 4 ++--
+ drivers/gpu/drm/xe/xe_pci_error.c   | 2 +-
+ drivers/gpu/drm/xe/xe_wedge.c       | 5 ++---
+ drivers/gpu/drm/xe/xe_wedge.h       | 5 +++++
+ 7 files changed, 15 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_drm_ras.c b/drivers/gpu/drm/xe/xe_drm_ras.c
+index 3ca6c8234..86c589437 100644
+--- a/drivers/gpu/drm/xe/xe_drm_ras.c
++++ b/drivers/gpu/drm/xe/xe_drm_ras.c
+@@ -21,7 +21,7 @@ static const char * const error_severity[] = DRM_XE_RAS_ERROR_SEVERITY_NAMES;
+ static int drm_ras_counter_get(struct xe_device *xe, struct xe_drm_ras_counter *info,
+ 			       u32 error_id, int *idx)
+ {
+-	if (xe_wedged(xe) && xe->wedged.mode != XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET)
++	if (xe_wedged(xe) && !xe_wedge_mode_is_no_reset(xe))
+ 		return -ECANCELED;
+ 
+ 	if (!info || !info[error_id].name)
+diff --git a/drivers/gpu/drm/xe/xe_guc_ads.c b/drivers/gpu/drm/xe/xe_guc_ads.c
+index f275e484c..ba5127f50 100644
+--- a/drivers/gpu/drm/xe/xe_guc_ads.c
++++ b/drivers/gpu/drm/xe/xe_guc_ads.c
+@@ -30,6 +30,7 @@
+ #include "xe_map.h"
+ #include "xe_mmio.h"
+ #include "xe_wa.h"
++#include "xe_wedge.h"
+ 
+ /* Slack of a few additional entries per engine */
+ #define ADS_REGSET_EXTRA_MAX	8
+@@ -550,7 +551,7 @@ static void guc_policies_init(struct xe_guc_ads *ads)
+ 	ads_blob_write(ads, policies.max_num_work_items,
+ 		       GLOBAL_POLICY_MAX_NUM_WI);
+ 
+-	if (xe->wedged.mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET)
++	if (xe_wedge_mode_is_no_reset(xe))
+ 		global_flags |= GLOBAL_POLICY_DISABLE_ENGINE_RESET;
+ 
+ 	ads_blob_write(ads, policies.global_flags, global_flags);
+diff --git a/drivers/gpu/drm/xe/xe_guc_capture.c b/drivers/gpu/drm/xe/xe_guc_capture.c
+index df0b73ab4..0622ab437 100644
+--- a/drivers/gpu/drm/xe/xe_guc_capture.c
++++ b/drivers/gpu/drm/xe/xe_guc_capture.c
+@@ -35,6 +35,7 @@
+ #include "xe_map.h"
+ #include "xe_mmio.h"
+ #include "xe_sched_job.h"
++#include "xe_wedge.h"
+ 
+ /*
+  * struct __guc_capture_bufstate
+@@ -1964,7 +1965,7 @@ xe_guc_capture_get_matching_and_lock(struct xe_exec_queue *q)
+ 
+ 	xe = gt_to_xe(q->gt);
+ 
+-	if (xe->wedged.mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET)
++	if (xe_wedge_mode_is_no_reset(xe))
+ 		return NULL;
+ 
+ 	if (!xe_device_uc_enabled(xe))
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index 56c19f1ac..f1e27e713 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -1428,7 +1428,7 @@ void xe_guc_submit_wedge(struct xe_guc *guc)
+ 	if (!guc->submission_state.initialized)
+ 		return;
+ 
+-	if (xe->wedged.mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET) {
++	if (xe_wedge_mode_is_no_reset(xe)) {
+ 		mutex_lock(&guc->submission_state.lock);
+ 		xa_for_each(&guc->submission_state.exec_queue_lookup, index, q)
+ 			if (xe_exec_queue_get_unless_zero(q))
+@@ -1449,7 +1449,7 @@ static bool guc_submit_hint_wedged(struct xe_guc *guc)
+ {
+ 	struct xe_device *xe = guc_to_xe(guc);
+ 
+-	if (xe->wedged.mode != XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET)
++	if (!xe_wedge_mode_is_no_reset(xe))
+ 		return false;
+ 
+ 	if (xe_wedged(xe))
+diff --git a/drivers/gpu/drm/xe/xe_pci_error.c b/drivers/gpu/drm/xe/xe_pci_error.c
+index 6b75d6fd0..9cf2e7892 100644
+--- a/drivers/gpu/drm/xe/xe_pci_error.c
++++ b/drivers/gpu/drm/xe/xe_pci_error.c
+@@ -128,7 +128,7 @@ static pci_ers_result_t xe_pci_error_mmio_enabled(struct pci_dev *pdev)
+ 	action = xe_ras_process_errors(xe);
+ 
+ 	/* User wants to debug the error, prevent reset */
+-	if (xe->wedged.mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET) {
++	if (xe_wedge_mode_is_no_reset(xe)) {
+ 		xe_wedge_declare(xe, DRM_WEDGE_RECOVERY_NONE);
+ 		return PCI_ERS_RESULT_DISCONNECT;
+ 	}
+diff --git a/drivers/gpu/drm/xe/xe_wedge.c b/drivers/gpu/drm/xe/xe_wedge.c
+index 2f35937c5..ca62190d6 100644
+--- a/drivers/gpu/drm/xe/xe_wedge.c
++++ b/drivers/gpu/drm/xe/xe_wedge.c
+@@ -117,7 +117,7 @@ void xe_wedge_declare(struct xe_device *xe, unsigned long method)
+ 	 * hangs, so wedge the device with 'none' recovery method and have
+ 	 * it available to the user for debugging.
+ 	 */
+-	if (xe->wedged.mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET)
++	if (xe_wedge_mode_is_no_reset(xe))
+ 		xe->wedged.method = DRM_WEDGE_RECOVERY_NONE;
+ 	else
+ 		xe->wedged.method = method;
+@@ -163,8 +163,7 @@ static bool wedge_mode_needs_policy_update(struct xe_device *xe, enum xe_wedged_
+ 	if (xe->wedged.mode == mode)
+ 		return false;
+ 
+-	if (xe->wedged.mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET ||
+-	    mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET)
++	if (xe_wedge_mode_is_no_reset(xe) || mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET)
+ 		return true;
+ 
+ 	return false;
+diff --git a/drivers/gpu/drm/xe/xe_wedge.h b/drivers/gpu/drm/xe/xe_wedge.h
+index 3b5499dfc..cfb333d4c 100644
+--- a/drivers/gpu/drm/xe/xe_wedge.h
++++ b/drivers/gpu/drm/xe/xe_wedge.h
+@@ -17,6 +17,11 @@ static inline bool xe_wedged(struct xe_device *xe)
+ 	return atomic_read(&xe->wedged.flag);
+ }
+ 
++static inline bool xe_wedge_mode_is_no_reset(struct xe_device *xe)
++{
++	return xe->wedged.mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET;
++}
++
+ void xe_wedge_declare(struct xe_device *xe, unsigned long method);
+ int xe_wedge_init(struct xe_device *xe);
+ int xe_wedge_set_mode(struct xe_device *xe, enum xe_wedged_mode mode);
+-- 
+2.43.0
+

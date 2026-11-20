@@ -166,4 +166,23 @@ static inline bool is_device_coherent_page(const struct page *page)
 }
 #endif
 
+/*
+ * With CONFIG_RANDOMIZE_MEMORY, x86_64 defines DIRECT_MAP_PHYSMEM_END as
+ * direct_map_physmem_end, which is not exported to modules.  Fall back to
+ * the architectural limit, which is never below the KASLR-adjusted value.
+ */
+#if defined(CONFIG_X86_64) && defined(CONFIG_RANDOMIZE_MEMORY)
+# undef DIRECT_MAP_PHYSMEM_END
+# define DIRECT_MAP_PHYSMEM_END ((1ULL << MAX_PHYSMEM_BITS) - 1)
+#endif
+
+/* Added upstream in v6.11, same definition as include/linux/mm.h */
+#ifndef DIRECT_MAP_PHYSMEM_END
+# ifdef MAX_PHYSMEM_BITS
+#  define DIRECT_MAP_PHYSMEM_END ((1ULL << MAX_PHYSMEM_BITS) - 1)
+# else
+#  define DIRECT_MAP_PHYSMEM_END (((phys_addr_t)-1) & ~(1ULL << 63))
+# endif
+#endif
+
 #endif /* __BACKPORT_LINUX_MM_H */

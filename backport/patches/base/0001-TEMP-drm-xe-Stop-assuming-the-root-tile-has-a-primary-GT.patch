@@ -1,0 +1,147 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stuart Summers <stuart.summers@intel.com>
+Date: Thu, 5 Nov 2026 23:30:15 +0000
+Subject: drm/xe: Stop assuming the root tile has a primary GT
+
+A handful of device level consumers reach for xe_root_mmio_gt() to get at
+state that merely happens to be hung off a GT - the GuC firmware version,
+GT stats counters and the default OA unit - and dereference it without a
+NULL check.  None of them touch MMIO, so none of them actually need the
+primary GT; they just need some GT.
+
+Add xe_device_any_gt(), which falls back to the root tile's media GT, and
+use it in those places.  For OA, walk the GTs instead so the default unit
+is the first one that exists, which keeps it OA unit 0 as the uapi
+promises.
+
+Signed-off-by: Stuart Summers <stuart.summers@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/patch/771421/?series=179173&rev=1)
+---
+ drivers/gpu/drm/xe/xe_device.h    | 16 ++++++++++++++++
+ drivers/gpu/drm/xe/xe_oa.c        | 24 ++++++++++++++++++++++--
+ drivers/gpu/drm/xe/xe_pagefault.c |  4 ++--
+ drivers/gpu/drm/xe/xe_query.c     |  3 ++-
+ drivers/gpu/drm/xe/xe_vm.c        |  2 +-
+ 5 files changed, 43 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.h b/drivers/gpu/drm/xe/xe_device.h
+index 5418f2498..2ad5b7fc3 100644
+--- a/drivers/gpu/drm/xe/xe_device.h
++++ b/drivers/gpu/drm/xe/xe_device.h
+@@ -110,6 +110,22 @@ static inline struct xe_gt *xe_root_mmio_gt(struct xe_device *xe)
+ 	return xe_device_get_root_tile(xe)->primary_gt;
+ }
+ 
++/*
++ * Provide a GT structure for device level state that happens to be hung off a
++ * GT but is not specific to one, such as GuC firmware versions or OA units.
++ * Unlike xe_root_mmio_gt(), this never returns NULL: the root tile always has
++ * at least one GT, even when the graphics IP is absent.  It must not be used
++ * for MMIO, since the media GT needs GSI offset translation.
++ *
++ * Returns the primary GT of the root tile, or its media GT if there is none.
++ */
++static inline struct xe_gt *xe_device_any_gt(struct xe_device *xe)
++{
++	struct xe_tile *tile = xe_device_get_root_tile(xe);
++
++	return tile->primary_gt ?: tile->media_gt;
++}
++
+ static inline struct xe_mmio *xe_root_tile_mmio(struct xe_device *xe)
+ {
+ 	return &xe->tiles[0].mmio;
+diff --git a/drivers/gpu/drm/xe/xe_oa.c b/drivers/gpu/drm/xe/xe_oa.c
+index 8af8812c1..997048c9a 100644
+--- a/drivers/gpu/drm/xe/xe_oa.c
++++ b/drivers/gpu/drm/xe/xe_oa.c
+@@ -2027,6 +2027,23 @@ out:
+ 	return ret;
+ }
+ 
++/*
++ * OA unit IDs are handed out in GT iteration order, so the first unit of the
++ * first GT that has one is OA unit 0. The primary GT may be absent, in which
++ * case unit 0 lives on the media GT.
++ */
++static struct xe_oa_unit *xe_oa_first_unit(struct xe_device *xe)
++{
++	struct xe_gt *gt;
++	u8 id;
++
++	for_each_gt(gt, xe, id)
++		if (gt->oa.num_oa_units)
++			return &gt->oa.oa_unit[0];
++
++	return NULL;
++}
++
+ /**
+  * xe_oa_stream_open_ioctl - Opens an OA stream
+  * @dev: @drm_device
+@@ -2059,8 +2076,11 @@ int xe_oa_stream_open_ioctl(struct drm_device *dev, u64 data, struct drm_file *f
+ 		return ret;
+ 
+ 	/* If not provided, OA unit defaults to OA unit 0 as per uapi */
+-	if (!param.oa_unit)
+-		param.oa_unit = &xe_root_mmio_gt(oa->xe)->oa.oa_unit[0];
++	if (!param.oa_unit) {
++		param.oa_unit = xe_oa_first_unit(oa->xe);
++		if (XE_IOCTL_DBG(xe, !param.oa_unit))
++			return -ENODEV;
++	}
+ 
+ 	if (param.exec_queue_id > 0) {
+ 		/* An exec_queue is only needed for OAR/OAC functionality on OAG */
+diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
+index c9bbd44cd..61e44b347 100644
+--- a/drivers/gpu/drm/xe/xe_pagefault.c
++++ b/drivers/gpu/drm/xe/xe_pagefault.c
+@@ -573,7 +573,7 @@ static bool xe_pagefault_queue_pop(struct xe_pagefault_queue *pf_queue,
+ 			continue;
+ 
+ 		if (cache_start != XE_PAGEFAULT_CACHE_START_INVALID) {
+-			xe_gt_stats_incr(xe_root_mmio_gt(xe),
++			xe_gt_stats_incr(xe_device_any_gt(xe),
+ 					 XE_GT_STATS_ID_PARALLEL_PAGEFAULT_COUNT,
+ 					 1);
+ 			break;
+@@ -792,7 +792,7 @@ ack_fault:
+ 	}
+ #undef USM_QUEUE_MAX_RUNTIME_MS
+ 
+-	xe_gt_stats_incr(xe_root_mmio_gt(xe), XE_GT_STATS_ID_PAGEFAULT_US,
++	xe_gt_stats_incr(xe_device_any_gt(xe), XE_GT_STATS_ID_PAGEFAULT_US,
+ 			 xe_gt_stats_ktime_us_delta(start));
+ }
+ 
+diff --git a/drivers/gpu/drm/xe/xe_query.c b/drivers/gpu/drm/xe/xe_query.c
+index 5f25cf9d5..baf470621 100644
+--- a/drivers/gpu/drm/xe/xe_query.c
++++ b/drivers/gpu/drm/xe/xe_query.c
+@@ -595,7 +595,8 @@ query_uc_fw_version(struct xe_device *xe, struct drm_xe_device_query *query)
+ 
+ 	switch (resp.uc_type) {
+ 	case XE_QUERY_UC_TYPE_GUC_SUBMISSION: {
+-		struct xe_guc *guc = &xe->tiles[0].primary_gt->uc.guc;
++		struct xe_gt *gt = xe_device_any_gt(xe);
++		struct xe_guc *guc = &gt->uc.guc;
+ 
+ 		version = &guc->fw.versions.found[XE_UC_FW_VER_COMPATIBILITY];
+ 		break;
+diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
+index c8b0734f0..ea4802e6e 100644
+--- a/drivers/gpu/drm/xe/xe_vm.c
++++ b/drivers/gpu/drm/xe/xe_vm.c
+@@ -1799,7 +1799,7 @@ static void xe_vm_init_prove_locking(struct xe_device *xe, struct xe_vm *vm)
+ 	fs_reclaim_release(GFP_KERNEL);
+ 
+ 	down_read(&vm->exec_queues.lock);
+-	might_lock(&xe_root_mmio_gt(xe)->uc.guc.ct.lock);
++	might_lock(&xe_device_any_gt(xe)->uc.guc.ct.lock);
+ 	up_read(&vm->exec_queues.lock);
+ }
+ 
+-- 
+2.43.0
+

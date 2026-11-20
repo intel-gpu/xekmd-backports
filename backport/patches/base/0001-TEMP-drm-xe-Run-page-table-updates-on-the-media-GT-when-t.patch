@@ -1,0 +1,276 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stuart Summers <stuart.summers@intel.com>
+Date: Thu, 5 Nov 2026 23:34:23 +0000
+Subject: drm/xe: Run page table updates on the media GT when there is no
+ primary
+
+The tile's migration context, and the bind exec queues built on top of
+it, are hard wired to the primary GT and its copy engine.  On a device
+with no graphics IP that GT is NULL, and xe_migrate_init() is never
+called at all, so probe dies in xe_cpu_bind_init() on an uninitialised
+tile->migrate.
+
+Page table updates are plain memory writes, so any GT can issue them.
+Add xe_tile_pt_gt() and xe_tile_pt_class(), which name the primary GT and
+its copy engine as before but fall back to the media GT and a video
+decode engine, and use them for the migration context, the bind queues
+and the place xe_gt_init() decides to set migration up.
+
+Note this only makes page table updates work.  The blit based copy and
+clear paths now target a video engine rather than NULL on such a device,
+which stops them oopsing, but they are still not functional there.
+
+Signed-off-by: Stuart Summers <stuart.summers@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/patch/771428/?series=179173&rev=1)
+---
+ drivers/gpu/drm/xe/xe_exec_queue.c |  5 +++--
+ drivers/gpu/drm/xe/xe_gt.c         | 11 ++++++----
+ drivers/gpu/drm/xe/xe_migrate.c    | 31 +++++++++++++++--------------
+ drivers/gpu/drm/xe/xe_tile.h       | 32 ++++++++++++++++++++++++++++++
+ 4 files changed, 58 insertions(+), 21 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
+index a05fcb7c5..3f8ad4b60 100644
+--- a/drivers/gpu/drm/xe/xe_exec_queue.c
++++ b/drivers/gpu/drm/xe/xe_exec_queue.c
+@@ -27,6 +27,7 @@
+ #include "xe_macros.h"
+ #include "xe_migrate.h"
+ #include "xe_pm.h"
++#include "xe_tile.h"
+ #include "xe_trace.h"
+ #include "xe_vm.h"
+ #include "xe_pxp.h"
+@@ -606,7 +607,7 @@ struct xe_exec_queue *xe_exec_queue_create_bind(struct xe_device *xe,
+ 						struct xe_vm *user_vm,
+ 						u32 flags, u64 extensions)
+ {
+-	struct xe_gt *gt = tile->primary_gt;
++	struct xe_gt *gt = xe_tile_pt_gt(tile);
+ 	struct xe_exec_queue *q;
+ 	struct xe_vm *migrate_vm;
+ 
+@@ -624,7 +625,7 @@ struct xe_exec_queue *xe_exec_queue_create_bind(struct xe_device *xe,
+ 					 flags, extensions);
+ 	} else {
+ 		q = xe_exec_queue_create_class(xe, gt, migrate_vm,
+-					       XE_ENGINE_CLASS_COPY, flags,
++					       xe_tile_pt_class(tile), flags,
+ 					       extensions);
+ 	}
+ 	xe_vm_put(migrate_vm);
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index 08bd5da12..460811338 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -66,6 +66,7 @@
+ #include "xe_sa.h"
+ #include "xe_sched_job.h"
+ #include "xe_sriov.h"
++#include "xe_tile.h"
+ #include "xe_tlb_inval.h"
+ #include "xe_tuning.h"
+ #include "xe_uc.h"
+@@ -676,10 +677,12 @@ static int gt_init_with_all_forcewake(struct xe_gt *gt)
+ 		}
+ 	}
+ 
+-	if (xe_gt_is_main_type(gt)) {
+-		struct xe_tile *tile = gt_to_tile(gt);
+-
+-		err = xe_migrate_init(tile->migrate);
++	/*
++	 * Normally the migration context runs on the primary GT, but a tile
++	 * with no graphics IP has only its media GT to run it on.
++	 */
++	if (gt == xe_tile_pt_gt(gt_to_tile(gt))) {
++		err = xe_migrate_init(gt_to_tile(gt)->migrate);
+ 		if (err)
+ 			return err;
+ 	}
+diff --git a/drivers/gpu/drm/xe/xe_migrate.c b/drivers/gpu/drm/xe/xe_migrate.c
+index 62e110769..ece21f9a8 100644
+--- a/drivers/gpu/drm/xe/xe_migrate.c
++++ b/drivers/gpu/drm/xe/xe_migrate.c
+@@ -40,6 +40,7 @@
+ #include "xe_sriov_vf_ccs.h"
+ #include "xe_svm.h"
+ #include "xe_sync.h"
++#include "xe_tile.h"
+ #include "xe_trace_bo.h"
+ #include "xe_validation.h"
+ #include "xe_vm.h"
+@@ -300,7 +301,7 @@ static void xe_migrate_prepare_vm(struct xe_tile *tile, struct xe_migrate *m,
+ 		if (xe->info.has_usm) {
+ 			xe_tile_assert(tile, xe_bo_size(batch) == SZ_1M);
+ 
+-			batch = tile->primary_gt->usm.bb_pool->bo;
++			batch = xe_tile_pt_gt(tile)->usm.bb_pool->bo;
+ 			m->usm_batch_base_ofs = m->batch_base_ofs + SZ_1M;
+ 			xe_tile_assert(tile, xe_bo_size(batch) == SZ_512K);
+ 
+@@ -321,7 +322,7 @@ static void xe_migrate_prepare_vm(struct xe_tile *tile, struct xe_migrate *m,
+ 		m->batch_base_ofs = xe_migrate_vram_ofs(xe, batch_addr, false);
+ 
+ 		if (xe->info.has_usm) {
+-			batch = tile->primary_gt->usm.bb_pool->bo;
++			batch = xe_tile_pt_gt(tile)->usm.bb_pool->bo;
+ 			batch_addr = xe_bo_addr(batch, 0, XE_PAGE_SIZE);
+ 			m->usm_batch_base_ofs = xe_migrate_vram_ofs(xe, batch_addr, false);
+ 		}
+@@ -480,7 +481,7 @@ static int xe_migrate_lock_prepare_vm(struct xe_tile *tile, struct xe_migrate *m
+ int xe_migrate_init(struct xe_migrate *m)
+ {
+ 	struct xe_tile *tile = m->tile;
+-	struct xe_gt *primary_gt = tile->primary_gt;
++	struct xe_gt *gt = xe_tile_pt_gt(tile);
+ 	struct xe_device *xe = tile_to_xe(tile);
+ 	struct xe_vm *vm;
+ 	int err;
+@@ -495,8 +496,8 @@ int xe_migrate_init(struct xe_migrate *m)
+ 		goto err_out;
+ 
+ 	if (xe->info.has_usm) {
+-		struct xe_hw_engine *hwe0 = primary_gt->usm.paging_hwe0;
+-		u32 logical_mask = primary_gt->usm.paging_logical_mask;
++		struct xe_hw_engine *hwe0 = gt->usm.paging_hwe0;
++		u32 logical_mask = gt->usm.paging_logical_mask;
+ 
+ 		if (!hwe0 || !logical_mask) {
+ 			err = -EINVAL;
+@@ -513,8 +514,8 @@ int xe_migrate_init(struct xe_migrate *m)
+ 					    EXEC_QUEUE_FLAG_MIGRATE |
+ 					    EXEC_QUEUE_FLAG_LOW_LATENCY, 0);
+ 	} else {
+-		m->q = xe_exec_queue_create_class(xe, primary_gt, vm,
+-						  XE_ENGINE_CLASS_COPY,
++		m->q = xe_exec_queue_create_class(xe, gt, vm,
++						  xe_tile_pt_class(tile),
+ 						  EXEC_QUEUE_FLAG_KERNEL |
+ 						  EXEC_QUEUE_FLAG_MIGRATE, 0);
+ 	}
+@@ -856,7 +857,7 @@ static u32 xe_migrate_ccs_copy(struct xe_migrate *m,
+ 			       u64 dst_ofs, bool dst_is_indirect, u32 dst_size,
+ 			       u64 ccs_ofs, bool copy_ccs)
+ {
+-	struct xe_gt *gt = m->tile->primary_gt;
++	struct xe_gt *gt = xe_tile_pt_gt(m->tile);
+ 	u32 flush_flags = 0;
+ 
+ 	if (!copy_ccs && dst_is_indirect) {
+@@ -900,7 +901,7 @@ static struct dma_fence *__xe_migrate_copy(struct xe_migrate *m,
+ 					   bool copy_only_ccs,
+ 					   bool is_vram_resolve)
+ {
+-	struct xe_gt *gt = m->tile->primary_gt;
++	struct xe_gt *gt = xe_tile_pt_gt(m->tile);
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	struct dma_fence *fence = NULL;
+ 	u64 size = xe_bo_size(src_bo);
+@@ -1197,7 +1198,7 @@ int xe_migrate_ccs_rw_copy(struct xe_tile *tile, struct xe_exec_queue *q,
+ 	bool dst_is_pltt = read_write == XE_SRIOV_VF_CCS_WRITE_CTX;
+ 	struct ttm_resource *src = new_mem;
+ 	struct xe_migrate *m = tile->migrate;
+-	struct xe_gt *gt = tile->primary_gt;
++	struct xe_gt *gt = xe_tile_pt_gt(tile);
+ 	u32 batch_size, batch_size_allocated;
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	struct xe_res_cursor src_it, ccs_it;
+@@ -1399,7 +1400,7 @@ struct dma_fence *xe_migrate_vram_copy_chunk(struct xe_bo *vram_bo, u64 vram_off
+ {
+ 	struct xe_device *xe = xe_bo_device(vram_bo);
+ 	struct xe_tile *tile = vram_bo->tile;
+-	struct xe_gt *gt = tile->primary_gt;
++	struct xe_gt *gt = xe_tile_pt_gt(tile);
+ 	struct xe_migrate *m = tile->migrate;
+ 	struct dma_fence *fence = NULL;
+ 	struct ttm_resource *vram = vram_bo->ttm.resource;
+@@ -1617,7 +1618,7 @@ struct dma_fence *xe_migrate_clear(struct xe_migrate *m,
+ 	bool clear_vram = mem_type_is_vram(dst->mem_type);
+ 	bool clear_bo_data = XE_MIGRATE_CLEAR_FLAG_BO_DATA & clear_flags;
+ 	bool clear_ccs = XE_MIGRATE_CLEAR_FLAG_CCS_DATA & clear_flags;
+-	struct xe_gt *gt = m->tile->primary_gt;
++	struct xe_gt *gt = xe_tile_pt_gt(m->tile);
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	bool clear_only_system_ccs = false;
+ 	struct dma_fence *fence = NULL;
+@@ -1873,7 +1874,7 @@ __xe_migrate_update_pgtables(struct xe_migrate *m,
+ {
+ 	const struct xe_migrate_pt_update_ops *ops = pt_update->ops;
+ 	struct xe_tile *tile = m->tile;
+-	struct xe_gt *gt = tile->primary_gt;
++	struct xe_gt *gt = xe_tile_pt_gt(tile);
+ 	struct xe_device *xe = tile_to_xe(tile);
+ 	struct xe_sched_job *job;
+ 	struct dma_fence *fence;
+@@ -2230,7 +2231,7 @@ static struct dma_fence *xe_migrate_vram(struct xe_migrate *m,
+ 					 struct dma_fence *deps,
+ 					 const enum xe_migrate_copy_dir dir)
+ {
+-	struct xe_gt *gt = m->tile->primary_gt;
++	struct xe_gt *gt = xe_tile_pt_gt(m->tile);
+ 	struct xe_device *xe = gt_to_xe(gt);
+ 	bool use_usm_batch = xe->info.has_usm;
+ 	struct dma_fence *fence = NULL;
+@@ -2655,7 +2656,7 @@ int xe_migrate_debug_ccs_overlap(struct xe_migrate *m,
+ 				 bool write_to_ccs)
+ {
+ 	struct xe_device *xe = tile_to_xe(m->tile);
+-	struct xe_gt *gt = m->tile->primary_gt;
++	struct xe_gt *gt = xe_tile_pt_gt(m->tile);
+ 	struct dma_fence *fence;
+ 	struct xe_bb *bb;
+ 	struct xe_sched_job *job;
+diff --git a/drivers/gpu/drm/xe/xe_tile.h b/drivers/gpu/drm/xe/xe_tile.h
+index b5e7f011a..9297fc22a 100644
+--- a/drivers/gpu/drm/xe/xe_tile.h
++++ b/drivers/gpu/drm/xe/xe_tile.h
+@@ -6,6 +6,7 @@
+ #ifndef _XE_TILE_H_
+ #define _XE_TILE_H_
+ 
++#include "xe_hw_engine_types.h"
+ #include "xe_tile_types.h"
+ 
+ struct xe_device;
+@@ -24,6 +25,37 @@ static inline bool xe_tile_is_root(struct xe_tile *tile)
+ 	return tile->id == 0;
+ }
+ 
++/**
++ * xe_tile_pt_gt() - GT used to run a tile's page table update jobs
++ * @tile: Pointer to the struct xe_tile.
++ *
++ * Page table updates, and the migration context they are submitted through,
++ * normally run on the primary GT.  A device whose graphics IP is absent has
++ * no primary GT, but its media GT can write page tables just as well.
++ *
++ * Return: The tile's primary GT, or its media GT if it has no primary GT.
++ */
++static inline struct xe_gt *xe_tile_pt_gt(struct xe_tile *tile)
++{
++	return tile->primary_gt ?: tile->media_gt;
++}
++
++/**
++ * xe_tile_pt_class() - Engine class to run a tile's page table update jobs on
++ * @tile: Pointer to the struct xe_tile.
++ *
++ * The engine class to pair with xe_tile_pt_gt(). The copy engine is the usual
++ * choice, but it lives on the primary GT; when there is none, fall back to a
++ * video decode engine on the media GT.
++ *
++ * Return: The engine class to create the tile's page table exec queue with.
++ */
++static inline enum xe_engine_class xe_tile_pt_class(struct xe_tile *tile)
++{
++	return tile->primary_gt ? XE_ENGINE_CLASS_COPY :
++				  XE_ENGINE_CLASS_VIDEO_DECODE;
++}
++
+ /**
+  * xe_tile_to_vr() - Return the struct xe_vram_region pointer from a
+  * struct xe_tile pointer
+-- 
+2.43.0
+

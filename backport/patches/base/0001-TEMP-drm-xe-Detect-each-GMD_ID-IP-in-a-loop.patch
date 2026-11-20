@@ -1,0 +1,116 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stuart Summers <stuart.summers@intel.com>
+Date: Thu, 5 Nov 2026 22:49:02 +0000
+Subject: drm/xe: Detect each GMD_ID IP in a loop
+
+handle_gmdid() open coded the graphics and media detection twice, with
+the two copies subtly disagreeing: a missing media IP was tolerated,
+while graphics reporting version 0 was reported as an unknown version.
+
+Describe the per IP differences in a small table and walk it, so both
+IPs are detected the same way and an absent IP of either kind simply
+leaves its descriptor NULL. Deciding whether the resulting combination
+is usable is left to the caller, which is unchanged in still demanding
+a graphics IP.
+
+Signed-off-by: Stuart Summers <stuart.summers@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/patch/771415/?series=179173&rev=1)
+---
+ drivers/gpu/drm/xe/xe_pci.c | 70 +++++++++++++++++++++++--------------
+ 1 file changed, 43 insertions(+), 27 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 9a8146cb8..ab0974217 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -703,9 +703,21 @@ static const struct xe_ip *find_media_ip(unsigned int verx100)
+ 	return NULL;
+ }
+ 
++static const struct xe_gmdid_desc {
++	const char *name;
++	const struct xe_ip *(*find_ip)(unsigned int verx100);
++} gmdid_descs[] = {
++	[GMDID_GRAPHICS] = { "graphics", find_graphics_ip },
++	[GMDID_MEDIA] = { "media", find_media_ip },
++};
++
+ /*
+  * Read IP version from hardware and select graphics/media IP descriptors
+  * based on the result.
++ *
++ * Each IP is detected independently and any of them may legitimately be fused
++ * off or otherwise absent, in which case its descriptor is left NULL.  Deciding
++ * whether the resulting combination is usable is up to the caller.
+  */
+ static int handle_gmdid(struct xe_device *xe,
+ 			const struct xe_ip **graphics_ip,
+@@ -713,34 +725,38 @@ static int handle_gmdid(struct xe_device *xe,
+ 			u32 *graphics_revid,
+ 			u32 *media_revid)
+ {
+-	u32 ver;
+-	int ret;
+-
+-	*graphics_ip = NULL;
+-	*media_ip = NULL;
+-
+-	ret = read_gmdid(xe, GMDID_GRAPHICS, &ver, graphics_revid);
+-	if (ret)
+-		return ret;
+-
+-	*graphics_ip = find_graphics_ip(ver);
+-	if (!*graphics_ip) {
+-		drm_err(&xe->drm, "Hardware reports unknown graphics version %u.%02u\n",
+-			ver / 100, ver % 100);
+-	}
+-
+-	ret = read_gmdid(xe, GMDID_MEDIA, &ver, media_revid);
+-	if (ret)
+-		return ret;
+-
+-	/* Media may legitimately be fused off / not present */
+-	if (ver == 0)
+-		return 0;
++	const struct xe_ip **ips[] = {
++		[GMDID_GRAPHICS] = graphics_ip,
++		[GMDID_MEDIA] = media_ip,
++	};
++	u32 *revids[] = {
++		[GMDID_GRAPHICS] = graphics_revid,
++		[GMDID_MEDIA] = media_revid,
++	};
++
++	for (enum xe_gmdid_type type = 0; type < ARRAY_SIZE(gmdid_descs); type++) {
++		const struct xe_gmdid_desc *desc = &gmdid_descs[type];
++		u32 ver;
++		int ret;
++
++		*ips[type] = NULL;
++		*revids[type] = 0;
++
++		ret = read_gmdid(xe, type, &ver, revids[type]);
++		if (ret)
++			return ret;
++
++		/* The IP may legitimately be fused off / not present */
++		if (!ver) {
++			*revids[type] = 0;
++			continue;
++		}
+ 
+-	*media_ip = find_media_ip(ver);
+-	if (!*media_ip) {
+-		drm_err(&xe->drm, "Hardware reports unknown media version %u.%02u\n",
+-			ver / 100, ver % 100);
++		*ips[type] = desc->find_ip(ver);
++		if (!*ips[type])
++			drm_err(&xe->drm,
++				"Hardware reports unknown %s version %u.%02u\n",
++				desc->name, ver / 100, ver % 100);
+ 	}
+ 
+ 	return 0;
+-- 
+2.43.0
+

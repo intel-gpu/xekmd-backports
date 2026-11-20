@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stuart Summers <stuart.summers@intel.com>
+Date: Thu, 5 Nov 2026 23:34:23 +0000
+Subject: drm/xe: Do not claim flat CCS without a graphics IP
+
+has_flat_ccs comes from the device descriptor rather than from the
+graphics IP, so it survives a device whose graphics IP is absent.  It is
+a graphics feature though, and probe_has_flat_ccs() reads its layout back
+through the primary GT, which is not there.
+
+Clear the flag along with the rest of the graphics feature bits.
+
+Signed-off-by: Stuart Summers <stuart.summers@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/patch/771424/?series=179173&rev=1)
+---
+ drivers/gpu/drm/xe/xe_pci.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 4c211783a..2a7386dd8 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -1134,6 +1134,14 @@ static int xe_info_init(struct xe_device *xe,
+ 		xe->info.has_ctx_tlb_inval = graphics_desc->has_ctx_tlb_inval;
+ 		xe->info.has_usm = graphics_desc->has_usm;
+ 		xe->info.has_64bit_timestamp = graphics_desc->has_64bit_timestamp;
++	} else {
++		/*
++		 * Flat CCS comes from the device descriptor rather than from
++		 * the graphics IP, but it is still a graphics feature: its
++		 * layout is read back through the primary GT, which is not
++		 * there to be read.
++		 */
++		xe->info.has_flat_ccs = 0;
+ 	}
+ 
+ 	if (xe->info.platform != XE_PVC)
+-- 
+2.43.0
+

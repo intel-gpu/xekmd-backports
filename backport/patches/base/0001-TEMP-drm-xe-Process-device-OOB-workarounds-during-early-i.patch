@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stuart Summers <stuart.summers@intel.com>
+Date: Fri, 30 Oct 2026 22:05:40 +0000
+Subject: drm/xe: Process device OOB workarounds during early info init
+
+Device OOB workarounds only match on platform, subplatform and platform
+step, all of which are known once xe_info_init_early() has copied them
+out of the device descriptor. Processing them there instead of in
+xe_device_probe_early() makes XE_DEVICE_WA() usable for the rest of
+early probe, which runs before xe_device_probe_early().
+
+While moving the call, check the return value of xe_wa_device_init(),
+which the old call site silently dropped.
+
+Signed-off-by: Stuart Summers <stuart.summers@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/patch/771413/?series=179173&rev=1)
+---
+ drivers/gpu/drm/xe/xe_device.c |  3 ---
+ drivers/gpu/drm/xe/xe_pci.c    | 14 ++++++++++++++
+ 2 files changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
+index 871d1ecc1..50e286c98 100644
+--- a/drivers/gpu/drm/xe/xe_device.c
++++ b/drivers/gpu/drm/xe/xe_device.c
+@@ -874,9 +874,6 @@ int xe_device_probe_early(struct xe_device *xe)
+ {
+ 	int err;
+ 
+-	xe_wa_device_init(xe);
+-	xe_wa_process_device_oob(xe);
+-
+ 	err = xe_mmio_probe_early(xe);
+ 	if (err)
+ 		return err;
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 8c1fcefd8..46892f7d9 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -15,6 +15,8 @@
+ #include <drm/drm_drv.h>
+ #include <drm/intel/pciids.h>
+ 
++#include <generated/xe_device_wa_oob.h>
++
+ #include "display/xe_display.h"
+ #include "regs/xe_gt_regs.h"
+ #include "regs/xe_regs.h"
+@@ -39,6 +41,7 @@
+ #include "xe_survivability_mode.h"
+ #include "xe_tile.h"
+ #include "xe_tile_printk.h"
++#include "xe_wa.h"
+ 
+ enum toggle_d3cold {
+ 	D3COLD_DISABLE,
+@@ -789,6 +792,17 @@ static int xe_info_init_early(struct xe_device *xe,
+ 	xe->info.subplatform = subplatform_desc ?
+ 		subplatform_desc->subplatform : XE_SUBPLATFORM_NONE;
+ 
++	/*
++	 * Device OOB workarounds only match on platform, subplatform and
++	 * platform step, which are all known by now, so process them here and
++	 * make XE_DEVICE_WA() usable for the remainder of early probe.
++	 */
++	err = xe_wa_device_init(xe);
++	if (err)
++		return err;
++
++	xe_wa_process_device_oob(xe);
++
+ 	xe->info.dma_mask_size = desc->dma_mask_size;
+ 	xe->info.va_bits = desc->va_bits;
+ 	xe->info.vm_max_level = desc->vm_max_level;
+-- 
+2.43.0
+

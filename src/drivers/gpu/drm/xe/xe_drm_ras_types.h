@@ -43,9 +43,6 @@ struct xe_drm_ras {
 
 	/** @info: info array for all types of errors */
 	struct xe_drm_ras_counter *info[DRM_XE_RAS_ERR_SEV_MAX];
-
-	/** @cper_on_query: emit a CPER record on each counter query */
-	bool cper_on_query;
 };
 
 #endif

@@ -68,7 +68,7 @@ static inline bool xe_is_vram_mgr_blocks_contiguous(struct gpu_buddy *mm,
 static int xe_ttm_vram_buddy_alloc(struct xe_ttm_vram_mgr *mgr, u64 start,
 				   u64 end, u64 size, u64 min_page_size,
 				   struct list_head *blocks, unsigned long flags,
-				   void *priv, u64 *used_visible)
+				   struct ttm_resource *res, u64 *used_visible)
 {
 	struct gpu_buddy *mm = &mgr->mm;
 	struct gpu_buddy_block *block;
@@ -78,8 +78,16 @@ static int xe_ttm_vram_buddy_alloc(struct xe_ttm_vram_mgr *mgr, u64 start,
 	if (err)
 		return err;
 
+	/*
+	 * Track the owning resource, never the owning BO. A BO backpointer
+	 * cached here goes stale the moment TTM hands the resource to a ghost
+	 * object (ttm_buffer_object_transfer()), which happens on every
+	 * accelerated move and on pipelined gutting. The resource, in
+	 * contrast, has exactly the same lifetime as these blocks and TTM
+	 * keeps &ttm_resource.bo pointing at the current owner for us.
+	 */
 	list_for_each_entry(block, blocks, link)
-		block->private = priv;
+		block->private = res;
 
 	if (end <= mgr->visible_size) {
 		*used_visible = size;
@@ -170,7 +178,7 @@ static int xe_ttm_vram_mgr_new(struct ttm_resource_manager *man,
 	err = xe_ttm_vram_buddy_alloc(mgr, (u64)place->fpfn << PAGE_SHIFT,
 				      (u64)lpfn << PAGE_SHIFT, size,
 				      min_page_size, &vres->blocks, vres->flags,
-				      tbo, &vres->used_visible_size);
+				      &vres->base, &vres->used_visible_size);
 	if (err)
 		goto error_unlock;
 	mutex_unlock(&mgr->lock);
@@ -384,7 +392,7 @@ static int xe_ttm_vram_mgr_dmem_reclaim(struct dmem_cgroup_pool_state *pool,
 	int ret, idx;
 
 	if (!drm_dev_enter(&xe->drm, &idx))
-return -ENODEV;
+		return -ENODEV;
 
 	{
 		ACQUIRE(xe_pm_runtime_ioctl, pm)(xe);
@@ -436,9 +444,7 @@ static void xe_ttm_vram_mgr_fini(struct drm_device *dev, void *arg)
 
 	mutex_lock(&mgr->lock);
 	xe_ttm_vram_free_bad_pages(mgr);
-mutex_unlock(&mgr->lock);
-
-	ttm_resource_manager_set_used(man, false);
+	mutex_unlock(&mgr->lock);
 
 	if (ttm_resource_manager_evict_all(&xe->ttm, man))
 		return;
@@ -964,7 +970,7 @@ int xe_ttm_vram_handle_addr_fault(struct xe_device *xe, u64 addr)
 	vram_mgr = &vr->ttm;
 	mm = &vram_mgr->mm;
 
-	if (xe_ras_get_disable_page_offline(xe)) {
+	if (xe_ras_get_disable_vram_page_offline(xe)) {
 		xe_err(xe, "0x%llx is reported as corrupted address by HW\n",
 		       addr);
 		return -EOPNOTSUPP;

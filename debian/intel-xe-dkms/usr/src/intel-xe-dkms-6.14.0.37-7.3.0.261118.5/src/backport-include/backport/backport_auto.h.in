@@ -1,0 +1,730 @@
+/* src/backport-include/backport/backport_auto.h.in.  Generated from configure.ac by autoheader.  */
+
+/* access_remote_vm() function is not present or not exported */
+#undef BPM_ACCESS_REMOTE_VM_NOT_PRESENT
+
+/* acpi_dev_for_each_child() is not available */
+#undef BPM_ACPI_DEV_FOR_EACH_CHILD_NOT_PRESENT
+
+/* alloc_ordered_workqueue_lockdep_map not available */
+#undef BPM_ALLOC_ORDERED_WORKQUEUE_LOCKDEP_MAP_NOT_PRESENT
+
+/* anon_inode_getfile_fmode() is not available */
+#undef BPM_ANON_INODE_GETFILE_FMODE_NOT_PRESENT
+
+/* auxiliary_get_drvdata and auxiliary_set_drvdata is not available */
+#undef BPM_AUXILIARY_BUS_HELPERS_NOT_PRESENT
+
+/* bitmap_weighted_or() is not present in kernel headers */
+#undef BPM_BITMAP_WEIGHTED_OR_NOT_PRESENT
+
+/* class_create() still requires owner parameter */
+#undef BPM_CLASS_CREATE_NO_OWNER_NOT_PRESENT
+
+/* struct class::devnode does not take const struct device * */
+#undef BPM_CLASS_DEVNODE_CONST_NOT_PRESENT
+
+/* ACQUIRE/ACQUIRE_ERR/4-arg DEFINE_GUARD_COND not available */
+#undef BPM_CLEANUP_ACQUIRE_NOT_PRESENT
+
+/* configfs_group_operations.is_visible not available */
+#undef BPM_CONFIGFS_GROUP_OPS_IS_VISIBLE_NOT_PRESENT
+
+/* bin_attribute callbacks do not expect const parameter */
+#undef BPM_CONST_STRUCT_BIN_ATTRIBUTE_IS_NOT_PRESENT
+
+/* dev_coredumpm_timeout() is not available */
+#undef BPM_COREDUMPM_TIMEOUT_NOT_PRESENT
+
+/* __counted_by is not available in the kernel */
+#undef BPM_COUNTED_BY_NOT_PRESENT
+
+/* COUNT_ARGS() does not support 15 arguments */
+#undef BPM_COUNT_ARGS_15_NOT_PRESENT
+
+/* DEFINE_SYSFS_GROUP_VISIBLE is not avilable */
+#undef BPM_DEFINE_SYSFS_GROUP_VISIBLE_NOT_PRESENT
+
+/* dev_coredump_put() is not available */
+#undef BPM_DEVCOREDUMP_PUT_NOT_PRESENT
+
+/* device_iommu_capable() is not available */
+#undef BPM_DEVICE_IOMMU_CAPABLE_NOT_PRESENT
+
+/* device_set_driver_override() is not available */
+#undef BPM_DEVICE_SET_DRIVER_OVERRIDE_NOT_PRESENT
+
+/* struct dev_pagemap_ops has no folio_free member */
+#undef BPM_DEV_PAGEMAP_OPS_FOLIO_FREE_NOT_PRESENT
+
+/* folio_split callback not present in dev_pagemap_ops */
+#undef BPM_DEV_PAGEMAP_OPS_FOLIO_SPLIT_NOT_PRESENT
+
+/* dev_pm_smart_suspend is not available */
+#undef BPM_DEV_PM_SMART_SUSPEND_NOT_PRESENT
+
+/* disable_delayed_work_sync is not declared in linux/workqueue.h */
+#undef BPM_DISABLE_DELAYED_WORK_SYNC_NOT_PRESENT
+
+/* disable_work_sync() function is not avilable */
+#undef BPM_DISBALE_WORK_SYNC_NOT_PRESENT
+
+/* DIV_U64_ROUND_UP macro is not avilable */
+#undef BPM_DIV_U64_ROUND_UP_NOT_PRESENT
+
+/* dma_buf_attach_ops has no invalidate_mappings member */
+#undef BPM_DMA_BUF_ATTACH_OPS_INVALIDATE_MAPPINGS_NOT_PRESENT
+
+/* dma_buf_invalidate_mappings() is not available */
+#undef BPM_DMA_BUF_INVALIDATE_MAPPINGS_NOT_PRESENT
+
+/* dma_fence_array_alloc() is not available */
+#undef BPM_DMA_FENCE_ARRAY_ALLOC_NOT_PRESENT
+
+/* Fence-array create/init without signal_on_any are unavailable */
+#undef BPM_DMA_FENCE_ARRAY_NO_SIGNAL_ON_ANY_NOT_PRESENT
+
+/* dma_fence_check_and_signal_locked() is not available */
+#undef BPM_DMA_FENCE_CHECK_AND_SIGNAL_LOCKED_NOT_PRESENT
+
+/* dma_fence_enable_signaling() is not available */
+#undef BPM_DMA_FENCE_ENABLE_SIGNALING_NOT_PRESENT
+
+/* dma_fence struct has no extern_lock member */
+#undef BPM_DMA_FENCE_EXTERN_LOCK_NOT_PRESENT
+
+/* dma_fence_is_container() is not available in the kernel */
+#undef BPM_DMA_FENCE_IS_CONTAINER_NOT_PRESENT
+
+/* dma_fence_lock_irqsave() and dma_fence_unlock_irqrestore() are not
+   available */
+#undef BPM_DMA_FENCE_LOCK_IRQSAVE_AND_IRQRESTORE_NOT_PRESENT
+
+/* dma_fence_set_deadline() is not available in the kernel */
+#undef BPM_DMA_FENCE_SET_DEADLINE_NOT_PRESENT
+
+/* struct dma_iova_state is not available */
+#undef BPM_DMA_IOVA_STATE_NOT_PRESENT
+
+/* dma_resv_add_fence() is not available in the kernel */
+#undef BPM_DMA_RESV_ADD_FENCE_NOT_PRESENT
+
+/* dma_resv_for_each_fence() is not available in the kernel */
+#undef BPM_DMA_RESV_FOR_EACH_FENCE_NOT_PRESENT
+
+/* dma_resv_replace_fences() is not available in the kernel */
+#undef BPM_DMA_RESV_REPLACE_FENCES_NOT_PRESENT
+
+/* dma_resv_reserve_fences() is not available in the kernel */
+#undef BPM_DMA_RESV_RESERVE_FENCES_NOT_PRESENT
+
+/* enum dma_resv_usage is not available in the kernel */
+#undef BPM_DMA_RESV_USAGE_NOT_PRESENT
+
+/* Dmem cgroup common ancestor helper is not exported */
+#undef BPM_DMEM_CGROUP_ANCESTOR_NOT_EXPORTED
+
+/* Dmem cgroup protection queries are not exported */
+#undef BPM_DMEM_CGROUP_PROTECTION_NOT_EXPORTED
+
+/* struct pci_driver does not have driver_managed_dma member */
+#undef BPM_DRIVER_MANAGED_DMA_NOT_PRESENT
+
+/* drmm_alloc_ordered_workqueue is not available */
+#undef BPM_DRMM_ALLOC_ORDERED_WORKQUEUE_NOT_PRESENT
+
+/* drmm_cgroup_register_region is declared in drm/drm_drv.h */
+#undef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
+
+/* drmm_cgroup_register_region takes a region size */
+#undef BPM_DRMM_CGROUP_REGISTER_REGION_SIZE_ARG
+
+/* drmm_mutex_init is not available */
+#undef BPM_DRMM_MUTEX_INIT_NOT_PRESENT
+
+/* __drmm_workqueue_release is not available */
+#undef BPM_DRMM_WORKQUEUE_RELEASE_NOT_PRESENT
+
+/* drm_buddy_block_trim() does not have 2nd Arugment not available */
+#undef BPM_DRM_BUDDY_BLOCK_TRIM_2ND_ARG_NOT_PRESENT
+
+/* Neither GPU_BUDDY_CONTIGUOUS_ALLOCATION nor DRM_BUDDY_CONTIGUOUS_ALLOCATION
+   is present */
+#undef BPM_DRM_BUDDY_CONTIGUOUS_ALLOCATION_NOT_PRESENT
+
+/* drm_buddy_free_list() does not have 3rd Arugment not available */
+#undef BPM_DRM_BUDDY_FREE_LIST_ARG3_NOT_PRESENT
+
+/* drm_coredump_printer_is_full function is not avilable */
+#undef BPM_DRM_COREDUMP_PRINTER_IS_FULL_NOT_PRESENT
+
+/* drm_dbg_printer() not available */
+#undef BPM_DRM_DBG_PRINTER_NOT_PRESENT
+
+/* drm_dbg_ratelimited() not available */
+#undef BPM_DRM_DBG_RATELIMITED_NOT_PRESENT
+
+/* struct drm_device does not have huge_mnt member */
+#undef BPM_DRM_DEVICE_HUGE_MNT_NOT_PRESENT
+
+/* DRM_DEV_WEDGED_EVENT does not have 3rd argument */
+#undef BPM_DRM_DEV_WEDGED_EVENT_ARG3_NOT_PRESENT
+
+/* DRM_DEV_WEDGED_EVENT is not avilable */
+#undef BPM_DRM_DEV_WEDGED_EVENT_NOT_PRESENT
+
+/* struct drm_driver .fbdev_probe member is not present */
+#undef BPM_DRM_DRIVER_FBDEV_PROBE_NOT_PRESENT
+
+/* Target DRM core provides DRIVER_GEM_GPUVA */
+#undef BPM_DRM_DRIVER_GEM_GPUVA_PRESENT
+
+/* struct drm_driver has gem_prime_mmap callback */
+#undef BPM_DRM_DRIVER_GEM_PRIME_MMAP_PRESENT
+
+/* drm_driver PRIME callback fields are not available */
+#undef BPM_DRM_DRIVER_PRIME_CALLBACKS_NOT_PRESENT
+
+/* drm_exec_init() takes only 2 arguments */
+#undef BPM_DRM_EXEC_INIT_ARG3_NOT_PRESENT
+
+/* __dma_fence_is_later uses old signature with seqno and ops arguments */
+#undef BPM_DRM_FENCE_IS_LATER_ARG_DMA_FENCE_OPS_NOT_PRESENT
+
+/* client_id field is not present in struct drm_file */
+#undef BPM_DRM_FILE_CLIENT_ID_NOT_PRESENT
+
+/* drm_gem_object.gpuva.lock_dep_map not present when CONFIG_LOCKDEP is
+   enabled */
+#undef BPM_DRM_GEM_GPUVA_LOCK_DEP_MAP_NOT_PRESENT
+
+/* drm_gem_object.gpuva.lock (struct mutex) not present; kernel uses
+   lock_dep_map pointer or no lock field */
+#undef BPM_DRM_GEM_GPUVA_MUTEX_NOT_PRESENT
+
+/* struct drm_gem_object_funcs lacks evict callback */
+#undef BPM_DRM_GEM_OBJECT_FUNCS_EVICT_NOT_PRESENT
+
+/* struct drm_gem_object_funcs lacks rss callback */
+#undef BPM_DRM_GEM_OBJECT_FUNCS_RSS_NOT_PRESENT
+
+/* struct drm_gem_object_funcs lacks status callback */
+#undef BPM_DRM_GEM_OBJECT_FUNCS_STATUS_NOT_PRESENT
+
+/* kernel drm_gem_object lacks gpuva field (pre-v6.1 kernels) */
+#undef BPM_DRM_GEM_OBJECT_GPUVA_MEMBER_NOT_PRESENT
+
+/* DRM_GPUVA_OP_DRIVER enum member is not avilable */
+#undef BPM_DRM_GPUVA_OP_DRIVER_NOT_PRESENT
+
+/* drm_gpuvm_bo_obtain_locked() is not present */
+#undef BPM_DRM_GPUVM_BO_OBTAIN_LOCKED_NOT_PRESENT
+
+/* drm_gpuvm_madvise_ops_create() is not present */
+#undef BPM_DRM_GPUVM_MADVISE_OPS_CREATE_NOT_PRESENT
+
+/* rename DRM GPUVM symbols to avoid conflicts with backport kernel
+   implementation */
+#undef BPM_DRM_GPUVM_RENAMING_SYMBOLS
+
+/* drm_gpuvm_sm_map_ops_create() is not present */
+#undef BPM_DRM_GPUVM_SM_MAP_OPS_CREATE_MAP_REQ_NOT_PRESENT
+
+/* drm_line_printer() not available */
+#undef BPM_DRM_LINE_PRINTER_NOT_PRESENT
+
+/* drm_memory_stats is not available */
+#undef BPM_DRM_MEMORY_STATS_NOT_PRESENT
+
+/* debugfs_symlink field not present in drm_minor, manual symlink creation
+   needed */
+#undef BPM_DRM_MINOR_DEBUGFS_SYMLINK_NOT_PRESENT
+
+/* drm_mode_size_dumb() is not available, kernel < 7.0 */
+#undef BPM_DRM_MODE_SIZE_DUMB_NOT_PRESENT
+
+/* drm_mode_size_dumb() is available, kernel >= 7.0 */
+#undef BPM_DRM_MODE_SIZE_DUMB_PRESENT
+
+/* drm_print_hex_dump() not available */
+#undef BPM_DRM_PRINT_HEX_DUMP_NOT_PRESENT
+
+/* drm show_fdinfo support is not available */
+#undef BPM_DRM_SHOW_FDINFO_NOT_PRESENT
+
+/* drm_suballoc_alloc() not available */
+#undef BPM_DRM_SUBALLOC_ALLOC_NOT_PRESENT
+
+/* DRM_WEDGE_RECOVERY_COLD_RESET is not available */
+#undef BPM_DRM_WEDGE_RECOVERY_COLD_RESET_NOT_PRESENT
+
+/* DRM_WEDGE_RECOVERY_VENDOR flag not present */
+#undef BPM_DRM_WEDGE_RECOVERY_VENDOR_NOT_PRESENT
+
+/* struct drm_wedge_task_info is not avilable */
+#undef BPM_DRM_WEDGE_TASK_INFO_NOT_PRESENT
+
+/* DRIVER_DATE field is not present or not needed in drm_driver structure */
+#undef BPM_DRV_DATE_NOT_PRESENT
+
+/* struct iommu_domain_ops does not have enforce_cache_coherency member */
+#undef BPM_ENFORCE_CACHE_COHERENCY_NOT_PRESENT
+
+/* eventfd_signal() requires an extra count argument */
+#undef BPM_EVENTFD_SIGNAL_ARG1_NOT_PRESENT
+
+/* EXPORT_SYMBOL_FOR_MODULES macro is not avilable */
+#undef BPM_EXPORT_SYMBOL_FOR_MODULES_NOT_PRESENT
+
+/* whether FIELD_PREP_CONST is defined */
+#undef BPM_FIELD_PREP_CONST_NOT_PRESENT
+
+/* folio_put() is not available in the kernel */
+#undef BPM_FOLIO_PUT_NOT_PRESENT
+
+/* folio_set_zone_device_data() is not available */
+#undef BPM_FOLIO_SET_ZONE_DEVICE_DATA_NOT_PRESENT
+
+/* folio_zone_device_data() is not available */
+#undef BPM_FOLIO_ZONE_DEVICE_DATA_NOT_PRESENT
+
+/* struct follow_pfnmap_args does not have addr_mask member */
+#undef BPM_FOLLOW_PFNMAP_ARGS_ADDR_MASK_NOT_PRESENT
+
+/* follow_pfnmap_start/end() is not available */
+#undef BPM_FOLLOW_PFNMAP_START_NOT_PRESENT
+
+/* whether FOP_UNSIGNED_OFFSET is defined */
+#undef BPM_FOP_UNSIGNED_OFFSET_NOT_PRESENT
+
+/* for_each_if is not in linux/util_macros.h */
+#undef BPM_FOR_EACH_IF_NOT_PRESENT
+
+/* for_each_or_bit is not available */
+#undef BPM_FOR_EACH_OR_BIT_NOT_PRESENT
+
+/* __free() cleanup attribute is not supported */
+#undef BPM_FREE_ATTRIBUTE_NOT_PRESENT
+
+/* generic_handle_irq_safe() is not available */
+#undef BPM_GENERIC_HANDLE_IRQ_SAFE_NOT_PRESENT
+
+/* genlmsg_iput() API is not available */
+#undef BPM_GENLMSG_IPUT_NOT_PRESENT
+
+/* genl_info_dump() API is not available */
+#undef BPM_GENL_INFO_DUMP_NOT_PRESENT
+
+/* GENL_REQ_ATTR_CHECK() macro is not available */
+#undef BPM_GENL_REQ_ATTR_CHECK_NOT_PRESENT
+
+/* genl_split_ops API is not available */
+#undef BPM_GENL_SPLIT_OPS_NOT_PRESENT
+
+/* GENMASK_U32 macro is not avilable */
+#undef BPM_GENMASK_U32_NOT_PRESENT
+
+/* hmm_pfn_to_phys() is not available */
+#undef BPM_HMM_PFN_TO_PHYS_NOT_PRESENT
+
+/* hmm_range_fault_unlocked_timeout() is not available */
+#undef BPM_HMM_RANGE_FAULT_UNLOCKED_TIMEOUT_NOT_PRESENT
+
+/* HRTIMER_SETUP macro is not avilable */
+#undef BPM_HRTIMER_SETUP_NOT_PRESENT
+
+/* init_llist_node() is not available, kernel < 6.12 */
+#undef BPM_INIT_LLIST_NODE_NOT_PRESENT
+
+/* init_llist_node() is available, kernel >= 6.12 */
+#undef BPM_INIT_LLIST_NODE_PRESENT
+
+/* iommu_group_claim_dma_owner() is not available */
+#undef BPM_IOMMU_GROUP_CLAIM_DMA_OWNER_NOT_PRESENT
+
+/* iommu_group_has_isolated_msi() is not available */
+#undef BPM_IOMMU_GROUP_HAS_ISOLATED_MSI_NOT_PRESENT
+
+/* iommu_map() does not have gfp parameter */
+#undef BPM_IOMMU_MAP_GFP_NOT_PRESENT
+
+/* iommu_paging_domain_alloc() is not available */
+#undef BPM_IOMMU_PAGING_DOMAIN_ALLOC_NOT_PRESENT
+
+/* irq_bypass_register_producer() does not have eventfd argument */
+#undef BPM_IRQ_BYPASS_REGISTER_PRODUCER_EVENTFD_NOT_PRESENT
+
+/* irq_bypass_register_producer() does not have irq argument */
+#undef BPM_IRQ_BYPASS_REGISTER_PRODUCER_IRQ_NOT_PRESENT
+
+/* is_device_coherent_page() is not present */
+#undef BPM_IS_DEVICE_COHERENT_PAGE_NOT_PRESENT
+
+/* kmalloc_objs() is not available */
+#undef BPM_KMALLOC_OBJS_NOT_PRESENT
+
+/* kmalloc_obj() is not available */
+#undef BPM_KMALLOC_OBJ_NOT_PRESENT
+
+/* kmap_local_page_try_from_panic exists but takes non-const struct page * */
+#undef BPM_KMAP_LOCAL_PAGE_TRY_FROM_PANIC_NONCONST_PRESENT
+
+/* kmap_local_page_try_from_panic is not available */
+#undef BPM_KMAP_LOCAL_PAGE_TRY_FROM_PANIC_NOT_PRESENT
+
+/* kvmalloc_objs() is not available */
+#undef BPM_KVMALLOC_OBJS_NOT_PRESENT
+
+/* kvrealloc_noprof() is available */
+#undef BPM_KVREALLOC_NOPROF_PRESENT
+
+/* kvrealloc() requires oldsize parameter */
+#undef BPM_KVREALLOC_OLDSIZE_PARAM_PRESENT
+
+/* kvzalloc_objs() is not available */
+#undef BPM_KVZALLOC_OBJS_NOT_PRESENT
+
+/* kzalloc_flex() is not available */
+#undef BPM_KZALLOC_FLEX_NOT_PRESENT
+
+/* kzalloc_objs() is not available */
+#undef BPM_KZALLOC_OBJS_NOT_PRESENT
+
+/* kzalloc_obj() is not available */
+#undef BPM_KZALLOC_OBJ_NOT_PRESENT
+
+/* linear_page_delta() is not available */
+#undef BPM_LINEAR_PAGE_DELTA_NOT_PRESENT
+
+/* linux/mei_uuid.h is not available */
+#undef BPM_LINUX_MEI_UUID_H_NOT_PRESENT
+
+/* list_count_nodes() is not available */
+#undef BPM_LIST_COUNT_NODES_NOT_PRESENT
+
+/* Define to 1 if list_lru_add does not have 4 arguments (nid, memcg) */
+#undef BPM_LIST_LRU_ADD_4ARGS_NOT_PRESENT
+
+/* list_lru_add() exported symbol is not available */
+#undef BPM_LIST_LRU_ADD_EXP_SYM_NOT_PRESENT
+
+/* Define if list_lru walk callback has no cb parameter */
+#undef BPM_LIST_LRU_WALK_CB_PARAM_NOT_PRESENT
+
+/* local64_try_cmpxchg is not available */
+#undef BPM_LOCAL64_TRY_CMPXCHG_NOT_PRESENT
+
+/* struct vfio_device_ops does not have match_token_uuid member */
+#undef BPM_MATCH_TOKEN_UUID_NOT_PRESENT
+
+/* class_register() does not take const struct class * */
+#undef BPM_MEI_CLASS_BUS_REGISTER_CONST_ARGS_NOT_PRESENT
+
+/* const argument not supported in struct bus_type match callback */
+#undef BPM_MEI_CL_DEVICE_MATCH_CONST_ARG_NOT_PRESENT
+
+/* const argument not supported in struct bus_type uevent callback */
+#undef BPM_MEI_CL_DEVICE_UEVENT_CONST_ARG_NOT_PRESENT
+
+/* migrate_device_pages()/finalize() not present */
+#undef BPM_MIGRATE_DEVICE_PAGES_NOT_PRESENT
+
+/* migrate_device_pfns() not present */
+#undef BPM_MIGRATE_DEVICE_PFNS_NOT_PRESENT
+
+/* struct migrate_vma fault_page member is not present */
+#undef BPM_MIGRATE_VMA_FAULT_PAGE_NOT_PRESENT
+
+/* migrate_vma_* helpers are not present or not exported */
+#undef BPM_MIGRATE_VMA_NOT_PRESENT
+
+/* Compound migration flags are unavailable */
+#undef BPM_MIGRATE_VMA_SELECT_COMPOUND_NOT_PRESENT
+
+/* Define to 1 if mmu_interval_notifier_ops lacks two-pass invalidate
+   callbacks */
+#undef BPM_MMU_INTERVAL_NOTIFIER_TWOPASS_NOT_PRESENT
+
+/* module_import_ns quoted namespace strings are not supported */
+#undef BPM_MODULE_IMPORT_TO_STRING_LITERAL_PRESENT
+
+/* struct pci_dev does not have non_mappable_bars member */
+#undef BPM_NON_MAPPABLE_BARS_NOT_PRESENT
+
+/* NR_GPU_ACTIVE and NR_GPU_RECLAIM are available */
+#undef BPM_NR_GPU_STATS_NOT_PRESENT
+
+/* num_pages_contiguous is not available */
+#undef BPM_NUM_PAGES_CONTIGUOUS_NOT_PRESENT
+
+/* enable objtool-safe module init/exit aliases */
+#undef BPM_OBJTOOL_COPY_ATTRIBUTE_NEEDED
+
+/* page_pgmap() helper is not available */
+#undef BPM_PAGE_PGMAP_NOT_PRESENT
+
+/* parse_int_array_user() function is not present or not exported */
+#undef BPM_PARSE_INT_ARRAY_USER_NOT_PRESENT
+
+/* pcie_aer_is_native() exported symbol is not available */
+#undef BPM_PCIE_AER_IS_NATIVE_EXP_SYM_NOT_PRESENT
+
+/* pcim_iomap_region() is not available */
+#undef BPM_PCIM_IOMAP_REGION_NOT_PRESENT
+
+/* pcim_p2pdma_provider() function not available */
+#undef BPM_PCIM_P2PDMA_NOT_PRESENT
+
+/* pci_clear_and_set_config_dword() function not available */
+#undef BPM_PCI_CLEAR_AND_SET_CONFIG_DWORD_NOT_PRESENT
+
+/* pci_iov_get_pf_drvdata() function not available */
+#undef BPM_PCI_IOV_GET_PF_DRVDATA_NOT_PRESENT
+
+/* pci_iov_vf_bar_get_sizes and pci_iov_vf_bar_set_size functions not
+   available */
+#undef BPM_PCI_IOV_VF_BAR_FUNCTIONS_NOT_PRESENT
+
+/* pci_iov_vf_id() function not available */
+#undef BPM_PCI_IOV_VF_ID_NOT_PRESENT
+
+/* pci_msix_can_alloc_dyn/pci_msix_alloc_irq_at/irq_domain_instantiate not
+   available */
+#undef BPM_PCI_MSIX_ALLOC_IRQ_NOT_PRESENT
+
+/* pci_rebar_size_supported and related helpers not available */
+#undef BPM_PCI_REBAR_SIZE_SUPPORTED_NOT_PRESENT
+
+/* pci_resize_resource does not take exclude_bars 4th argument */
+#undef BPM_PCI_RESIZE_RESOURCE_VF_BARS_NOT_PRESENT
+
+/* Exported no-argument perf_allow_cpu() is unavailable */
+#undef BPM_PERF_ALLOW_CPU_NOT_PRESENT
+
+/* perf_allow_kernel() is not exported to modules */
+#undef BPM_PERF_ALLOW_KERNEL_NOT_EXPORTED
+
+/* perf_allow_kernel() requires an event attribute */
+#undef BPM_PERF_ALLOW_KERNEL_NO_ARGS_NOT_PRESENT
+
+/* platform_device.remove callback returns int */
+#undef BPM_PF_DRIVER_REMOVE_RETURN_VOID_NOT_PRESENT
+
+/* pin_user_pages_remote() does not have the 6-argument signature */
+#undef BPM_PIN_USER_PAGES_REMOTE_ARG6_NOT_PRESENT
+
+/* PMD_ORDER macro is not available in linux/pgtable.h */
+#undef BPM_PMD_ORDER_NOT_PRESENT
+
+/* struct pmu does not have scope member */
+#undef BPM_PMU_SCOPE_MEMBER_NOT_PRESENT
+
+/* pm_runtime_*autosuspend() helpers do not mark last_busy */
+#undef BPM_PM_RUNTIME_AUTOSUSPEND_MARK_LAST_BUSY_NOT_PRESENT
+
+/* pm_runtime_get_if_active() does not have 2nd Arugment not available */
+#undef BPM_PM_RUNTIME_GET_IF_ACTIVE_ARG2_NOT_PRESENT
+
+/* PM_SUSPEND_IN_PROGRESS function is not avilable */
+#undef BPM_PM_SUSPEND_IN_PROGRESS_NOT_PRESENT
+
+/* range_overflows() is not provided by the kernel */
+#undef BPM_RANGE_OVERFLOWS_NOT_PRESENT
+
+/* register_shrinker second argument is not present */
+#undef BPM_REGISTER_SHRINKER_ARG2_NOT_PRESENT
+
+/* secs_to_jiffies() function is not available */
+#undef BPM_SECS_TO_JIFFIES_NOT_PRESENT
+
+/* shmem_read_folio() is not available in the kernel */
+#undef BPM_SHMEM_READ_FOLIO_NOT_PRESENT
+
+/* shmem_writeout is not available */
+#undef BPM_SHMEM_WRITEOUT_NOT_PRESENT
+
+/* shmem_write_folio() is not available */
+#undef BPM_SHMEM_WRITE_FOLIO_NOT_PRESENT
+
+/* shrinker_alloc/register/free API not present */
+#undef BPM_SHRINKER_ALLOC_NOT_PRESENT
+
+/* spi_driver.remove callback returns int */
+#undef BPM_SPI_DRIVER_REMOVE_RETURN_VOID_NOT_PRESENT
+
+/* strscpy() argument3 is not available */
+#undef BPM_STRSCPY_ARG3_PRESENT
+
+/* struct bin_attribute does not have read_new member */
+#undef BPM_STRUCT_BIN_ATTRIBUTE_READ_NEW_NOT_PRESENT
+
+/* const keyword not supported for struct ctl_table */
+#undef BPM_STRUCT_CTL_TABLE_CONST_KEYWORD_NOT_PRESENT
+
+/* struct device has no driver_override member */
+#undef BPM_STRUCT_DEVICE_DRIVER_OVERRIDE_NOT_PRESENT
+
+/* origin member is not part of "struct drm_printer" */
+#undef BPM_STRUCT_DRM_PRINTER_ORIGIN_NOT_PRESENT
+
+/* str_down_up() is not available */
+#undef BPM_STR_DOWN_UP_NOT_PRESENT
+
+/* str_plural() is not available */
+#undef BPM_STR_PLURAL_NOT_PRESENT
+
+/* str_up_down() is not available */
+#undef BPM_STR_UP_DOWN_NOT_PRESENT
+
+/* legacy register_sysctl path requires explicit ctl_table sentinel */
+#undef BPM_SYSCTL_TABLE_SENTINEL_NOT_PRESENT
+
+/* system_percpu_wq not available */
+#undef BPM_SYSTEM_PERCPU_WQ_NOT_PRESENT
+
+/* timer_delete() function is not available */
+#undef BPM_TIMER_DELETE_NOT_PRESENT
+
+/* bitmap_weighted_or() is not present in kernel headers */
+#undef BPM_UNDERSCORE_BITMAP_WEIGHTED_OR_NOT_PRESENT
+
+/* us_to_ktime() function is not available */
+#undef BPM_US_TO_KTIME_NOT_PRESENT
+
+/* uuid_le_cmp() is not available */
+#undef BPM_UUID_LE_CMP_NOT_PRESENT
+
+/* struct vfio_device_ops does not have get_region_info_caps member */
+#undef BPM_VFIO_GET_REGION_INFO_CAPS_NOT_PRESENT
+
+/* vma_alloc_folio still takes 5 args including hugepage */
+#undef BPM_VMA_ALLOC_FOLIO_4ARGS_NOT_PRESENT
+
+/* vma_end_pgoff() is not available */
+#undef BPM_VMA_END_PGOFF_NOT_PRESENT
+
+/* vma_flags_t type is not available */
+#undef BPM_VMA_FLAGS_T_NOT_PRESENT
+
+/* vma_get_page_prot() is not available */
+#undef BPM_VMA_GET_PAGE_PROT_NOT_PRESENT
+
+/* vma_is_cow_mapping() is not available */
+#undef BPM_VMA_IS_COW_MAPPING_NOT_PRESENT
+
+/* vmf_insert_pfn_pmd()/vmf_insert_pfn_pud() expect pfn_t argument */
+#undef BPM_VMF_INSERT_PFN_ARG_PFN_T_NOT_PRESENT
+
+/* vm_flags_set() is not available in the kernel */
+#undef BPM_VM_FLAGS_SET_NOT_PRESENT
+
+/* i2c-designware lacks Intel Xe polling/quirk; disable xe_i2c */
+#undef BPM_XE_I2C_NOT_SUPPORTED
+
+/* Unbound parent PCI bridge should disable PM and emit warning */
+#undef BPM_XE_PM_UNBOUNDED_BRIDGE_DISABLE_PM
+
+/* zone_device_folio_init() is not available, use page concept */
+#undef BPM_ZONE_DEVICE_FOLIO_INIT_NOT_PRESENT
+
+/* zone_device_page_init does not take 1 arg */
+#undef BPM_ZONE_DEVICE_PAGE_INIT_1ARG_NOT_PRESENT
+
+/* zone_device_page_init does not take 2 args */
+#undef BPM_ZONE_DEVICE_PAGE_INIT_2ARGS_NOT_PRESENT
+
+/* zone_device_page_init does not take 3 args */
+#undef BPM_ZONE_DEVICE_PAGE_INIT_3ARGS_NOT_PRESENT
+
+/* Define to 1 if you have the <drm/display/drm_hdcp.h> header file. */
+#undef HAVE_DRM_DISPLAY_DRM_HDCP_H
+
+/* Define to 1 if you have the <drm/drm_accel.h> header file. */
+#undef HAVE_DRM_DRM_ACCEL_H
+
+/* Define to 1 if you have the <drm/drm_gpuva_mgr.h> header file. */
+#undef HAVE_DRM_DRM_GPUVA_MGR_H
+
+/* Define to 1 if you have the <drm/drm_module.h> header file. */
+#undef HAVE_DRM_DRM_MODULE_H
+
+/* Define to 1 if you have the <drm/drm_privacy_screen_machine.h> header file.
+   */
+#undef HAVE_DRM_DRM_PRIVACY_SCREEN_MACHINE_H
+
+/* Define to 1 if you have the <drm/i915_gsc_proxy_mei_interface.h> header
+   file. */
+#undef HAVE_DRM_I915_GSC_PROXY_MEI_INTERFACE_H
+
+/* Define to 1 if you have the <drm/intel/i915_drm.h> header file. */
+#undef HAVE_DRM_INTEL_I915_DRM_H
+
+/* Define to 1 if you have the <drm/intel/i915_gsc_proxy_mei_interface.h>
+   header file. */
+#undef HAVE_DRM_INTEL_I915_GSC_PROXY_MEI_INTERFACE_H
+
+/* Define to 1 if you have the <kunit/static_stub.h> header file. */
+#undef HAVE_KUNIT_STATIC_STUB_H
+
+/* Define to 1 if you have the <linux/args.h> header file. */
+#undef HAVE_LINUX_ARGS_H
+
+/* Define to 1 if you have the <linux/cleanup.h> header file. */
+#undef HAVE_LINUX_CLEANUP_H
+
+/* Define to 1 if you have the <linux/container_of.h> header file. */
+#undef HAVE_LINUX_CONTAINER_OF_H
+
+/* Define to 1 if you have the <linux/dma-iommu.h> header file. */
+#undef HAVE_LINUX_DMA_IOMMU_H
+
+/* Define to 1 if you have the <linux/gpu_buddy.h> header file. */
+#undef HAVE_LINUX_GPU_BUDDY_H
+
+/* Define to 1 if you have the <linux/iosys-map.h> header file. */
+#undef HAVE_LINUX_IOSYS_MAP_H
+
+/* Define to 1 if you have the <linux/mei_aux.h> header file. */
+#undef HAVE_LINUX_MEI_AUX_H
+
+/* Define to 1 if you have the <linux/mutex_types.h> header file. */
+#undef HAVE_LINUX_MUTEX_TYPES_H
+
+/* Define to 1 if you have the <linux/sprintf.h> header file. */
+#undef HAVE_LINUX_SPRINTF_H
+
+/* Define to 1 if you have the <linux/string_choices.h> header file. */
+#undef HAVE_LINUX_STRING_CHOICES_H
+
+/* Define to 1 if you have the <linux/unaligned.h> header file. */
+#undef HAVE_LINUX_UNALIGNED_H
+
+/* Define to 1 if you have the <linux/wordpart.h> header file. */
+#undef HAVE_LINUX_WORDPART_H
+
+/* Define to 1 if you have the <linux/workqueue_types.h> header file. */
+#undef HAVE_LINUX_WORKQUEUE_TYPES_H
+
+/* Name of package */
+#undef PACKAGE
+
+/* Define to the address where bug reports for this package should be sent. */
+#undef PACKAGE_BUGREPORT
+
+/* Define to the full name of this package. */
+#undef PACKAGE_NAME
+
+/* Define to the full name and version of this package. */
+#undef PACKAGE_STRING
+
+/* Define to the one symbol short name of this package. */
+#undef PACKAGE_TARNAME
+
+/* Define to the home page for this package. */
+#undef PACKAGE_URL
+
+/* Define to the version of this package. */
+#undef PACKAGE_VERSION
+
+/* Version number of package */
+#undef VERSION

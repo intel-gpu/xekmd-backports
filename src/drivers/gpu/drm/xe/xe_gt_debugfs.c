@@ -356,8 +356,8 @@ static int gpgpu_preemption_level_show(struct seq_file *m, void *unused)
 }
 
 static ssize_t gpgpu_preemption_level_write(struct file *file,
-					    const char __user *ubuf,
-					    size_t len, loff_t *offp)
+		const char __user *ubuf,
+		size_t len, loff_t *offp)
 {
 	struct seq_file *m = file->private_data;
 	struct xe_gt *gt = m->private;
@@ -388,8 +388,8 @@ static ssize_t gpgpu_preemption_level_write(struct file *file,
 	if (new_level != XE_GPGPU_PREEMPT_DEFAULT) {
 		add_taint(TAINT_USER, LOCKDEP_STILL_OK);
 		xe_gt_notice(gt,
-			     "GPGPU preemption overridden to '%s' (applies to new LRCs only)\n",
-			     gpgpu_preemption_level_names[new_level]);
+				"GPGPU preemption overridden to '%s' (applies to new LRCs only)\n",
+				gpgpu_preemption_level_names[new_level]);
 	}
 
 	gt->gpgpu_preemption_level = new_level;

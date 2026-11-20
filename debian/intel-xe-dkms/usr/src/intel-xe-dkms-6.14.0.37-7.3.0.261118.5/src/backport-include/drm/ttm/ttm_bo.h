@@ -1,0 +1,9 @@
+#ifndef __BACKPORT_DRM_TTM_BO_H__
+#define __BACKPORT_DRM_TTM_BO_H__
+
+#include_next <drm/ttm/ttm_bo.h>
+
+void ttm_bo_set_bulk_move(struct ttm_buffer_object *bo,
+                          struct ttm_lru_bulk_move *bulk);
+
+#endif /* __BACKPORT_DRM_TTM_BO_H__ */

@@ -6,20 +6,29 @@
 #ifndef _XE_CPER_H_
 #define _XE_CPER_H_
 
+#include <linux/types.h>
+
 #include "abi/xe_sigid_abi.h"
 
-struct pci_dev;
-struct xe_ras_error_class;
+struct va_format;
+struct xe_device;
 struct xe_ras_get_counter_response;
 
-#if IS_REACHABLE(CONFIG_UEFI_CPER_X86)
-void xe_emit_hardware_error_cper(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigid,
-				 struct xe_ras_error_class *counter,
-				 struct xe_ras_get_counter_response *response);
+#if IS_ENABLED(CONFIG_UEFI_CPER)
+void xe_cper_emit(struct xe_device *xe, int cper_sev, enum xe_sigid sigid,
+		  u32 component, u32 location, const void *data, size_t len,
+		  struct va_format *vaf);
+void xe_cper_emit_counter(struct xe_device *xe, int cper_sev, enum xe_sigid sigid,
+			  const struct xe_ras_get_counter_response *response);
+int xe_cper_sysfs_init(struct xe_device *xe);
 #else
-static inline void xe_emit_hardware_error_cper(struct pci_dev *pdev, int cper_sev,
-					       enum xe_sigid sigid,
-					       struct xe_ras_error_class *counter,
-					       struct xe_ras_get_counter_response *response) {}
+static inline void xe_cper_emit(struct xe_device *xe, int cper_sev, enum xe_sigid sigid,
+				u32 component, u32 location, const void *data, size_t len,
+				struct va_format *vaf) {}
+static inline void xe_cper_emit_counter(struct xe_device *xe, int cper_sev,
+					enum xe_sigid sigid,
+					const struct xe_ras_get_counter_response *response) {}
+static inline int xe_cper_sysfs_init(struct xe_device *xe) { return 0; }
 #endif
+
 #endif /* _XE_CPER_H_ */

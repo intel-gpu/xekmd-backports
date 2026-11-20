@@ -37,7 +37,7 @@ enum xe_sysctrl_group {
  * @XE_SYSCTRL_CMD_GET_OFFLINE_QUEUE: Retrieve list of offlined queued pages from firmware
  * @XE_SYSCTRL_CMD_GET_HEALTH: Retrieve gpu health
  * @XE_SYSCTRL_CMD_SET_HEALTH: Set gpu health
- * @XE_SYSCTRL_CMD_GET_INFO_QUEUE_DATA: Retrieve a chunk of info queue data
+ * @XE_SYSCTRL_CMD_GET_INFO_QUEUE: Retrieve a chunk of info queue data
  */
 enum xe_sysctrl_gfsp_cmd {
 	XE_SYSCTRL_CMD_GET_SOC_ERROR		= 0x01,
@@ -51,7 +51,7 @@ enum xe_sysctrl_gfsp_cmd {
 	XE_SYSCTRL_CMD_GET_OFFLINE_QUEUE	= 0x0A,
 	XE_SYSCTRL_CMD_GET_HEALTH		= 0x0B,
 	XE_SYSCTRL_CMD_SET_HEALTH		= 0x0C,
-	XE_SYSCTRL_CMD_GET_INFO_QUEUE_DATA	= 0x0D,
+	XE_SYSCTRL_CMD_GET_INFO_QUEUE		= 0x0D,
 };
 
 /**
@@ -158,6 +158,9 @@ struct xe_sysctrl_mailbox_command {
 
 	/** @data_out_len: Size of output buffer in bytes (0 if no response expected) */
 	size_t data_out_len;
+
+	/** @timeout_ms: Response timeout in ms, or 0 for %XE_SYSCTRL_MB_DEFAULT_TIMEOUT_MS */
+	unsigned int timeout_ms;
 };
 
 /* Modify as needed */
@@ -172,5 +175,6 @@ struct xe_sysctrl_mailbox_command {
 	(XE_SYSCTRL_MB_MAX_MESSAGE_SIZE - sizeof(u32))
 
 #define XE_SYSCTRL_MB_DEFAULT_TIMEOUT_MS	500
+#define XE_SYSCTRL_MB_MAX_TIMEOUT_MS		60000
 
 #endif

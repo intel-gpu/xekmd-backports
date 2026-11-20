@@ -11,12 +11,8 @@
 #include "xe_cper.h"
 #include "xe_device.h"
 #include "xe_log.h"
+#include "xe_pci_types.h"
 #include "xe_printk.h"
-
-static bool is_hw_sigid(enum xe_sigid sigid)
-{
-	return (int)sigid >= INTEL_SIGID_GPU_XE_HARDWARE_START;
-}
 
 static void log_emit_cper(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigid,
 			  u32 component, u32 location, const void *data, size_t len,
@@ -25,10 +21,8 @@ static void log_emit_cper(struct pci_dev *pdev, int cper_sev, enum xe_sigid sigi
 	KUNIT_STATIC_STUB_REDIRECT(log_emit_cper, pdev, cper_sev, sigid,
 				   component, location, data, len, vaf);
 
-	if (is_hw_sigid(sigid) && !IS_ERR(data))
-		xe_emit_hardware_error_cper(pdev, cper_sev, sigid,
-					    (struct xe_ras_error_class *)data, NULL);
-	/* TODO software CPER */
+	xe_cper_emit(xe_any_to_xe(pdev), cper_sev, sigid,
+		     component, location, data, len, vaf);
 }
 
 static const char *log_unknown_component_prefix(u32 component)
@@ -62,18 +56,24 @@ static const char *log_component_prefix(u32 component)
 	return component ? log_unknown_component_prefix(component) : "";
 }
 
-static struct xe_gt *get_gt_safe(struct pci_dev *pdev, u8 id)
+static bool allowed_tile_id(struct xe_device *xe, u8 tile_id)
 {
-	struct xe_device *xe = pdev_to_xe_device(pdev);
-
-	return xe ? xe_device_get_gt(xe, id) : NULL;
+	return tile_id < 1 + xe->desc->max_remote_tiles;
 }
 
-static struct xe_tile *get_tile_safe(struct pci_dev *pdev, u8 id)
+static bool allowed_gt_id(struct xe_device *xe, u8 gt_id)
 {
-	struct xe_device *xe = pdev_to_xe_device(pdev);
+	return gt_id < (1 + xe->desc->max_remote_tiles) * xe->desc->max_gt_per_tile;
+}
 
-	return xe && id < xe->info.tile_count ? &xe->tiles[id] : NULL;
+static u8 gt_id_to_tile_id(struct xe_device *xe, u8 gt_id)
+{
+	return gt_id / xe->desc->max_gt_per_tile;
+}
+
+static const char *location_suffix(bool valid)
+{
+	return valid ? ":" : "?";
 }
 
 static const char *log_location_prefix(struct pci_dev *pdev, u32 location, char *buf, size_t size)
@@ -86,17 +86,22 @@ static const char *log_location_prefix(struct pci_dev *pdev, u32 location, char 
 			goto unrecognized;
 		strscpy(buf, "", size);
 	} else if (type == XE_LOG_LOCATION_TYPE_TILE) {
-		struct xe_tile *tile = get_tile_safe(pdev, id);
+		struct xe_device *xe = xe_any_to_xe(pdev);
+		bool valid = xe ? allowed_tile_id(xe, id) : false;
+		const char *pad = location_suffix(valid);
 
-		if (!tile)
-			goto unrecognized;
-		snprintf(buf, size, "Tile%u: ", id);
+		pci_WARN(pdev, !valid && IS_ENABLED(CPTCFG_DRM_XE_DEBUG),
+			 "LOG: invalid tile identifier: %u\n", id);
+		snprintf(buf, size, "Tile%u%s ", id, pad);
 	} else if (type == XE_LOG_LOCATION_TYPE_GT) {
-		struct xe_gt *gt = get_gt_safe(pdev, id);
+		struct xe_device *xe = xe_any_to_xe(pdev);
+		bool valid = xe ? allowed_gt_id(xe, id) : false;
+		const char *pad = location_suffix(valid);
+		u8 tile_id = xe ? gt_id_to_tile_id(xe, id) : 0;
 
-		if (!gt)
-			goto unrecognized;
-		snprintf(buf, size, "Tile%u: GT%u: ", gt->tile->id, id);
+		pci_WARN(pdev, !valid && IS_ENABLED(CPTCFG_DRM_XE_DEBUG),
+			 "LOG: invalid GT identifier: %u\n", id);
+		snprintf(buf, size, "Tile%u%s GT%u%s ", tile_id, pad, id, pad);
 	} else {
 		goto unrecognized;
 	}
@@ -108,6 +113,11 @@ unrecognized:
 		 "LOG: unrecognized location %u.%u\n", type, id);
 	snprintf(buf, size, "LOC%u.%u? ", type, id);
 	return buf;
+}
+
+static bool is_hw_sigid(enum xe_sigid sigid)
+{
+	return (int)sigid >= INTEL_SIGID_GPU_XE_HARDWARE_START;
 }
 
 static bool is_sev_error(int cper_sev)

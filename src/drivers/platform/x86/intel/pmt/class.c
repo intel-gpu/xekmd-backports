@@ -12,8 +12,8 @@
 #include <linux/log2.h>
 #include <linux/intel_vsec.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
-#include <linux/minmax.h>
 #include <linux/ioport.h>
+#include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/pci.h>
@@ -300,8 +300,6 @@ static int pmt_resolve_access_pci(struct intel_pmt_entry *entry,
 		return -EINVAL;
 	}
 
-entry->dev = ivdev->dev;
-
 	return 0;
 }
 
@@ -375,9 +373,11 @@ static int intel_pmt_populate_entry(struct intel_pmt_entry *entry,
 		dev_err(dev, "Unknown discovery source: %d\n", ivdev->src);
 		return -EINVAL;
 	}
+
 	entry->guid = header->guid;
 	entry->size = header->size;
 	entry->cb = ivdev->priv_data;
+	entry->dev = ivdev->dev;
 
 	return 0;
 }

@@ -39,6 +39,366 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.1_261118.6` | | | |
+| | oot-backport/main | [`e9abbe2dd`](<https://github.com/intel-gpu/xekmd-backports/commit/e9abbe2ddbc3f320fd474e9cd51f4a2407a3078b>) | backport-include/zstd: support GuC dump compression on older kernels |
+| | oot-backport/main | [`3edd51cca`](<https://github.com/intel-gpu/xekmd-backports/commit/3edd51cca2ea77893fc8d9fe712ca57ca1f46b1a>) | patches: fix hunk offsets to resolve hunk failures |
+| | linux-next | [`923bab365`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=923bab365da28fdae995d08e67fbc2aa3eff1c6c>) | Revert "drm/xe: Set mask bits for CCS_MODE register" |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/767377/?series=178045&rev=1>) | &#91;TEMP&#93; drm/ttm, drm/xe: Drop the ttm_tt on null moves to VRAM |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/174252/#rev2>) | &#91;TEMP&#93; drm/xe: Defer VM teardown until exec queue cleanup completes |
+| | ML v4 | [Patchwork](<https://patchwork.freedesktop.org/series/175996/#rev4>) | &#91;TEMP&#93; drm/xe: Disable scheduling early on FD close to avoid CAT error cascade |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/767376/?series=178045&rev=1>) | &#91;TEMP&#93; drm/xe: Exclude imported dma-buf BOs from the TT budget |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/761238/?series=176414&rev=1>) | &#91;TEMP&#93; drm/xe: Extend Wa_16030224309 to graphics version 35.11 |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/174252/#rev2>) | &#91;TEMP&#93; drm/xe: Hold a device reference across deferred VM destruction |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/174252/#rev2>) | &#91;TEMP&#93; drm/xe: Mark VMs as closing before queue cleanup |
+| | ML v4 | [Patchwork](<https://patchwork.freedesktop.org/series/175996/#rev4>) | &#91;TEMP&#93; drm/xe: Read scheduler message opcode under lock |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/172710/#rev3>) | &#91;TEMP&#93; drm/xe: Separate drm-ras netlink data from device and firmware RAS state |
+| | ML v4 | [Patchwork](<https://patchwork.freedesktop.org/series/175996/#rev4>) | &#91;TEMP&#93; drm/xe: Synchronously wait for queue kill on FD close |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/178015/#rev2>) | &#91;TEMP&#93; drm/xe/cper: Drop redundant counter argument |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/178015/#rev2>) | &#91;TEMP&#93; drm/xe/cper: Prepare Intel CPER info records |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/759600/?series=175989&rev=1>) | &#91;TEMP&#93; drm/xe/cri: Implement workaround Wa_15020021844 |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/758679/?series=175785&rev=1>) | &#91;TEMP&#93; drm/xe/cri: Set downstream access to L3 class 3 and write-back |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/767375/?series=178045&rev=1>) | &#91;TEMP&#93; drm/xe: don't allocate fake mmap offsets for imported dma-bufs |
+| | linux-next | [`d3f1b058a`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=d3f1b058a77d1754d469ea4eaf43e754d43cdc4c>) | &#91;TEMP&#93; drm/xe/ggtt: invalidate engine GGTT TLBs for multi-queue GTs |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/173403/#rev2>) | &#91;TEMP&#93; drm/xe/i2c: Expose AMC Alert reason sysfs |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/177598/#rev3>) | &#91;TEMP&#93; drm/xe/pf: Program LMTT directory pointer from each GT's init path |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/177598/#rev3>) | &#91;TEMP&#93; drm/xe/pf: Use multicast writes for early-generation LMTT config |
+| | ML | [Patchwork](<https://patchwork.freedesktop.org/patch/748149/>) | &#91;TEMP&#93; drm/xe/ras: Enable SGUnit PCIe error reporting |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Add DOC text for VSEC |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Add PMT GUID internal access |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Add base_offset to allow for more flexibilty |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Correct locking order |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Crescent Island PMT callbacks |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Crescent Island PMT decode |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Do not register BMG PMT for VF |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Refactor BattleMage PMT defines |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Refactor platform check |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Support Crescent Island PMT |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Support late bind fw information |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Support possible hotplug exit |
+| | ML v14 | [Patchwork](<https://patchwork.freedesktop.org/patch/760018/?series=160717&rev=14>) | &#91;TEMP&#93; drm/xe/vsec: Support survivability mode for CRI |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Update PMT internal access |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Update VSEC probe order |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;TEMP&#93; drm/xe/vsec: Use correct pm state get |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/172710/#rev3>) | &#91;TEMP&#93; drm/xe/xe_ras: Add function to get maximum pages firmware can store |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/178316/#rev2>) | &#91;TEMP&#93; drm/xe/xe_ras: Add support for PCIe error component handling |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/172710/#rev3>) | &#91;TEMP&#93; drm/xe/xe_ras: Add support to query page offline queue and list |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/178015/#rev2>) | &#91;TEMP&#93; drm/xe/xe_ras: Add support to retrieve info queue data |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/172710/#rev3>) | &#91;TEMP&#93; drm/xe/xe_ras: Handle page offline requests for device memory ecc errors |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/172710/#rev3>) | &#91;TEMP&#93; drm/xe/xe_ras: Track offlined pages by firmware to avoid duplicates |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/172710/#rev3>) | &#91;TEMP&#93;: drm/xe/xe_ttm_vram: Report max_pages reported by firmware to userspace |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/760212/?series=176134&rev=1>) | &#91;TEMP&#93;: vfio/xe: Add CRI and NVL device IDs |
+| | linux-next | [`3a4d995cb`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3a4d995cb926da4bd16f9bd4c7104d95105c5eff>) | drm: Add DRM_WEDGE_RECOVERY_COLD_RESET recovery method |
+| | linux-next | [`048364a21`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=048364a21a4baa6494d3c51d3cf7bccf336d5e35>) | drm/doc: Document DRM_WEDGE_RECOVERY_COLD_RESET recovery method |
+| | linux-next | [`6fdbfc75e`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=6fdbfc75eaa1b10ff5d2a45b6b8cf2b57f7a1d03>) | drm/drm_ras: Add drm_ras netlink error event |
+| | linux-next | [`0a6310dde`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=0a6310dde13dca8252a48ec8e2e65752c0fced86>) | drm/pagemap: Drop ratelimiting from dev_unhold_work debug trace |
+| | linux-next | [`b66b036c9`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b66b036c959f49decd2202db4026d3ae21e01388>) | drm/pagemap: Prevent CPU stalls during unbounded pagemap teardown |
+| | linux-next | [`9cc19bb8f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=9cc19bb8f2f6886392b9185b96bbef91b2f1a50f>) | drm/ras: Cancel and free message on get counter failure |
+| | linux-next | [`b2207d4c4`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b2207d4c4e84347a3a6b26b77e218cfc606d0109>) | drm/ras: Introduce error threshold |
+| | linux-next | [`6a8789e94`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=6a8789e948c15f6daea4961e73e8ba01016716b2>) | drm/xe: Add debugfs knob to control GPGPU preemption granularity |
+| | linux-next | [`dd157120f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=dd157120f71f843b79f3684d9da48240776d3382>) | drm/xe: Add debugfs pagefault_info |
+| | linux-next | [`6ef3eb10a`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=6ef3eb10aea4260f752c06489a5369c2b67848b0>) | drm/xe: Add fault-inject based VRAM page offline injection |
+| | linux-next | [`fd831e3af`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=fd831e3af1e0858cdf12b49635c4ffb4600442fa>) | drm/xe: Add mnemonic error reason to page fault diagnostics |
+| | linux-next | [`b56f37907`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b56f37907ae7169de58209917b6cc4e259436829>) | drm/xe: Add num_pf_work modparam |
+| | linux-next | [`d67f04046`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=d67f04046641b7aa1607d66111581226d4da681f>) | drm/xe: Add pagefault chaining stats |
+| | linux-next | [`b6bd6c613`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b6bd6c613fd5e7967e5b4c0a0a5270b6ede1a8b8>) | drm/xe: Add support for wa_14028434957 |
+| | linux-next | [`53e76bde1`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=53e76bde11df43bc10a395a5ef7604ab96d56964>) | drm/xe: Allow prefetch-only VM bind IOCTLs to use VM read lock |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20260922144634.55130-2-talesam@gmail.com>) | drm/xe: Capture devcoredump on TLB invalidation timeout |
+| | linux-next | [`f2b4b3f81`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f2b4b3f81466291bde7553c097350f9e08ec59ca>) | drm/xe: Chain page faults via queue-resident cache to avoid fault storms |
+| | linux-next | [`0ac331020`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=0ac3310200c91f723f093fa61105dee3a4c83444>) | drm/xe: Don't unload the driver until all drm devices are freed |
+| | linux-next | [`a158eba2f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=a158eba2fb0d82b7a11f316c6b4065d5861ba0dd>) | drm/xe: Drop redundant parameter from xe_probe_info and friends |
+| | linux-next | [`31aa5fdb0`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=31aa5fdb01c8e0ceb6a0ba84dde589b1db9b40b2>) | drm/xe: Drop redundant parameter from xe_probe_info_early |
+| | linux-next | [`e98e6b57d`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=e98e6b57dad5f7d072d85595d2138c84859bf5f0>) | drm/xe: Drop redundant parameters from xe_info_init_early |
+| | linux-next | [`424e8b5e6`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=424e8b5e61aadcfcc54c6ee27064471b46268116>) | drm/xe: Drop unused parameter from xe_info_init |
+| | linux-next | [`24fca684c`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=24fca684c4461a4f0565d07775ca51b39a43862d>) | drm/xe: Engine class and instance into a u8 |
+| | linux-next | [`1faafb979`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=1faafb979f2da6662bc62aa4030020f38b2044aa>) | drm/xe: Export xe_ttm_bo_purge() |
+| | linux-next | [`fb19798cc`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=fb19798cc366eaacd68b6f59226120045e0b8f7e>) | drm/xe: Expose bad VRAM pages via debugfs |
+| | linux-next | [`aa94849ac`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=aa94849ac3d66a798046bde6784b7d58ff030764>) | drm/xe: Extend Wa_16030224309 to graphics version 35.11 |
+| | linux-next | [`941bcc1a4`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=941bcc1a4bbf0749f80d13883468cd2c9f7763b1>) | drm/xe: Fine grained page fault locking |
+| | linux-next | [`f34e06068`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f34e06068b0fa6708dcb958a99e651f60c770f99>) | drm/xe: Guard teardown paths against purged BOs |
+| | linux-next | [`529f45af3`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=529f45af3e65e17448c6b402a4dce2245fb2df08>) | drm/xe: Handle NULL resource and allow purging of VRAM pages |
+| | linux-next | [`9b00f6153`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=9b00f6153614ca495213f1734b63beae844551eb>) | drm/xe: Handle PUNIT errors by requesting cold-reset recovery |
+| | linux-next | [`965f62434`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=965f624349945ad15c86f44c72fafa11ed962794>) | drm/xe: Implement print vfunc for page fault info logging |
+| | linux-next | [`4fb32222c`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=4fb32222c0a5ef8d148454c3ee77cab64e65e3ab>) | drm/xe: Introduce xe_any helpers |
+| | linux-next | [`82f813f7a`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=82f813f7a0de8b8ed299df6bba13347175c4fa50>) | drm/xe: Introduce xe_wedge |
+| | linux-next | [`3a7df8a43`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3a7df8a43c783ed13bff8de9848fc179107727ea>) | drm/xe: Keep reference to device descriptor |
+| | linux-next | [`4356370ca`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=4356370caf36bc9f7ec9a7a376b9876d53b92878>) | drm/xe: Link LRC BO and its execution queue with safe lifetime rules |
+| | linux-next | [`c1b1906f8`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c1b1906f86ee34bae4a80d0ed4176b64d82e8dec>) | drm/xe: Link VRAM resource allocation with gpu buddy |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20260922144634.55130-3-talesam@gmail.com>) | drm/xe: Log when a timed out TLB invalidation ack finally arrives |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20260410-xe3p_tuning-v1-3-e206a62ee38f@intel.com>) | drm/xe: Mark ROW_CHICKEN5 as a masked register |
+| | linux-next | [`1f6ac7c86`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=1f6ac7c86aa524f8a9c86298976d0f5ccdb97bf6>) | drm/xe: Memset g2g buffer on resume |
+| | linux-next | [`320662381`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=320662381ca243a3364663e917a7447afaf618fa>) | drm/xe: Poll GT for C6 before D3 |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20261013222846.308259-6-alan.previn.teres.alexis@intel.com>) | drm/xe: Remove extra newlines from LRC snapshot dump |
+| | linux-next | [`5a3931cda`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=5a3931cdaaf0f10531687cf599b2ba04dc4935b2>) | drm/xe: Remove ifdef in DRM_GPUVA_OP_DRIVER svm subop checking |
+| | linux-next | [`81ba672a4`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=81ba672a45f3f1d32b1b8e1530416e2af0689ce9>) | drm/xe: Remove redundant full pagefault queue check |
+| | linux-next | [`9d91d2c1f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=9d91d2c1f947f7a1fa698f1881248feb602c4b15>) | drm/xe: Report all probe errors using SIGID |
+| | linux-next | [`688835ac0`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=688835ac03689556ff32b5b55bbe537c1d15dcc6>) | drm/xe: Report 'device wedged' errors using SIGID |
+| | linux-next | [`81a5a4d1c`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=81a5a4d1c9aa23d874b5c49cea2c10de4d9c0d43>) | drm/xe: Report 'probe blocked' status using SIGID |
+| | linux-next | [`61e185250`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=61e18525023acaa638dd9f518402b0bf1c12ff7b>) | drm/xe: Route deferred xe_vma/xe_vm teardown off system_dfl_wq |
+| | linux-next | [`311bd345b`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=311bd345b9bfad162477936c8dec7ab6a26fea8f>) | drm/xe: Route execlist exec queue teardown off system_dfl_wq |
+| | linux-next | [`323047eee`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=323047eeee980a493729623151adef296bcc97af>) | drm/xe: Separate drm-ras netlink data from device and firmware RAS state |
+| | linux-next | [`9fd3b392b`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=9fd3b392bdf37e7135692c89303681e8d9e899be>) | drm/xe: Skip clearing purged page-table BOs |
+| | linux-next | [`4ab4fb32b`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=4ab4fb32bfbbb20459413cfc15c880d7313546a9>) | drm/xe: Split the bo shrinker into purgeable and non-purgeable shrinkers |
+| | linux-next | [`65d3bfa42`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=65d3bfa42c14caeb87274e9c6df03b7545977f2e>) | drm/xe: Thread prefetch of SVM ranges |
+| | linux-next | [`deaef39cb`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=deaef39cb41a602c03c86e6b5a01e4a3b4934f48>) | drm/xe: Tie BO TTM LRU priority to DONTNEED/WILLNEED madvise state |
+| | linux-next | [`2830e59a9`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=2830e59a9268b2fdd11c9b920956edcb3a1361dd>) | drm/xe: Track number of populated ttm_tts in the shrinker |
+| | linux-next | [`107156dc6`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=107156dc6b9cc5710c9b1545d1e61a47a46c72bf>) | drm/xe: Track pagefault worker runtime |
+| | linux-next | [`aa8216142`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=aa8216142a6c8bbc6cb4b83d8782d4fa34c97baa>) | drm/xe: Track parallel page fault activity in GT stats |
+| | linux-next | [`f4e86e1f5`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f4e86e1f5ab5bc4edb368a6d3e21bcd0f3922c54>) | drm/xe: Update non-purgeable shrinker batch size based on average BO size |
+| | linux-next | [`6c1004142`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=6c1004142270f7c52f3809050a962a5795d49cc1>) | drm/xe: Use a single page-fault queue with multiple workers |
+| | linux-next | [`bcd8734f2`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=bcd8734f2afeb1bfb81f06e5af0e49a3573e0873>) | drm/xe: Use guard(spinlock_irqsave) in pagefault handler |
+| | linux-next | [`a3d7376b9`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=a3d7376b9d6711ad45060f73b951130399a1ff9b>) | drm/xe: Validate thermal sensor count before reads |
+| | linux-next | [`6df8aa0e8`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=6df8aa0e8a323201a1eb85a98864e90b6b59230a>) | drm/xe: add force option for global invalidation |
+| | linux-next | [`d4a7e1611`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=d4a7e1611716ac4c211f5f022363c2123d92d812>) | drm/xe: batch CT pagefault acks with periodic flush |
+| | linux-next | [`e86c44c4c`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=e86c44c4c92ba4a30ef775d6d713e7dc50ca20fa>) | drm/xe/bo: Make xe_bo_is_user() public |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20261029172800.2150325-7-naresh.kumar.g@intel.com>) | drm/xe: capture L3 node status registers in devcoredump |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20260903161553.528932-27-tejas.upadhyay@intel.com>) | drm/xe/configfs: Add disable_vram_page_offline attribute |
+| | linux-next | [`12f8e9ed2`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=12f8e9ed28bc5c7713d25b873b4da6b67e77c8fa>) | drm/xe/configfs: Add disable_vram_page_offline attribute |
+| | linux-next | [`137d37bdb`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=137d37bdb7914fe4cf9cab94bb5b4e787c30b50c>) | drm/xe/cper: Add CPER reporting entry point for xe_log |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/169692/#rev3>) | &#91;TEMP&#93; drm/xe/cper: Add Intel specific CPER structures |
+| | linux-next | [`06fcb6fcc`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=06fcb6fcc0d4805814e3a142f3f6d78d10f7c7c2>) | drm/xe/cper: Construct CPER record for hardware errors |
+| | linux-next | [`c4466e14f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c4466e14f273095b35ad7b6de3962c2e831a3a07>) | drm/xe/cper: Emit cper record to trace buf |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/169692/#rev3>) | &#91;TEMP&#93; drm/xe/cper: Hardware error CPER reporting from xe_log |
+| | linux-next | [`e647f967f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=e647f967f048f2341cb68ad2a913182ef76ba623>) | drm/xe/cper: Initialize Intel-specific CPER header |
+| | linux-next | [`ca098eaed`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=ca098eaed06f249874bc4c03bb5e928b3136afb5>) | drm/xe/cper: Log CPER records for aggregate counter retrieval |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/169692/#rev3>) | drm/xe/cper: Prepare CPER record |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/169692/#rev3>) | &#91;TEMP&#93; drm/xe/cper: Prepare Intel CPER error info records |
+| | linux-next | [`4cd2571c1`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=4cd2571c10d5b0f18e401663b520d744544ee701>) | drm/xe/cper: Retrieve the error counter record for CPER reporting |
+| | linux-next | [`0acb5de8d`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=0acb5de8d7a9aec9419f316ef06b937dde285685>) | drm/xe/cri: Expose device UID through sysfs |
+| | linux-next | [`094dbee53`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=094dbee53c6a86acb03fcf76628da14c5a60d3ac>) | drm/xe/cri: Implement Wa_14028586678 |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20261029172800.2150325-3-naresh.kumar.g@intel.com>) | drm/xe/devcoredump: Add GuC register snapshot to devcoredump |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20261029172800.2150325-2-naresh.kumar.g@intel.com>) | drm/xe/devcoredump: Capture GT fuse registers in devcoredump |
+| | linux-next | [`86040515e`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=86040515e4644a57a111295fb7ad306dd199fc0a>) | drm/xe/dma-buf: Add xe_dma_buf_to_gem() self-import helper |
+| | linux-next | [`1b2a3db00`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=1b2a3db0049b4512737abd98d11e4abcc9be079c>) | drm/xe/drm_ras: Wire up error threshold callbacks |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20261029172800.2150325-5-naresh.kumar.g@intel.com>) | drm/xe: dump GAM page fault report registers in devcoredump |
+| | linux-next | [`f026883cf`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f026883cf7187658a72aae58004a166ace919432>) | drm/xe/eu_stall: Don't mark stream enabled if enable fails |
+| | linux-next | [`4b89c9188`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=4b89c9188b1d0bbdc7b0e2f3531eeef9e2732ec8>) | drm/xe/ggtt: Report GGTT errors using structured logging |
+| | linux-next | [`07fed9b3f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=07fed9b3f47136b6ccc4d71ab283768b6d5daf59>) | drm/xe/gt: Report 'Fault response' pagefault error using SIGID |
+| | linux-next | [`395921503`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=39592150387d7e7382999ddef8714245a1b91c12>) | drm/xe/gt: Report GT reset failure using SIGID |
+| | linux-next | [`08efc2ef4`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=08efc2ef4cb5375c9e1da8d92b4fe00c928be14f>) | drm/xe/gt: Report 'Queue full' pagefault error using SIGID |
+| | linux-next | [`968ec2cdc`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=968ec2cdcd6ed4a271932581f27566b29870fa9c>) | drm/xe/gt: Report 'reset failed' errors using SIGID |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20261013222846.308259-8-alan.previn.teres.alexis@intel.com>) | drm/xe/guc: Add dump_cache to optimize GuC CT/Log compression flow |
+| | linux-next | [`56950f696`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=56950f696483b8972136a6bf0814c98ed7fdea4d>) | drm/xe/guc: Cleanup error codes and handling for CT errors |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20261013222846.308259-7-alan.previn.teres.alexis@intel.com>) | drm/xe/guc: Compress GuC log and CTB dump with zstd |
+| | xe-next | [`cf4171a20`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/cf4171a20d13918e07ed01a1e01a6b546825c601>) | drm/xe/guc: Fix race around q-&gt;guc-&gt;suspend_pending access |
+| | linux-next | [`c8941585c`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c8941585cc71dd4221bfdf91c31f681f8b3b28b2>) | drm/xe/guc: Handle CRASH and EXCEPTION G2H with separate helpers |
+| | linux-next | [`c37c85e94`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c37c85e94311081aeeef2827b3f4bc0ae0235cfc>) | drm/xe/guc: Make ct_dead_capture available on non-debug config |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20261029172800.2150325-4-naresh.kumar.g@intel.com>) | drm/xe/guc: Print register addresses in capture snapshot output |
+| | linux-next | [`9e3536457`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=9e35364579ddd3260e890d90b55a8de597ea00fd>) | drm/xe/guc: Report 'GuC mmio' errors using SIGID |
+| | linux-next | [`a403d443f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=a403d443fb1fa20e3824cbfc324249939fca9f70>) | drm/xe/guc: Report errors that cause a CT shutdown using SIGID |
+| | linux-next | [`2a6b5fb49`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=2a6b5fb4929863837f84a6d725174a544e47ed6e>) | drm/xe/guc: Report major GuC failures using SIGID |
+| | linux-next | [`4a0452332`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=4a0452332722491f852d5f4d2f2fadba2e6327f2>) | drm/xe/guc: Use different error codes for GuC load errors |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20261029172800.2150325-6-naresh.kumar.g@intel.com>) | drm/xe/guc: add TDL, SLICE gfx registers to capture list |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20261029172800.2150325-8-naresh.kumar.g@intel.com>) | drm/xe/guc: capture additional engine state registers |
+| | linux-next | [`ff796870f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=ff796870f5ddb0e6040c71b44d3d6247420d216f>) | drm/xe/guc: rework exec queue teardown PM/unplug handling |
+| | linux-next | [`14bbd417a`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=14bbd417a6e0f12d225d835f85263cf6e56ce7e9>) | drm/xe/hw_error: Initialize hw_error_work per tile |
+| | linux-next | [`3541c7128`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3541c71284fa85e08e54aa2cc28dd80c0e936a69>) | drm/xe/hw_error: Reuse CSC worker for generic error handling |
+| | xe-next | [`054805851`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/054805851f2e10a2238b581dc65b12d121fae692>) | drm/xe/hwmon: Add helpers to validate thermal sensor readings |
+| | linux-next | [`993338420`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=993338420540a35d058876f67d88c72e32240b31>) | drm/xe/hwmon: Add platform-aware VRAM thermal channel support |
+| | linux-next | [`87ce4876e`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=87ce4876e3f500e8982675af9363041005568dcd>) | drm/xe/hwmon: Cache temperature availability to reduce probe time |
+| | linux-next | [`0d4033d89`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=0d4033d899609df88b2b7f8a4d1a0f275f289670>) | drm/xe/hwmon: Consolidate temperature sensor availability checks |
+| | linux-next | [`24ec15d64`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=24ec15d646179a255f314e404343bf8e3200c9c0>) | drm/xe/hwmon: Decode CRI temperature registers as IEEE-754 |
+| | xe-next | [`1bbbd7d98`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/1bbbd7d98fa588d5ace3d79ce56d8928f18768f5>) | drm/xe/hwmon: Decode mailbox temperature as sign-magnitude |
+| | linux-next | [`8fdd3d4c5`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=8fdd3d4c55ecb6cd3abc55b713f7b6722f08b61d>) | drm/xe/hwmon: Detect unavailable PCIe thermal sensors |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/174898/#rev3>) | &#91;TEMP&#93; drm/xe/hwmon: Fix memory controller thermal data handling |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/174898/#rev3>) | &#91;TEMP&#93; drm/xe/hwmon: Handle pcode read failures of xe_hwmon_pcode_rmw_power_limit |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/174898/#rev3>) | &#91;TEMP&#93; drm/xe/hwmon: Handle unavailable memory controller sensors |
+| | linux-next | [`58c84a1df`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=58c84a1dffe219139a086c2ab6e79f8c9072446c>) | drm/xe/hwmon: Report errors using structured xe_log API |
+| | linux-next | [`0dd554733`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=0dd554733ae8ae74651ac3842fe020d7839772f3>) | drm/xe/hwmon: Simplify temperature channels config |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/174898/#rev3>) | &#91;TEMP&#93; drm/xe/hwmon: Update PCIE temperature sensor offset for CRI |
+| | linux-next | [`ae4cd659d`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=ae4cd659d22dc00a6e9bf1802485e6ea5c1f74e2>) | drm/xe/hwmon: Update memory controller temperature offset for CRI |
+| | linux-next | [`1a925ad51`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=1a925ad51847db376fc0acd21fc5b76fb9c36cde>) | drm/xe/hwmon: Use shared pcode default timeout for power limit write |
+| | linux-next | [`32b98ee8d`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=32b98ee8d317bcb8a8a9fb4f715e7889bcf7ea9f>) | drm/xe/hwmon: add PCIe temperature support for CRI |
+| | linux-next | [`b30c98755`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b30c9875542e89d36c5677ee8e0b46fb76b5baf0>) | drm/xe/hwmon: handle CRI+ power interval encoding |
+| | linux-next | [`b6ccfa0be`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b6ccfa0bed5b770f301b4c7066613e1c0fbff2cf>) | drm/xe/hwmon: use CRI-specific package and VRAM temperature registers |
+| | linux-next | [`60fabbdbf`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=60fabbdbf6efe12f4075692d7c732c5536259e6c>) | drm/xe/kunit: Setup driver data in the test device |
+| | linux-next | [`a40dd08d6`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=a40dd08d6e09b653bb3cb222890dd44dc5c46488>) | drm/xe/lmtt: Report invalidation errors using structured xe_log API |
+| | linux-next | [`23a714120`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=23a71412009828c66690aa674af02f638eb5e39b>) | drm/xe/log: Add SIGID log helpers for component &amp; severity |
+| | linux-next | [`a1b89af50`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=a1b89af50e0afff03e6055dbd4534d349a27e80b>) | drm/xe/log: Add SIGID log helpers for components |
+| | linux-next | [`9dae5c3b0`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=9dae5c3b00f3f5e26e22d18156a1a10d8a783640>) | drm/xe/log: Add SIGID log helpers for errno-only |
+| | linux-next | [`eb9316ef7`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=eb9316ef7669a1da0940a0982a312f6219dec401>) | drm/xe/log: Add SIGID log helpers for location &amp; severity |
+| | linux-next | [`c74b90483`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c74b9048318a71af3083dda17644aa6897cf3be2>) | drm/xe/log: Add SIGID log helpers for location |
+| | linux-next | [`afa3007ca`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=afa3007ca866ca3317493927163e09f993adc41b>) | drm/xe/log: Add SIGID log helpers for severity |
+| | linux-next | [`b26802fce`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b26802fceed615043b92e2cc8075d66a7e329157>) | drm/xe/log: Add VRAM, PAT, and HWMON DRIVER_HARDWARE components |
+| | linux-next | [`1151b9f6f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=1151b9f6f46570650bdda5931380320119ae97e4>) | drm/xe/log: Add component/location decorations to dmesg |
+| | linux-next | [`ceea43a74`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=ceea43a746624fb3ec80188918408c8441625247>) | drm/xe/log: Add hardware error signatures |
+| | linux-next | [`1d2292f8f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=1d2292f8f116a6323923352352115931ddefef53>) | drm/xe/log: Add structured SIGID error logging infrastructure |
+| | linux-next | [`5fec1a2f4`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=5fec1a2f4f7e760acd108a242c24ff620900d3e1>) | drm/xe/log: Extend components list with hardware items |
+| | linux-next | [`4d3dd0c94`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=4d3dd0c9464bd342506e075598b3db25c9ee75b3>) | drm/xe/log: Index all SIGID printk messages |
+| | linux-next | [`c3bd29281`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c3bd292810818d8b8e6a01e023f1d5134f8f61ec>) | drm/xe/log: Introduce structured component/location identifiers |
+| | linux-next | [`388640070`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=388640070d2369d2b2f229d4ea090881e6fcfc95>) | drm/xe/memirq: Report errors using structured xe_log API |
+| | linux-next | [`188d81399`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=188d8139945c8dc37374efbf8552d0c2b13659a8>) | drm/xe/migrate: support 4K PTEs for identity map |
+| | linux-next | [`d268b81d6`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=d268b81d652034f34393153126facf461ba42e6f>) | drm/xe/mmio: Report BAR mapping errors using structured xe_log API |
+| | linux-next | [`713d51516`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=713d515168bdac14a230caac1d4df838d263f0e4>) | drm/xe/multi_queue: handle CGP_SYNC wait timeout during VF recovery |
+| | linux-next | [`c40be0c6e`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c40be0c6e4914c1c939c2d5cb2c5467ef27a5ddd>) | drm/xe/multi_queue: replay dynamic CGP updates lost during VF migration |
+| | linux-next | [`116a19d83`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=116a19d83efe02f3b2e6352f6f2b2e2f79054de2>) | drm/xe/multi_queue: track and recover lost CGP updates across VF migration |
+| | linux-next | [`baafc300c`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=baafc300cd079a5210c1e70e5ea3d93518e40b38>) | drm/xe/nvm: add system controller region |
+| | linux-next | [`af636122a`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=af636122a88eaa4a097253ad4cb0cbbbffccdc5c>) | drm/xe/nvm: define survivability partition |
+| | linux-next | [`cffeb4ef6`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=cffeb4ef6f2867df5cc4811b59930dc0fe3ea7e9>) | drm/xe/oa: Extend OAM unit hwe assignment for new dGfx |
+| | linux-next | [`e0ba981c3`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=e0ba981c317209e8464ead7dc81439b1210a2fe3>) | drm/xe/pagefault: Add SRCID to pagefault struct |
+| | linux-next | [`de3e402df`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=de3e402df7f56a99b54e683930417debdb523530>) | drm/xe/pat: Report missing PAT table using structured xe_log API |
+| | linux-next | [`c5dba6c95`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c5dba6c95797f9a511d5f91cdb5751500e6176ff>) | drm/xe/pat: always check is_valid() when querying an index |
+| | linux-next | [`3fe338ed5`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3fe338ed5debcc115ebef8ee832fc11b6b5ba2da>) | drm/xe/pci: Add upstream switch port lookup helper |
+| | linux-next | [`b4f95affc`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b4f95affc66ef76342c1f6bf3849f6c8ade6b9d6>) | drm/xe/pci: Report 'cannot re-enable' error using SIGID |
+| | linux-next | [`f18fbf00b`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f18fbf00be0fe23b8d37e32555d79b0c04c37bac>) | drm/xe/pci: Report unknown GMDID versions using structured xe_log API |
+| | linux-next | [`9b8234d17`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=9b8234d176bb98e8612ddc4c3dbfd014219d5f6f>) | drm/xe/pci_error: Allow debugging PCI errors |
+| | linux-next | [`8721a51d4`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=8721a51d44733b8b5cb41fa1bfe7fac2cf55107b>) | drm/xe/pcode: Increase default pcode mailbox timeout to 10ms |
+| | linux-next | [`29fea8370`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=29fea8370983ba0ece7fdcb6fcb1daced5ff3141>) | drm/xe/pcode: Report 'Mailbox failed' error using SIGID |
+| | linux-next | [`35241a7a8`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=35241a7a8e57a150944340ec9ccd6de9fb4bb304>) | drm/xe/pcode: Report 'initialization timedout' error using SIGID |
+| | linux-next | [`b01fa4815`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b01fa481555e10de9d88addfcc41f527008ff649>) | drm/xe/pcode: Report 'timeout, retrying' error using SIGID |
+| | linux-next | [`6fa45759c`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=6fa45759cf43df3508a94dda7b6b02735ab19c4f>) | drm/xe/pf: Fix the address range assert in ggtt_get_pte helper |
+| | linux-next | [`c9edd9cf7`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c9edd9cf7e613262e6f10e05876108f03086f658>) | drm/xe/pf: Use multicast writes for early-generation LMTT config |
+| | linux-next | [`5a2b1a5fb`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=5a2b1a5fb42946ad04cdb5fdd764588f2e2e13dd>) | drm/xe/ras: Add support for error threshold |
+| | linux-next | [`586041a29`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=586041a29187ac05a66118a53baeb9a757f9926e>) | drm/xe/ras: Cache disable_vram_page_offline policy at init |
+| | linux-next | [`eb732ef76`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=eb732ef76b0ed4fb28194273e21ae620ab600aa9>) | drm/xe/ras: Check RAS and LOG component definitions |
+| | xe-next | [`505f803cf`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/505f803cfdea3a5f75d5f3b049a39024f966280f>) | drm/xe/ras: Fix sysctrl and drm-ras discrepancy |
+| | linux-next | [`84474fbf9`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=84474fbf9ae5a0fe482aa81fd255f2ce247ab566>) | drm/xe/ras: Move xe_ras_process_errors() to xe_ras |
+| | linux-next | [`f416c3899`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f416c3899d2a0fe5f05921567164c10e5e36dbde>) | drm/xe/ras: Treat non-fatal PCIe errors as recovered |
+| | linux-next | [`f29c2bd7e`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f29c2bd7eaeb73afcdbd4e3bbf54d6f8799a9b06>) | drm/xe/ras: Use fault-inject to trigger cold-reset wedge |
+| | linux-next | [`948eee331`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=948eee331bef0c5245bd3c44a6ed99401b8bcca7>) | drm/xe/ras: Validate sysctrl response |
+| | linux-next | [`e03d31e70`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=e03d31e703357fceceada79f3ea3b3b078686874>) | drm/xe/reg_sr: Report save-restore errors using structured xe_log API |
+| | linux-next | [`b7501c4fd`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b7501c4fd941a9f8e7c8a4d073658b4a49dcbde9>) | drm/xe: remove EXEC_QUEUE_FLAG_PERMANENT |
+| | linux-next | [`7d3fcc537`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=7d3fcc537e50c7fb214fd1e914bf56184dcd7445>) | drm/xe: revamp hw reserved PAT index checking |
+| | linux-next | [`042d84d7e`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=042d84d7e69f4da41c58707d558a95421e565869>) | drm/xe/survivability: Guard runtime survivability enable against unbind |
+| | linux-next | [`a0e2160a0`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=a0e2160a0111e40fc7bd2221cbe2bb6fb4091cff>) | drm/xe/survivability: Report 'Boot Mode enabled' status using SIGID |
+| | linux-next | [`f04f7c7aa`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f04f7c7aa651534d723af98c03132c44ffa281c2>) | drm/xe/survivability: Report 'Runtime Mode enabled' status using SIGID |
+| | linux-next | [`3cc5107bd`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3cc5107bd611544531799a8c45fe8452d7cc3fc6>) | drm/xe/survivability: Report 'boot status' on sysfs failure |
+| | linux-next | [`0e1c4b5de`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=0e1c4b5de48135958ec55c22468c2e637eb49f57>) | drm/xe/survivability: Report 'boot status' using SIGID |
+| | linux-next | [`33cc29e3d`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=33cc29e3dc0e6530a1eb0a318ff7a414c0c21068>) | drm/xe/survivability: Report sysfs failure in one place |
+| | linux-next | [`eacf3c423`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=eacf3c423801e2fd35ce1e50926f522a35f74732>) | drm/xe/sysctrl: Add RAS error injection debugfs interface |
+| | linux-next | [`f59c2be37`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f59c2be37618f6bd7360b9df5acd1028abc1d05c>) | drm/xe/sysctrl: Add generic mailbox passthrough debugfs entry |
+| | linux-next | [`c81d8cdf2`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c81d8cdf29b6f13a3c50f961d997995b985f66c6>) | drm/xe/sysctrl: Add helper to check oCode firmware readiness |
+| | linux-next | [`0bae1d543`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=0bae1d5438abecaf688b2df7ac30edf0482b8d90>) | drm/xe/sysctrl: Add helper to query application status |
+| | linux-next | [`0b3aec1e9`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=0b3aec1e9b6f71840f579f202c978777629b9e3f>) | drm/xe/sysctrl: Add mailbox control state to error messages |
+| | linux-next | [`20750dd3a`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=20750dd3a32bdf84bc313804a847ef7a45bf17df>) | drm/xe/sysctrl: Add sysctrl debugfs infrastructure and loopback test interface |
+| | linux-next | [`8453cb0c4`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=8453cb0c4b88ed04702f8371c3da46df9448fddc>) | drm/xe/sysctrl: Allow per-command mailbox response timeout |
+| | linux-next | [`3215ff2b7`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3215ff2b71b7b8117657019ec3b6b64e585563c6>) | drm/xe/sysctrl: Improve firmware response error logging |
+| | linux-next | [`081b99368`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=081b993689d3510dbdc2d83f6956441612e0d02f>) | drm/xe/sysctrl: Log group and command ID on mailbox failure |
+| | linux-next | [`e192be856`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=e192be8566a02cb3f8b7d4707cc6e719c2ed4536>) | drm/xe/sysctrl: Make sysctrl_read_frame() void |
+| | linux-next | [`75e8c0bbf`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=75e8c0bbf235ac1288421b82acc7064460bc7282>) | drm/xe/sysctrl: Make sysctrl_write_frame() void |
+| | linux-next | [`10b59a4c3`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=10b59a4c3196cf5ccb27adc0abb8e32b9cee5acc>) | drm/xe/sysctrl: Replace FIELD_GET() with REG_FIELD_GET() |
+| | linux-next | [`738e3fc41`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=738e3fc41d86cc2ea619481ca9e4b5b62ea3e1ed>) | drm/xe/sysctrl: Report 'System Controller event' error using SIGID |
+| | linux-next | [`d511f9d1c`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=d511f9d1c1cf0422bfd008e81956734b6bf9be2a>) | drm/xe/sysctrl: Return error codes from sysctrl_wait_bit_clear() |
+| | linux-next | [`026bd0e21`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=026bd0e216077ea04c72c2f90261fba7b305d409>) | drm/xe/sysctrl: Return error codes from sysctrl_wait_bit_set() |
+| | linux-next | [`4686fcca6`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=4686fcca694c00fd73eee0f453f32b197baccf9b>) | drm/xe/sysctrl: Reuse xe_sysctrl_create_command() |
+| | linux-next | [`a98308558`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=a9830855883da2372b21dbee95c27d4694b8e5d6>) | drm/xe/sysctrl: Use xe_assert() for payload size validation |
+| | linux-next | [`c352c0bd4`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c352c0bd4e092a2a005c6810477f54ca502d7f18>) | drm/xe/tests: Add Kunit tests for xe_log |
+| | linux-next | [`14cd83cb7`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=14cd83cb77d49230edc318a7683fb446259dbfec>) | drm/xe/tests: Add kunit tests for xe_any |
+| | linux-next | [`0f0a5aba8`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=0f0a5aba875992c4d0aaf8c6178550557fa38ce2>) | drm/xe/tlb_inval: add xe_tlb_inval_ggtt_full() GGTT invalidation helper |
+| | linux-next | [`9edefbf06`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=9edefbf06ce34a89925e70811d9961277f16aba5>) | drm/xe/tuning: Stop applying media CCCHKNREG1 tuning from Xe3p onward |
+| | linux-next | [`69183b706`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=69183b7062061ce9985a6e116890ffb7929bd1f4>) | drm/xe/uapi: Expose ban reason in EXEC_QUEUE_GET_PROPERTY_BAN |
+| | linux-next | [`52df26491`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=52df26491f4c6e559a0acb8f148880b77be55ee5>) | drm/xe/uc: Report DMA failure using SIGID |
+| | linux-next | [`88064894b`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=88064894bcce6d239804e54bd7f577645d4739ab>) | drm/xe/vm: Add srcid to xe_vm_get_property_ioctl fault report |
+| | linux-next | [`7737f819e`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=7737f819e9f1a0cbd653e1a58bda4be18e0306b8>) | drm/xe/vram: Add VRAM page offline fault handler |
+| | linux-next | [`556774b11`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=556774b11e1d87a4235ca87d6921cf557df1340a>) | drm/xe/vram: Add page offline data structures and lifecycle |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20260903161553.528932-25-tejas.upadhyay@intel.com>) | drm/xe/vram: Add page offline data structures and lifecycle |
+| | linux-next | [`6ff99f433`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=6ff99f4335f7ff5c210a2130438535c625f61f06>) | drm/xe/vram: Check disable_vram_page_offline policy in fault handler |
+| | ML | [`846584d0c`](<https://patch.msgid.link/20260903161553.528932-24-tejas.upadhyay@intel.com>) | drm/xe/vram: Extract buddy alloc and free helpers |
+| | linux-next | [`afc588a89`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=afc588a89015f55c52a3e83efa83253e79abab04>) | drm/xe/vram: Extract buddy allocation and free helpers |
+| | linux-next | [`95ef64e67`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=95ef64e67a2334963c1f8d9c497d5ee541ee7077>) | drm/xe/vram: Report VRAM errors using structured xe_log API |
+| | linux-next | [`0550bc631`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=0550bc6311e3401f3e14e0f410b55e7139384a36>) | drm/xe/vram: Report tile vs device VRAM visibility errors |
+| | linux-next | [`c874bc70c`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c874bc70c897c554cc460cfe1fa2c715f780d368>) | drm/xe/vram: add early VRAM health check |
+| | linux-next | [`bab69ad31`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=bab69ad31cd35b282921efe825a496cf89dd7374>) | drm/xe/vram: revamp CPU VRAM mapping |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;Temp&#93; drm/xe/vsec: Add PMT GUID internal access |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;Temp&#93; drm/xe/vsec: Add base_offset to allow for more flexibilty |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;Temp&#93; drm/xe/vsec: Correct locking order |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;Temp&#93; drm/xe/vsec: Crescent Island PMT callbacks |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;Temp&#93; drm/xe/vsec: Crescent Island PMT decode |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;Temp&#93; drm/xe/vsec: Do not register BMG PMT for VF |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;Temp&#93; drm/xe/vsec: Refactor BattleMage PMT defines |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;Temp&#93; drm/xe/vsec: Refactor platform check |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;Temp&#93; drm/xe/vsec: Support Crescent Island PMT |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;Temp&#93; drm/xe/vsec: Support late bind fw information |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;Temp&#93; drm/xe/vsec: Support possible hotplug exit |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;Temp&#93; drm/xe/vsec: Update VSEC probe order |
+| | ML v12 | [Patchwork](<https://patchwork.freedesktop.org/series/160717/#rev12>) | &#91;Temp&#93; drm/xe/vsec: Use correct pm state get |
+| | linux-next | [`ee7fd9237`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=ee7fd923774e1a0a1a2fede5406ca35f39b83fa4>) | drm/xe/xe3: Fix OAM stream broken on Xe3+ |
+| | linux-next | [`34d088dfb`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=34d088dfb88560f68ece67f3fb4a24e2ceee049f>) | drm/xe/xe3p: Force non-compressible memory reads to 256B overfetches |
+| | linux-next | [`dd7707871`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=dd7707871f1e71d40dd29269083b7e6455d01164>) | drm/xe/xe3p: Read resource copy presence from fuse register |
+| | linux-next | [`3abf37f5a`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3abf37f5a6c1ee238ffaa34e75e9ecb0ee2db4a4>) | drm/xe/xe3p_lpg: Add support for Wa_16030224309 |
+| | linux-next | [`dcf510df4`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=dcf510df467964344a0dfca6a9f7f6a5361e65af>) | drm/xe/xe_gt_idle: fix vecs config for powergating info |
+| | linux-next | [`85e65b9b9`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=85e65b9b9d627e955761c67001057c2516b97bde>) | drm/xe/xe_late_bind_fw: Add string mappings of status codes |
+| | linux-next | [`918e85a4f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=918e85a4f597eac1f566bfc9f315d18def8ec8d3>) | drm/xe/xe_late_bind_fw: Add support to load Ocode firmware |
+| | linux-next | [`b3a6e42af`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b3a6e42af57df74c19093d32a6fa3a3fa8b5b592>) | drm/xe/xe_late_bind_fw: Convert late bind flag to mask |
+| | linux-next | [`d7bc407b3`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=d7bc407b38090e908d2b63560bd3c5c44185e56f>) | drm/xe/xe_late_bind_fw: Enable late binding support for CRI |
+| | xe-next | [`3e4b2a634`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/3e4b2a6349ed7258057fa95a1e58730615703dae>) | drm/xe/xe_late_bind_fw: Fix firmware leak on missing manifest entry |
+| | linux-next | [`6569aa662`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=6569aa6628799976b1c857afe8793c4fe70afb68>) | drm/xe/xe_late_bind_fw: Refactor pm flow |
+| | linux-next | [`abd9f0a7a`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=abd9f0a7ad7c614941978bc4552d306ac201842b>) | drm/xe/xe_migrate: Align MEM_COPY pitch with destination address |
+| | linux-next | [`f5b5384f4`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f5b5384f4108e18746c9ae75583bf56c0452ca5f>) | drm/xe/xe_migrate: Fix page tracking in access_memory |
+| | linux-next | [`3bd6c6e67`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3bd6c6e6705a8dbe47a5accba506924beb826bf2>) | drm/xe/xe_migrate: Optimize unaligned access_memory copies |
+| | linux-next | [`684811514`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=6848115144cd1089876a3f3da9931c96bcf437af>) | drm/xe/xe_pci_error: Wait for pcode init post SBR |
+| | linux-next | [`3b8cc72ad`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3b8cc72ad59765ad4ba7461a77285a625cd9c799>) | drm/xe/xe_ras: Add a flag for uncorrectable internal error |
+| | linux-next | [`4ad3a6ceb`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=4ad3a6ceb3b485c63b42bbaea91079738bfab4b8>) | drm/xe/xe_ras: Add function to get maximum pages firmware can store |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/172733/#rev2>) | &#91;TEMP&#93; drm/xe/xe_ras: Add support for PCIe error component handling |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/172733/#rev2>) | &#91;TEMP&#93; drm/xe/xe_ras: Add support for handling Fabric errors |
+| | linux-next | [`6d8ad0217`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=6d8ad0217f9d5190562564c4f8afe8ff42f085a6>) | drm/xe/xe_ras: Add support to query page offline queue and list |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/169692/#rev3>) | &#91;TEMP&#93; drm/xe/xe_ras: Add support to retrieve info queue data for CRI |
+| | linux-next | [`12b427cf8`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=12b427cf8bb03c2e16abfdc77765700679b58c63>) | drm/xe/xe_ras: Handle page offline requests for device memory ecc errors |
+| | linux-next | [`253679f45`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=253679f4533be53914c14ee611858ae10c3ced6e>) | drm/xe/xe_ras: Report core compute errors using SIGID |
+| | linux-next | [`de211a22d`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=de211a22d692904ee5f3983506072d31ca4c9eec>) | drm/xe/xe_ras: Report correctable errors using SIGID |
+| | linux-next | [`6a9493e47`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=6a9493e470752dd0e2339dc82db98b48d8e0dab0>) | drm/xe/xe_ras: Report correctable/uncorrectable error events to userspace |
+| | linux-next | [`2dd54f5f3`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=2dd54f5f37451a78be1e96189e0bfd27ce0ada37>) | drm/xe/xe_ras: Report device memory errors using SIGID |
+| | linux-next | [`896311319`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=896311319968e1fea947d799bb1cc01a1f81c042>) | drm/xe/xe_ras: Report soc internal errors using SIGID |
+| | linux-next | [`ee5e2de26`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=ee5e2de2688665e4061e1cfef61030ca1283dbc1>) | drm/xe/xe_ras: Skip double-bit ECC page offlining on AER path |
+| | linux-next | [`b0b55c2d1`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b0b55c2d15ed1db8cb4fa7077c3fbe5ce673ee22>) | drm/xe/xe_ras: Track offlined pages by firmware to avoid duplicates |
+| | linux-next | [`2b8c1d7fe`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=2b8c1d7fe0d521f9d264ef08c15760235e61c341>) | drm/xe/xe_survivability: Simplify runtime survivability error handling |
+| | linux-next | [`f19319e12`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f19319e1250e5bc71f903fde3eb91821aab0a387>) | drm/xe/xe_ttm_vram: Report max_pages reported by firmware to userspace |
+| | linux-next | [`155c978d1`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=155c978d1b37993abea1a5ec6d8384916ce8f4cb>) | mei: csc: add option for polling and enable it |
+| | linux-next | [`ff7472afb`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=ff7472afb37d85192f305120d1d93cb9a2dae689>) | mei: csc: add pci error handling |
+| | linux-next | [`fa013b91c`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=fa013b91c082fff6bbf8990299dff0e6a567ccbe>) | mei: make polling wait interruptible |
+| | linux-next | [`528f61bdc`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=528f61bdc565b08d177b32eec58d20b19349f9ac>) | mei: me: avoid hw access in polling when not active |
+| | linux-next | [`819583c41`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=819583c41eacb83b3b5ebe1d8a8dbd5c54a3aa31>) | mei: me: reduce active polling timeout to 20 ms |
+| | linux-next | [`0b1cd1638`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=0b1cd1638a01c0cd906a1c75a247345f83d4d191>) | mtd: mtd_intel_dg: add survivability partition |
+| | ML | [`846584d0c`](<https://patch.msgid.link/fc0e8bb00e2765fb7d145fef2ed1b0236b935c08.1781294741.git.david.e.box@linux.intel.com>) | platform/x86/intel/pmc: Add NVL PCI IDs for SSRAM telemetry discovery |
+| | linux-next | [`7fdfccf87`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=7fdfccf87676a17ab7a24b67595c701dd8d913a5>) | platform/x86/intel/pmt: Add register access callbacks |
+| | linux-next | [`5871df43f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=5871df43fccf1e0cdcba873396b7951f31d5b86e>) | platform/x86/intel/pmt: Do not remap when using callbacks |
+| | linux-next | [`b86e5062c`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b86e5062cb881f6e5c1ddb8913c1357a9508f6db>) | platform/x86/intel/pmt: complete pcidev to device update |
+| | linux-next | [`8ee5b655e`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=8ee5b655e0a6fcfe65519d942114c4736bf601f3>) | platform/x86/intel/pmt: refactor rc with a return value |
+| | linux-next | [`5724621ad`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=5724621ad5b8083b3fdd3fd38599d26d98a26bbb>) | platform/x86/intel/pmt: refactor rmw with a return value |
+| | linux-next | [`60519dd56`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=60519dd563d91369bfae59f37895459a542eff66>) | vfio/xe: Add CRI and NVL device IDs |
+| | eudebug-v3-xe3p-prelim | `bc3bbb6f3` | drm/xe: Implement SR-IOV and eudebug exclusivity |
+| | eudebug-v3-xe3p-prelim | `3a5682674` | drm/xe: Reset engines before gt reset |
+| | eudebug-v3-xe3p-prelim | `43470d196` | drm/xe/eudebug: Enable EU pagefault handling |
+| | eudebug-v3-xe3p-prelim | `604bf914d` | drm/xe/eudebug: Introduce eudebug support |
+| | eudebug-v3-xe3p-prelim | `61301ec0a` | drm/xe/eudebug: Mark guc contexts as debuggable |
+| | eudebug-v3-xe3p-prelim | `db21511dc` | drm/xe/eudebug: Prelim rework for Xe EU debug |
+| | eudebug-v3-xe3p-prelim | `eb129d920` | drm/xe/eudebug: hw enablement for eudebug |
+| | eudebug-v3-xe3p-prelim | `d9874b80c` | drm/xe/eudebug/xe3p: Pagefault exception debugging support |
+| | eudebug-v3-xe3p-prelim | `d54479f1e` | drm/xe/eudebug/xe3p: Per context debugging support |
+| | eudebug-v3-xe3p-prelim | `7a93b9e1e` | drm/xe/xe_file: change pid type from pid_t to pid pointer |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/174556/#rev1>) | &#91;TEMP&#93;: drm/pagemap: Drop ratelimiting from dev_unhold_work debug trace |
+| | xe-next | [`a526c0a47`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/a526c0a47517cf2756a3ec9fc721f658be009ce4>) | drm/pagemap: Prevent CPU stalls during unbounded pagemap teardown |
+| | xe-next | [`638d116d7`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/638d116d755ed89628ad07bde33ae7d7658db834>) | drm/xe: Access GT MMIO after pcode init |
+| | linux-next | [`846f333b3`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=846f333b3e0b48065f96bee74ffa0b9d390ed05f>) | drm/xe: Don't abort the shrinker walk on -EBUSY |
+| | xe-next | [`972234baa`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/972234baa32845afe458fc547434c250035b5466>) | drm/xe: Drop xe_device_set_wedged_method() |
+| | linux-next | [`30499cbd7`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=30499cbd796117b63be3b59a1781c25ea3f4b27f>) | drm/xe: Fix build with DRM_XE=y and CONFIGFS_FS=m |
+| | xe-next | [`49c00ef33`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/49c00ef335741eb3c6ce21e49eb988a17cf2e62a>) | drm/xe: Make xe_device_declare_wedged() IRQ safe |
+| | xe-next | [`6599a0eb0`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/6599a0eb0990cde96c4e66a4e1e2ae1b172e85d2>) | drm/xe: Move xe_device_wedged_fini() registration to xe_device_probe_early() |
+| | linux-next | [`f88c6f2fa`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f88c6f2fa88bc5892b1e842972096613086c06b2>) | drm/xe: Prevent VF memory IRQ from accessing a torn-down engine |
+| | linux-next | [`928ee5d4f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=928ee5d4fb1f211aa361524801c15b54603fae52>) | drm/xe: Rebind BOs evicted before the first LR queue |
+| | linux-next | [`0cfb54f8f`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=0cfb54f8f4d69efc847641738d25065049160aca>) | drm/xe: Sync Wa_16023105232 in xe_was to match OOB rule |
+| | linux-next | [`e994e0f1b`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=e994e0f1ba52e4be3607ba7f952a8d835f1f6563>) | drm/xe: Toggle the D3Cold enable flag at runtime resume |
+| | xe-next | [`5fb4aefb5`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/5fb4aefb5f4baaa1cbec6c4cee0f91925b33f310>) | drm/xe/amc: Guard xe_amc_work() with runtime PM |
+| | xe-next | [`861590f69`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/861590f69994e41c9ef1b65db8e9ba433f1d1c1c>) | drm/xe/gt: Disable GT reset worker before engine teardown |
+| | xe-next | [`913d394eb`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/913d394eb2be6536c66995affde44255d1e36493>) | drm/xe/gt: Use GT ordered workqueue for wedging |
+| | linux-next | [`e30553655`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=e305536554790e06876dd4e4f854c97d1353aa79>) | drm/xe/guc: Demote uncorrectable local error log on CRI |
+| | linux-next | [`3ecbac236`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3ecbac2365b9b0d3b9dfdbf2d92d5ec767e85591>) | drm/xe/guc: Do not attribute a TDR disable to a pending suspend |
+| | linux-next | [`3e9a95f3d`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3e9a95f3df5b0f9de163c5ee4e4e287750ef9655>) | drm/xe/guc: Protect timeout handling from device unplug |
+| | xe-next | [`fc8d229d7`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/fc8d229d76102489b6f56538a818c285a87db1e9>) | drm/xe/hw_error: Guard csc_hw_error_work() with runtime PM |
+| | linux-next | [`c5b502e43`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c5b502e43f7cd6456663d5bae495551646a5e125>) | drm/xe/hwmon: Fix pcode power limit handling |
+| | linux-next | [`ca6e33701`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=ca6e33701de8676118f1d039e0c00839d7de13c6>) | drm/xe/hwmon: Fix thermal sensor data handling |
+| | linux-next | [`99ceaebb8`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=99ceaebb888944d00932063a649ebb41bd8af1d2>) | drm/xe/hwmon: Handle unavailable memory controller sensors |
+| | linux-next | [`4289dded4`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=4289dded4329bc2bf16fbc1bcfed22c198e2f147>) | drm/xe/hwmon: Propagate all hardware read errors |
+| | linux-next | [`7dbd24e9d`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=7dbd24e9d5311b6afdbdd875dd247ab5ff54edca>) | drm/xe/log: Relax location ID recognition |
+| | linux-next | [`b99292acb`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=b99292acb2dce61ce50d37f54a66d84b768b8927>) | drm/xe/lrc: Restore CTX_CS_INDIRECT_CTX_OFFSET programming for pre-Xe2 |
+| | linux-next | [`3be1bd59c`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3be1bd59ced603d2e6a6ba9a4fe274308cea9965>) | drm/xe/madvise: use already clamped pat_index |
+| | linux-next | [`9095ffa88`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=9095ffa88962be9052a44154cfe23da5c6fea367>) | drm/xe/migrate: Keep access_memory chunks within the transfer limit |
+| | linux-next | [`e952337c3`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=e952337c3dbccf600ddae3bb1d38e996172ac8f8>) | drm/xe/pat: Return error from xe_pat_init_early() on unknown platform |
+| | xe-next | [`0dbc1d076`](<https://gitlab.freedesktop.org/drm/xe/kernel/-/commit/0dbc1d0762bc89649aeaea98a63f6e5f786ea1b8>) | drm/xe/pci_error: Flush GT wedge worker before bus reset |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/154724/#rev3>) | drm/xe/pf: Keep VF LMEM BAR size low if no VFs enabled |
+| | linux-next | [`a8653bee6`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=a8653bee6a0404e9962e80894eae0afab355cbd3>) | drm/xe/pf: Program LMTT directory pointer from each GT's init path |
+| | linux-next | [`641ffb213`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=641ffb2132839242e49a158d2aea579a75fa2e8e>) | drm/xe/pm: Apply tile workarounds after PCODE initialization |
+| | linux-next | [`ce1550274`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=ce155027427a0c76be173f19f911b414d9d686bc>) | drm/xe/svm: Preserve default PAT index when resetting VMA attributes |
+| | linux-next | [`65e2e108e`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=65e2e108e466a2def170797a6d1b4b7849cec3a1>) | drm/xe/tuning: Restrict Anyhit NULL-query tuning to render engines |
 | `xebr_v7.3.0_261118.5` | | | |
 | | oot-backport/main | [`4e9a579a2`](<https://github.com/intel-gpu/xekmd-backports/commit/4e9a579a2b8b60e5ceb71f718b2e3579e4b274f2>) | drm/drv: handle legacy cgroup region registration |
 | `xebr_v7.3.0_261118.4` | | | |

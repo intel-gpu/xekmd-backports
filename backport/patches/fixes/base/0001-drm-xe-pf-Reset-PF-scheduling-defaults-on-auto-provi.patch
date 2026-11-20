@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+Date: Wed, 18 Nov 2026 21:53:46 +0530
+Subject: [PATCH] drm/xe/pf: Reset PF scheduling defaults on auto provisioning
+ restore
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Restoring auto provisioning releases VF configs, but leaves PF scheduling
+overrides from debugfs in place. As a result, the next VF enable may skip
+fair scheduling reprovisioning, leaving VFs with infinite EQ/PT and
+causing VF probe or FLR timeouts.
+
+Reset PF scheduling defaults when switching back to auto provisioning
+so subsequent VF enable reprovisions PF/VFs with fair scheduling again.
+
+PF: Tile0: GT0: VF24 resource sanitizing failed (-ETIMEDOUT)
+PF: Tile0: GT0: VF24 FLR didn't finish in 5000 ms (-ETIMEDOUT)
+
+ERROR Tile0: GT0: hwe rcs0: emit_wa_job failed (-ETIME) guc_id=1
+ERROR SIGID=101 FATAL (-ETIME) PROBE: driver loading failed for device
+
+Fixes: 4af7fae27dc66 ("drm/xe/pf: Split the provisioning mode change function")
+Reviewed-by: Piotr Piórkowski <piotr.piorkowski@intel.com>
+(cherry picked from commit 72f716775dae43f2f6ea042bc97f6552f5240db7 linux-next)
+Signed-off-by: Rachapalli Bandi Jagadeesh <jagadeesh.rachapalli.bandi@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov_pf_provision.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+index 0ec7ea83f..50e2a15c9 100644
+--- a/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
++++ b/drivers/gpu/drm/xe/xe_sriov_pf_provision.c
+@@ -168,12 +168,19 @@ int xe_sriov_pf_provision_set_mode(struct xe_device *xe, enum xe_sriov_provision
+ 		return 0;
+ 
+ 	if (mode == XE_SRIOV_PROVISIONING_MODE_AUTO) {
++		int err;
++
+ 		if (xe_sriov_pf_num_vfs(xe)) {
+ 			xe_sriov_dbg(xe, "can't restore %s: VFs must be disabled!\n",
+ 				     mode_to_string(mode));
+ 			return -EBUSY;
+ 		}
+ 		pf_unprovision_all_vfs(xe);
++
++		/* custom PF EQ/PT/sched_if_idle would block fair VF scheduling */
++		err = pf_reprovision_default(xe);
++		if (err)
++			return err;
+ 	}
+ 
+ 	xe_sriov_dbg(xe, "mode %s changed to %s by %ps\n",
+-- 
+2.43.0
+

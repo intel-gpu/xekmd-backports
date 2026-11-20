@@ -710,6 +710,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
 		int err = 0;
 		bool invalidated = false;
 
+
 		/* Last fault same address, ack immediately */
 		if (xe_pagefault_match(pf, cache_start, cache_end, cache_asid)) {
 			xe_gt_stats_incr(gt, XE_GT_STATS_ID_LAST_PAGEFAULT_COUNT, 1);
@@ -728,7 +729,8 @@ static void xe_pagefault_queue_work(struct work_struct *w)
 			} else {
 				xe_gt_stats_incr(pf->gt, XE_GT_STATS_ID_INVALID_PREFETCH_PAGEFAULT_COUNT, 1);
 				xe_gt_dbg(pf->gt, "Prefetch Fault response: Unsuccessful %pe\n",
-					  ERR_PTR(err));
+
+						ERR_PTR(err));
 			}
 		} else {
 			/* Cache valid fault locally */
@@ -745,13 +747,13 @@ ack_fault:
 		private = pf->producer.private;
 
 		xe_assert(xe, pf->consumer.alloc_state ==
-			  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
+				XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
 		xe_assert(xe, pf == pf_work->cache.pf);
 
 		ops->ack_fault_begin(private);
 		while (pf) {
 			xe_assert(xe, pf->consumer.alloc_state ==
-				  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
+					XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
 			xe_assert(xe, ops == pf->producer.ops);
 			xe_assert(xe, gt == pf->gt);
 
@@ -762,7 +764,7 @@ ack_fault:
 			if (!invalidated) {
 				invalidated = true;
 				xe_pagefault_cache_invalidate(pf_queue,
-							      pf_work);
+						pf_work);
 			}
 
 			pf->consumer.alloc_state = XE_PAGEFAULT_ALLOC_STATE_FREE;
@@ -773,7 +775,7 @@ ack_fault:
 			 * fault processed
 			 */
 			while (pf && !xe_pagefault_match(pf, cache_start,
-							 cache_end, cache_asid))
+						cache_end, cache_asid))
 				pf = xe_pagefault_queue_unchain_requeue(pf_queue, pf, gt);
 
 			/* Ensure resets are safe */

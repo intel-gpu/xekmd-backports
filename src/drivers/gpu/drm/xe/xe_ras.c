@@ -3,14 +3,16 @@
  * Copyright © 2026 Intel Corporation
  */
 
-#include <linux/aer.h>
+#include <linux/bitfield.h>
 
 #include <generated/xe_device_wa_oob.h>
 
+#include <linux/aer.h>
+
 #include "xe_assert.h"
 #include "xe_bo.h"
-#include "xe_cper.h"
 #include "xe_configfs.h"
+#include "xe_cper.h"
 #include "xe_debugfs.h"
 #include "xe_device.h"
 #include "xe_drm_ras.h"
@@ -26,6 +28,7 @@
 #include "xe_sysctrl_mailbox_types.h"
 #include "xe_ttm_vram_mgr.h"
 #include "xe_wa.h"
+#include "xe_wedge.h"
 
 /* Any non-null entry marks the page as offlined by firmware */
 #define XE_RAS_PAGE_OFFLINED		xa_mk_value(1)
@@ -91,7 +94,7 @@ enum xe_ras_health {
 };
 
 static const char *const xe_ras_severities[] = {
-[XE_RAS_SEV_NOT_SUPPORTED]		= "Not Supported",
+	[XE_RAS_SEV_NOT_SUPPORTED]		= "Not Supported",
 	[XE_RAS_SEV_CORRECTABLE]		= "Correctable Error",
 	[XE_RAS_SEV_UNCORRECTABLE]		= "Uncorrectable Error",
 	[XE_RAS_SEV_INFORMATIONAL]		= "Informational Error",
@@ -116,6 +119,9 @@ static const char * const gpu_health_states[] = {
 };
 static_assert(ARRAY_SIZE(gpu_health_states) == XE_RAS_HEALTH_MAX);
 
+static int get_counter(struct xe_device *xe, struct xe_ras_error_class *counter,
+		       u32 *value, bool emit_cper);
+
 static u8 drm_to_xe_ras_severity(u8 severity)
 {
 	switch (severity) {
@@ -137,6 +143,20 @@ static u8 xe_to_drm_ras_severity(u8 severity)
 		return DRM_XE_RAS_ERR_SEV_UNCORRECTABLE;
 	default:
 		return DRM_XE_RAS_ERR_SEV_MAX;
+	}
+}
+
+static u8 ras_sev_to_cper_sev(u8 severity)
+{
+	switch (severity) {
+	case XE_RAS_SEV_CORRECTABLE:
+		return CPER_SEV_CORRECTED;
+	case XE_RAS_SEV_UNCORRECTABLE:
+		return CPER_SEV_RECOVERABLE;
+	case XE_RAS_SEV_INFORMATIONAL:
+		return CPER_SEV_INFORMATIONAL;
+	default:
+		return CPER_SEV_RECOVERABLE;
 	}
 }
 
@@ -176,6 +196,24 @@ static u8 xe_to_drm_ras_component(u8 component)
 	}
 }
 
+static enum xe_sigid ras_comp_to_hw_sigid(u8 component)
+{
+	switch (component) {
+	case XE_RAS_COMP_DEVICE_MEMORY:
+		return XE_SIGID_DEVICE_MEMORY;
+	case XE_RAS_COMP_CORE_COMPUTE:
+		return XE_SIGID_CORE_COMPUTE;
+	case XE_RAS_COMP_PCIE:
+		return XE_SIGID_PCIE;
+	case XE_RAS_COMP_FABRIC:
+		return XE_SIGID_FABRIC;
+	case XE_RAS_COMP_SOC_INTERNAL:
+		return XE_SIGID_SOC_INTERNAL;
+	default:
+		return XE_SIGID_HW;
+	}
+}
+
 static int ras_status_to_errno(u32 status)
 {
 	switch (status) {
@@ -196,18 +234,10 @@ static int ras_status_to_errno(u32 status)
 	}
 }
 
-static u8 ras_sev_to_cper_sev(u8 sev)
+static u16 ras_comp_to_log_comp(u8 component)
 {
-	switch (sev) {
-	case XE_RAS_SEV_CORRECTABLE:
-		return CPER_SEV_CORRECTED;
-	case XE_RAS_SEV_UNCORRECTABLE:
-		return CPER_SEV_RECOVERABLE;
-	case XE_RAS_SEV_INFORMATIONAL:
-		return CPER_SEV_INFORMATIONAL;
-	default:
-		return CPER_SEV_RECOVERABLE;
-	}
+	return FIELD_PREP(XE_LOG_COMPONENT_CLASS_MASK, XE_LOG_COMPONENT_CLASS_HARDWARE) |
+	       FIELD_PREP(XE_LOG_COMPONENT_TYPE_MASK, component);
 }
 
 static inline const char *sev_to_str(u8 severity)
@@ -268,28 +298,42 @@ static int send_page_offline_cmd(struct xe_device *xe, u64 page_address,
 	}
 
 	ret = ras_status_to_errno(response.status);
-	if (ret)
+	if (ret) {
 		xe_log_err(xe, SYSCTRL, ret, "page offline command failed with status %u\n",
 			   response.status);
+		return ret;
+	}
 
-	if (action == XE_RAS_PAGE_ACTION_OFFLINE)
-		xa_store(&state->offlined_pages, page_address >> XE_PTE_SHIFT,
-			 XE_RAS_PAGE_OFFLINED, GFP_KERNEL);
+	if (action == XE_RAS_PAGE_ACTION_OFFLINE) {
+		ret = xa_err(xa_store(&state->offlined_pages,
+				      page_address >> XE_PTE_SHIFT,
+				      XE_RAS_PAGE_OFFLINED, GFP_KERNEL));
+		if (ret)
+			xe_err(xe, "Failed to store offlined page 0x%llx: %d\n", page_address,
+			       ret);
+	}
 
-	return ret;
+	return 0;
 }
 
-static int handle_page_offline(struct xe_device *xe, u64 page_address, bool send_cmd)
+static int handle_page_offline(struct xe_device *xe, u64 page_address, bool notify_fw)
 {
 	struct xe_ras_state *state = &xe->ras.state;
 	enum xe_ras_page_action action;
 	u64 addr;
-	int ret = 0;
+	int ret;
 
 	if (!IS_ALIGNED(page_address, XE_PAGE_SIZE)) {
 		xe_log_err(xe, SYSCTRL, -EINVAL, "Unaligned physical page address: 0x%llx\n",
 			   page_address);
 		return -EINVAL;
+	}
+
+	/* User policy set to disable page offlining */
+	if (xe_ras_get_disable_vram_page_offline(xe)) {
+		action = XE_RAS_PAGE_ACTION_REMOVE;
+		xe_log_err(xe, DEVICE_MEMORY, -EOPNOTSUPP, "User policy set to disable page offlining\n");
+		goto notify;
 	}
 
 	addr = ALIGN_DOWN(page_address, PAGE_SIZE);
@@ -300,7 +344,7 @@ static int handle_page_offline(struct xe_device *xe, u64 page_address, bool send
 	 * Handle return code from address fault handling function:
 	 *  0: Page softofflined, remove from firmware queue
 	 * -EIO: Address belongs to a critical BO/stolen area that cannot be offlined
-	 * -EOPNOTSUPP: Address is valid and can be offlined but user policy is not to offline
+	 * -ENOMEM: Failed to allocate BO for soft-offlining the page
 	 * -EEXIST: Address is soft offlined but yet to be offlined by firmware for second
 	 * occurrence
 	 */
@@ -310,13 +354,6 @@ static int handle_page_offline(struct xe_device *xe, u64 page_address, bool send
 		action = XE_RAS_PAGE_ACTION_REMOVE;
 		xe_log_err(xe, DEVICE_MEMORY, ret,
 			   "Poison detected at physical address 0x%llx, page soft-offlined\n",
-			   page_address);
-		break;
-	/* User policy set to decline page offlining */
-	case -EOPNOTSUPP:
-		action = XE_RAS_PAGE_ACTION_REMOVE;
-		xe_log_err(xe, DEVICE_MEMORY, ret,
-			   "Poison detected at physical address 0x%llx, user policy set to decline soft-offlining\n",
 			   page_address);
 		break;
 	case -EIO:
@@ -334,14 +371,19 @@ static int handle_page_offline(struct xe_device *xe, u64 page_address, bool send
 			   "Double-bit ECC error detected at physical address 0x%llx, page soft-offlined\n",
 			   page_address);
 		break;
-	default:
+	case -ENOMEM:
 		xe_log_err(xe, DEVICE_MEMORY, ret,
-			   "Failed to handle address fault at physical address 0x%llx\n",
+			   "Poison detected at physical address 0x%llx, failed to soft-offline\n",
+			   page_address);
+		return ret;
+	default:
+		xe_log_err(xe, DEVICE_MEMORY, ret, "Failed to handle address fault at physical address 0x%llx\n",
 			   page_address);
 		return 0;
 	}
 
-	if (send_cmd) {
+ notify:
+	if (notify_fw) {
 		ret = send_page_offline_cmd(xe, page_address, action);
 		if (ret)
 			return ret;
@@ -350,37 +392,41 @@ static int handle_page_offline(struct xe_device *xe, u64 page_address, bool send
 	return 0;
 }
 
-static u32 ras_comp_to_hw_sigid(u8 component)
+static bool ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter)
 {
-	switch (component) {
-	case XE_RAS_COMP_DEVICE_MEMORY:
-		return XE_SIGID_DEVICE_MEMORY;
-	case XE_RAS_COMP_CORE_COMPUTE:
-		return XE_SIGID_CORE_COMPUTE;
-	case XE_RAS_COMP_PCIE:
-		return XE_SIGID_PCIE;
-	case XE_RAS_COMP_FABRIC:
-		return XE_SIGID_FABRIC;
-	case XE_RAS_COMP_SOC_INTERNAL:
-		return XE_SIGID_SOC_INTERNAL;
-	default:
-		return U32_MAX;
+	u8 severity = counter->common.severity;
+	u8 component = counter->common.component;
+
+	if (!in_range(severity, XE_RAS_SEV_NOT_SUPPORTED + 1, XE_RAS_SEV_MAX - 1)) {
+		xe_err(xe, "sysctrl: unexpected severity %u\n", severity);
+		return false;
 	}
+
+	if (!in_range(component, XE_RAS_COMP_NOT_SUPPORTED + 1, XE_RAS_COMP_MAX - 1)) {
+		xe_err(xe, "sysctrl: unexpected component %u\n", component);
+		return false;
+	}
+
+	return true;
 }
 
-static void get_offline_pages(struct xe_device *xe, u32 cmd, void *req, size_t req_size,
-			      void *resp, size_t resp_size,
-			      struct xe_ras_offline_common *common, bool offline)
+/*
+ * Fetch and process offline list and queue from firmware via mailbox. @notify_fw controls
+ * whether firmware is notified of the offline/remove action.
+ */
+static void process_offline_pages(struct xe_device *xe, u32 cmd, void *req, size_t req_size,
+				  void *resp, size_t resp_size,
+				  struct xe_ras_offline_common *common, bool notify_fw)
 {
 	struct xe_sysctrl_mailbox_command command = {0};
 	struct xe_ras_offline_list_request *list_req;
 	struct xe_ras_state *state = &xe->ras.state;
 	unsigned long index;
 	u32 total_pages = 0, count = 0;
-	ssize_t rlen;
+	size_t rlen;
 	int ret, i;
 
-	list_req = req ? req : NULL;
+	list_req = req;
 
 	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, cmd, req, req_size, resp,
 				  resp_size);
@@ -405,13 +451,21 @@ static void get_offline_pages(struct xe_device *xe, u32 cmd, void *req, size_t r
 			return;
 		}
 
+		/* Populate the maximum number of pages from offline list */
+		if (list_req && !state->max_pages)
+			state->max_pages =
+				((struct xe_ras_offline_list_response *)resp)->max_entries;
+
 		for (i = 0; i < common->pages_returned && i < XE_RAS_NUM_PAGES; i++) {
-			handle_page_offline(xe, common->page_addresses[i], offline);
+			handle_page_offline(xe, common->page_addresses[i], notify_fw);
 			/* The pages are already offlined by firmware */
-			if (!offline) {
+			if (!notify_fw) {
 				index = common->page_addresses[i] >> XE_PTE_SHIFT;
-				xa_store(&state->offlined_pages, index,
-					 XE_RAS_PAGE_OFFLINED, GFP_KERNEL);
+				ret = xa_err(xa_store(&state->offlined_pages, index,
+						      XE_RAS_PAGE_OFFLINED, GFP_KERNEL));
+				if (ret)
+					xe_err(xe, "Failed to store offlined page 0x%llx: %d\n",
+					       common->page_addresses[i], ret);
 			}
 		}
 
@@ -431,29 +485,33 @@ static void get_offline_pages(struct xe_device *xe, u32 cmd, void *req, size_t r
 	} while (common->additional_data);
 }
 
-static void get_queued_pages(struct xe_device *xe)
+/*
+ * Retrieve firmware queued pages from warm-retained SRAM during probe. Handle and soft-offline
+ * each page as required.
+ */
+static void get_offline_queue(struct xe_device *xe)
 {
 	struct xe_ras_offline_common response = {0};
 
-	get_offline_pages(xe, XE_SYSCTRL_CMD_GET_OFFLINE_QUEUE, NULL, 0, &response,
-			  sizeof(response), &response, true);
+	process_offline_pages(xe, XE_SYSCTRL_CMD_GET_OFFLINE_QUEUE, NULL, 0, &response,
+			      sizeof(response), &response, true);
 }
 
-static void get_offlined_list(struct xe_device *xe)
+/*
+ * Retrieve permanently offlined pages from firmware's non-volatile storage during probe,
+ * allowing the driver to soft-offline them before kernel allocations begin.
+ */
+static void get_offline_list(struct xe_device *xe)
 {
 	struct xe_ras_offline_list_response response = {0};
 	struct xe_ras_offline_list_request request = {0};
-	struct xe_ras_state *state = &xe->ras.state;
 
-	get_offline_pages(xe, XE_SYSCTRL_CMD_GET_OFFLINE_LIST, &request, sizeof(request),
-			  &response, sizeof(response), &response.common, false);
-
-	if (response.max_entries)
-		state->max_pages = response.max_entries;
+	process_offline_pages(xe, XE_SYSCTRL_CMD_GET_OFFLINE_LIST, &request, sizeof(request),
+			      &response, sizeof(response), &response.common, false);
 }
 
-#define PCI_EXP_AER_FLAGS	(PCI_EXP_DEVCTL_CERE | PCI_EXP_DEVCTL_NFERE | \
-				 PCI_EXP_DEVCTL_FERE | PCI_EXP_DEVCTL_URRE)
+#define PCI_EXP_AER_FLAGS      (PCI_EXP_DEVCTL_CERE | PCI_EXP_DEVCTL_NFERE | \
+				PCI_EXP_DEVCTL_FERE | PCI_EXP_DEVCTL_URRE)
 
 static void ras_usp_aer_init(struct xe_device *xe)
 {
@@ -513,21 +571,21 @@ MODULE_IMPORT_NS("CXL");
 static void ras_send_error_event(struct xe_device *xe, u8 severity, u8 component)
 {
 	struct xe_ras_error_class counter = {0};
-	struct xe_ras_get_counter_response response = {0};
 	u8 drm_severity, drm_component;
+	u32 value;
 	int ret;
 
 	counter.common.severity = severity;
 	counter.common.component = component;
 
-	ret = xe_ras_get_counter_response(xe, &counter, &response);
+	ret = get_counter(xe, &counter, &value, false);
 	if (ret)
 		return;
 
 	drm_severity = xe_to_drm_ras_severity(severity);
 	drm_component = xe_to_drm_ras_component(component);
 
-	xe_drm_ras_event(xe, drm_component, drm_severity, response.value);
+	xe_drm_ras_event(xe, drm_component, drm_severity, value);
 }
 
 static u8 handle_core_compute_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
@@ -538,32 +596,32 @@ static u8 handle_core_compute_errors(struct xe_device *xe, struct xe_ras_error_a
 
 	uncorr_type = FIELD_GET(CORE_COMPUTE_UNCORR_TYPE, error_info->log_header);
 
+	xe_log_comp(xe, cper_sev, CORE_COMPUTE, &arr->counter, sizeof(arr->counter),
+		    "Uncorrectable error detected, type %u\n", uncorr_type);
+
 	/* Request a reset if error is global */
-	if (uncorr_type == GLOBAL_UNCORR_ERROR) {
-		xe_log_comp(xe, cper_sev, CORE_COMPUTE, &arr->counter, sizeof(arr->counter),
-			    "Global uncorrectable error detected\n");
+	if (uncorr_type == GLOBAL_UNCORR_ERROR)
 		return XE_RAS_RECOVERY_ACTION_RESET;
-	}
 
 	/*
 	 * No action needed for other errors.
 	 * Local errors are recovered using an engine reset by GuC.
 	 */
-	xe_log_comp(xe, cper_sev, CORE_COMPUTE, &arr->counter, sizeof(arr->counter),
-		    "Other compute errors\n");
 	return XE_RAS_RECOVERY_ACTION_RECOVERED;
 }
 
 static void punit_error_handler(struct xe_device *xe)
 {
-	xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_COLD_RESET);
-	xe_device_declare_wedged(xe);
+	xe_wedge_declare(xe, DRM_WEDGE_RECOVERY_COLD_RESET);
 }
 
 static u8 handle_soc_internal_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
 {
 	struct xe_ras_soc_error *info = (void *)arr->details;
 	struct xe_ras_soc_error_source *source = &info->source;
+	u32 raw_source;
+
+	BUILD_BUG_ON(sizeof(raw_source) != sizeof(*source));
 
 	if (source->csc) {
 		struct xe_ras_csc_error *csc_error = (void *)info->details;
@@ -578,7 +636,7 @@ static u8 handle_soc_internal_errors(struct xe_device *xe, struct xe_ras_error_a
 		 */
 		if (csc_error->hec_fw_error) {
 			xe_log_comp_fatal(xe, SOC_INTERNAL, &arr->counter, sizeof(arr->counter),
-					  "CSC error detected: 0x%x\n", csc_error->hec_fw_error);
+					  "CSC error detected: 0x%08x\n", csc_error->hec_fw_error);
 			xe_survivability_mode_runtime_enable(xe);
 			return XE_RAS_RECOVERY_ACTION_DISCONNECT;
 		}
@@ -587,20 +645,25 @@ static u8 handle_soc_internal_errors(struct xe_device *xe, struct xe_ras_error_a
 
 		if (ieh_error->global_error_status & XE_RAS_SOC_IEH_PUNIT) {
 			xe_log_comp_fatal(xe, SOC_INTERNAL, &arr->counter, sizeof(arr->counter),
-					  "PUNIT error detected: 0x%x\n",
-					   ieh_error->global_error_status);
+					  "PUNIT error detected: 0x%08x\n",
+					  ieh_error->global_error_status);
 			punit_error_handler(xe);
 			return XE_RAS_RECOVERY_ACTION_DISCONNECT;
 		}
 	}
 
 	/* For other SoC internal errors, request a reset as recovery mechanism */
+	memcpy(&raw_source, source, sizeof(raw_source));
+	xe_log_comp(xe, ras_sev_to_cper_sev(arr->counter.common.severity), SOC_INTERNAL,
+		    &arr->counter, sizeof(arr->counter),
+		    "Unknown error detected: 0x%08x\n", raw_source);
 	return XE_RAS_RECOVERY_ACTION_RESET;
 }
 
 static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
 {
 	struct xe_ras_memory_error *info = (void *)arr->details;
+	u8 cper_sev = ras_sev_to_cper_sev(arr->counter.common.severity);
 	int ret;
 
 	/*
@@ -638,17 +701,22 @@ static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_
 		}
 
 		ret = handle_page_offline(xe, info->sw_address, true);
+		xe_log_comp(xe, ret ? cper_sev : CPER_SEV_INFORMATIONAL,
+			    DEVICE_MEMORY, &arr->counter, sizeof(arr->counter),
+			    "Double-bit ECC error detected at sw address 0x%llx\n",
+			    info->sw_address);
 		/*
 		 * Wedge the device with a bus reset for errors that require SBR to recover.
 		 * TODO: Trigger SBR using pci_reset_bus
 		 */
 		if (ret) {
-			xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_BUS_RESET);
-			xe_device_declare_wedged(xe);
+			xe_wedge_declare(xe, DRM_WEDGE_RECOVERY_BUS_RESET);
 			return XE_RAS_RECOVERY_ACTION_RESET;
 		}
 		break;
 	default:
+		xe_log_comp(xe, cper_sev, DEVICE_MEMORY, &arr->counter, sizeof(arr->counter),
+			    "Unknown error detected\n");
 		return XE_RAS_RECOVERY_ACTION_RESET;
 	}
 
@@ -658,62 +726,14 @@ static u8 handle_device_memory_errors(struct xe_device *xe, struct xe_ras_error_
 static u8 handle_pcie_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
 {
 	struct xe_ras_ieh_error *info = (void *)arr->details;
-	u8 severity = arr->counter.common.severity;
-
-	if (info->global_error_status & XE_RAS_PCIE_IEH_GPMA) {
-		xe_log_comp(xe, ras_sev_to_cper_sev(severity), PCIE, &arr->counter,
-			    sizeof(arr->counter), "GPMA error detected\n");
-		return XE_RAS_RECOVERY_ACTION_RESET;
-	}
 
 	xe_log_comp(xe, ras_sev_to_cper_sev(arr->counter.common.severity), PCIE, &arr->counter,
-		    sizeof(arr->counter), "Errors detected\n");
+		    sizeof(arr->counter), "error detected: 0x%08x\n", info->global_error_status);
+
+	if (info->global_error_status & XE_RAS_PCIE_IEH_GPMA)
+		return XE_RAS_RECOVERY_ACTION_RESET;
+
 	return XE_RAS_RECOVERY_ACTION_RECOVERED;
-}
-
-static u8 handle_fabric_errors(struct xe_device *xe, struct xe_ras_error_array *arr)
-{
-	struct xe_ras_error_product *product = &arr->counter.product;
-	struct xe_ras_ieh_error *info = (void *)arr->details;
-	u8 severity = arr->counter.common.severity;
-
-	if ((info->global_error_status & XE_RAS_FAB_IEH_SAF_MHB) &&
-	    product->cause.cause == XE_RAS_FAB_CAUSE_PAYLOAD) {
-		xe_log_comp(xe, ras_sev_to_cper_sev(severity), FABRIC, &arr->counter,
-			    sizeof(arr->counter), "SAF MHB error detected\n");
-		return XE_RAS_RECOVERY_ACTION_RECOVERED;
-	}
-
-	xe_log_comp(xe, ras_sev_to_cper_sev(severity), FABRIC, &arr->counter,
-		    sizeof(arr->counter), "Errors detected\n");
-	return XE_RAS_RECOVERY_ACTION_RESET;
-}
-
-/**
- * xe_ras_counter_is_valid() - Validate a RAS error counter
- * @xe: Xe device instance
- * @counter: RAS error class to validate
- *
- * Validate that counter represents a supported RAS error class
- *
- * Return: true if counter is valid, false otherwise.
- */
-bool xe_ras_counter_is_valid(struct xe_device *xe, struct xe_ras_error_class *counter)
-{
-	u8 severity = counter->common.severity;
-	u8 component = counter->common.component;
-
-	if (!in_range(severity, XE_RAS_SEV_NOT_SUPPORTED + 1, XE_RAS_SEV_MAX - 1)) {
-		xe_err(xe, "sysctrl: unexpected severity %u\n", severity);
-		return false;
-	}
-
-	if (!in_range(component, XE_RAS_COMP_NOT_SUPPORTED + 1, XE_RAS_COMP_MAX - 1)) {
-		xe_err(xe, "sysctrl: unexpected component %u\n", component);
-		return false;
-	}
-
-	return true;
 }
 
 void xe_ras_counter_threshold_crossed(struct xe_device *xe,
@@ -739,12 +759,12 @@ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
 		severity = errors[id].common.severity;
 		component = errors[id].common.component;
 
-		if (!xe_ras_counter_is_valid(xe, &errors[id]))
+		if (!ras_counter_is_valid(xe, &errors[id]))
 			continue;
 
 		xe_log_from(xe, ras_sev_to_cper_sev(severity),
 			    ras_comp_to_hw_sigid(component),
-			    component,
+			    ras_comp_to_log_comp(component),
 			    &errors[id], sizeof(errors[id]),
 			    "error detected\n");
 
@@ -757,18 +777,35 @@ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
 	}
 }
 
+static int get_counter(struct xe_device *xe, struct xe_ras_error_class *counter,
+		       u32 *value, bool emit_cper)
+{
+	struct xe_ras_get_counter_response response = {0};
+	int ret;
+
+	ret = xe_ras_get_counter_response(xe, counter, &response);
+	if (ret)
+		return ret;
+
+	*value = response.value;
+	if (emit_cper)
+		xe_cper_emit_counter(xe, ras_sev_to_cper_sev(counter->common.severity),
+				     ras_comp_to_hw_sigid(counter->common.component), &response);
+	return 0;
+}
+
 /**
  * xe_ras_get_counter_response() - Get error counter record
  * @xe: Xe device instance
- * @counter: ras error class
- * @out: Counter record retrieved
+ * @counter: RAS error class
+ * @response: Counter record retrieved
  *
- * This function retrieves the counter record of specific error counter
+ * Retrieve the counter record of a specific error class from firmware.
  *
  * Return: 0 on success, negative error code on failure.
  */
-int xe_ras_get_counter_response(struct xe_device *xe, struct xe_ras_error_class *counter,
-				struct xe_ras_get_counter_response *out)
+int xe_ras_get_counter_response(struct xe_device *xe, const struct xe_ras_error_class *counter,
+				struct xe_ras_get_counter_response *response)
 {
 	struct xe_ras_get_counter_request request = {0};
 	struct xe_sysctrl_mailbox_command command = {0};
@@ -776,11 +813,10 @@ int xe_ras_get_counter_response(struct xe_device *xe, struct xe_ras_error_class 
 	size_t rlen;
 	int ret;
 
-	memset(out, 0, sizeof(*out));
 	request.counter = *counter;
 
 	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_GET_COUNTER,
-				  &request, sizeof(request), out, sizeof(*out));
+				  &request, sizeof(request), response, sizeof(*response));
 
 	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
 	if (ret) {
@@ -788,19 +824,19 @@ int xe_ras_get_counter_response(struct xe_device *xe, struct xe_ras_error_class 
 		return ret;
 	}
 
-	if (rlen != sizeof(*out)) {
+	if (rlen != sizeof(*response)) {
 		xe_err(xe, "sysctrl: unexpected get counter response length %zu (expected %zu)\n",
-		       rlen, sizeof(*out));
+		       rlen, sizeof(*response));
 		return -EIO;
 	}
 
-	if (!xe_ras_counter_is_valid(xe, &out->counter))
+	if (!ras_counter_is_valid(xe, &response->counter))
 		return -EBADMSG;
 
-	common = &out->counter.common;
+	common = &response->counter.common;
 
-	xe_dbg(xe, "[RAS]: get counter %u for %s %s\n", out->value, comp_to_str(common->component),
-	       sev_to_str(common->severity));
+	xe_dbg(xe, "[RAS]: get counter %u for %s %s\n", response->value,
+	       comp_to_str(common->component), sev_to_str(common->severity));
 
 	return 0;
 }
@@ -834,7 +870,6 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
 		return XE_RAS_RECOVERY_ACTION_RECOVERED;
 
 	BUILD_BUG_ON(BITS_PER_TYPE(sent) < XE_RAS_COMP_MAX);
-
 	/* Default action for PCIe bus errors */
 	final_action = XE_RAS_RECOVERY_ACTION_RECOVERED;
 
@@ -876,7 +911,7 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
 			component = arr->counter.common.component;
 			severity = arr->counter.common.severity;
 
-			if (!xe_ras_counter_is_valid(xe, &arr->counter))
+			if (!ras_counter_is_valid(xe, &arr->counter))
 				continue;
 
 			xe_info(xe, "[RAS]: %s %s detected\n", comp_to_str(component),
@@ -900,9 +935,6 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
 				break;
 			case XE_RAS_COMP_PCIE:
 				action = handle_pcie_errors(xe, arr);
-				break;
-			case XE_RAS_COMP_FABRIC:
-				action = handle_fabric_errors(xe, arr);
 				break;
 			default:
 				/* For any other component, reset */
@@ -943,26 +975,13 @@ err:
  */
 int xe_ras_get_counter(struct xe_device *xe, u8 severity, u8 component, u32 *value)
 {
-	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
 	struct xe_ras_error_class counter = {0};
-	struct xe_ras_get_counter_response response = {0};
-	int ret;
 
 	counter.common.severity = drm_to_xe_ras_severity(severity);
 	counter.common.component = drm_to_xe_ras_component(component);
 
 	guard(xe_pm_runtime)(xe);
-	ret = xe_ras_get_counter_response(xe, &counter, &response);
-	if (ret)
-		return ret;
-	*value = response.value;
-
-	if (xe->ras.nl_data.cper_on_query)
-		xe_emit_hardware_error_cper(pdev, ras_sev_to_cper_sev(counter.common.severity),
-					    ras_comp_to_hw_sigid(counter.common.component),
-					    (struct xe_ras_error_class *)&counter,
-					    (struct xe_ras_get_counter_response *)&response);
-	return 0;
+	return get_counter(xe, &counter, value, READ_ONCE(xe->cper.on_query));
 }
 
 /**
@@ -1014,7 +1033,7 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
 
 	counter = &response.counter;
 
-	if (!xe_ras_counter_is_valid(xe, counter))
+	if (!ras_counter_is_valid(xe, counter))
 		return -EBADMSG;
 
 	xe_dbg(xe, "[RAS]: clear counter for %s %s\n", comp_to_str(counter->common.component),
@@ -1023,6 +1042,18 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
 	return 0;
 }
 
+/**
+ * xe_ras_get_threshold() - Get error counter threshold
+ * @xe: Xe device instance
+ * @severity: Error severity to be queried (&enum drm_xe_ras_error_severity)
+ * @component: Error component to be queried (&enum drm_xe_ras_error_component)
+ * @threshold: Counter threshold
+ *
+ * This function retrieves the error threshold of a specific counter based on
+ * severity and component.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
 int xe_ras_get_threshold(struct xe_device *xe, u8 severity, u8 component, u32 *threshold)
 {
 	struct xe_ras_get_threshold_response response = {};
@@ -1052,7 +1083,7 @@ int xe_ras_get_threshold(struct xe_device *xe, u8 severity, u8 component, u32 *t
 		return -EIO;
 	}
 
-	if (!xe_ras_counter_is_valid(xe, &response.counter))
+	if (!ras_counter_is_valid(xe, &response.counter))
 		return -EBADMSG;
 
 	counter = &response.counter;
@@ -1063,6 +1094,18 @@ int xe_ras_get_threshold(struct xe_device *xe, u8 severity, u8 component, u32 *t
 	return 0;
 }
 
+/**
+ * xe_ras_set_threshold() - Set error counter threshold
+ * @xe: Xe device instance
+ * @severity: Error severity to be set (&enum drm_xe_ras_error_severity)
+ * @component: Error component to be set (&enum drm_xe_ras_error_component)
+ * @threshold: Counter threshold
+ *
+ * This function sets the error threshold of a specific counter based on
+ * severity and component.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
 int xe_ras_set_threshold(struct xe_device *xe, u8 severity, u8 component, u32 threshold)
 {
 	struct xe_ras_set_threshold_response response = {};
@@ -1101,7 +1144,8 @@ int xe_ras_set_threshold(struct xe_device *xe, u8 severity, u8 component, u32 th
 	}
 
 	counter = &response.counter;
-	if (!xe_ras_counter_is_valid(xe, counter))
+
+	if (!ras_counter_is_valid(xe, counter))
 		return -EBADMSG;
 
 	xe_dbg(xe, "[RAS]: set threshold %u for %s %s\n", response.threshold,
@@ -1109,143 +1153,188 @@ int xe_ras_set_threshold(struct xe_device *xe, u8 severity, u8 component, u32 th
 	return 0;
 }
 
-static int get_info_queue_data(struct xe_device *xe,
-			       const struct xe_ras_get_info_queue_data_request *req,
-			       struct xe_ras_get_info_queue_data_response *out)
+static int get_info_queue(struct xe_device *xe,
+			  struct xe_ras_get_info_queue_request *request,
+			  struct xe_ras_get_info_queue_response *response)
 {
-	struct xe_ras_get_info_queue_data_response response = {0};
 	struct xe_sysctrl_mailbox_command command = {0};
+	const struct xe_ras_info_queue_header *hdr;
 	size_t rlen;
 	int ret;
 
-	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP,
-				  XE_SYSCTRL_CMD_GET_INFO_QUEUE_DATA,
-				  (void *)req, sizeof(*req), &response, sizeof(response));
+	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_GET_INFO_QUEUE,
+				  request, sizeof(*request), response, sizeof(*response));
 
 	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
 	if (ret) {
-		xe_err(xe, "sysctrl: failed to get info queue data %d\n", ret);
+		xe_err(xe, "sysctrl: failed to get info queue %d\n", ret);
 		return ret;
 	}
 
-	if (rlen != sizeof(response)) {
-		xe_err(xe, "sysctrl: unexpected get info queue data response length %zu (expected %zu)\n",
-		       rlen, sizeof(response));
+	if (rlen != sizeof(*response)) {
+		xe_err(xe, "sysctrl: unexpected get info queue response length %zu (expected %zu)\n",
+		       rlen, sizeof(*response));
 		return -EIO;
 	}
 
-	xe_dbg(xe, "[RAS]: info queue data: status=%u chunk_size=%u flags=0x%x\n",
-	       response.operation_status,
-	       response.queue_response.queue_header.chunk_size,
-	       response.queue_response.queue_header.flags);
+	ret = ras_status_to_errno(response->status);
+	if (ret) {
+		xe_err(xe, "sysctrl: get info queue command failed with status %#x\n",
+		       response->status);
+		return ret;
+	}
 
-	*out = response;
+	hdr = &response->qdata_response.header;
+	xe_dbg(xe, "[RAS] get info queue: total_size=%u chunk_offset=%u chunk_size=%u flags=%#x num_headers=%u\n",
+	       hdr->total_size, hdr->chunk_offset, hdr->chunk_size, hdr->flags, hdr->num_headers);
+
 	return 0;
 }
 
+static bool chunk_is_valid(const struct xe_ras_info_queue_header *hdr,
+			   u32 expected_offset, u32 total_size, u32 dest_size)
+{
+	u32 end;
+
+	return hdr->total_size == total_size && total_size &&
+	       hdr->chunk_offset == expected_offset &&
+	       hdr->chunk_size && hdr->chunk_size <= XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE &&
+	       !check_add_overflow(hdr->chunk_offset, hdr->chunk_size, &end) &&
+	       end <= min_t(u32, total_size, XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE) &&
+	       end <= dest_size;
+}
+
+static u32 get_first_chunk(struct xe_device *xe,
+			   const struct xe_ras_get_counter_response *counter_resp,
+			   u8 *dest_buf, u32 dest_size, u32 *flags)
+{
+	const struct xe_ras_info_queue_header *hdr = &counter_resp->first.header;
+
+	if (!chunk_is_valid(hdr, 0, hdr->total_size, dest_size)) {
+		xe_warn(xe, "[RAS]: invalid first info queue chunk (total=%u offset=%u size=%u, expected offset=0)\n",
+			hdr->total_size, hdr->chunk_offset, hdr->chunk_size);
+		return 0;
+	}
+
+	memcpy(dest_buf, counter_resp->first.data, hdr->chunk_size);
+	*flags = hdr->flags;
+
+	return hdr->chunk_size;
+}
+
+static u32 get_remaining_chunks(struct xe_device *xe,
+				const struct xe_ras_get_counter_response *counter_resp,
+				u8 *dest_buf, u32 dest_size, u32 offset, u32 flags)
+{
+	u32 requests_left = XE_SYSCTRL_FLOOD_LIMIT * 2;
+	int ret;
+
+	xe_assert(xe, offset < dest_size);
+
+	while ((flags & XE_RAS_INFO_QUEUE_FLAG_MORE_DATA) && offset < dest_size) {
+		struct xe_ras_info_queue_data_request *qdata_request;
+		struct xe_ras_get_info_queue_response response = {};
+		struct xe_ras_get_info_queue_request request = {};
+		struct xe_ras_info_queue_header *hdr;
+
+		if (!requests_left) {
+			xe_warn(xe, "[RAS] info queue drain stopped after %u requests with data remaining\n",
+				XE_SYSCTRL_FLOOD_LIMIT * 2);
+			break;
+		}
+		requests_left--;
+
+		qdata_request = &request.qdata_request;
+		qdata_request->offset = offset;
+		qdata_request->size = min(XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE,
+					  dest_size - offset);
+		qdata_request->session_id = counter_resp->counter;
+
+		ret = get_info_queue(xe, &request, &response);
+		if (ret) {
+			xe_err(xe, "[RAS]: info queue drain aborted: fetch at offset=%u, ret = %d\n",
+			       offset, ret);
+			return offset;
+		}
+
+		hdr = &response.qdata_response.header;
+
+		if (!chunk_is_valid(hdr, offset, counter_resp->first.header.total_size,
+				    dest_size)) {
+			xe_warn(xe, "[RAS]: invalid info queue chunk (total=%u offset=%u size=%u, expected offset=%u)\n",
+				hdr->total_size, hdr->chunk_offset, hdr->chunk_size, offset);
+			return offset;
+		}
+
+		memcpy(dest_buf + offset, response.qdata_response.data, hdr->chunk_size);
+		offset += hdr->chunk_size;
+		flags = hdr->flags;
+	}
+
+	return min(offset, counter_resp->first.header.total_size);
+}
+
 /**
- * xe_ras_drain_info_queue_raw - Drain the full RAS info queue into a flat buffer.
- * @xe: xe device
- * @counter_resp: counter response carrying the first embedded chunk and the
- *                counter identifier used as the source context for subsequent
- *                GET_INFO_QUEUE_DATA fetches
- * @raw_buf: destination buffer supplied by the caller
- * @raw_buf_size: size of @raw_buf in bytes; also caps the total amount of data
- *                assembled from the info queue
+ * xe_ras_get_info_queue_size() - Get the total size of the RAS info queue
+ * @response: Counter response carrying the first info queue chunk
  *
- * Copies the first chunk already embedded in @counter_resp, then loops
- * issuing GET_INFO_QUEUE_DATA to fetch any remaining chunks until the queue
+ * Return: Info queue size in bytes, capped at the supported maximum, or zero
+ * if no usable info queue is present.
+ */
+u32 xe_ras_get_info_queue_size(struct xe_device *xe,
+			       const struct xe_ras_get_counter_response *response)
+{
+	u32 total_size;
+
+	if (!response->has_info_queue)
+		return 0;
+
+	total_size = response->first.header.total_size;
+	if (!total_size) {
+		xe_warn(xe, "[RAS] info queue reports zero size\n");
+		return 0;
+	}
+
+	if (total_size > XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE) {
+		xe_warn(xe, "[RAS] info queue size %u exceeds max size %u, truncating\n",
+			total_size, XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE);
+		total_size = XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE;
+	}
+	return total_size;
+}
+
+/**
+ * xe_ras_drain_info_queue() - Drain the full RAS info queue into a flat buffer
+ * @xe: xe device
+ * @response: counter response carrying the first embedded chunk
+ * @dest_buf: destination buffer supplied by the caller
+ * @dest_size: size of @dest_buf in bytes
+ *
+ * Copies the first chunk already embedded in @response, then loops
+ * issuing GET_INFO_QUEUE to fetch any remaining chunks until the queue
  * signals no more data or a transport/bounds error is encountered.  On
  * transport or bounds errors the function stops and returns whatever has
  * been assembled so far.
  *
- * Returns: number of valid bytes written into @raw_buf.  Zero if @raw_buf is
- *          NULL or @raw_buf_size is 0.
+ * Returns: Number of valid bytes written into @dest_buf.
  */
-u32 xe_ras_drain_info_queue_raw(struct xe_device *xe,
-				const struct xe_ras_get_counter_response *counter_resp,
-				u8 *raw_buf, u32 raw_buf_size)
+u32 xe_ras_drain_info_queue(struct xe_device *xe,
+			    const struct xe_ras_get_counter_response *response,
+			    u8 *dest_buf, u32 dest_size)
 {
-	const struct xe_ras_info_queue_header *first_qhdr =
-		&counter_resp->info_queue.queue_header;
-	struct xe_ras_get_info_queue_data_request iq_req = {0};
-	struct xe_ras_get_info_queue_data_response iq_response = {0};
-	u32 iq_offset = 0;
-	u32 end;
-	bool complete = true;
+	u32 flags, offset;
 
-	if (!raw_buf || !raw_buf_size)
+	if (!response->has_info_queue)
 		return 0;
 
-	/* Copy first chunk already embedded in the counter response */
-	if (first_qhdr->chunk_size &&
-	    first_qhdr->chunk_size <= XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE &&
-	    !check_add_overflow(first_qhdr->chunk_offset, first_qhdr->chunk_size, &end) &&
-	    end <= XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE && end <= raw_buf_size) {
-		memcpy(raw_buf + first_qhdr->chunk_offset,
-		       counter_resp->info_queue.queue_data, first_qhdr->chunk_size);
-		iq_offset = first_qhdr->chunk_size;
-	}
+	xe_assert(xe, dest_buf);
+	xe_assert(xe, dest_size);
 
-	/* Fetch any remaining chunks */
-	if (first_qhdr->flags & XE_RAS_INFO_QUEUE_FLAG_MORE_DATA) {
-		iq_req.source_command			= XE_SYSCTRL_CMD_GET_COUNTER;
-		iq_req.source_context			= counter_resp->counter;
-		iq_req.queue_request.requested_size	= XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE;
-		iq_req.queue_request.session_id		= counter_resp->counter;
+	offset = get_first_chunk(xe, response, dest_buf, dest_size, &flags);
+	if (!offset)
+		return 0;
 
-		do {
-			struct xe_ras_info_queue_header *qhdr;
-			u32 end;
-
-			iq_req.queue_request.requested_offset = iq_offset;
-
-			if (get_info_queue_data(xe, &iq_req, &iq_response)) {
-				complete = false;
-				xe_err(xe,
-				       "[RAS]: info queue drain aborted: fetch at offset=%u failed\n",
-				       iq_offset);
-				break;
-			}
-
-			qhdr = &iq_response.queue_response.queue_header;
-
-			if (!qhdr->chunk_size) {
-				complete = false;
-				break;
-			}
-
-			if (qhdr->chunk_size > XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE) {
-				complete = false;
-				xe_warn(xe,
-					"[RAS]: CPER: invalid chunk size %u\n", qhdr->chunk_size);
-				break;
-			}
-
-			if (check_add_overflow(qhdr->chunk_offset, qhdr->chunk_size, &end) ||
-			    end > XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE || end > raw_buf_size) {
-				complete = false;
-				xe_warn(xe,
-					"[RAS]: info queue chunk out of bounds (offset=%u size=%u)\n",
-					qhdr->chunk_offset, qhdr->chunk_size);
-				break;
-			}
-
-			memcpy(raw_buf + qhdr->chunk_offset,
-			       iq_response.queue_response.queue_data,
-			       qhdr->chunk_size);
-
-			iq_offset += qhdr->chunk_size;
-		} while (iq_response.queue_response.queue_header.flags &
-			 XE_RAS_INFO_QUEUE_FLAG_MORE_DATA);
-	}
-
-	if (!complete)
-		return iq_offset;
-
-	return first_qhdr->total_size
-	       ? min3(first_qhdr->total_size, XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE, raw_buf_size)
-	       : iq_offset;
+	return get_remaining_chunks(xe, response, dest_buf, dest_size, offset, flags);
 }
 
 static ssize_t gpu_health_show(struct device *dev, struct device_attribute *attr, char *buf)
@@ -1381,56 +1470,6 @@ static const struct attribute_group gpu_health_group = {
 	.attrs = gpu_health_attrs,
 };
 
-static ssize_t cper_on_query_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	struct xe_device *xe = kdev_to_xe_device(dev);
-
-	return sysfs_emit(buf, "%u\n", xe->ras.nl_data.cper_on_query);
-}
-
-static ssize_t cper_on_query_store(struct device *dev, struct device_attribute *attr,
-				   const char *buf, size_t count)
-{
-	struct xe_device *xe = kdev_to_xe_device(dev);
-	bool enable;
-	int ret;
-
-	ret = kstrtobool(buf, &enable);
-	if (ret)
-		return ret;
-
-	xe->ras.nl_data.cper_on_query = enable;
-
-	return count;
-}
-static DEVICE_ATTR_ADMIN_RW(cper_on_query);
-
-static struct attribute *cper_on_query_attrs[] = {
-	&dev_attr_cper_on_query.attr,
-	NULL
-};
-
-/**
- * DOC: CPER on query
- *
- * On Intel Xe platforms that support the RAS error reporting interface,
- * the driver can emit a CPER (Common Platform Error Record) each time an
- * error counter is queried. This behaviour is controlled through the
- * following sysfs attribute::
- *
- *     /sys/bus/pci/devices/<device>/cper_on_query
- *
- * The attribute is a boolean (``0`` or ``1``). When set to ``1``, every
- * counter query emits a CPER record built from the associated info queue
- * data; when set to ``0`` (default) no record is emitted on query.
- *
- * Reading the attribute is available to all users and returns the current
- * setting, whereas writing is restricted to administrative users.
- */
-static const struct attribute_group cper_on_query_group = {
-	.attrs = cper_on_query_attrs,
-};
-
 static void ras_fini(void *arg)
 {
 	struct xe_device *xe = arg;
@@ -1439,21 +1478,21 @@ static void ras_fini(void *arg)
 }
 
 /**
- * xe_ras_get_disable_page_offline - Get the page offline user policy
+ * xe_ras_get_disable_vram_page_offline - Get the vram page offline user policy
  * @xe: xe device instance
  *
- * Return: true if the page offline policy is disabled, false otherwise.
+ * Return: true if the vram page offline policy is disabled, false otherwise.
  */
-bool xe_ras_get_disable_page_offline(struct xe_device *xe)
+bool xe_ras_get_disable_vram_page_offline(struct xe_device *xe)
 {
-	return xe->ras.state.disable_page_offline;
+	return xe->ras.state.disable_vram_page_offline;
 }
 
 /**
  * xe_ras_get_max_pages - Get the maximum number of pages
  * @xe: xe device instance
  *
- * Return: Maximum number of pages that can be stored in flash
+ * Return: Maximum number of pages stored by the firmware in flash
  */
 u32 xe_ras_get_max_pages(struct xe_device *xe)
 {
@@ -1499,10 +1538,10 @@ int xe_ras_init(struct xe_device *xe)
 		return 0;
 
 	/*
-	 * TODO: Replace platform check with xe->info.has_disable_vram_page_offline
-	 * once the feature flag is plumbed through device info.
+	 * TODO: Replace with xe->info.has_disable_vram_page_offline once the feature flag is
+	 * plumbed through device info.
 	 */
-	xe->ras.state.disable_page_offline =
+	xe->ras.state.disable_vram_page_offline =
 		xe_configfs_get_disable_vram_page_offline(to_pci_dev(xe->drm.dev));
 
 	if (IS_ENABLED(CONFIG_PCIEAER))
@@ -1510,16 +1549,24 @@ int xe_ras_init(struct xe_device *xe)
 
 	xa_init(&state->offlined_pages);
 
-	get_queued_pages(xe);
-	get_offlined_list(xe);
+	ret = devm_add_action_or_reset(xe->drm.dev, ras_fini, xe);
+	if (ret)
+		return ret;
+
+	/* Fetch the offline list before queue to avoid duplication */
+	get_offline_list(xe);
+	get_offline_queue(xe);
+
+	/*
+	 * During probe, process and log any errors detected by firmware while the driver was not
+	 * loaded. Critical errors such as Punit and CSC are reported through Pcode init failure,
+	 * causing the driver to enter survivability mode.
+	 */
+	xe_ras_process_errors(xe);
 
 	ret = devm_device_add_group(xe->drm.dev, &gpu_health_group);
 	if (ret)
-		xe_err(xe, "Failed to create GPU health sysfs, err=%d\n", ret);
+		return ret;
 
-	ret = devm_device_add_group(xe->drm.dev, &cper_on_query_group);
-	if (ret)
-		xe_err(xe, "Failed to create cper_on_query sysfs, err=%d\n", ret);
-
-	return devm_add_action_or_reset(xe->drm.dev, ras_fini, xe);
+	return xe_cper_sysfs_init(xe);
 }

@@ -52,7 +52,6 @@ struct xe_device_desc {
 	u8 has_i2c:1;
 	u8 has_llc:1;
 	u8 has_mbx_power_limits:1;
-	u8 has_mbx_temp_sentinel:1;
 	u8 has_mbx_thermal_info:1;
 	u8 has_mert:1;
 	u8 has_pre_prod_wa:1;
@@ -62,6 +61,7 @@ struct xe_device_desc {
 	u8 has_soc_remapper_telem:1;
 	u8 has_sriov:1;
 	u8 has_sysctrl:1;
+	u8 has_temp_sentinel:1;
 	u8 needs_scratch:1;
 	u8 skip_guc_pc:1;
 	u8 skip_pcode:1;

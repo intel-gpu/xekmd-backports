@@ -39,6 +39,9 @@ struct xe_sysctrl_debugfs_entry {
 
 	/** @status: Last command result */
 	int status;
+
+	/** @timeout_ms: Last mailbox response timeout used (0 for default) */
+	unsigned int timeout_ms;
 };
 
 /**

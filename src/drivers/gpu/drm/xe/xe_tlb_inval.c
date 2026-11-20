@@ -625,15 +625,17 @@ int xe_tlb_inval_range_tilemask_submit(struct xe_device *xe, u32 asid,
 		if (!(tile_mask & BIT(id)))
 			continue;
 
-		xe_tlb_inval_fence_init(&tile->primary_gt->tlb_inval,
-					&fence[fence_id], true);
+		if (tile->primary_gt) {
+			xe_tlb_inval_fence_init(&tile->primary_gt->tlb_inval,
+						&fence[fence_id], true);
 
-		err = xe_tlb_inval_range(&tile->primary_gt->tlb_inval,
-					 &fence[fence_id], start, end,
-					 asid, NULL);
-		if (err)
-			goto wait;
-		++fence_id;
+			err = xe_tlb_inval_range(&tile->primary_gt->tlb_inval,
+						 &fence[fence_id], start, end,
+						 asid, NULL);
+			if (err)
+				goto wait;
+			++fence_id;
+		}
 
 		if (!tile->media_gt)
 			continue;

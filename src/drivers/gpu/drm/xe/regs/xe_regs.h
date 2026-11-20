@@ -12,6 +12,8 @@
 #define SOC_BASE				0x280000
 
 #define GU_CNTL_PROTECTED			XE_REG(0x10100C)
+#define   GT_PRESENT				REG_BIT(8)
+#define   IM_PRESENT				REG_BIT(10)
 #define   DRIVERINT_FLR_DIS			REG_BIT(31)
 
 #define GU_CNTL					XE_REG(0x101010)

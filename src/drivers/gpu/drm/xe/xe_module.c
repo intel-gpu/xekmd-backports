@@ -23,6 +23,7 @@
 #include "xe_sched_job.h"
 
 struct xe_modparam xe_modparam = {
+	.enable_media =		XE_DEFAULT_ENABLE_MEDIA,
 	.probe_display =	XE_DEFAULT_PROBE_DISPLAY,
 	.guc_log_level =	XE_DEFAULT_GUC_LOG_LEVEL,
 	.force_probe =		XE_DEFAULT_FORCE_PROBE,
@@ -41,6 +42,12 @@ struct xe_modparam xe_modparam = {
 module_param_named(svm_notifier_size, xe_modparam.svm_notifier_size, uint, 0600);
 MODULE_PARM_DESC(svm_notifier_size, "Set the svm notifier size in MiB, must be power of 2 "
 		 "[default=" __stringify(XE_DEFAULT_SVM_NOTIFIER_SIZE) "]");
+
+module_param_named(enable_media, xe_modparam.enable_media, int, 0444);
+MODULE_PARM_DESC(enable_media, "Enable the media GT, when present (-1=auto, 0=disable, 1=enable). "
+		 "Disabling overrides any media GT selected via the gt_types_allowed "
+		 "configfs attribute "
+		 "[default=" __stringify(XE_DEFAULT_ENABLE_MEDIA) "])");
 
 #ifdef BPM_DRMM_CGROUP_REGISTER_REGION_NOT_PRESENT
 module_param_named(pin_vram_percent, xe_modparam.pin_vram_percent, uint, 0400);

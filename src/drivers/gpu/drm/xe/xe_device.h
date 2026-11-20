@@ -110,6 +110,22 @@ static inline struct xe_gt *xe_root_mmio_gt(struct xe_device *xe)
 	return xe_device_get_root_tile(xe)->primary_gt;
 }
 
+/*
+ * Provide a GT structure for device level state that happens to be hung off a
+ * GT but is not specific to one, such as GuC firmware versions or OA units.
+ * Unlike xe_root_mmio_gt(), this never returns NULL: the root tile always has
+ * at least one GT, even when the graphics IP is absent.  It must not be used
+ * for MMIO, since the media GT needs GSI offset translation.
+ *
+ * Returns the primary GT of the root tile, or its media GT if there is none.
+ */
+static inline struct xe_gt *xe_device_any_gt(struct xe_device *xe)
+{
+	struct xe_tile *tile = xe_device_get_root_tile(xe);
+
+	return tile->primary_gt ?: tile->media_gt;
+}
+
 static inline struct xe_mmio *xe_root_tile_mmio(struct xe_device *xe)
 {
 	return &xe->tiles[0].mmio;
@@ -278,6 +294,7 @@ static inline bool xe_device_is_admin_only(const struct xe_device *xe)
 }
 #endif
 
+bool xe_device_media_allowed(struct xe_device *xe);
 void xe_device_exit(void);
 
 /*

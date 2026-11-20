@@ -573,7 +573,7 @@ static bool xe_pagefault_queue_pop(struct xe_pagefault_queue *pf_queue,
 			continue;
 
 		if (cache_start != XE_PAGEFAULT_CACHE_START_INVALID) {
-			xe_gt_stats_incr(xe_root_mmio_gt(xe),
+			xe_gt_stats_incr(xe_device_any_gt(xe),
 					 XE_GT_STATS_ID_PARALLEL_PAGEFAULT_COUNT,
 					 1);
 			break;
@@ -794,7 +794,7 @@ ack_fault:
 	}
 #undef USM_QUEUE_MAX_RUNTIME_MS
 
-	xe_gt_stats_incr(xe_root_mmio_gt(xe), XE_GT_STATS_ID_PAGEFAULT_US,
+	xe_gt_stats_incr(xe_device_any_gt(xe), XE_GT_STATS_ID_PAGEFAULT_US,
 			 xe_gt_stats_ktime_us_delta(start));
 }
 

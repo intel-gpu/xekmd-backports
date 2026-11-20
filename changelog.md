@@ -40,6 +40,27 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.2_261118.8` | | | |
+| | oot-backport/main | [`a9f9772f5`](<https://github.com/intel-gpu/xekmd-backports/commit/a9f9772f5dd5d40c17bc41fd63691e13a02ac6bb>) | backport-include/linux: include required in sprintf backported header |
+| | oot-backport/main | [`b686294c4`](<https://github.com/intel-gpu/xekmd-backports/commit/b686294c4dd05495f96abc719a71c4413da7186d>) | mm.h: Backport DIRECT_MAP_PHYSMEM_END |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/178946/#rev3>) | &#91;TEMP&#93; drm/xe/drm_ras: Protect against unplugged or wedged device |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/series/178946/#rev3>) | &#91;TEMP&#93; drm/xe/wedge: Introduce xe_wedge_mode_is_no_reset() |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe: Add enable_media module parameter |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe: Allow probe without a primary GT |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe: Detect each GMD_ID IP in a loop |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe: Do not claim flat CCS without a graphics IP |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe: Document that gt_types_allowed=media now probes |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe: Fall back to CPU copies when the tile cannot blit |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe: Guard per-tile primary GT accesses |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe: Process device OOB workarounds during early info init |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe: Require a fully visible VRAM BAR without a primary GT |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe: Run page table updates on the media GT when there is no primary |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe: Stop assuming the root tile has a primary GT |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe: Tolerate a missing graphics IP in xe_info_init() |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe: Verify IP presence against GU_CNTL |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe: Work around media 52-bit limitation on CRI |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe/sysctrl: Restore the SoC remapper on every runtime resume |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev1>) | &#91;TEMP&#93; drm/xe/sysctrl: Use preallocated mailbox staging buffers |
 | `xebr_v7.3.1_261118.6` | | | |
 | | oot-backport/main | [`e9abbe2dd`](<https://github.com/intel-gpu/xekmd-backports/commit/e9abbe2ddbc3f320fd474e9cd51f4a2407a3078b>) | backport-include/zstd: support GuC dump compression on older kernels |
 | | oot-backport/main | [`3edd51cca`](<https://github.com/intel-gpu/xekmd-backports/commit/3edd51cca2ea77893fc8d9fe712ca57ca1f46b1a>) | patches: fix hunk offsets to resolve hunk failures |

@@ -6,7 +6,6 @@
 #include <linux/bitfield.h>
 #include <linux/cleanup.h>
 #include <linux/minmax.h>
-#include <linux/slab.h>
 #include <linux/sprintf.h>
 #include <linux/string.h>
 
@@ -103,36 +102,27 @@ static void sysctrl_clear_response(struct xe_sysctrl *sc)
 	xe_mmio_rmw32(sc->mmio, SYSCTRL_MB_CTRL, SYSCTRL_MB_CTRL_RUN_BUSY_OUT, 0);
 }
 
-static int sysctrl_prepare_command(struct xe_device *xe,
-				   u8 group_id, u8 command,
-				   const void *data_in, size_t data_in_len,
-				   u8 **mbox_cmd, size_t *cmd_size)
+static size_t sysctrl_prepare_command(struct xe_sysctrl *sc,
+				      u8 group_id, u8 command,
+				      const void *data_in, size_t data_in_len)
 {
 	struct xe_sysctrl_mailbox_msg_hdr *hdr;
-	size_t size;
-	u8 *buffer;
+	struct xe_device *xe = sc_to_xe(sc);
+
+	lockdep_assert_held(&sc->cmd_lock);
 
 	xe_assert(xe, command <= SYSCTRL_HDR_COMMAND_MAX);
 
 	xe_assert(xe, data_in_len <= XE_SYSCTRL_MB_MAX_MESSAGE_SIZE - sizeof(*hdr));
 
-	size = sizeof(*hdr) + data_in_len;
-
-	buffer = kmalloc(size, GFP_KERNEL);
-	if (!buffer)
-		return -ENOMEM;
-
-	hdr = (struct xe_sysctrl_mailbox_msg_hdr *)buffer;
+	hdr = (struct xe_sysctrl_mailbox_msg_hdr *)sc->cmd_buf;
 	hdr->data = REG_FIELD_PREP(SYSCTRL_HDR_GROUP_ID_MASK, group_id) |
 		    REG_FIELD_PREP(SYSCTRL_HDR_COMMAND_MASK, command);
 
 	if (data_in && data_in_len)
-		memcpy(buffer + sizeof(*hdr), data_in, data_in_len);
+		memcpy(sc->cmd_buf + sizeof(*hdr), data_in, data_in_len);
 
-	*mbox_cmd = buffer;
-	*cmd_size = size;
-
-	return 0;
+	return sizeof(*hdr) + data_in_len;
 }
 
 static int sysctrl_send_frames(struct xe_sysctrl *sc,
@@ -231,14 +221,17 @@ static int sysctrl_receive_frames(struct xe_sysctrl *sc,
 	struct xe_sysctrl_mailbox_msg_hdr *hdr;
 	struct xe_device *xe = sc_to_xe(sc);
 	size_t remain = sizeof(*hdr) + data_out_len;
-	u8 *buffer __free(kfree) = kzalloc(remain, GFP_KERNEL);
+	u8 *buffer = sc->resp_buf;
 	size_t frame_size;
 	bool done = false;
 	int ret = 0;
 	u8 *out;
 
-	if (!buffer)
-		return -ENOMEM;
+	lockdep_assert_held(&sc->cmd_lock);
+
+	xe_assert(xe, data_out_len <= XE_SYSCTRL_MB_MAX_MESSAGE_SIZE - sizeof(*hdr));
+
+	memset(buffer, 0, remain);
 
 	out = buffer;
 	while (!done && remain) {
@@ -360,8 +353,7 @@ int xe_sysctrl_send_command(struct xe_sysctrl *sc,
 {
 	struct xe_device *xe = sc_to_xe(sc);
 	u8 group_id, command_code;
-	u8 *mbox_cmd = NULL;
-	size_t cmd_size = 0;
+	size_t cmd_size;
 	unsigned int timeout_ms;
 	int ret;
 
@@ -380,25 +372,17 @@ int xe_sysctrl_send_command(struct xe_sysctrl *sc,
 
 	might_sleep();
 
-	ret = sysctrl_prepare_command(xe, group_id, command_code,
-				      cmd->data_in, cmd->data_in_len,
-				      &mbox_cmd, &cmd_size);
-	if (ret) {
-		xe_log_err(xe, SYSCTRL, ret, "Failed to prepare command %#x.%#x\n",
-			   group_id, command_code);
-		return ret;
-	}
-
 	guard(mutex)(&sc->cmd_lock);
 
-	ret = sysctrl_send_command(sc, mbox_cmd, cmd_size,
+	cmd_size = sysctrl_prepare_command(sc, group_id, command_code,
+					   cmd->data_in, cmd->data_in_len);
+
+	ret = sysctrl_send_command(sc, sc->cmd_buf, cmd_size,
 				   cmd->data_out, cmd->data_out_len, rdata_len,
 				   timeout_ms);
 	if (ret)
 		xe_log_err(xe, SYSCTRL, ret, "Mailbox command failed to send %#x.%#x\n",
 			   group_id, command_code);
-
-	kfree(mbox_cmd);
 
 	return ret;
 }

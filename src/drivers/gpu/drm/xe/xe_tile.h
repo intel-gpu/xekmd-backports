@@ -6,6 +6,7 @@
 #ifndef _XE_TILE_H_
 #define _XE_TILE_H_
 
+#include "xe_hw_engine_types.h"
 #include "xe_tile_types.h"
 
 struct xe_device;
@@ -22,6 +23,37 @@ void xe_tile_migrate_wait(struct xe_tile *tile);
 static inline bool xe_tile_is_root(struct xe_tile *tile)
 {
 	return tile->id == 0;
+}
+
+/**
+ * xe_tile_pt_gt() - GT used to run a tile's page table update jobs
+ * @tile: Pointer to the struct xe_tile.
+ *
+ * Page table updates, and the migration context they are submitted through,
+ * normally run on the primary GT.  A device whose graphics IP is absent has
+ * no primary GT, but its media GT can write page tables just as well.
+ *
+ * Return: The tile's primary GT, or its media GT if it has no primary GT.
+ */
+static inline struct xe_gt *xe_tile_pt_gt(struct xe_tile *tile)
+{
+	return tile->primary_gt ?: tile->media_gt;
+}
+
+/**
+ * xe_tile_pt_class() - Engine class to run a tile's page table update jobs on
+ * @tile: Pointer to the struct xe_tile.
+ *
+ * The engine class to pair with xe_tile_pt_gt(). The copy engine is the usual
+ * choice, but it lives on the primary GT; when there is none, fall back to a
+ * video decode engine on the media GT.
+ *
+ * Return: The engine class to create the tile's page table exec queue with.
+ */
+static inline enum xe_engine_class xe_tile_pt_class(struct xe_tile *tile)
+{
+	return tile->primary_gt ? XE_ENGINE_CLASS_COPY :
+				  XE_ENGINE_CLASS_VIDEO_DECODE;
 }
 
 /**

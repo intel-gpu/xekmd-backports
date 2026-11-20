@@ -66,6 +66,7 @@
 #include "xe_sa.h"
 #include "xe_sched_job.h"
 #include "xe_sriov.h"
+#include "xe_tile.h"
 #include "xe_tlb_inval.h"
 #include "xe_tuning.h"
 #include "xe_uc.h"
@@ -700,10 +701,12 @@ static int gt_init_with_all_forcewake(struct xe_gt *gt)
 		}
 	}
 
-	if (xe_gt_is_main_type(gt)) {
-		struct xe_tile *tile = gt_to_tile(gt);
-
-		err = xe_migrate_init(tile->migrate);
+	/*
+	 * Normally the migration context runs on the primary GT, but a tile
+	 * with no graphics IP has only its media GT to run it on.
+	 */
+	if (gt == xe_tile_pt_gt(gt_to_tile(gt))) {
+		err = xe_migrate_init(gt_to_tile(gt)->migrate);
 		if (err)
 			return err;
 	}

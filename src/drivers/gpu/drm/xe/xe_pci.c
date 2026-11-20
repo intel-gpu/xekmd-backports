@@ -7,6 +7,9 @@
 
 #include <kunit/static_stub.h>
 #include <linux/device/driver.h>
+#include <linux/dma-mapping.h>
+#include <linux/iommu.h>
+#include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>
@@ -14,6 +17,8 @@
 #include <drm/drm_color_mgmt.h>
 #include <drm/drm_drv.h>
 #include <drm/intel/pciids.h>
+
+#include <generated/xe_device_wa_oob.h>
 
 #include "display/xe_display.h"
 #include "regs/xe_gt_regs.h"
@@ -39,6 +44,7 @@
 #include "xe_survivability_mode.h"
 #include "xe_tile.h"
 #include "xe_tile_printk.h"
+#include "xe_wa.h"
 
 enum toggle_d3cold {
 	D3COLD_DISABLE,
@@ -633,7 +639,7 @@ static int read_gmdid(struct xe_device *xe, enum xe_gmdid_type type, u32 *ver, u
 		int err;
 
 		/* Don't try to read media ver if media GT is not allowed */
-		if (type == GMDID_MEDIA && !xe_configfs_media_gt_allowed(to_pci_dev(xe->drm.dev))) {
+		if (type == GMDID_MEDIA && !xe_device_media_allowed(xe)) {
 			*ver = *revid = 0;
 			return 0;
 		}
@@ -700,9 +706,37 @@ static const struct xe_ip *find_media_ip(unsigned int verx100)
 	return NULL;
 }
 
+static const struct xe_gmdid_desc {
+	const char *name;
+	u32 present;
+	const struct xe_ip *(*find_ip)(unsigned int verx100);
+} gmdid_descs[] = {
+	[GMDID_GRAPHICS] = { "graphics", GT_PRESENT, find_graphics_ip },
+	[GMDID_MEDIA] = { "media", IM_PRESENT, find_media_ip },
+};
+
+/*
+ * Besides the IP version in GMD_ID, hardware reports whether an IP is present
+ * at all through the fuse backed presence bits in GU_CNTL_PROTECTED.  Use
+ * those as a second level of verification, so an IP hardware says is not there
+ * is left alone whatever GMD_ID claims.
+ */
+static bool gt_fused(struct xe_device *xe, u32 present)
+{
+	/* VFs have no access to GU_CNTL_PROTECTED, so go by GMD_ID alone */
+	if (IS_SRIOV_VF(xe))
+		return false;
+
+	return !(xe_mmio_read32(xe_root_tile_mmio(xe), GU_CNTL_PROTECTED) & present);
+}
+
 /*
  * Read IP version from hardware and select graphics/media IP descriptors
  * based on the result.
+ *
+ * Each IP is detected independently and any of them may legitimately be fused
+ * off or otherwise absent, in which case its descriptor is left NULL.  Deciding
+ * whether the resulting combination is usable is up to the caller.
  */
 static int handle_gmdid(struct xe_device *xe,
 			const struct xe_ip **graphics_ip,
@@ -710,36 +744,46 @@ static int handle_gmdid(struct xe_device *xe,
 			u32 *graphics_revid,
 			u32 *media_revid)
 {
-	u32 ver;
-	int ret;
+	const struct xe_ip **ips[] = {
+		[GMDID_GRAPHICS] = graphics_ip,
+		[GMDID_MEDIA] = media_ip,
+	};
+	u32 *revids[] = {
+		[GMDID_GRAPHICS] = graphics_revid,
+		[GMDID_MEDIA] = media_revid,
+	};
 
-	*graphics_ip = NULL;
-	*media_ip = NULL;
+	for (enum xe_gmdid_type type = 0; type < ARRAY_SIZE(gmdid_descs); type++) {
+		const struct xe_gmdid_desc *desc = &gmdid_descs[type];
+		u32 ver;
+		int ret;
 
-	ret = read_gmdid(xe, GMDID_GRAPHICS, &ver, graphics_revid);
-	if (ret)
-		return ret;
+		*ips[type] = NULL;
+		*revids[type] = 0;
 
-	*graphics_ip = find_graphics_ip(ver);
-	if (!*graphics_ip) {
-		xe_log_err(xe, REGS, -EINVAL,
-			   "Hardware reports unknown graphics version %u.%02u\n",
-			   ver / 100, ver % 100);
-	}
+		ret = read_gmdid(xe, type, &ver, revids[type]);
+		if (ret)
+			return ret;
 
-	ret = read_gmdid(xe, GMDID_MEDIA, &ver, media_revid);
-	if (ret)
-		return ret;
+		/* The IP may legitimately be fused off / not present */
+		if (!ver) {
+			*revids[type] = 0;
+			continue;
+		}
 
-	/* Media may legitimately be fused off / not present */
-	if (ver == 0)
-		return 0;
+		if (gt_fused(xe, desc->present)) {
+			xe_log_info(xe, REGS,
+				    "Hardware reports the %s IP is not present, ignoring version %u.%02u\n",
+				    desc->name, ver / 100, ver % 100);
+			*revids[type] = 0;
+			continue;
+		}
 
-	*media_ip = find_media_ip(ver);
-	if (!*media_ip) {
-		xe_log_err(xe, REGS, -EINVAL,
-			   "Hardware reports unknown media version %u.%02u\n",
-			   ver / 100, ver % 100);
+		*ips[type] = desc->find_ip(ver);
+		if (!*ips[type])
+			xe_log_err(xe, REGS, -EINVAL,
+				   "Hardware reports unknown %s version %u.%02u\n",
+				   desc->name, ver / 100, ver % 100);
 	}
 
 	return 0;
@@ -771,6 +815,56 @@ static int xe_probe_info_early(struct xe_device *xe,
 }
 
 /*
+ * Number of address bits media is able to reach on CRI, where it has no
+ * address translation of its own.
+ */
+#define XE_CRI_MEDIA_ADDR_BITS	46
+
+static bool device_iommu_iova_backed(struct device *dev)
+{
+	struct iommu_domain *domain = iommu_get_domain_for_dev(dev);
+
+	return domain && domain->type != IOMMU_DOMAIN_IDENTITY;
+}
+
+/*
+ * Decide whether media can be used on CRI.  Media there cannot translate
+ * addresses, so it is only usable if device DMA is guaranteed to stay within
+ * XE_CRI_MEDIA_ADDR_BITS.  The IOMMU guarantees that by allocating IOVAs
+ * below the device dma mask.  Without it, DMA addresses are host physical
+ * addresses, so media is only usable when the host cannot produce an address
+ * wider than media can reach.
+ */
+static bool cri_media_addressable(struct xe_device *xe)
+{
+	u64 host_max_addr = DIRECT_MAP_PHYSMEM_END;
+
+	if (device_iommu_iova_backed(xe->drm.dev))
+		return true;
+
+	if (host_max_addr <= DMA_BIT_MASK(XE_CRI_MEDIA_ADDR_BITS))
+		return true;
+
+	drm_info(&xe->drm,
+		 "IOMMU is not translating device DMA and the host can produce %u bit physical addresses, media is limited to %u\n",
+		 fls64(host_max_addr), XE_CRI_MEDIA_ADDR_BITS);
+
+	return false;
+}
+
+/*
+ * Whether the user wants media at all.  The default (-1) leaves the decision
+ * to the driver.
+ */
+static bool media_wanted(struct xe_device *xe)
+{
+	if (xe_modparam.enable_media < 0)
+		return !XE_DEVICE_WA(xe, 14028632488);
+
+	return xe_modparam.enable_media;
+}
+
+/*
  * Initialize device info content that only depends on static driver_data
  * passed to the driver at probe time from PCI ID table.
  */
@@ -790,7 +884,30 @@ static int xe_info_init_early(struct xe_device *xe,
 	xe->info.subplatform = subplatform_desc ?
 		subplatform_desc->subplatform : XE_SUBPLATFORM_NONE;
 
+	/*
+	 * Device OOB workarounds only match on platform, subplatform and
+	 * platform step, which are all known by now, so process them here and
+	 * make XE_DEVICE_WA() usable for the remainder of early probe.
+	 */
+	err = xe_wa_device_init(xe);
+	if (err)
+		return err;
+
+	xe_wa_process_device_oob(xe);
+
+	xe->info.media_allowed = media_wanted(xe) &&
+		xe_configfs_media_gt_allowed(to_pci_dev(xe->drm.dev)) &&
+		(!XE_DEVICE_WA(xe, 14028632488) || cri_media_addressable(xe));
+
 	xe->info.dma_mask_size = desc->dma_mask_size;
+	/*
+	 * Some device media blocks cannot address beyond 46 bits. Clamp the
+	 * dma_mask_size to reflect this.
+	 */
+	if (XE_DEVICE_WA(xe, 14028632488) && xe_device_media_allowed(xe))
+		xe->info.dma_mask_size = min_t(u8, xe->info.dma_mask_size,
+					       XE_CRI_MEDIA_ADDR_BITS);
+
 	xe->info.va_bits = desc->va_bits;
 	xe->info.vm_max_level = desc->vm_max_level;
 	xe->info.vram_flags = desc->vram_flags;
@@ -883,6 +1000,9 @@ static struct xe_gt *alloc_primary_gt(struct xe_tile *tile,
 	struct xe_device *xe = tile_to_xe(tile);
 	struct xe_gt *gt;
 
+	if (!graphics_desc)
+		return NULL;
+
 	if (!xe_configfs_primary_gt_allowed(to_pci_dev(xe->drm.dev))) {
 		xe_tile_info(tile, "Primary GT disabled via configfs\n");
 		return NULL;
@@ -931,8 +1051,8 @@ static struct xe_gt *alloc_media_gt(struct xe_tile *tile,
 	struct xe_device *xe = tile_to_xe(tile);
 	struct xe_gt *gt;
 
-	if (!xe_configfs_media_gt_allowed(to_pci_dev(xe->drm.dev))) {
-		xe_tile_info(tile, "Media GT disabled via configfs\n");
+	if (!xe_device_media_allowed(xe)) {
+		xe_tile_info(tile, "Media GT disabled\n");
 		return NULL;
 	}
 
@@ -983,11 +1103,11 @@ static int xe_probe_ips(struct xe_device *xe,
 	}
 
 	/*
-	 * If we couldn't detect the graphics IP, that's considered a fatal
-	 * error and we should abort driver load.  Failing to detect media
-	 * IP is non-fatal; we'll just proceed without enabling media support.
+	 * Either IP on its own is enough to go on with.  Only a device where
+	 * neither could be detected is a fatal error, since there would be
+	 * nothing left to drive.
 	 */
-	if (!probed_info->graphics_ip)
+	if (!probed_info->graphics_ip && !probed_info->media_ip)
 		return -ENODEV;
 
 	return 0;
@@ -1035,9 +1155,14 @@ static int xe_info_init(struct xe_device *xe,
 	xe->info.step.graphics = probed_info->step.graphics;
 	xe->info.step.media = probed_info->step.media;
 
-	xe->info.graphics_verx100 = graphics_ip->verx100;
-	xe->info.graphics_name = graphics_ip->name;
-	graphics_desc = graphics_ip->desc;
+	if (graphics_ip) {
+		xe->info.graphics_verx100 = graphics_ip->verx100;
+		xe->info.graphics_name = graphics_ip->name;
+		graphics_desc = graphics_ip->desc;
+	} else {
+		xe->info.graphics_name = "none";
+		graphics_desc = NULL;
+	}
 
 	if (media_ip) {
 		xe->info.media_verx100 = media_ip->verx100;
@@ -1048,16 +1173,27 @@ static int xe_info_init(struct xe_device *xe,
 		media_desc = NULL;
 	}
 
-	xe->info.has_access_counter = graphics_desc->has_access_counter;
-	xe->info.has_asid = graphics_desc->has_asid;
-	xe->info.has_atomic_enable_pte_bit = graphics_desc->has_atomic_enable_pte_bit;
+	if (graphics_desc) {
+		xe->info.has_access_counter = graphics_desc->has_access_counter;
+		xe->info.has_asid = graphics_desc->has_asid;
+		xe->info.has_atomic_enable_pte_bit = graphics_desc->has_atomic_enable_pte_bit;
+		xe->info.has_range_tlb_inval = graphics_desc->has_range_tlb_inval;
+		xe->info.has_ctx_tlb_inval = graphics_desc->has_ctx_tlb_inval;
+		xe->info.has_usm = graphics_desc->has_usm;
+		xe->info.has_64bit_timestamp = graphics_desc->has_64bit_timestamp;
+	} else {
+		/*
+		 * Flat CCS comes from the device descriptor rather than from
+		 * the graphics IP, but it is still a graphics feature: its
+		 * layout is read back through the primary GT, which is not
+		 * there to be read.
+		 */
+		xe->info.has_flat_ccs = 0;
+	}
+
 	if (xe->info.platform != XE_PVC)
 		xe->info.has_device_atomics_on_smem = 1;
 
-	xe->info.has_range_tlb_inval = graphics_desc->has_range_tlb_inval;
-	xe->info.has_ctx_tlb_inval = graphics_desc->has_ctx_tlb_inval;
-	xe->info.has_usm = graphics_desc->has_usm;
-	xe->info.has_64bit_timestamp = graphics_desc->has_64bit_timestamp;
 	xe->info.has_mem_copy_instr = GRAPHICS_VER(xe) >= 20;
 
 	if (IS_SRIOV_VF(xe)) {
@@ -1086,21 +1222,14 @@ static int xe_info_init(struct xe_device *xe,
 		if (IS_ERR(tile->primary_gt))
 			return PTR_ERR(tile->primary_gt);
 
-		/*
-		 * It's not currently possible to probe a device with the
-		 * primary GT disabled.  With some work, this may be future in
-		 * the possible for igpu platforms (although probably not for
-		 * dgpu's since access to the primary GT's BCS engines is
-		 * required for VRAM management).
-		 */
-		if (!tile->primary_gt) {
-			drm_err(&xe->drm, "Cannot probe device with without a primary GT\n");
-			return -ENODEV;
-		}
-
 		tile->media_gt = alloc_media_gt(tile, media_desc);
 		if (IS_ERR(tile->media_gt))
 			return PTR_ERR(tile->media_gt);
+
+		if (!tile->primary_gt && !tile->media_gt) {
+			xe_tile_err(tile, "Cannot probe tile without any GT\n");
+			return -ENODEV;
+		}
 	}
 
 	/*

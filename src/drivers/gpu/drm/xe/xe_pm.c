@@ -265,6 +265,10 @@ int xe_pm_resume(struct xe_device *xe)
 
 	xe_irq_resume(xe);
 
+	err = xe_sysctrl_media_defeature(xe);
+	if (err)
+		goto err;
+
 	for_each_gt(gt, xe, id) {
 		err = xe_gt_resume(gt);
 		if (err)
@@ -709,8 +713,17 @@ int xe_pm_runtime_resume(struct xe_device *xe)
 
 	xe_i2c_pm_resume(xe, xe->d3cold.allowed);
 
-	if (xe->d3cold.allowed)
-		xe_sysctrl_pm_resume(xe);
+	/*
+	 * Done unconditionally: @d3cold.allowed is only the state xe asked the
+	 * PCI core for, the platform can still drop power when the bridge
+	 * above us runtime suspends, taking the SoC remapper configuration
+	 * with it.
+	 */
+	xe_sysctrl_pm_resume(xe);
+
+	err = xe_sysctrl_media_defeature(xe);
+	if (err)
+		goto out;
 
 	xe_display_pm_runtime_resume_early(xe);
 

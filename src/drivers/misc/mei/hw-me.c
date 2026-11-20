@@ -5,11 +5,8 @@
  */
 
 #include <linux/bitfield.h>
-#include <linux/delay.h>
-#include <linux/pci.h>
-
 #include <linux/cleanup.h>
-#include <linux/kthread.h>
+#include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/kthread.h>
 #include <linux/pci.h>
@@ -1302,6 +1299,8 @@ static irqreturn_t __mei_me_irq_thread_handler(struct mei_device *dev)
 	u32 hcsr;
 	int rets = 0;
 
+	/* initialize our complete list */
+
 	hcsr = mei_hcsr_read(dev);
 	me_intr_clear(dev, hcsr);
 
@@ -1429,7 +1428,7 @@ EXPORT_SYMBOL_GPL(mei_me_irq_thread_handler);
  * @_dev: mei device
  *
  * The thread monitors the interrupt source register and calls
- * mei_me_irq_thread_handler() to handle the firmware
+ * __mei_me_irq_thread_handler() to handle the firmware
  * input.
  *
  * The function polls in MEI_POLL_ACTIVE_MS timeout
@@ -1455,8 +1454,8 @@ int mei_me_polling_thread(void *_dev)
 						 hw->is_active || kthread_should_stop());
 		else
 			wait_event_interruptible_timeout(hw->wait_active,
-						 hw->is_active || kthread_should_stop(),
-						 msecs_to_jiffies(MEI_POLL_IDLE_MS));
+							 hw->is_active || kthread_should_stop(),
+							 msecs_to_jiffies(MEI_POLL_IDLE_MS));
 
 		if (kthread_should_stop())
 			break;

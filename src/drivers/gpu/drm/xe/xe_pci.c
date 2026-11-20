@@ -478,7 +478,6 @@ static const struct xe_device_desc cri_desc = {
 	.has_gsc_nvm = 1,
 	.has_i2c = true,
 	.has_mbx_power_limits = true,
-	.has_mbx_temp_sentinel = true,
 	.has_mbx_thermal_info = true,
 	.has_mert = true,
 	.has_pre_prod_wa = 1,
@@ -486,6 +485,7 @@ static const struct xe_device_desc cri_desc = {
 	.has_soc_remapper_telem = true,
 	.has_sriov = true,
 	.has_sysctrl = true,
+	.has_temp_sentinel = true,
 	.late_bind_mask = BIT(XE_LB_FW_FAN_CONTROL) |
 			  BIT(XE_LB_FW_OCODE),
 	.max_gt_per_tile = 2,
@@ -722,8 +722,9 @@ static int handle_gmdid(struct xe_device *xe,
 
 	*graphics_ip = find_graphics_ip(ver);
 	if (!*graphics_ip) {
-		drm_err(&xe->drm, "Hardware reports unknown graphics version %u.%02u\n",
-			ver / 100, ver % 100);
+		xe_log_err(xe, REGS, -EINVAL,
+			   "Hardware reports unknown graphics version %u.%02u\n",
+			   ver / 100, ver % 100);
 	}
 
 	ret = read_gmdid(xe, GMDID_MEDIA, &ver, media_revid);
@@ -736,8 +737,9 @@ static int handle_gmdid(struct xe_device *xe,
 
 	*media_ip = find_media_ip(ver);
 	if (!*media_ip) {
-		drm_err(&xe->drm, "Hardware reports unknown media version %u.%02u\n",
-			ver / 100, ver % 100);
+		xe_log_err(xe, REGS, -EINVAL,
+			   "Hardware reports unknown media version %u.%02u\n",
+			   ver / 100, ver % 100);
 	}
 
 	return 0;
@@ -756,7 +758,6 @@ struct xe_probed_info {
  * Probe from the hardware the info required by xe_info_init_early().
  */
 static int xe_probe_info_early(struct xe_device *xe,
-			       const struct xe_device_desc *desc,
 			       struct xe_probed_info *probed_info)
 {
 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
@@ -764,7 +765,7 @@ static int xe_probe_info_early(struct xe_device *xe,
 	probed_info->devid = pdev->device;
 	probed_info->revid = pdev->revision;
 
-	xe_step_platform_get(desc->platform, probed_info->revid, &probed_info->step);
+	xe_step_platform_get(xe->desc->platform, probed_info->revid, &probed_info->step);
 
 	return 0;
 }
@@ -774,10 +775,10 @@ static int xe_probe_info_early(struct xe_device *xe,
  * passed to the driver at probe time from PCI ID table.
  */
 static int xe_info_init_early(struct xe_device *xe,
-			      const struct xe_device_desc *desc,
-			      const struct xe_subplatform_desc *subplatform_desc,
 			      struct xe_probed_info *probed_info)
 {
+	const struct xe_subplatform_desc *subplatform_desc = xe->subplatform_desc;
+	const struct xe_device_desc *desc = xe->desc;
 	int err;
 
 	xe->info.devid = probed_info->devid;
@@ -803,7 +804,6 @@ static int xe_info_init_early(struct xe_device *xe,
 	/* runtime fusing may force flat_ccs to disabled later */
 	xe->info.has_flat_ccs = desc->has_flat_ccs;
 	xe->info.has_mbx_power_limits = desc->has_mbx_power_limits;
-	xe->info.has_mbx_temp_sentinel = desc->has_mbx_temp_sentinel;
 	xe->info.has_mbx_thermal_info = desc->has_mbx_thermal_info;
 	xe->info.has_gsc_nvm = desc->has_gsc_nvm;
 	xe->info.has_heci_gscfi = desc->has_heci_gscfi;
@@ -819,6 +819,7 @@ static int xe_info_init_early(struct xe_device *xe,
 	xe->info.has_sriov = xe_configfs_primary_gt_allowed(to_pci_dev(xe->drm.dev)) &&
 		desc->has_sriov;
 	xe->info.has_sysctrl = desc->has_sysctrl;
+	xe->info.has_temp_sentinel = desc->has_temp_sentinel;
 	xe->info.skip_guc_pc = desc->skip_guc_pc;
 	xe->info.skip_pcode = desc->skip_pcode;
 	xe->info.needs_scratch = desc->needs_scratch;
@@ -843,14 +844,13 @@ static int xe_info_init_early(struct xe_device *xe,
 }
 
 static void xe_probe_tile_count(struct xe_device *xe,
-				const struct xe_device_desc *desc,
 				struct xe_probed_info *probed_info)
 {
 	struct xe_mmio *mmio;
 	u8 tile_count;
 	u32 mtcfg;
 
-	probed_info->tile_count = 1 + desc->max_remote_tiles;
+	probed_info->tile_count = 1 + xe->desc->max_remote_tiles;
 
 	/*
 	 * Probe for tile count only for platforms that support multiple
@@ -953,9 +953,10 @@ static struct xe_gt *alloc_media_gt(struct xe_tile *tile,
 }
 
 static int xe_probe_ips(struct xe_device *xe,
-			const struct xe_device_desc *desc,
 			struct xe_probed_info *probed_info)
 {
+	const struct xe_device_desc *desc = xe->desc;
+
 	/*
 	 * If this platform supports GMD_ID, we'll detect the proper IP
 	 * descriptor to use from hardware registers.
@@ -996,14 +997,13 @@ static int xe_probe_ips(struct xe_device *xe,
  * Probe from the hardware the info required by xe_info_init().
  */
 static int xe_probe_info(struct xe_device *xe,
-			 const struct xe_device_desc *desc,
 			 struct xe_probed_info *probed_info)
 {
 	int err;
 
-	xe_probe_tile_count(xe, desc, probed_info);
+	xe_probe_tile_count(xe, probed_info);
 
-	err = xe_probe_ips(xe, desc, probed_info);
+	err = xe_probe_ips(xe, probed_info);
 	if (err)
 		return err;
 
@@ -1017,7 +1017,6 @@ static int xe_probe_info(struct xe_device *xe,
  * present in device info.
  */
 static int xe_info_init(struct xe_device *xe,
-			const struct xe_device_desc *desc,
 			struct xe_probed_info *probed_info)
 {
 	const struct xe_ip *graphics_ip;
@@ -1125,7 +1124,8 @@ static void xe_pci_remove(struct pci_dev *pdev)
 		return;
 
 	xe_device_remove(xe);
-/*
+
+	/*
 	 * Preserve remove-time flush after moving destroy work to module
 	 * lifetime.
 	 */
@@ -1214,6 +1214,8 @@ static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *des
 	if (IS_ERR(xe))
 		return PTR_ERR(xe);
 
+	xe->desc = desc;
+	xe->subplatform_desc = subplatform_desc;
 	xe->devres_group = group;
 
 	pci_set_drvdata(pdev, &xe->drm);
@@ -1222,11 +1224,11 @@ static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *des
 
 	pci_set_master(pdev);
 
-	err = xe_probe_info_early(xe, desc, &probed_info);
+	err = xe_probe_info_early(xe, &probed_info);
 	if (err)
 		return err;
 
-	err = xe_info_init_early(xe, desc, subplatform_desc, &probed_info);
+	err = xe_info_init_early(xe, &probed_info);
 	if (err)
 		return err;
 
@@ -1245,11 +1247,11 @@ static int __xe_pci_probe(struct pci_dev *pdev, const struct xe_device_desc *des
 	if (err)
 		return err;
 
-	err = xe_probe_info(xe, desc, &probed_info);
+	err = xe_probe_info(xe, &probed_info);
 	if (err)
 		return err;
 
-	err = xe_info_init(xe, desc, &probed_info);
+	err = xe_info_init(xe, &probed_info);
 	if (err)
 		return err;
 
@@ -1386,7 +1388,7 @@ static int xe_pci_runtime_suspend(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct xe_device *xe = pdev_to_xe_device(pdev);
-	int err;
+	int err, ret;
 
 	/*
 	 * We hold an additional reference to the runtime PM to keep PF in D0
@@ -1400,6 +1402,17 @@ static int xe_pci_runtime_suspend(struct device *dev)
 	err = xe_pm_runtime_suspend(xe);
 	if (err)
 		return err;
+
+	err = xe_pm_wait_all_c6(xe);
+	if (err) {
+		drm_dbg(&xe->drm, "Resuming - GT C6 check failed!");
+		ret = xe_pm_runtime_resume(xe);
+		if (ret) {
+			drm_err(&xe->drm, "Resume failed after suspend was canceled");
+			return ret;
+		}
+		return err;
+	}
 
 	pci_save_state(pdev);
 
@@ -1421,6 +1434,9 @@ static int xe_pci_runtime_resume(struct device *dev)
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct xe_device *xe = pdev_to_xe_device(pdev);
 	int err;
+
+	if (xe->d3cold.allowed)
+		d3cold_toggle(pdev, D3COLD_DISABLE);
 
 	err = pci_set_power_state(pdev, PCI_D0);
 	if (err)

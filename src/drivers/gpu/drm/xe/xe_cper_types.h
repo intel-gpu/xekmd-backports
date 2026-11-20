@@ -10,9 +10,16 @@
 #include <linux/types.h>
 #include <linux/uuid.h>
 
+#include "xe_ras_types.h"
+
+/* Entries built from RAS error logs carry fixed-size details */
+#define XE_CPER_RAS_LOG_ENTRY_SIZE \
+	(offsetof(struct xe_cper_intel_event, metadata) + \
+	 sizeof_field(struct xe_ras_error_log, details))
+
 /*
  * Validation bits definition for validation_bits in struct
- * xe_cper_sec_intel_err_hdr. When set, corresponding fields in header
+ * xe_cper_intel_hdr. When set, corresponding fields in header
  * contains valid data
  */
 #define XE_CPER_VALID_LOCATION		0x0001
@@ -20,7 +27,6 @@
 #define XE_CPER_VALID_SIG_ID		0x0004
 #define XE_CPER_VALID_PCI_BDF		0x0008
 #define XE_CPER_VALID_DRV_VERSION	0x0010
-#define XE_CPER_VALID_FW_ID		0x0020
 
 /*
  * Intel CPER GUID Namespace — RFC 9562 UUIDv5 (SHA-1 name-based)
@@ -34,53 +40,26 @@
 	GUID_INIT(0x9a42070f, 0xdf9d, 0x555e, \
 		  0xba, 0x02, 0x7c, 0xbc, 0x86, 0x3d, 0x37, 0x1c)
 
-#define INTEL_CPER_CREATOR_AMC \
-	GUID_INIT(0x215803da, 0xfc7a, 0x5925, \
-		  0xb7, 0x8b, 0x1f, 0xc1, 0x19, 0x61, 0x58, 0xd1)
-
 /* Notification Types */
 #define INTEL_CPER_NOTIFY_GPU_ERROR \
 	GUID_INIT(0x4ae12aef, 0x8745, 0x5fc7, \
 		  0xb9, 0x96, 0x71, 0xee, 0xbb, 0x51, 0xf2, 0x23)
-
-#define INTEL_CPER_NOTIFY_DRV_ERROR \
-	GUID_INIT(0xcef7e934, 0x51e7, 0x535f, \
-		  0xa6, 0x78, 0x5a, 0x4c, 0xcc, 0xb6, 0x96, 0x09)
 
 /* Section Types */
 #define INTEL_CPER_SECTION_ACCEL_GENERIC \
 	GUID_INIT(0xea9d8f84, 0x4258, 0x5227, \
 		  0x80, 0x28, 0xb9, 0xb1, 0x3e, 0x6d, 0x58, 0xb0)
 
-#pragma pack(push, 1)
-
 /**
- * struct xe_cper_sec_intel_err_hdr - Intel-specific CPER error section header
+ * struct xe_cper_intel_hdr - Intel-specific CPER header
  *
  * Fixed-size header for the Intel GPU error section of a CPER record.
- * All multi-byte fields are little-endian; the structure is packed.
+ * All multi-byte fields are little-endian.
  */
-struct xe_cper_sec_intel_err_hdr {
-	/** @error_class: Error classification (type, component, location, cause) */
-	union {
-		struct {
-			/** @error_class.error_type: RAS error severity */
-			u8  error_type;
-			/** @error_class.error_component: IP block that raised the error */
-			u8  error_component;
-			/** @error_class.tile: Tile number */
-			u8  tile;
-			/** @error_class.instance: Instance within the tile */
-			u32 instance;
-			/** @error_class.cause: Error cause code */
-			u32 cause;
-			/** @error_class.reserved: Reserved, must be zero */
-			u8  reserved;
-		} error_class;
-		/** @class: Raw byte view of the error class */
-		u8 class[12];
-	};
-	/** @first_timestamp: Timestamp of the first occurrence of this error class */
+struct xe_cper_intel_hdr {
+	/** @counter: Error class (severity, component, location, cause) */
+	struct xe_ras_error_class counter;
+	/** @first_timestamp: First occurrence of this error class, in ticks */
 	u64 first_timestamp;
 	/** @sig_id: Aggregated error class SIG ID; set to U32_MAX if unknown */
 	u32 sig_id;
@@ -92,88 +71,95 @@ struct xe_cper_sec_intel_err_hdr {
 	char pci_bdf[16];
 	/** @drv_version: Driver source version string (THIS_MODULE->srcversion) */
 	char drv_version[25];
-	/** @fw_id: Firmware version string (GFSP+PCODE+CSC+GUC or MNG+NUC+RAS+GUC) */
-	char fw_id[256];
 	/** @reserved: Reserved for future use, must be zero */
-	u8 reserved[5];
-};
+	u8 reserved[258];
+	/** @info_log_size: Size of xe_cper_intel_info */
+	u16 info_log_size;
+	/** @reserved1: Reserved for future use, must be zero */
+	u8 reserved1;
+} __packed;
 
 /**
- * struct xe_cper_sec_intel_error_info - Variable-length Intel GPU error payload
+ * struct xe_cper_intel_info - Variable-length Intel-specific CPER error information
  *
- * Appended after &xe_cper_sec_intel_err_hdr when detailed per-event data
- * is available. The @event_queue flexible array holds @event_queue_count
- * packed &xe_intel_priv_event_entry records.
+ * Contains the counter and event queue, and is appended after
+ * &xe_cper_intel_hdr when detailed error information is available.
  */
-struct xe_cper_sec_intel_error_info {
-	/** @error_class: Error classification (mirrors the header error_class) */
-	union {
-		struct {
-			u8  error_type;
-			u8  error_component;
-			u8  tile;
-			u32 instance;
-			u32 cause;
-			u8  reserved;
-		} error_class;
-		/** @class: Raw byte view of the error class */
-		u8 class[12];
-	};
+struct xe_cper_intel_info {
+	/** @counter: Error class (severity, component, location, cause) */
+	struct xe_ras_error_class counter;
 	/** @error_count: Total number of errors recorded */
 	u32 error_count;
-	/** @event_queue_length: Total byte size of the @event_queue array */
-	u32 event_queue_length;
-	/** @event_queue_count: Number of entries in @event_queue */
+	/** @event_queue_size: Total size of @event_queue in bytes */
+	u32 event_queue_size;
+	/** @event_queue_count: Number of events in @event_queue */
 	u32 event_queue_count;
-	/** @event_queue: Packed array of &xe_intel_priv_event_entry records */
+	/** @event_queue: Packed array of xe_cper_intel_event records */
 	u8 event_queue[];
-};
+} __packed;
 
 /**
- * struct xe_intel_priv_event_entry - Single error event in the event queue
- *
- * Each entry is variable-length; @entry_length gives the byte size of
- * @metadata only (not including @entry_length or @timestamp).
+ * struct xe_cper_intel_event - Single error event in the CPER event queue
  */
-struct xe_intel_priv_event_entry {
-	/** @entry_length: Byte length of the @metadata payload */
-	u32 entry_length;
-	/** @timestamp: Hardware timestamp of this event */
+struct xe_cper_intel_event {
+	/** @size: Byte size of the @metadata payload */
+	u32 size;
+	/** @timestamp: &xe_ras_error_log::timestamp */
 	u64 timestamp;
-	/** @metadata: Event-specific payload bytes */
-	u8  metadata[];
-};
+	/** @metadata: &xe_ras_error_log::details */
+	u8 metadata[];
+} __packed;
 
 /**
- * struct xe_cper_nonstd_record - Fixed-size portion of an Intel GPU CPER record
+ * struct xe_cper_nonstd_record - Intel GPU CPER record
  *
  * Contains the standard CPER record header, section descriptor, and the
- * Intel error section header. A &xe_cper_sec_intel_error_info payload
- * (with its flexible @event_queue array) is appended dynamically.
+ * Intel section header. A &xe_cper_intel_info payload may be
+ * appended dynamically.
  */
 struct xe_cper_nonstd_record {
 	/** @record_hdr: Standard CPER record header (UEFI Appendix N.2.1) */
 	struct cper_record_header record_hdr;
 	/** @section_desc: CPER section descriptor */
 	struct cper_section_descriptor section_desc;
-	/** @intel_hdr: Intel-specific error section header */
-	struct xe_cper_sec_intel_err_hdr intel_hdr;
-};
-
-#pragma pack(pop)
+	/** @intel_hdr: Intel-specific CPER header */
+	struct xe_cper_intel_hdr intel_hdr;
+} __packed;
 
 /**
- * struct xe_platform_id_entry - Mapping from PCI device ID to CPER platform GUID
+ * struct xe_device_guid_entry - Mapping from PCI device ID to CPER device GUID
  *
- * Used to resolve the platform_id field in a CPER section descriptor.
+ * Used to resolve the platform_id field in a CPER record header.
  * GUIDs are UUIDv5 (RFC 9562, SHA-1) derived from the Intel CPER namespace
  * with name string "platform/8086:<dev_id_hex_lower>".
  */
-struct xe_platform_id_entry {
+struct xe_device_guid_entry {
 	/** @device_id: PCI device ID */
 	u16       device_id;
-	/** @platform_id: Corresponding UUIDv5 platform GUID */
-	guid_t    platform_id;
+	/** @guid: Corresponding UUIDv5 device GUID */
+	guid_t    guid;
+};
+
+/**
+ * struct xe_cper_info_entry - One CPER info payload and its source counter
+ */
+struct xe_cper_info_entry {
+	/** @hdr: Error class and error count used for the CPER section header */
+	struct xe_ras_info_queue_dynamic_counter_hdr hdr;
+	/** @info: Allocated info payload, NULL if none */
+	struct xe_cper_intel_info *info;
+	/** @info_size: Byte size of @info including the event queue */
+	u32 info_size;
+	/** @timestamp: Timestamp of the first occurrence of this error class */
+	u64 timestamp;
+};
+
+/**
+ * struct xe_cper - Xe CPER state
+ */
+struct xe_cper {
+	/** @on_query: Emit a CPER record on each RAS counter query */
+	bool on_query;
 };
 
 #endif

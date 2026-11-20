@@ -12,19 +12,19 @@
 #define XE_RAS_NUM_COUNTERS			16
 #define XE_RAS_NUM_ERROR_ARR			3
 #define XE_RAS_NUM_PAGES			25
+#define XE_RAS_ERROR_DWORDS_MAX			16
 /* Error bits in IEH global error status register */
 #define XE_RAS_SOC_IEH_PUNIT			BIT(1)
 #define XE_RAS_PCIE_IEH_GPMA			BIT(5)
-/* Bits 16-31 represent individual SAF MHB unit */
-#define XE_RAS_FAB_IEH_SAF_MHB			GENMASK(31, 16)
-
-/* Fabric Data payload parity errors */
-#define XE_RAS_FAB_CAUSE_PAYLOAD		BIT(2)
 
 /* Device memory error categories */
 #define XE_RAS_MEMORY_DB_ECC			BIT(1)
 #define XE_RAS_MEMORY_POISON			BIT(2)
 #define XE_RAS_MEMORY_DATA_PARITY		BIT(5)
+
+#define XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE	200
+#define XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE	5120
+#define XE_RAS_INFO_QUEUE_FLAG_MORE_DATA	0x02
 
 /**
  * enum xe_ras_page_action - Page offline actions for page offline request
@@ -38,11 +38,6 @@ enum xe_ras_page_action {
 	XE_RAS_PAGE_ACTION_REMOVE,
 	XE_RAS_PAGE_ACTION_MAX
 };
-
-#define XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE	200
-#define XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE	5120
-#define XE_RAS_INFO_QUEUE_FLAG_AVAILABLE	0x01
-#define XE_RAS_INFO_QUEUE_FLAG_MORE_DATA	0x02
 
 /**
  * enum xe_ras_recovery_action - RAS recovery actions
@@ -135,31 +130,31 @@ struct xe_ras_info_queue_header {
 	u32 chunk_offset;
 	/** @chunk_size: Size of the data in this chunk in bytes */
 	u32 chunk_size;
-	/** @sequence_number: Sequence number for this chunk, starts at 0 */
-	u32 sequence_number;
-	/** @flags: Info queue control flags (RAS_INFO_QUEUE_FLAG_*) */
-u32 flags:8;
-	/** @compression_type: Compression algorithm used; 0 = none */
-	u32 compression_type:4;
-	/** @num_headers: Number of detailed counter headers at start of queue_data */
+	/** @reserved0: Reserved for future use */
+	u32 reserved0;
+	/** @flags: Info queue control flags (XE_RAS_INFO_QUEUE_FLAG_*) */
+	u32 flags:8;
+	/** @reserved1: Reserved for future use */
+	u32 reserved1:4;
+	/** @num_headers: Number of detailed counter headers at start of the data */
 	u32 num_headers:5;
-	/** @reserved: Reserved for future use */
-	u32 reserved:15;
-	/** @checksum: CRC32 checksum of this chunk data */
-	u32 checksum;
+	/** @reserved2: Reserved for future use */
+	u32 reserved2:15;
+	/** @reserved3: Reserved for future use */
+	u32 reserved3;
 } __packed;
 
 /**
- * struct xe_ras_info_queue_request - Request for a specific chunk of info queue data
+ * struct xe_ras_info_queue_data_request - Request for a specific chunk of info queue data
  *
  * Allows the driver to request continuation of large info queue transfers
  * by specifying an offset and size within the full data set.
  */
-struct xe_ras_info_queue_request {
-	/** @requested_offset: Byte offset of the requested data chunk */
-	u32 requested_offset;
-	/** @requested_size: Maximum size of the requested chunk in bytes */
-	u32 requested_size;
+struct xe_ras_info_queue_data_request {
+	/** @offset: Byte offset of the requested data chunk */
+	u32 offset;
+	/** @size: Maximum size of the requested chunk in bytes */
+	u32 size;
 	/** @session_id: Session ID to correlate multi-chunk transfers */
 	struct xe_ras_error_class session_id;
 	/** @reserved: Reserved for future use */
@@ -167,16 +162,16 @@ struct xe_ras_info_queue_request {
 } __packed;
 
 /**
- * struct xe_ras_info_queue_response - Generic response for commands with info queues
+ * struct xe_ras_info_queue_data_response - Generic response for commands with info queues
  *
  * Standard response format for any command that returns an info queue
  * payload. May be embedded in a command-specific response structure.
  */
-struct xe_ras_info_queue_response {
-	/** @queue_header: Info queue metadata for this chunk */
-	struct xe_ras_info_queue_header queue_header;
-	/** @queue_data: Info queue data for this chunk */
-	u8 queue_data[XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE];
+struct xe_ras_info_queue_data_response {
+	/** @header: Info queue metadata for this chunk */
+	struct xe_ras_info_queue_header header;
+	/** @data: Info queue data for this chunk */
+	u8 data[XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE];
 } __packed;
 
 /**
@@ -184,13 +179,14 @@ struct xe_ras_info_queue_response {
  *
  * When a session requests aggregate counter data, one header per matching
  * dynamic counter class is prepended to the queue data. The @counter field
- * indicates how many subsequent error log entries belong to this class.
+ * identifies the error class, and @error_count is its error count; at most
+ * XE_RAS_NUM_COUNTERS error log entries follow for it.
  */
 struct xe_ras_info_queue_dynamic_counter_hdr {
-	/** @error_class: Error class associated with this counter group */
-	struct xe_ras_error_class error_class;
-	/** @counter: Number of error log entries that follow for this class */
-	u32 counter;
+	/** @counter: Error class associated with this counter group */
+	struct xe_ras_error_class counter;
+	/** @error_count: Error count of this class */
+	u32 error_count;
 } __packed;
 
 /**
@@ -199,80 +195,28 @@ struct xe_ras_info_queue_dynamic_counter_hdr {
 struct xe_ras_error_log {
 	/** @timestamp: Timestamp when the error was recorded */
 	u64 timestamp;
-	/** @error_details: Error-specific details */
-	u32 error_details[16];
+	/** @details: Error-specific details */
+	u32 details[XE_RAS_ERROR_DWORDS_MAX];
 } __packed;
 
 /**
- * struct xe_ras_offline_common - Common structure for offline list and queue
+ * struct xe_ras_get_info_queue_request - Request for XE_SYSCTRL_CMD_GET_INFO_QUEUE
  */
-struct xe_ras_offline_common {
-	/** @total_pages: Total number of queued pages */
-	u32 total_pages;
-/** @pages_returned: Number of pages returned in this response */
-	u32 pages_returned;
-	/** @page_addresses: Array of page addresses (4KB aligned) */
-	u64 page_addresses[XE_RAS_NUM_PAGES];
-	/** @additional_data: Indicates if more data is available */
-	u8 additional_data;
+struct xe_ras_get_info_queue_request {
+	/** @qdata_request: Info queue request parameters */
+	struct xe_ras_info_queue_data_request qdata_request;
 	/** @reserved: Reserved for future use */
-	u8 reserved[3];
+	u32 reserved[16];
 } __packed;
 
 /**
- * struct xe_ras_offline_list_request - Request for get offline list command
+ * struct xe_ras_get_info_queue_response - Response for XE_SYSCTRL_CMD_GET_INFO_QUEUE
  */
-struct xe_ras_offline_list_request {
-	/** @index: Zero-based index into the offline page list */
-	u32 index;
-} __packed;
-
-/**
- * struct xe_ras_offline_list_response - Response from get offline list command
- */
-struct xe_ras_offline_list_response {
-	/** @max_entries: Total no of pages that can be stored in flash */
-	u32 max_entries;
-	/** @common: Common offline page information */
-	struct xe_ras_offline_common common;
-} __packed;
-
-/* Device structures */
-
-/**
- * struct xe_ras_state - RAS device and firmware state
- */
-struct xe_ras_state {
-	/** @aer_internal_error: true if an uncorrectable internal error was reported via AER */
-	bool aer_internal_error;
-	/** @disable_page_offline: cached configfs policy, immutable after init */
-	bool disable_page_offline;
-	/** @max_pages: Total number of pages that can be stored by firmware */
-	u32 max_pages;
-	/** @offlined_pages: XArray of pages offlined by firmware */
-	struct xarray offlined_pages;
-};
-
-/**
- * struct xe_ras_get_info_queue_data_request - Request for RAS_CMD_GET_INFO_QUEUE_DATA
- */
-struct xe_ras_get_info_queue_data_request {
-	/** @queue_request: Info queue request parameters */
-	struct xe_ras_info_queue_request queue_request;
-	/** @source_command: Original command that generated the info queue */
-	u32 source_command;
-	/** @source_context: Context from original command, if applicable */
-	struct xe_ras_error_class source_context;
-} __packed;
-
-/**
- * struct xe_ras_get_info_queue_data_response - Response for RAS_CMD_GET_INFO_QUEUE_DATA
- */
-struct xe_ras_get_info_queue_data_response {
-	/** @operation_status: Status of the retrieval operation */
-	u32 operation_status;
-	/** @queue_response: Info queue data chunk */
-	struct xe_ras_info_queue_response queue_response;
+struct xe_ras_get_info_queue_response {
+	/** @status: Status of the retrieval operation */
+	u32 status;
+	/** @qdata_response: Info queue data chunk */
+	struct xe_ras_info_queue_data_response qdata_response;
 } __packed;
 
 /**
@@ -303,8 +247,8 @@ struct xe_ras_get_counter_response {
 	u32 has_info_queue:1;
 	/** @reserved1: Reserved for future use */
 	u32 reserved1:22;
-	/** @info_queue: Initial info queue data (first chunk) if available */
-	struct xe_ras_info_queue_response info_queue;
+	/** @first: First info queue chunk, if @has_info_queue is set */
+	struct xe_ras_info_queue_data_response first;
 } __packed;
 
 /**
@@ -382,6 +326,7 @@ struct xe_ras_set_threshold_response {
 	/** @reserved1: Reserved for future use */
 	u32 reserved1[2];
 } __packed;
+
 /**
  * struct xe_ras_error_array - Details of the error types
  */
@@ -452,7 +397,7 @@ struct xe_ras_csc_error {
 
 /**
  * struct xe_ras_ieh_error - IEH (Integrated Error Handler) error details
-*/
+ */
 struct xe_ras_ieh_error {
 	/** @reserved: Reserved for future use */
 	u32 reserved;
@@ -503,6 +448,40 @@ struct xe_ras_page_offline_response {
 } __packed;
 
 /**
+ * struct xe_ras_offline_common - Common structure for offline list and queue
+ */
+struct xe_ras_offline_common {
+	/** @total_pages: Total number of queued pages */
+	u32 total_pages;
+	/** @pages_returned: Number of pages returned in this response */
+	u32 pages_returned;
+	/** @page_addresses: Array of page addresses (4KB aligned) */
+	u64 page_addresses[XE_RAS_NUM_PAGES];
+	/** @additional_data: Indicates if more data is available */
+	u8 additional_data;
+	/** @reserved: Reserved for future use */
+	u8 reserved[3];
+} __packed;
+
+/**
+ * struct xe_ras_offline_list_request - Request for get offline list command
+ */
+struct xe_ras_offline_list_request {
+	/** @index: Zero-based index into the offline page list */
+	u32 index;
+} __packed;
+
+/**
+ * struct xe_ras_offline_list_response - Response from get offline list command
+ */
+struct xe_ras_offline_list_response {
+	/** @max_entries: Total no of pages that can be stored in flash */
+	u32 max_entries;
+	/** @common: Common offline page information */
+	struct xe_ras_offline_common common;
+} __packed;
+
+/**
  * struct xe_ras_get_health_request - Request structure for obtaining gpu health
  */
 struct xe_ras_get_health_request {
@@ -543,4 +522,20 @@ struct xe_ras_set_health_response {
 	/** @reserved1: Reserved for future use */
 	u32 reserved1[2];
 } __packed;
+
+/* Device structures */
+
+/**
+ * struct xe_ras_state - RAS device and firmware state
+ */
+struct xe_ras_state {
+	/** @aer_internal_error: true if an uncorrectable internal error was reported via AER */
+	bool aer_internal_error;
+	/** @disable_vram_page_offline: cached configfs policy, immutable after init */
+	bool disable_vram_page_offline;
+	/** @max_pages: Total number of pages that can be stored by firmware */
+	u32 max_pages;
+	/** @offlined_pages: XArray of pages offlined by firmware */
+	struct xarray offlined_pages;
+};
 #endif

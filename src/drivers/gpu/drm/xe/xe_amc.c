@@ -15,10 +15,12 @@
 #include "regs/xe_i2c_regs.h"
 
 #include "xe_amc.h"
+#include "xe_any.h"
 #include "xe_device.h"
 #include "xe_i2c.h"
 #include "xe_mmio.h"
-#include "xe_printk.h"
+#include "xe_pm.h"
+#include "xe_wedge.h"
 
 /**
  * DOC: Add-In Management Controller (AMC)
@@ -149,10 +151,13 @@ static void xe_amc_work(struct work_struct *work)
 {
 	const struct amc_request *request = &amc_get_alert_reason;
 	struct xe_amc *amc = from_work(amc, work, work);
+	struct xe_device *xe = xe_any_to_xe(amc->i2c->drm_dev);
 	u8 alert_reason = AMC_ALERT_UNKNOWN;
 	struct amc_response response;
 	struct i2c_client *client;
 	int ret;
+
+	xe_pm_runtime_get(xe);
 
 	client = amc->i2c->client[XE_I2C_CLIENT_AMC];
 	if (IS_ERR_OR_NULL(client))
@@ -196,7 +201,7 @@ out_reassert_interrupt:
 
 	switch (alert_reason) {
 	case AMC_ALERT_FW_DOWNLOAD:
-case AMC_ALERT_THERMAL_TRIP:
+	case AMC_ALERT_THERMAL_TRIP:
 	case AMC_ALERT_OOB_REQUEST:
 	case AMC_ALERT_OOB_RESET:
 	case AMC_ALERT_CATERR: {
@@ -205,8 +210,7 @@ case AMC_ALERT_THERMAL_TRIP:
 		dev_warn(amc->i2c->drm_dev,
 			 "AMC Alert: %s (%u)\n", amc_alert[alert_reason], alert_reason);
 		amc->alert_reason = alert_reason;
-		xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_VENDOR);
-		xe_device_declare_wedged(xe);
+		xe_wedge_declare(xe, DRM_WEDGE_RECOVERY_VENDOR);
 		break;
 	}
 	default:
@@ -214,6 +218,8 @@ case AMC_ALERT_THERMAL_TRIP:
 		dev_warn(amc->i2c->drm_dev, "AMC Alert: unknown (%u)\n", alert_reason);
 		break;
 	}
+
+	xe_pm_runtime_put(xe);
 }
 
 void xe_amc_handle_alert(struct xe_i2c *i2c)

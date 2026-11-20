@@ -45,9 +45,34 @@ static inline void folio_set_zone_device_data(struct folio *folio, void *data)
 #endif
 
 #ifdef BPM_ZONE_DEVICE_FOLIO_INIT_3ARGS_NOT_PRESENT
-/* Kernel has 2-arg zone_device_folio_init(folio, order); driver calls 3-arg */
+#include <linux/mmdebug.h>
+#include <linux/page_ref.h>
+/*
+ * Reinitialize per-page metadata left by a previously allocated folio of a
+ * different order before calling the 2-arg helper.
+ */
+static inline void backport_zone_device_folio_init(struct folio *folio,
+						   struct dev_pagemap *pgmap,
+						   unsigned int order)
+{
+	struct page *page = &folio->page;
+	unsigned long i;
+
+	for (i = 0; i < (1UL << order); i++, page++) {
+		/* Clear possible order (as old page[1]), PG_head and PG_locked */
+		page->flags &= ~0xffUL;
+		page->mapping = NULL;
+		/* Also clears a stale compound_head */
+		page->pgmap = pgmap;
+		page->share = 0;
+		VM_WARN_ON_ONCE_PAGE(page_ref_count(page), page);
+	}
+
+	zone_device_folio_init(folio, order);
+}
+
 #define zone_device_folio_init(folio, pgmap, order) \
-	zone_device_folio_init(folio, order)
+	backport_zone_device_folio_init(folio, pgmap, order)
 #endif
 
 #endif /* __BACKPORT_LINUX_MEMREMAP_H */

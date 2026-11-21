@@ -33,6 +33,9 @@ struct xe_i2c_endpoint {
 };
 
 struct xe_i2c {
+#ifdef BPM_PLATFORM_DEVICE_INFO_SWNODE_NOT_PRESENT
+	struct fwnode_handle *adapter_node;
+#endif
 	struct platform_device *pdev;
 	struct i2c_adapter *adapter;
 	struct i2c_client *client[XE_I2C_MAX_CLIENTS];

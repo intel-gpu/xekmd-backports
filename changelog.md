@@ -40,6 +40,9 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.4_261118.9` | | | |
+| | oot-backport/main | [`990650380`](<https://github.com/intel-gpu/xekmd-backports/commit/9906503809abc7c220da8f86f88bb4e55adf3d50>) | drm/xe/i2c: Backport platform_device_info it has no swnode member |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/patch/758953/?series=175858&rev=1>) | &#91;TEMP&#93; Backport-only: drm/xe/i2c: Fix use-after-free on driver unload |
 | `xebr_v7.3.3_261118.8` | | | |
 | | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/179052/#rev2>) | &#91;TEMP&#93; drm/xe: Add a userptr repin timeout sysfs attribute |
 | | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/179052/#rev2>) | &#91;TEMP&#93; drm/xe: Requeue the rebind worker instead of retrying in-line on -EAGAIN |

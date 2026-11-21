@@ -55,6 +55,12 @@ static const struct property_entry xe_i2c_adapter_properties[] = {
 	{ }
 };
 
+#ifndef BPM_PLATFORM_DEVICE_INFO_SWNODE_NOT_PRESENT
+static const struct software_node xe_i2c_adapter_node = {
+	.properties = xe_i2c_adapter_properties,
+};
+#endif
+
 static inline void xe_i2c_read_endpoint(struct xe_mmio *mmio, void *ep)
 {
 	u32 *val = ep;
@@ -98,7 +104,7 @@ static int xe_i2c_notifier(struct notifier_block *nb, unsigned long action, void
 	struct device *dev = data;
 
 	if (action == BUS_NOTIFY_ADD_DEVICE &&
-	    adapter && dev->parent == &i2c->pdev->dev) {
+	    adapter && dev->parent && dev->parent->parent == i2c->drm_dev) {
 		i2c->adapter = adapter;
 		schedule_work(&i2c->work);
 		return NOTIFY_OK;
@@ -107,12 +113,18 @@ static int xe_i2c_notifier(struct notifier_block *nb, unsigned long action, void
 	return NOTIFY_DONE;
 }
 
+#ifdef BPM_PLATFORM_DEVICE_INFO_SWNODE_NOT_PRESENT
 static int xe_i2c_register_adapter(struct xe_i2c *i2c)
 {
 	struct pci_dev *pci = to_pci_dev(i2c->drm_dev);
 	struct platform_device *pdev;
+	struct fwnode_handle *fwnode;
 	int ret;
 	u32 id;
+
+	fwnode = fwnode_create_software_node(xe_i2c_adapter_properties, NULL);
+	if (IS_ERR(fwnode))
+		return PTR_ERR(fwnode);
 
 	id = (pci_domain_nr(pci->bus) << 16) | pci_dev_id(pci);
 
@@ -123,16 +135,14 @@ static int xe_i2c_register_adapter(struct xe_i2c *i2c)
 	 * platform_device_register_full() is done.
 	 */
 	pdev = platform_device_alloc(adapter_name, id);
-	if (!pdev)
-		return -ENOMEM;
-
-	ret = device_create_managed_software_node(&pdev->dev,
-						  xe_i2c_adapter_properties,
-						  NULL);
-	if (ret)
-		goto err_pdev_put;
+	if (!pdev) {
+		ret = -ENOMEM;
+		goto err_fwnode_remove;
+	}
 
 	pdev->dev.parent = i2c->drm_dev;
+	pdev->dev.fwnode = fwnode;
+	i2c->adapter_node = fwnode;
 	i2c->pdev = pdev;
 
 	ret = platform_device_add(pdev);
@@ -143,6 +153,8 @@ static int xe_i2c_register_adapter(struct xe_i2c *i2c)
 
 err_pdev_put:
 	platform_device_put(pdev);
+err_fwnode_remove:
+	fwnode_remove_software_node(fwnode);
 
 	return ret;
 }
@@ -150,7 +162,35 @@ err_pdev_put:
 static void xe_i2c_unregister_adapter(struct xe_i2c *i2c)
 {
 	platform_device_unregister(i2c->pdev);
+	fwnode_remove_software_node(i2c->adapter_node);
 }
+#else
+static int xe_i2c_register_adapter(struct xe_i2c *i2c)
+{
+	struct pci_dev *pci = to_pci_dev(i2c->drm_dev);
+	struct platform_device_info info = {
+		.parent = i2c->drm_dev,
+		.name = adapter_name,
+		.swnode = &xe_i2c_adapter_node,
+	};
+	struct platform_device *pdev;
+
+	info.id = (pci_domain_nr(pci->bus) << 16) | pci_dev_id(pci);
+
+	pdev = platform_device_register_full(&info);
+	if (IS_ERR(pdev))
+		return PTR_ERR(pdev);
+
+	i2c->pdev = pdev;
+
+	return 0;
+}
+
+static void xe_i2c_unregister_adapter(struct xe_i2c *i2c)
+{
+	platform_device_unregister(i2c->pdev);
+}
+#endif
 
 /**
  * xe_i2c_present - I2C controller is present and functional

@@ -1,0 +1,144 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Balasubramani Vivekanandan <balasubramani.vivekanandan@intel.com>
+Date: Fri, 9 Oct 2026 22:12:42 +0530
+Subject: [PATCH] [TEMP] Backport-only: drm/xe/i2c: Fix use-after-free on driver
+ unload
+The kernel crashes when unloading the xe driver on CRI:
+
+ Oops: general protection fault, probably for non-canonical address 0x6b6b6b6b6b6b6b73
+ RIP: 0010:platform_device_release+0x80/0x90
+ Call Trace:
+  device_release+0x44/0xa0
+  kobject_put+0x9b/0x250
+  put_device+0x13/0x30
+  platform_device_unregister+0x29/0x40
+  xe_i2c_remove+0x80/0xa0 [xe]
+  devm_action_release+0x16/0x30
+  release_nodes+0x3d/0x140
+  devres_release_all+0x96/0xd0
+
+This started after commit 0f485f88656af ("drm/xe/i2c: use
+device_create_managed_software_node()"), which attaches a managed
+software node to a platform device created with platform_device_alloc().
+
+Comment above the device_create_managed_software_node function cautions
+that the software node created by it should not be shared or reused as
+the lifetime of the node is linked to the device.
+
+But the DesignWare i2c driver which creates an adapter device as a child
+of the platform device reuses the software node as its fwnode.
+(device_set_node() in i2c_dw_probe()).
+
+During module unbind, when the adapter device is deleted, it drops the
+reference count for the software node and frees the software node.
+Later when the platform device is removed, it tries to dereference the
+software node pointer and results in use-after-free.
+
+Instead of managed software node use a static struct software_node
+passed through platform_device_info.swnode to
+platform_device_register_full().
+But we have a blocker which doesn't allow to use
+platform_device_register_full() simply.
+
+Currently the driver is using the two step alloc/add sequence while
+creating the platform device so that i2c->pdev is set before
+platform_device_add(), because xe_i2c_notifier() needs i2c->dev and it
+can run before platform_device_register_full() returns.
+
+We can fix it by removing the dependency on i2c->dev in
+xe_i2c_notifier(). It is using it to match against the right adapter.
+Instead of using the device, use its parent to match.
+
+Fixes: 0f485f88656af ("drm/xe/i2c: use device_create_managed_software_node()")
+Cc: Bartosz Golaszewski <bartosz.golaszewski@oss.qualcomm.com>
+Cc: Danilo Krummrich <dakr@kernel.org>
+Cc: Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Signed-off-by: Balasubramani Vivekanandan <balasubramani.vivekanandan@intel.com>
+Fixes: 151f6ff78cdf ("software node: Provide replacement for device_add_properties()")
+Signed-off-by: Nareshkumar Gollakoti<naresh.kumar.g@intel.com>
+Reviewed-by: Andi Shyti <andi.shyti@linux.intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/patch/758953/?series=175858&rev=1)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_i2c.c | 45 +++++++++++++------------------------
+ 1 file changed, 15 insertions(+), 30 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_i2c.c b/drivers/gpu/drm/xe/xe_i2c.c
+index b82caaff8..c54a2375f 100644
+--- a/drivers/gpu/drm/xe/xe_i2c.c
++++ b/drivers/gpu/drm/xe/xe_i2c.c
+@@ -55,6 +55,10 @@ static const struct property_entry xe_i2c_adapter_properties[] = {
+ 	{ }
+ };
+ 
++static const struct software_node xe_i2c_adapter_node = {
++	.properties = xe_i2c_adapter_properties,
++};
++
+ static inline void xe_i2c_read_endpoint(struct xe_mmio *mmio, void *ep)
+ {
+ 	u32 *val = ep;
+@@ -98,7 +102,7 @@ static int xe_i2c_notifier(struct notifier_block *nb, unsigned long action, void
+ 	struct device *dev = data;
+ 
+ 	if (action == BUS_NOTIFY_ADD_DEVICE &&
+-	    adapter && dev->parent == &i2c->pdev->dev) {
++	    adapter && dev->parent && dev->parent->parent == i2c->drm_dev) {
+ 		i2c->adapter = adapter;
+ 		schedule_work(&i2c->work);
+ 		return NOTIFY_OK;
+@@ -110,41 +114,22 @@ static int xe_i2c_notifier(struct notifier_block *nb, unsigned long action, void
+ static int xe_i2c_register_adapter(struct xe_i2c *i2c)
+ {
+ 	struct pci_dev *pci = to_pci_dev(i2c->drm_dev);
++	struct platform_device_info info = {
++		.parent = i2c->drm_dev,
++		.name = adapter_name,
++		.swnode = &xe_i2c_adapter_node,
++	};
+ 	struct platform_device *pdev;
+-	int ret;
+-	u32 id;
+-
+-	id = (pci_domain_nr(pci->bus) << 16) | pci_dev_id(pci);
+-
+-	/*
+-	 * Not using platform_device_register_full() here because we don't have
+-	 * a handle to the platform_device before it returns. xe_i2c_notifier()
+-	 * uses that handle, but it may be called before
+-	 * platform_device_register_full() is done.
+-	 */
+-	pdev = platform_device_alloc(adapter_name, id);
+-	if (!pdev)
+-		return -ENOMEM;
+ 
+-	ret = device_create_managed_software_node(&pdev->dev,
+-						  xe_i2c_adapter_properties,
+-						  NULL);
+-	if (ret)
+-		goto err_pdev_put;
++	info.id = (pci_domain_nr(pci->bus) << 16) | pci_dev_id(pci);
+ 
+-	pdev->dev.parent = i2c->drm_dev;
+-	i2c->pdev = pdev;
++	pdev = platform_device_register_full(&info);
++	if (IS_ERR(pdev))
++		return PTR_ERR(pdev);
+ 
+-	ret = platform_device_add(pdev);
+-	if (ret)
+-		goto err_pdev_put;
++	i2c->pdev = pdev;
+ 
+ 	return 0;
+-
+-err_pdev_put:
+-	platform_device_put(pdev);
+-
+-	return ret;
+ }
+ 
+ static void xe_i2c_unregister_adapter(struct xe_i2c *i2c)
+-- 
+2.43.0
+

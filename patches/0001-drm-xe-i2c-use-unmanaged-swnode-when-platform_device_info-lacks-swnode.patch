@@ -1,0 +1,122 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akanksha Hotta <akanksha.hotta@intel.com>
+Date: Sat, 21 Nov 2026 12:00:00 +0530
+Subject: drm/xe/i2c: use unmanaged fwnode when platform_device_info lacks
+ swnode
+
+Upstream "drm/xe/i2c: Fix use-after-free on driver unload" registers the
+DesignWare adapter with platform_device_register_full() and a static
+software node passed via platform_device_info.swnode. That member only
+exists since v7.1.
+
+On older kernels, use the adapter registration path to create an unmanaged software 
+node with fwnode_create_software_node(), assign it as the platform device fwnode
+and remove it after unregistering the platform device. A managed node
+must not be used there, since the DesignWare adapter child reuses it as
+its fwnode and drops the managed node's last reference on removal.
+
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_i2c.c | 55 +++++++++++++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_i2c.h |  3 ++
+ 2 files changed, 58 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_i2c.c b/drivers/gpu/drm/xe/xe_i2c.c
+index c54a237..dabb04d 100644
+--- a/drivers/gpu/drm/xe/xe_i2c.c
++++ b/drivers/gpu/drm/xe/xe_i2c.c
+@@ -55,9 +55,11 @@ static const struct property_entry xe_i2c_adapter_properties[] = {
+ 	{ }
+ };
+ 
++#ifndef BPM_PLATFORM_DEVICE_INFO_SWNODE_NOT_PRESENT
+ static const struct software_node xe_i2c_adapter_node = {
+ 	.properties = xe_i2c_adapter_properties,
+ };
++#endif
+ 
+ static inline void xe_i2c_read_endpoint(struct xe_mmio *mmio, void *ep)
+ {
+@@ -111,6 +113,58 @@ static int xe_i2c_notifier(struct notifier_block *nb, unsigned long action, void
+ 	return NOTIFY_DONE;
+ }
+ 
++#ifdef BPM_PLATFORM_DEVICE_INFO_SWNODE_NOT_PRESENT
++static int xe_i2c_register_adapter(struct xe_i2c *i2c)
++{
++	struct pci_dev *pci = to_pci_dev(i2c->drm_dev);
++	struct platform_device *pdev;
++	struct fwnode_handle *fwnode;
++	int ret;
++	u32 id;
++
++	fwnode = fwnode_create_software_node(xe_i2c_adapter_properties, NULL);
++	if (IS_ERR(fwnode))
++		return PTR_ERR(fwnode);
++
++	id = (pci_domain_nr(pci->bus) << 16) | pci_dev_id(pci);
++
++	/*
++	 * Not using platform_device_register_full() here because we don't have
++	 * a handle to the platform_device before it returns. xe_i2c_notifier()
++	 * uses that handle, but it may be called before
++	 * platform_device_register_full() is done.
++	 */
++	pdev = platform_device_alloc(adapter_name, id);
++	if (!pdev) {
++		ret = -ENOMEM;
++		goto err_fwnode_remove;
++	}
++
++	pdev->dev.parent = i2c->drm_dev;
++	pdev->dev.fwnode = fwnode;
++	i2c->adapter_node = fwnode;
++	i2c->pdev = pdev;
++
++	ret = platform_device_add(pdev);
++	if (ret)
++		goto err_pdev_put;
++
++	return 0;
++
++err_pdev_put:
++	platform_device_put(pdev);
++err_fwnode_remove:
++	fwnode_remove_software_node(fwnode);
++
++	return ret;
++}
++
++static void xe_i2c_unregister_adapter(struct xe_i2c *i2c)
++{
++	platform_device_unregister(i2c->pdev);
++	fwnode_remove_software_node(i2c->adapter_node);
++}
++#else
+ static int xe_i2c_register_adapter(struct xe_i2c *i2c)
+ {
+ 	struct pci_dev *pci = to_pci_dev(i2c->drm_dev);
+@@ -136,6 +190,7 @@ static void xe_i2c_unregister_adapter(struct xe_i2c *i2c)
+ {
+ 	platform_device_unregister(i2c->pdev);
+ }
++#endif
+ 
+ /**
+  * xe_i2c_present - I2C controller is present and functional
+diff --git a/drivers/gpu/drm/xe/xe_i2c.h b/drivers/gpu/drm/xe/xe_i2c.h
+index 5969054..70c21b3 100644
+--- a/drivers/gpu/drm/xe/xe_i2c.h
++++ b/drivers/gpu/drm/xe/xe_i2c.h
+@@ -33,6 +33,9 @@ struct xe_i2c_endpoint {
+ };
+ 
+ struct xe_i2c {
++#ifdef BPM_PLATFORM_DEVICE_INFO_SWNODE_NOT_PRESENT
++	struct fwnode_handle *adapter_node;
++#endif
+ 	struct platform_device *pdev;
+ 	struct i2c_adapter *adapter;
+ 	struct i2c_client *client[XE_I2C_MAX_CLIENTS];
+-- 
+2.34.1

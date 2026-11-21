@@ -40,6 +40,13 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.3_261118.8` | | | |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/179052/#rev2>) | &#91;TEMP&#93; drm/xe: Add a userptr repin timeout sysfs attribute |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/179052/#rev2>) | &#91;TEMP&#93; drm/xe: Requeue the rebind worker instead of retrying in-line on -EAGAIN |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/179052/#rev2>) | &#91;TEMP&#93; drm/xe: run compute rebind worker on device NUMA node |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/179052/#rev2>) | &#91;TEMP&#93; drm/xe/userptr: Make the repin retry loop non-fatal |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/179052/#rev2>) | &#91;TEMP&#93; drm/xe/vf: Free preempt fences on rebind worker retry |
+| | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/179052/#rev2>) | &#91;TEMP&#93; drm/xe/vm: restore userptr invalidations on VMA op unwind |
 | `xebr_v7.3.2_261118.8` | | | |
 | | oot-backport/main | [`a9f9772f5`](<https://github.com/intel-gpu/xekmd-backports/commit/a9f9772f5dd5d40c17bc41fd63691e13a02ac6bb>) | backport-include/linux: include required in sprintf backported header |
 | | oot-backport/main | [`b686294c4`](<https://github.com/intel-gpu/xekmd-backports/commit/b686294c4dd05495f96abc719a71c4413da7186d>) | mm.h: Backport DIRECT_MAP_PHYSMEM_END |

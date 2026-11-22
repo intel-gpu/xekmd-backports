@@ -1184,8 +1184,8 @@ static int get_info_queue(struct xe_device *xe,
 		return ret;
 	}
 
-	hdr = &response->qdata_response.header;
-	xe_dbg(xe, "[RAS] get info queue: total_size=%u chunk_offset=%u chunk_size=%u flags=%#x num_headers=%u\n",
+	hdr = &response->qdata_resp.header;
+	xe_dbg(xe, "[RAS]: get info queue: total=%u offset=%u size=%u flags=%#x num_headers=%u\n",
 	       hdr->total_size, hdr->chunk_offset, hdr->chunk_size, hdr->flags, hdr->num_headers);
 
 	return 0;
@@ -1196,7 +1196,7 @@ static bool chunk_is_valid(const struct xe_ras_info_queue_header *hdr,
 {
 	u32 end;
 
-	return hdr->total_size == total_size && total_size &&
+	return hdr->total_size && hdr->total_size == total_size &&
 	       hdr->chunk_offset == expected_offset &&
 	       hdr->chunk_size && hdr->chunk_size <= XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE &&
 	       !check_add_overflow(hdr->chunk_offset, hdr->chunk_size, &end) &&
@@ -1226,29 +1226,20 @@ static u32 get_remaining_chunks(struct xe_device *xe,
 				const struct xe_ras_get_counter_response *counter_resp,
 				u8 *dest_buf, u32 dest_size, u32 offset, u32 flags)
 {
+	u32 total_size = counter_resp->first.header.total_size;
 	u32 requests_left = XE_SYSCTRL_FLOOD_LIMIT * 2;
 	int ret;
 
-	xe_assert(xe, offset < dest_size);
-
-	while ((flags & XE_RAS_INFO_QUEUE_FLAG_MORE_DATA) && offset < dest_size) {
-		struct xe_ras_info_queue_data_request *qdata_request;
+	while (flags & XE_RAS_INFO_QUEUE_FLAG_MORE_DATA && offset < dest_size) {
+		struct xe_ras_info_queue_data_request *qdata_req;
 		struct xe_ras_get_info_queue_response response = {};
 		struct xe_ras_get_info_queue_request request = {};
 		struct xe_ras_info_queue_header *hdr;
 
-		if (!requests_left) {
-			xe_warn(xe, "[RAS] info queue drain stopped after %u requests with data remaining\n",
-				XE_SYSCTRL_FLOOD_LIMIT * 2);
-			break;
-		}
-		requests_left--;
-
-		qdata_request = &request.qdata_request;
-		qdata_request->offset = offset;
-		qdata_request->size = min(XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE,
-					  dest_size - offset);
-		qdata_request->session_id = counter_resp->counter;
+		qdata_req = &request.qdata_req;
+		qdata_req->offset = offset;
+		qdata_req->size = min_t(u32, XE_RAS_INFO_QUEUE_MAX_CHUNK_SIZE, dest_size - offset);
+		qdata_req->session_id = counter_resp->counter;
 
 		ret = get_info_queue(xe, &request, &response);
 		if (ret) {
@@ -1257,25 +1248,35 @@ static u32 get_remaining_chunks(struct xe_device *xe,
 			return offset;
 		}
 
-		hdr = &response.qdata_response.header;
+		hdr = &response.qdata_resp.header;
 
-		if (!chunk_is_valid(hdr, offset, counter_resp->first.header.total_size,
-				    dest_size)) {
+		if (!chunk_is_valid(hdr, offset, total_size, dest_size)) {
 			xe_warn(xe, "[RAS]: invalid info queue chunk (total=%u offset=%u size=%u, expected offset=%u)\n",
 				hdr->total_size, hdr->chunk_offset, hdr->chunk_size, offset);
 			return offset;
 		}
 
-		memcpy(dest_buf + offset, response.qdata_response.data, hdr->chunk_size);
+		memcpy(dest_buf + offset, response.qdata_resp.data, hdr->chunk_size);
 		offset += hdr->chunk_size;
 		flags = hdr->flags;
+
+		if (!--requests_left) {
+			xe_warn(xe, "[RAS]: info queue flooding, aborted at offset=%u\n", offset);
+			break;
+		}
 	}
 
-	return min(offset, counter_resp->first.header.total_size);
+	if (offset != dest_size) {
+		xe_warn(xe, "[RAS]: info queue drain incomplete, missed %u size\n",
+			dest_size - offset);
+	}
+
+	return min_t(u32, offset, dest_size);
 }
 
 /**
  * xe_ras_get_info_queue_size() - Get the total size of the RAS info queue
+ * @xe: xe device
  * @response: Counter response carrying the first info queue chunk
  *
  * Return: Info queue size in bytes, capped at the supported maximum, or zero
@@ -1291,12 +1292,12 @@ u32 xe_ras_get_info_queue_size(struct xe_device *xe,
 
 	total_size = response->first.header.total_size;
 	if (!total_size) {
-		xe_warn(xe, "[RAS] info queue reports zero size\n");
+		xe_warn(xe, "[RAS]: info queue reports zero size\n");
 		return 0;
 	}
 
 	if (total_size > XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE) {
-		xe_warn(xe, "[RAS] info queue size %u exceeds max size %u, truncating\n",
+		xe_warn(xe, "[RAS]: info queue size %u exceeds max size %u, truncating\n",
 			total_size, XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE);
 		total_size = XE_RAS_INFO_QUEUE_MAX_TOTAL_SIZE;
 	}
@@ -1324,9 +1325,7 @@ u32 xe_ras_drain_info_queue(struct xe_device *xe,
 {
 	u32 flags, offset;
 
-	if (!response->has_info_queue)
-		return 0;
-
+	xe_assert(xe, response->has_info_queue);
 	xe_assert(xe, dest_buf);
 	xe_assert(xe, dest_size);
 

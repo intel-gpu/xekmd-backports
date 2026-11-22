@@ -40,6 +40,10 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.6_261118.9` | | | |
+| | ML v6 | [Patchwork](<https://patchwork.freedesktop.org/series/178015/#rev6>) | &#91;TEMP&#93; drm/xe/cper: Drop redundant counter argument |
+| | ML v6 | [Patchwork](<https://patchwork.freedesktop.org/series/178015/#rev6>) | &#91;TEMP&#93; drm/xe/cper: Prepare Intel CPER info records |
+| | ML v6 | [Patchwork](<https://patchwork.freedesktop.org/series/178015/#rev6>) | &#91;TEMP&#93; drm/xe/xe_ras: Add support to retrieve info queue data |
 | `xebr_v7.3.5_261118.9` | | | |
 | | ML v2 | [Patchwork](<https://patchwork.freedesktop.org/series/179173/#rev2>) | &#91;TEMP&#93; drm/xe: Don't error on failed media defeature |
 | `xebr_v7.3.4_261118.9` | | | |

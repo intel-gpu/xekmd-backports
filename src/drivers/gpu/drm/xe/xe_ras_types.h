@@ -12,7 +12,7 @@
 #define XE_RAS_NUM_COUNTERS			16
 #define XE_RAS_NUM_ERROR_ARR			3
 #define XE_RAS_NUM_PAGES			25
-#define XE_RAS_ERROR_DWORDS_MAX			16
+#define XE_RAS_ERROR_DWORDS_MAX				16
 /* Error bits in IEH global error status register */
 #define XE_RAS_SOC_IEH_PUNIT			BIT(1)
 #define XE_RAS_PCIE_IEH_GPMA			BIT(5)
@@ -175,14 +175,14 @@ struct xe_ras_info_queue_data_response {
 } __packed;
 
 /**
- * struct xe_ras_info_queue_dynamic_counter_hdr - Aggregate counter header entry
+ * struct xe_ras_dynamic_counter_hdr - Aggregate counter header entry
  *
  * When a session requests aggregate counter data, one header per matching
  * dynamic counter class is prepended to the queue data. The @counter field
  * identifies the error class, and @error_count is its error count; at most
  * XE_RAS_NUM_COUNTERS error log entries follow for it.
  */
-struct xe_ras_info_queue_dynamic_counter_hdr {
+struct xe_ras_dynamic_counter_hdr {
 	/** @counter: Error class associated with this counter group */
 	struct xe_ras_error_class counter;
 	/** @error_count: Error count of this class */
@@ -203,8 +203,8 @@ struct xe_ras_error_log {
  * struct xe_ras_get_info_queue_request - Request for XE_SYSCTRL_CMD_GET_INFO_QUEUE
  */
 struct xe_ras_get_info_queue_request {
-	/** @qdata_request: Info queue request parameters */
-	struct xe_ras_info_queue_data_request qdata_request;
+	/** @qdata_req: Info queue request parameters */
+	struct xe_ras_info_queue_data_request qdata_req;
 	/** @reserved: Reserved for future use */
 	u32 reserved[16];
 } __packed;
@@ -215,8 +215,8 @@ struct xe_ras_get_info_queue_request {
 struct xe_ras_get_info_queue_response {
 	/** @status: Status of the retrieval operation */
 	u32 status;
-	/** @qdata_response: Info queue data chunk */
-	struct xe_ras_info_queue_data_response qdata_response;
+	/** @qdata_resp: Info queue data chunk */
+	struct xe_ras_info_queue_data_response qdata_resp;
 } __packed;
 
 /**

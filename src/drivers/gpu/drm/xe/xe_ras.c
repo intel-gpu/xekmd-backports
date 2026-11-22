@@ -284,7 +284,7 @@ static int send_page_offline_cmd(struct xe_device *xe, u64 page_address,
 	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_PAGE_OFFLINE,
 				  &request, sizeof(request), &response, sizeof(response));
 
-	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
+	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen, true);
 	if (ret) {
 		xe_log_err(xe, SYSCTRL, ret, "failed to send page offline command\n");
 		return ret;
@@ -437,7 +437,7 @@ static void process_offline_pages(struct xe_device *xe, u32 cmd, void *req, size
 		if (list_req)
 			list_req->index = count;
 
-		ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
+		ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen, true);
 		if (ret) {
 			xe_log_err(xe, SYSCTRL, ret, "failed to get page offline data, cmd=%#x\n",
 				   cmd);
@@ -818,7 +818,7 @@ int xe_ras_get_counter_response(struct xe_device *xe, const struct xe_ras_error_
 	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_GET_COUNTER,
 				  &request, sizeof(request), response, sizeof(*response));
 
-	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
+	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen, true);
 	if (ret) {
 		xe_err(xe, "sysctrl: failed to get counter %d\n", ret);
 		return ret;
@@ -886,7 +886,7 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
 	do {
 		memset(&response, 0, sizeof(response));
 
-		ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
+		ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen, true);
 		if (ret) {
 			xe_err(xe, "sysctrl: failed to get soc error %d\n", ret);
 			goto err;
@@ -1012,7 +1012,7 @@ int xe_ras_clear_counter(struct xe_device *xe, u8 severity, u8 component)
 				  &request, sizeof(request), &response, sizeof(response));
 
 	guard(xe_pm_runtime)(xe);
-	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
+	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen, true);
 	if (ret) {
 		xe_err(xe, "sysctrl: failed to clear counter %d\n", ret);
 		return ret;
@@ -1071,7 +1071,7 @@ int xe_ras_get_threshold(struct xe_device *xe, u8 severity, u8 component, u32 *t
 				  &request, sizeof(request), &response, sizeof(response));
 
 	guard(xe_pm_runtime)(xe);
-	ret = xe_sysctrl_send_command(&xe->sc, &command, &len);
+	ret = xe_sysctrl_send_command(&xe->sc, &command, &len, true);
 	if (ret) {
 		xe_err(xe, "sysctrl: failed to get threshold %d\n", ret);
 		return ret;
@@ -1124,7 +1124,7 @@ int xe_ras_set_threshold(struct xe_device *xe, u8 severity, u8 component, u32 th
 				  &request, sizeof(request), &response, sizeof(response));
 
 	guard(xe_pm_runtime)(xe);
-	ret = xe_sysctrl_send_command(&xe->sc, &command, &len);
+	ret = xe_sysctrl_send_command(&xe->sc, &command, &len, true);
 	if (ret) {
 		xe_err(xe, "sysctrl: failed to set threshold %d\n", ret);
 		return ret;
@@ -1165,7 +1165,7 @@ static int get_info_queue(struct xe_device *xe,
 	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_GET_INFO_QUEUE,
 				  request, sizeof(*request), response, sizeof(*response));
 
-	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
+	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen, true);
 	if (ret) {
 		xe_err(xe, "sysctrl: failed to get info queue %d\n", ret);
 		return ret;
@@ -1350,7 +1350,7 @@ static ssize_t gpu_health_show(struct device *dev, struct device_attribute *attr
 	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_GET_HEALTH,
 				  &request, sizeof(request), &response, sizeof(response));
 	guard(xe_pm_runtime)(xe);
-	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
+	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen, true);
 	if (ret) {
 		xe_err(xe, "sysctrl: failed to get health %d\n", ret);
 		return ret;
@@ -1395,7 +1395,7 @@ static ssize_t gpu_health_store(struct device *dev, struct device_attribute *att
 	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_SET_HEALTH,
 				  &request, sizeof(request), &response, sizeof(response));
 	guard(xe_pm_runtime)(xe);
-	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen);
+	ret = xe_sysctrl_send_command(&xe->sc, &command, &rlen, true);
 	if (ret) {
 		xe_err(xe, "sysctrl: failed to set health %d\n", ret);
 		return ret;

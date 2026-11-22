@@ -24,7 +24,7 @@ static void get_pending_event(struct xe_sysctrl *sc, struct xe_sysctrl_mailbox_c
 	do {
 		memset(response, 0, sizeof(*response));
 
-		ret = xe_sysctrl_send_command(sc, command, &len);
+		ret = xe_sysctrl_send_command(sc, command, &len, true);
 		if (ret) {
 			xe_log_err(xe, SYSCTRL, ret, "Failed to get pending event\n");
 			return;

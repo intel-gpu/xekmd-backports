@@ -28,6 +28,7 @@ void xe_sysctrl_create_command(struct xe_sysctrl_mailbox_command *command, u8 gr
 			       size_t response_len);
 int xe_sysctrl_send_command(struct xe_sysctrl *sc,
 			    struct xe_sysctrl_mailbox_command *cmd,
-			    size_t *rdata_len);
+			    size_t *rdata_len,
+			    bool print_on_error);
 
 #endif

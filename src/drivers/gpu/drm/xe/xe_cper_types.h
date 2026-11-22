@@ -13,7 +13,7 @@
 #include "xe_ras_types.h"
 
 /* Entries built from RAS error logs carry fixed-size details */
-#define XE_CPER_RAS_LOG_ENTRY_SIZE \
+#define XE_CPER_INTEL_EVENT_SIZE \
 	(offsetof(struct xe_cper_intel_event, metadata) + \
 	 sizeof_field(struct xe_ras_error_log, details))
 
@@ -73,8 +73,8 @@ struct xe_cper_intel_hdr {
 	char drv_version[25];
 	/** @reserved: Reserved for future use, must be zero */
 	u8 reserved[258];
-	/** @info_log_size: Size of xe_cper_intel_info */
-	u16 info_log_size;
+	/** @einfo_size: Size of xe_cper_intel_info */
+	u16 einfo_size;
 	/** @reserved1: Reserved for future use, must be zero */
 	u8 reserved1;
 } __packed;
@@ -145,11 +145,11 @@ struct xe_device_guid_entry {
  */
 struct xe_cper_info_entry {
 	/** @hdr: Error class and error count used for the CPER section header */
-	struct xe_ras_info_queue_dynamic_counter_hdr hdr;
-	/** @info: Allocated info payload, NULL if none */
-	struct xe_cper_intel_info *info;
-	/** @info_size: Byte size of @info including the event queue */
-	u32 info_size;
+	struct xe_ras_dynamic_counter_hdr hdr;
+	/** @einfo: Allocated info payload, NULL if none */
+	struct xe_cper_intel_info *einfo;
+	/** @einfo_size: Byte size of @einfo including the event queue */
+	u32 einfo_size;
 	/** @timestamp: Timestamp of the first occurrence of this error class */
 	u64 timestamp;
 };

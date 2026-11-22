@@ -216,7 +216,8 @@ static int sysctrl_process_frame(struct xe_sysctrl *sc,
 static int sysctrl_receive_frames(struct xe_sysctrl *sc,
 				  const struct xe_sysctrl_mailbox_msg_hdr *req,
 				  void *data_out, size_t data_out_len,
-				  size_t *rdata_len, unsigned int timeout_ms)
+				  size_t *rdata_len, unsigned int timeout_ms,
+				  bool print_on_error)
 {
 	struct xe_sysctrl_mailbox_msg_hdr *hdr;
 	struct xe_device *xe = sc_to_xe(sc);
@@ -248,16 +249,17 @@ static int sysctrl_receive_frames(struct xe_sysctrl *sc,
 
 	hdr = (struct xe_sysctrl_mailbox_msg_hdr *)buffer;
 
-	if (!XE_SYSCTRL_HDR_IS_RESPONSE(hdr) ||
-	    XE_SYSCTRL_HDR_GROUP_ID(hdr) != XE_SYSCTRL_HDR_GROUP_ID(req) ||
-	    XE_SYSCTRL_HDR_COMMAND(hdr) != XE_SYSCTRL_HDR_COMMAND(req)) {
+	if ((!XE_SYSCTRL_HDR_IS_RESPONSE(hdr) ||
+	     XE_SYSCTRL_HDR_GROUP_ID(hdr) != XE_SYSCTRL_HDR_GROUP_ID(req) ||
+	     XE_SYSCTRL_HDR_COMMAND(hdr) != XE_SYSCTRL_HDR_COMMAND(req)) &&
+	    print_on_error) {
 		xe_log_err(xe, SYSCTRL, -EPROTO,
 			   "Response header mismatch: %#x != %#x\n",
 			   hdr->data, req->data);
 		return -EPROTO;
 	}
 
-	if (XE_SYSCTRL_HDR_RESULT(hdr) != 0) {
+	if (XE_SYSCTRL_HDR_RESULT(hdr) != 0 && print_on_error) {
 		xe_log_err(xe, SYSCTRL, -EIO, "Firmware error: %#04x %#x.%#x\n",
 			   XE_SYSCTRL_HDR_RESULT(hdr),
 			   XE_SYSCTRL_HDR_GROUP_ID(req), XE_SYSCTRL_HDR_COMMAND(req));
@@ -273,7 +275,8 @@ static int sysctrl_receive_frames(struct xe_sysctrl *sc,
 static int sysctrl_send_command(struct xe_sysctrl *sc,
 				const u8 *mbox_cmd, size_t cmd_size,
 				void *data_out, size_t data_out_len,
-				size_t *rdata_len, unsigned int timeout_ms)
+				size_t *rdata_len, unsigned int timeout_ms,
+				bool print_on_error)
 {
 	const struct xe_sysctrl_mailbox_msg_hdr *hdr;
 	size_t received;
@@ -289,7 +292,8 @@ static int sysctrl_send_command(struct xe_sysctrl *sc,
 	hdr = (const struct xe_sysctrl_mailbox_msg_hdr *)mbox_cmd;
 
 	ret = sysctrl_receive_frames(sc, hdr, data_out, data_out_len,
-				     &received, timeout_ms);
+				     &received, timeout_ms,
+				     print_on_error);
 	if (ret)
 		return ret;
 
@@ -349,7 +353,8 @@ void xe_sysctrl_create_command(struct xe_sysctrl_mailbox_command *command, u8 gr
  */
 int xe_sysctrl_send_command(struct xe_sysctrl *sc,
 			    struct xe_sysctrl_mailbox_command *cmd,
-			    size_t *rdata_len)
+			    size_t *rdata_len,
+			    bool print_on_error)
 {
 	struct xe_device *xe = sc_to_xe(sc);
 	u8 group_id, command_code;
@@ -379,8 +384,8 @@ int xe_sysctrl_send_command(struct xe_sysctrl *sc,
 
 	ret = sysctrl_send_command(sc, sc->cmd_buf, cmd_size,
 				   cmd->data_out, cmd->data_out_len, rdata_len,
-				   timeout_ms);
-	if (ret)
+				   timeout_ms, print_on_error);
+	if (ret && print_on_error)
 		xe_log_err(xe, SYSCTRL, ret, "Mailbox command failed to send %#x.%#x\n",
 			   group_id, command_code);
 

@@ -166,7 +166,7 @@ xe_sysctrl_check_app_status(struct xe_device *xe, enum xe_sysctrl_app_id app_id)
 	xe_sysctrl_create_command(&cmd, XE_SYSCTRL_GROUP_CORE, XE_SYSCTRL_CMD_GET_APP_STATUS_BY_ID,
 				  &req, sizeof(req), &resp, sizeof(resp));
 
-	ret = xe_sysctrl_send_command(&xe->sc, &cmd, &out_len);
+	ret = xe_sysctrl_send_command(&xe->sc, &cmd, &out_len, true);
 	if (ret)
 		return XE_SYSCTRL_FIRMWARE_COMM_FAILURE;
 
@@ -243,7 +243,7 @@ int xe_sysctrl_sdk_api_version(struct xe_device *xe, u16 *version)
 	xe_sysctrl_create_command(&cmd, XE_SYSCTRL_GROUP_CORE, XE_SYSCTRL_CMD_SDK_API_VERSION,
 				  0, 0, &resp, sizeof(resp));
 
-	ret = xe_sysctrl_send_command(&xe->sc, &cmd, &out_len);
+	ret = xe_sysctrl_send_command(&xe->sc, &cmd, &out_len, true);
 	if (ret)
 		return ret;
 
@@ -270,7 +270,7 @@ static int sysctrl_media_defeature(struct xe_device *xe, u8 feature)
 				  XE_SYSCTRL_CMD_MEDIA_DEFEATURE,
 				  &req, sizeof(req), &resp, sizeof(resp));
 
-	ret = xe_sysctrl_send_command(&xe->sc, &cmd, &out_len);
+	ret = xe_sysctrl_send_command(&xe->sc, &cmd, &out_len, false);
 	if (ret)
 		return ret;
 
@@ -308,8 +308,8 @@ static int sysctrl_media_defeature_send(struct xe_device *xe, u8 feature)
 
 	ret = sysctrl_media_defeature(xe, feature);
 	if (ret) {
-		xe_err(xe, "sysctrl: failed to defeature media (0x%02x): %pe\n",
-		       feature, ERR_PTR(ret));
+		xe_info(xe, "sysctrl: failed to defeature media (0x%02x): %pe\n",
+			feature, ERR_PTR(ret));
 		return ret;
 	}
 

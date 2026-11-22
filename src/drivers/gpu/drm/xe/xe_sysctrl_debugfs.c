@@ -85,7 +85,7 @@ static ssize_t xe_sysctrl_loopback_write(struct file *file, const char __user *u
 
 	scoped_guard(mutex, &entry->lock) {
 		guard(xe_pm_runtime)(xe);
-		entry->status = xe_sysctrl_send_command(entry->sc, &cmd, &out_len);
+		entry->status = xe_sysctrl_send_command(entry->sc, &cmd, &out_len, true);
 		entry->response_len = entry->status ? 0 : out_len;
 		status = entry->status;
 	}
@@ -227,7 +227,7 @@ static ssize_t xe_sysctrl_ras_error_inject_write(struct file *file, const char _
 
 	scoped_guard(mutex, &entry->lock) {
 		guard(xe_pm_runtime)(xe);
-		status = xe_sysctrl_send_command(entry->sc, &cmd, &out_len);
+		status = xe_sysctrl_send_command(entry->sc, &cmd, &out_len, true);
 		entry->status = status;
 	}
 
@@ -420,7 +420,7 @@ static ssize_t xe_sysctrl_mailbox_write(struct file *file, const char __user *ub
 		cmd.timeout_ms = timeout_ms;
 
 		guard(xe_pm_runtime)(xe);
-		status = xe_sysctrl_send_command(entry->sc, &cmd, &out_len);
+		status = xe_sysctrl_send_command(entry->sc, &cmd, &out_len, true);
 		entry->status = status;
 		entry->response_len = status ? 0 : out_len;
 	}

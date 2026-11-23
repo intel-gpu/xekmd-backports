@@ -1,0 +1,99 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Sujaritha Sundaresan <sujaritha.sundaresan@intel.com>
+Date: Mon, 19 Oct 2026 15:34:48 +0530
+Subject: [PATCH] drm/xe/guc: Reset GuC before unmapping its post-hwconfig
+ buffers
+
+guc_fini_hw() resets the GuC on teardown, but it is registered before
+xe_guc_init_post_hwconfig() (re)allocates most of the GuC buffers. As
+devm actions run in reverse order, these buffers get unmapped from the
+GGTT while the GuC is still running and may still access them. When
+unmapped GGTT entries are left invalid, this results in a GuC page
+fault on unbind or probe failure.
+
+Re-register guc_fini_hw() after all the GuC buffer allocations, so the
+GuC is reset before any of them is unmapped. Keep GuC submit and RC
+teardown running before the reset, as they still need to stop or talk
+to the GuC.
+
+Fixes: ee460b8855d4 ("drm/xe/ggtt: fault on unmapped GGTT for multi-queue platforms")
+Signed-off-by: Sujaritha Sundaresan <sujaritha.sundaresan@intel.com>
+Reviewed-by: Balasubramani Vivekanandan <balasubramani.vivekanandan@intel.com>
+Link: https://patch.msgid.link/20261019100448.759503-1-sujaritha.sundaresan@intel.com
+Signed-off-by: Balasubramani Vivekanandan <balasubramani.vivekanandan@intel.com>
+(cherry-picked from commit cfbd165a74a5c554e2b003bb0361e9b51efd36c8 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_guc.c | 31 ++++++++++++++++++++++++-------
+ 1 file changed, 24 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_guc.c b/drivers/gpu/drm/xe/xe_guc.c
+index 6b94bbb4f..b34719fff 100644
+--- a/drivers/gpu/drm/xe/xe_guc.c
++++ b/drivers/gpu/drm/xe/xe_guc.c
+@@ -882,9 +882,10 @@ static u32 guc_additional_cache_size(struct xe_device *xe)
+  */
+ int xe_guc_init_post_hwconfig(struct xe_guc *guc)
+ {
++	struct xe_device *xe = guc_to_xe(guc);
+ 	int ret;
+ 
+-	if (IS_SRIOV_VF(guc_to_xe(guc)))
++	if (IS_SRIOV_VF(xe))
+ 		return vf_guc_init_post_hwconfig(guc);
+ 
+ 	ret = xe_guc_realloc_post_hwconfig(guc);
+@@ -897,28 +898,44 @@ int xe_guc_init_post_hwconfig(struct xe_guc *guc)
+ 
+ 	guc_init_params_post_hwconfig(guc);
+ 
+-	ret = xe_guc_submit_init(guc, ~0);
++	ret = xe_guc_pc_init(&guc->pc);
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = xe_guc_db_mgr_init(&guc->dbm, ~0);
++	ret = xe_guc_engine_activity_init(guc);
+ 	if (ret)
+ 		return ret;
+ 
+ 	ret = xe_guc_pc_init(&guc->pc);
++	ret = xe_guc_buf_cache_init_with_size(&guc->buf,
++					      guc_additional_cache_size(xe));
++
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = xe_guc_rc_init(guc);
++	/*
++	 * The GuC keeps accessing its GGTT-mapped buffers until it is reset,
++	 * so move guc_fini_hw() after all GuC allocations above to have the
++	 * reset done before any of them is unpinned and its GGTT PTEs cleared.
++	 * Teardown actions that must run before the reset, either because they
++	 * still talk to the GuC (like GuC RC) or because they stop the CT and
++	 * submission (like GuC submit), must be registered after this point.
++	 */
++	devm_remove_action(xe->drm.dev, guc_fini_hw, guc);
++	ret = devm_add_action_or_reset(xe->drm.dev, guc_fini_hw, guc);
++
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = xe_guc_engine_activity_init(guc);
++	ret = xe_guc_submit_init(guc, ~0);
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = xe_guc_buf_cache_init_with_size(&guc->buf,
+-					      guc_additional_cache_size(guc_to_xe(guc)));
++	ret = xe_guc_db_mgr_init(&guc->dbm, ~0);
++	if (ret)
++		return ret;
++
++	ret = xe_guc_rc_init(guc);
+ 	if (ret)
+ 		return ret;
+ 
+-- 
+2.43.0
+

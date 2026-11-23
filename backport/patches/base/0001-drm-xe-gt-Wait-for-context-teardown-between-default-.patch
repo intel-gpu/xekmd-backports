@@ -1,0 +1,146 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nitin Gote <nitin.r.gote@intel.com>
+Date: Mon, 16 Nov 2026 13:57:17 +0530
+Subject: [PATCH] drm/xe/gt: Wait for context teardown between default LRC
+ recordings
+
+xe_gt_record_default_lrcs() records one engine at a time and drops its
+q and nop_q once the default LRC image has been captured. However, the
+associated contexts are torn down asynchronously. The LRCs and their
+GGTT ranges are freed only after GuC acknowledges the deregistration and
+the destroy worker completes cleanup.
+
+This allows cleanup from one engine to overlap recording of the next
+engine. In that window, the next engine's nop_q can reuse GGTT ranges
+previously used by a recorded engine while that engine still has the old
+nop_q loaded as its current context.
+
+On CRI with ctx_restore_mid_bb enabled for compute, bcs1 is recorded
+immediately before ccs0. If ccs0's nop_q reuses GGTT ranges previously
+used by bcs1's nop_q, the q -> nop_q switch can fail, GuC reports a
+Memory CAT error, emit_nop_job() times out, and probe fails.
+
+Wait for both queue GuC IDs to be released and flush the destroy worker
+before recording the next engine. This guarantees complete context
+teardown before any new context allocation or execution.
+
+Assisted-by: LLM
+Cc: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
+Cc: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Signed-off-by: Nitin Gote <nitin.r.gote@intel.com>
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+Link: https://patch.msgid.link/20261116082716.2636317-2-nitin.r.gote@intel.com
+Signed-off-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+(cherry-picked from commit 5fbdab061524bdb0a349c17a79593338311cbf13 linux-next)
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_gt.c         | 13 +++++++++++++
+ drivers/gpu/drm/xe/xe_guc_submit.c | 27 +++++++++++++++++++++++++++
+ drivers/gpu/drm/xe/xe_guc_submit.h |  1 +
+ 3 files changed, 41 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_gt.c b/drivers/gpu/drm/xe/xe_gt.c
+index fe71cb011d3a..65f91b8e1ff7 100644
+--- a/drivers/gpu/drm/xe/xe_gt.c
++++ b/drivers/gpu/drm/xe/xe_gt.c
+@@ -395,6 +395,7 @@ int xe_gt_record_default_lrcs(struct xe_gt *gt)
+ 
+ 	for_each_hw_engine(hwe, gt, id) {
+ 		struct xe_exec_queue *q, *nop_q;
++		u32 q_id, nop_id = 0;
+ 		void *default_lrc;
+ 
+ 		if (gt->default_lrc[hwe->class])
+@@ -416,6 +417,7 @@ int xe_gt_record_default_lrcs(struct xe_gt *gt)
+ 				  hwe->name, q);
+ 			return err;
+ 		}
++		q_id = q->guc->id;
+ 
+ 		/* Prime golden LRC with known good state */
+ 		err = emit_wa_job(gt, q);
+@@ -433,6 +435,7 @@ int xe_gt_record_default_lrcs(struct xe_gt *gt)
+ 				  hwe->name, nop_q);
+ 			goto put_exec_queue;
+ 		}
++		nop_id = nop_q->guc->id;
+ 
+ 		/* Switch to different LRC */
+ 		err = emit_nop_job(gt, nop_q);
+@@ -454,6 +457,16 @@ int xe_gt_record_default_lrcs(struct xe_gt *gt)
+ 		xe_exec_queue_put(q);
+ 		if (err)
+ 			break;
++
++		/* No LRC GGTT range may be freed while the next engine is recorded */
++		err = xe_guc_submit_wait_id_released(&gt->uc.guc, q_id);
++		if (!err)
++			err = xe_guc_submit_wait_id_released(&gt->uc.guc, nop_id);
++		if (err) {
++			xe_gt_err(gt, "hwe %s: context teardown timed out (%pe)\n",
++				  hwe->name, ERR_PTR(err));
++			break;
++		}
+ 	}
+ 
+ 	return err;
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
+index b5c916a764db..38069be11aa5 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.c
++++ b/drivers/gpu/drm/xe/xe_guc_submit.c
+@@ -10,6 +10,7 @@
+ #include <linux/bitmap.h>
+ #include <linux/circ_buf.h>
+ #include <linux/dma-fence-array.h>
++#include <linux/iopoll.h>
+ 
+ #include <drm/drm_drv.h>
+ #include <drm/drm_managed.h>
+@@ -1910,6 +1911,32 @@ static void guc_exec_queue_destroy_async(struct xe_exec_queue *q)
+ 	xe_destroy_wq_queue(&q->guc->destroy_async);
+ }
+ 
++/**
++ * xe_guc_submit_wait_id_released() - Wait for an exec queue's teardown
++ * @guc: the GuC
++ * @guc_id: GuC ID of an exec queue whose last reference was dropped
++ *
++ * Wait for @guc_id to be released, which happens only after GuC acknowledges
++ * the deregistration, then flush the destroy worker so the queue's LRCs are
++ * freed on return.
++ *
++ * Return: 0 on success, -ETIMEDOUT on timeout.
++ */
++int xe_guc_submit_wait_id_released(struct xe_guc *guc, u32 guc_id)
++{
++	void *entry;
++	int ret;
++
++	ret = read_poll_timeout(xa_load, entry, !entry, 100, USEC_PER_SEC, false,
++				&guc->submission_state.exec_queue_lookup, guc_id);
++	if (ret)
++		return ret;
++
++	xe_destroy_wq_flush();
++
++	return 0;
++}
++
+ static void __guc_exec_queue_process_msg_cleanup(struct xe_sched_msg *msg,
+ 						 bool bound)
+ {
+diff --git a/drivers/gpu/drm/xe/xe_guc_submit.h b/drivers/gpu/drm/xe/xe_guc_submit.h
+index 7a81d0aa19bb..8397c5bb6bfd 100644
+--- a/drivers/gpu/drm/xe/xe_guc_submit.h
++++ b/drivers/gpu/drm/xe/xe_guc_submit.h
+@@ -52,6 +52,7 @@ xe_guc_exec_queue_snapshot_print(struct xe_guc_submit_exec_queue_snapshot *snaps
+ void
+ xe_guc_exec_queue_snapshot_free(struct xe_guc_submit_exec_queue_snapshot *snapshot);
+ void xe_guc_submit_print(struct xe_guc *guc, struct drm_printer *p);
++int xe_guc_submit_wait_id_released(struct xe_guc *guc, u32 guc_id);
+ void xe_guc_register_vf_exec_queue(struct xe_exec_queue *q, int ctx_type);
+ 
+ bool xe_guc_has_registered_mlrc_queues(struct xe_guc *guc);
+-- 
+2.43.0
+

@@ -6,6 +6,11 @@
 #include "xe_device.h"
 
 #include <linux/aperture.h>
+#ifdef BPM_DRM_FILE_CLIENT_NAME_NOT_PRESENT
+#include <linux/compat.h>
+#include <linux/ctype.h>
+#include <linux/uaccess.h>
+#endif
 #include <linux/delay.h>
 #include <linux/fault-inject.h>
 #include <linux/jiffies.h>
@@ -269,6 +274,72 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
 			  DRM_RENDER_ALLOW),
 };
 
+#ifdef BPM_DRM_FILE_CLIENT_NAME_NOT_PRESENT
+static int xe_set_client_name(struct drm_device *dev, void *data,
+			      struct drm_file *file)
+{
+	struct drm_set_client_name *request = data;
+	struct xe_drm_client *client = to_xe_file(file)->client;
+	size_t length = request->name_len;
+	char *name = NULL;
+	size_t index;
+
+	if (length > DRM_CLIENT_NAME_MAX_LEN)
+		return -EINVAL;
+	if (length) {
+		name = memdup_user_nul(u64_to_user_ptr(request->name), length);
+		if (IS_ERR(name))
+			return PTR_ERR(name);
+		for (index = 0; index < length; index++) {
+			if (!isascii(name[index]) || !isgraph(name[index])) {
+				kfree(name);
+				return -EINVAL;
+			}
+		}
+	}
+
+	mutex_lock(&client->name_lock);
+	kfree(client->name);
+	client->name = name;
+	mutex_unlock(&client->name_lock);
+	return 0;
+}
+
+static long xe_client_name_ioctl(struct file *file, unsigned int cmd,
+				 unsigned long arg)
+{
+	struct drm_file *file_priv = file->private_data;
+	unsigned int size = _IOC_SIZE(cmd);
+	unsigned int in_size = cmd & IOC_IN ? size : 0;
+	unsigned int out_size = cmd & IOC_OUT ? size : 0;
+	void __user *user_data = (void __user *)arg;
+	void *data;
+	long ret;
+
+	if (drm_dev_is_unplugged(file_priv->minor->dev))
+		return -ENODEV;
+	data = kzalloc(max_t(size_t, size, sizeof(struct drm_set_client_name)), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+	if (copy_from_user(data, user_data, in_size)) {
+		ret = -EFAULT;
+		goto out;
+	}
+	ret = drm_ioctl_kernel(file, xe_set_client_name, data, DRM_RENDER_ALLOW);
+	if (copy_to_user(user_data, data, out_size))
+		ret = -EFAULT;
+out:
+	kfree(data);
+	return ret;
+}
+
+static bool xe_is_client_name_ioctl(unsigned int cmd)
+{
+	return DRM_IOCTL_TYPE(cmd) == DRM_IOCTL_BASE &&
+		DRM_IOCTL_NR(cmd) == DRM_IOCTL_NR(DRM_IOCTL_SET_CLIENT_NAME);
+}
+#endif
+
 static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct drm_file *file_priv = file->private_data;
@@ -282,6 +353,11 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	ret = ACQUIRE_ERR(xe_pm_runtime_ioctl, &pm);
 	if (ret >= 0) {
 		xe_eudebug_discovery_lock(xe, cmd);
+#ifdef BPM_DRM_FILE_CLIENT_NAME_NOT_PRESENT
+		if (xe_is_client_name_ioctl(cmd))
+			ret = xe_client_name_ioctl(file, cmd, arg);
+		else
+#endif
 		ret = drm_ioctl(file, cmd, arg);
 		xe_eudebug_discovery_unlock(xe, cmd);
 	}
@@ -303,6 +379,11 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
 	ret = ACQUIRE_ERR(xe_pm_runtime_ioctl, &pm);
 	if (ret >= 0) {
 		xe_eudebug_discovery_lock(xe, cmd);
+#ifdef BPM_DRM_FILE_CLIENT_NAME_NOT_PRESENT
+		if (xe_is_client_name_ioctl(cmd))
+			ret = xe_client_name_ioctl(file, cmd, (unsigned long)compat_ptr(arg));
+		else
+#endif
 		ret = drm_compat_ioctl(file, cmd, arg);
 		xe_eudebug_discovery_unlock(xe, cmd);
 	}
@@ -419,7 +500,25 @@ static int xe_mmap(struct file *filp, struct vm_area_struct *vma)
 	return drm_gem_mmap(filp, vma);
 }
 
-#if defined(CONFIG_PROC_FS) && defined(BPM_DRM_SHOW_FDINFO_NOT_PRESENT)
+#if defined(CONFIG_PROC_FS) && (defined(BPM_DRM_SHOW_FDINFO_NOT_PRESENT) || \
+	defined(BPM_DRM_FILE_CLIENT_NAME_NOT_PRESENT))
+static void xe_show_client_name(struct drm_printer *p, struct drm_file *file)
+{
+#ifdef BPM_DRM_FILE_CLIENT_NAME_NOT_PRESENT
+	struct xe_drm_client *client = to_xe_file(file)->client;
+
+	mutex_lock(&client->name_lock);
+	if (client->name)
+		drm_printf(p, "drm-client-name:\t%s\n", client->name);
+	mutex_unlock(&client->name_lock);
+#else
+	mutex_lock(&file->client_name_lock);
+	if (file->client_name)
+		drm_printf(p, "drm-client-name:\t%s\n", file->client_name);
+	mutex_unlock(&file->client_name_lock);
+#endif
+}
+
 static void xe_show_fdinfo(struct seq_file *m, struct file *f)
 {
 	struct drm_file *file = f->private_data;
@@ -429,7 +528,9 @@ static void xe_show_fdinfo(struct seq_file *m, struct file *f)
 	u64 client_id = file->client_id;
 #endif
 
-	bpm_drm_show_fdinfo(m, f, client_id, xe_drm_client_fdinfo);
+	bpm_drm_show_fdinfo(m, f, client_id, xe_show_client_name,
+			     xe_device_is_admin_only(to_xe_device(file->minor->dev)) ?
+			     NULL : xe_drm_client_fdinfo);
 }
 #endif
 
@@ -444,7 +545,7 @@ static const struct file_operations xe_driver_fops = {
 	.compat_ioctl = xe_drm_compat_ioctl,
 	.llseek = noop_llseek,
 #if defined(CONFIG_PROC_FS)
-#ifdef BPM_DRM_SHOW_FDINFO_NOT_PRESENT
+#if defined(BPM_DRM_SHOW_FDINFO_NOT_PRESENT) || defined(BPM_DRM_FILE_CLIENT_NAME_NOT_PRESENT)
 	.show_fdinfo = xe_show_fdinfo,
 #else
 	.show_fdinfo = drm_show_fdinfo,

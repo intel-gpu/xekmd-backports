@@ -141,7 +141,7 @@ int backport_drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
 EXPORT_SYMBOL(drm_dev_wedged_event);
 #endif
 
-#ifdef BPM_DRM_SHOW_FDINFO_NOT_PRESENT
+#if defined(BPM_DRM_SHOW_FDINFO_NOT_PRESENT) || defined(BPM_DRM_FILE_CLIENT_NAME_NOT_PRESENT)
 /*
  * Backport of drm_show_fdinfo(). Older kernels have neither
  * drm_driver.show_fdinfo nor drm_file.client_id, so the driver passes in
@@ -150,12 +150,18 @@ EXPORT_SYMBOL(drm_dev_wedged_event);
  * dependency.
  */
 void bpm_drm_show_fdinfo(struct seq_file *m, struct file *f, u64 client_id,
+			 void (*show_name)(struct drm_printer *p,
+					   struct drm_file *file),
 			 void (*show_fdinfo)(struct drm_printer *p,
 					     struct drm_file *file))
 {
 	struct drm_file *file = f->private_data;
 	struct drm_device *dev = file->minor->dev;
 	struct drm_printer p = drm_seq_file_printer(m);
+	int idx;
+
+	if (!drm_dev_enter(dev, &idx))
+		return;
 
 	drm_printf(&p, "drm-driver:\t%s\n", dev->driver->name);
 	drm_printf(&p, "drm-client-id:\t%llu\n", client_id);
@@ -168,8 +174,13 @@ void bpm_drm_show_fdinfo(struct seq_file *m, struct file *f, u64 client_id,
 			   PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn));
 	}
 
+	if (show_name)
+		show_name(&p, file);
+
 	if (show_fdinfo)
 		show_fdinfo(&p, file);
+
+	drm_dev_exit(idx);
 }
 EXPORT_SYMBOL(bpm_drm_show_fdinfo);
 #endif

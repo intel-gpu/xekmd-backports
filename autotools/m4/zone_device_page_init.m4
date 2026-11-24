@@ -10,22 +10,23 @@ AC_DEFUN([AC_ZONE_DEVICE_PAGE_INIT_NOT_PRESENT], [
 			zone_device_page_init(NULL, NULL, 0);
 		],[
 		],[
+			AC_DEFINE(BPM_ZONE_DEVICE_PAGE_INIT_3ARGS_NOT_PRESENT, 1,
+				[zone_device_page_init does not take 3 args])
+
 			AC_KERNEL_TRY_COMPILE([
 				#include <linux/memremap.h>
 			],[
-				unsigned int order = 0;
-				zone_device_page_init(NULL, order);
+				zone_device_page_init(NULL, NULL);
 			],[
-				AC_DEFINE(BPM_ZONE_DEVICE_PAGE_INIT_3ARGS_NOT_PRESENT, 1,
-					[zone_device_page_init does not take 3 args, but 2 args only])
 			],[
+				AC_DEFINE(BPM_ZONE_DEVICE_PAGE_INIT_2ARGS_NOT_PRESENT, 1,
+					[zone_device_page_init does not take 2 args])
+
 				AC_KERNEL_TRY_COMPILE([
 					#include <linux/memremap.h>
 				],[
 					zone_device_page_init(NULL);
 				],[
-					AC_DEFINE(BPM_ZONE_DEVICE_PAGE_INIT_2ARGS_NOT_PRESENT, 1,
-						[zone_device_page_init does not take 2 args, but 1 arg only])
 				],[
 					AC_DEFINE(BPM_ZONE_DEVICE_PAGE_INIT_1ARG_NOT_PRESENT, 1,
 						[zone_device_page_init does not take 1 arg])

@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Subject: [PATCH] drm/sched: keep fence names safe on legacy kernels
+
+On older kernels, a sync-file fence can outlive its scheduler. Querying
+its timeline name can then access freed scheduler memory.
+
+Keep a fence-owned timeline name and return detached names after
+signaling, without changing behavior on kernels with safe name helpers.
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/scheduler/sched_fence.c | 19 ++++++++++++++++++-
+ include/drm/gpu_scheduler.h           |  6 ++++++
+ 2 files changed, 24 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/scheduler/sched_fence.c b/drivers/gpu/drm/scheduler/sched_fence.c
+--- a/drivers/gpu/drm/scheduler/sched_fence.c
++++ b/drivers/gpu/drm/scheduler/sched_fence.c
+@@ -86,13 +86,26 @@ void drm_sched_fence_finished(struct drm_sched_fence *fence, int result)
+ 
+ static const char *drm_sched_fence_get_driver_name(struct dma_fence *fence)
+ {
++#ifdef BPM_DMA_FENCE_NAME_HELPERS_NOT_PRESENT
++	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags))
++		return "detached-driver";
++#endif
++
+ 	return "drm_sched";
+ }
+ 
+ static const char *drm_sched_fence_get_timeline_name(struct dma_fence *f)
+ {
+ 	struct drm_sched_fence *fence = to_drm_sched_fence(f);
+-	return (const char *)fence->sched->name;
++
++#ifdef BPM_DMA_FENCE_NAME_HELPERS_NOT_PRESENT
++	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &f->flags))
++		return "detached-timeline";
++
++	return fence->timeline_name;
++#else
++	return (const char *)fence->sched->name;
++#endif
+ }
+ 
+ static void drm_sched_fence_free_rcu(struct rcu_head *rcu)
+@@ -227,6 +240,10 @@ void drm_sched_fence_init(struct drm_sched_fence *fence,
+ 	unsigned seq;
+ 
+ 	fence->sched = entity->rq->sched;
++#ifdef BPM_DMA_FENCE_NAME_HELPERS_NOT_PRESENT
++	strscpy(fence->timeline_name, fence->sched->name,
++		sizeof(fence->timeline_name));
++#endif
+ 	seq = atomic_inc_return(&entity->fence_seq);
+ 	dma_fence_init(&fence->scheduled, &drm_sched_fence_ops_scheduled,
+ 		       &fence->lock, entity->fence_context, seq);
+diff --git a/include/drm/gpu_scheduler.h b/include/drm/gpu_scheduler.h
+--- a/include/drm/gpu_scheduler.h
++++ b/include/drm/gpu_scheduler.h
+@@ -322,6 +322,12 @@ struct drm_sched_fence {
+          * belongs to.
+          */
+ 	struct drm_gpu_scheduler	*sched;
++#ifdef BPM_DMA_FENCE_NAME_HELPERS_NOT_PRESENT
++        /**
++         * @timeline_name: fence-owned timeline name for legacy name callbacks.
++         */
++	char				timeline_name[32];
++#endif
+         /**
+          * @lock: the lock used by the scheduled and the finished fences.
+          */
+-- 
+2.43.0

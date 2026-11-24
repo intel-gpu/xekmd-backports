@@ -40,6 +40,8 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.7_261118.9` | | | |
+| | linux-next | [`682b943f1`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=682b943f154707ab9c1d409c96910b64e38729c7>) | drm/xe/cri: Add new PCI ID |
 | `xebr_v7.3.6_261118.9` | | | |
 | | ML v6 | [Patchwork](<https://patchwork.freedesktop.org/series/178015/#rev6>) | &#91;TEMP&#93; drm/xe/cper: Drop redundant counter argument |
 | | ML v6 | [Patchwork](<https://patchwork.freedesktop.org/series/178015/#rev6>) | &#91;TEMP&#93; drm/xe/cper: Prepare Intel CPER info records |

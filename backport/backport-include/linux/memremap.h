@@ -31,48 +31,19 @@ static inline void folio_set_zone_device_data(struct folio *folio, void *data)
 #endif
 
 #ifdef BPM_ZONE_DEVICE_PAGE_INIT_3ARGS_NOT_PRESENT
-/* Has 2-arg signature: (page, order) */
+#ifndef BPM_ZONE_DEVICE_PAGE_INIT_2ARGS_NOT_PRESENT
+/* Has 2-arg signature */
 #define zone_device_page_init(page, pgmap, order) \
-	zone_device_page_init(page, order)
-#elif defined(BPM_ZONE_DEVICE_PAGE_INIT_2ARGS_NOT_PRESENT)
+	zone_device_page_init(page, pgmap)
+#elif !defined(BPM_ZONE_DEVICE_PAGE_INIT_1ARG_NOT_PRESENT)
 /* Has 1-arg signature */
 #define zone_device_page_init(page, pgmap, order) \
 	zone_device_page_init(page)
-#elif defined(BPM_ZONE_DEVICE_PAGE_INIT_1ARG_NOT_PRESENT)
+#else
 #undef zone_device_page_init
 #define zone_device_page_init(page, pgmap, order) \
         do { } while (0)
 #endif
-
-#ifdef BPM_ZONE_DEVICE_FOLIO_INIT_3ARGS_NOT_PRESENT
-#include <linux/mmdebug.h>
-#include <linux/page_ref.h>
-/*
- * Reinitialize per-page metadata left by a previously allocated folio of a
- * different order before calling the 2-arg helper.
- */
-static inline void backport_zone_device_folio_init(struct folio *folio,
-						   struct dev_pagemap *pgmap,
-						   unsigned int order)
-{
-	struct page *page = &folio->page;
-	unsigned long i;
-
-	for (i = 0; i < (1UL << order); i++, page++) {
-		/* Clear possible order (as old page[1]), PG_head and PG_locked */
-		page->flags &= ~0xffUL;
-		page->mapping = NULL;
-		/* Also clears a stale compound_head */
-		page->pgmap = pgmap;
-		page->share = 0;
-		VM_WARN_ON_ONCE_PAGE(page_ref_count(page), page);
-	}
-
-	zone_device_folio_init(folio, order);
-}
-
-#define zone_device_folio_init(folio, pgmap, order) \
-	backport_zone_device_folio_init(folio, pgmap, order)
 #endif
 
 #endif /* __BACKPORT_LINUX_MEMREMAP_H */

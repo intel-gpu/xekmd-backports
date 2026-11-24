@@ -156,6 +156,10 @@ void bpm_drm_show_fdinfo(struct seq_file *m, struct file *f, u64 client_id,
 	struct drm_file *file = f->private_data;
 	struct drm_device *dev = file->minor->dev;
 	struct drm_printer p = drm_seq_file_printer(m);
+	int idx;
+
+	if (!drm_dev_enter(dev, &idx))
+		return;
 
 	drm_printf(&p, "drm-driver:\t%s\n", dev->driver->name);
 	drm_printf(&p, "drm-client-id:\t%llu\n", client_id);
@@ -170,6 +174,8 @@ void bpm_drm_show_fdinfo(struct seq_file *m, struct file *f, u64 client_id,
 
 	if (show_fdinfo)
 		show_fdinfo(&p, file);
+
+	drm_dev_exit(idx);
 }
 EXPORT_SYMBOL(bpm_drm_show_fdinfo);
 #endif

@@ -23,7 +23,7 @@ diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
 index 8f318da..c3b3cca 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -393,6 +393,20 @@ static int xe_mmap(struct file *filp, struct vm_area_struct *vma)
+@@ -393,6 +393,22 @@ static int xe_mmap(struct file *filp, struct vm_area_struct *vma)
  	return drm_gem_mmap(filp, vma);
  }
  
@@ -37,7 +37,9 @@ index 8f318da..c3b3cca 100644
 +	u64 client_id = file->client_id;
 +#endif
 +
-+	bpm_drm_show_fdinfo(m, f, client_id, xe_drm_client_fdinfo);
++	bpm_drm_show_fdinfo(m, f, client_id,
++			     xe_device_is_admin_only(to_xe_device(file->minor->dev)) ?
++			     NULL : xe_drm_client_fdinfo);
 +}
 +#endif
 +
@@ -78,8 +80,8 @@ index 81020b4..edb55ad 100644
  
 +#ifdef BPM_DRM_FILE_CLIENT_ID_NOT_PRESENT
 +	{
-+		static atomic_t next_client_id = ATOMIC_INIT(0);
-+		client->id = atomic_inc_return(&next_client_id);
++		static atomic64_t next_client_id = ATOMIC64_INIT(0);
++		client->id = atomic64_inc_return(&next_client_id);
 +	}
 +#endif
 +

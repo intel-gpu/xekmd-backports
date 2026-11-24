@@ -94,10 +94,14 @@ struct xe_drm_client *xe_drm_client_alloc(void)
 
 	kref_init(&client->kref);
 
+#ifdef BPM_DRM_FILE_CLIENT_NAME_NOT_PRESENT
+	mutex_init(&client->name_lock);
+#endif
+
 #ifdef BPM_DRM_FILE_CLIENT_ID_NOT_PRESENT
 	{
-		static atomic_t next_client_id = ATOMIC_INIT(0);
-		client->id = atomic_inc_return(&next_client_id);
+		static atomic64_t next_client_id = ATOMIC64_INIT(0);
+		client->id = atomic64_inc_return(&next_client_id);
 	}
 #endif
 
@@ -122,6 +126,10 @@ void __xe_drm_client_free(struct kref *kref)
 	struct xe_drm_client *client =
 		container_of(kref, typeof(*client), kref);
 
+#ifdef BPM_DRM_FILE_CLIENT_NAME_NOT_PRESENT
+	mutex_destroy(&client->name_lock);
+	kfree(client->name);
+#endif
 	kfree(client);
 }
 

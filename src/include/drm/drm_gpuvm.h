@@ -39,6 +39,13 @@
 #include <drm/drm_exec.h>
 
 #ifdef BPM_DRM_GPUVM_RENAMING_SYMBOLS
+#define drm_gpuvm_init LINUX_BACKPORT(drm_gpuvm_init)
+#define drm_gpuvm_interval_empty LINUX_BACKPORT(drm_gpuvm_interval_empty)
+#define drm_gpuvm_sm_map LINUX_BACKPORT(drm_gpuvm_sm_map)
+#define drm_gpuvm_sm_unmap LINUX_BACKPORT(drm_gpuvm_sm_unmap)
+#define drm_gpuvm_sm_map_ops_create LINUX_BACKPORT(drm_gpuvm_sm_map_ops_create)
+#define drm_gpuvm_sm_unmap_ops_create LINUX_BACKPORT(drm_gpuvm_sm_unmap_ops_create)
+#define drm_gpuvm_prefetch_ops_create LINUX_BACKPORT(drm_gpuvm_prefetch_ops_create)
 #define drm_gpuva LINUX_BACKPORT(drm_gpuva)
 #define drm_gpuva_insert LINUX_BACKPORT(drm_gpuva_insert)
 #define drm_gpuva_remove LINUX_BACKPORT(drm_gpuva_remove)

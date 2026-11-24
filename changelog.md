@@ -40,6 +40,12 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.8_261118.13` | | | |
+| | oot-backport/main | [`f6de8b2f1`](<https://github.com/intel-gpu/xekmd-backports/commit/f6de8b2f1990681e3526044ef8aefb38f1b7873b>) | drm/xe: Backport client-name ioctl for older kernels |
+| | oot-backport/main | [`b82d1cc33`](<https://github.com/intel-gpu/xekmd-backports/commit/b82d1cc33ed760abb31af7dd4582d11139d93bb7>) | drm/xe: Restore fdinfo memory reporting on 5.15 |
+| | oot-backport/main | [`62e0fe7a9`](<https://github.com/intel-gpu/xekmd-backports/commit/62e0fe7a9a129e4e79171ff90b5e7709685bf83e>) | backport: Rename drm_gpuvm symbols to modpost errors |
+| | linux-next | [`cfbd165a7`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=cfbd165a74a5c554e2b003bb0361e9b51efd36c8>) | drm/xe/guc: Reset GuC before unmapping its post-hwconfig buffers |
+| | linux-next | [`5fbdab061`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=5fbdab061524bdb0a349c17a79593338311cbf13>) | drm/xe/gt: Wait for context teardown between default LRC recordings |
 | `xebr_v7.3.7_261118.9` | | | |
 | | linux-next | [`682b943f1`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=682b943f154707ab9c1d409c96910b64e38729c7>) | drm/xe/cri: Add new PCI ID |
 | `xebr_v7.3.6_261118.9` | | | |

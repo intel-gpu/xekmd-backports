@@ -8,6 +8,9 @@
 
 #include <linux/kref.h>
 #include <linux/list.h>
+#ifdef BPM_DRM_FILE_CLIENT_NAME_NOT_PRESENT
+#include <linux/mutex.h>
+#endif
 #include <linux/pid.h>
 #include <linux/rcupdate.h>
 #include <linux/sched.h>
@@ -19,7 +22,15 @@ struct xe_bo;
 
 struct xe_drm_client {
 	struct kref kref;
+#ifdef BPM_DRM_FILE_CLIENT_ID_NOT_PRESENT
+	u64 id;
+#else
 	unsigned int id;
+#endif
+#ifdef BPM_DRM_FILE_CLIENT_NAME_NOT_PRESENT
+	struct mutex name_lock;
+	char *name;
+#endif
 #ifdef CONFIG_PROC_FS
 	/**
 	 * @bos_lock: lock protecting @bos_list

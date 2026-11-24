@@ -1619,7 +1619,15 @@ static void drm_pagemap_folio_split(struct folio *orig_folio, struct folio *new_
 	if (!new_folio)
 		return;
 
+#ifdef BPM_PAGE_PGMAP_NOT_PRESENT
+	/*
+	 * struct folio has no pgmap on kernels without page_pgmap();
+	 * use the head page's.
+	 */
+	new_folio->page.pgmap = orig_folio->page.pgmap;
+#else
 	new_folio->pgmap = orig_folio->pgmap;
+#endif
 
 	orig_data = (unsigned long)folio_zone_device_data(orig_folio);
 	zdd = (struct drm_pagemap_zdd *)(orig_data & ~DRM_PAGEMAP_ZDD_FLAG_MASK);

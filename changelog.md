@@ -40,6 +40,12 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.7_261118.11` | | | |
+| | oot-backport/main | [`62e0fe7a9`](<https://github.com/intel-gpu/xekmd-backports/commit/62e0fe7a9a129e4e79171ff90b5e7709685bf83e>) | backport: Rename drm_gpuvm symbols to modpost errors |
+| | oot-backport/main | [`f20f611e8`](<https://github.com/intel-gpu/xekmd-backports/commit/f20f611e81bccda013e8d023c158622ebcf5c772>) | memremap.h: reinit folio metadata before 2-arg zone_device_folio_init |
+| | oot-backport/main | [`3b9523ca1`](<https://github.com/intel-gpu/xekmd-backports/commit/3b9523ca1f07d4392475d68f50d94d9796efa51c>) | drm/pagemap: use page-&gt;pgmap when struct folio has no pgmap |
+| | oot-backport/main | [`279e51589`](<https://github.com/intel-gpu/xekmd-backports/commit/279e51589b9eb6b0cf5655fd9e0827df02db82a2>) | memremap.h: fix zone_device_{page,folio}_init() gating for 2-arg kernels |
+| | linux-next | [`682b943f1`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=682b943f154707ab9c1d409c96910b64e38729c7>) | drm/xe/cri: Add new PCI ID |
 | `xebr_v7.3.6_261118.9` | | | |
 | | ML v6 | [Patchwork](<https://patchwork.freedesktop.org/series/178015/#rev6>) | &#91;TEMP&#93; drm/xe/cper: Drop redundant counter argument |
 | | ML v6 | [Patchwork](<https://patchwork.freedesktop.org/series/178015/#rev6>) | &#91;TEMP&#93; drm/xe/cper: Prepare Intel CPER info records |

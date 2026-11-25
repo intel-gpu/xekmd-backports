@@ -86,13 +86,26 @@ void drm_sched_fence_finished(struct drm_sched_fence *fence, int result)
 
 static const char *drm_sched_fence_get_driver_name(struct dma_fence *fence)
 {
+#ifdef BPM_DMA_FENCE_NAME_HELPERS_NOT_PRESENT
+	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags))
+		return "detached-driver";
+#endif
+
 	return "drm_sched";
 }
 
 static const char *drm_sched_fence_get_timeline_name(struct dma_fence *f)
 {
 	struct drm_sched_fence *fence = to_drm_sched_fence(f);
+
+#ifdef BPM_DMA_FENCE_NAME_HELPERS_NOT_PRESENT
+	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &f->flags))
+		return "detached-timeline";
+
+	return fence->timeline_name;
+#else
 	return (const char *)fence->sched->name;
+#endif
 }
 
 static void drm_sched_fence_free_rcu(struct rcu_head *rcu)
@@ -232,6 +245,10 @@ void drm_sched_fence_init(struct drm_sched_fence *fence,
 	unsigned seq;
 
 	fence->sched = entity->rq->sched;
+#ifdef BPM_DMA_FENCE_NAME_HELPERS_NOT_PRESENT
+	strscpy(fence->timeline_name, fence->sched->name,
+		sizeof(fence->timeline_name));
+#endif
 	seq = atomic_inc_return(&entity->fence_seq);
 	dma_fence_init(&fence->scheduled, &drm_sched_fence_ops_scheduled,
 		       &fence->lock, entity->fence_context, seq);

@@ -325,6 +325,12 @@ struct drm_sched_fence {
          * belongs to.
          */
 	struct drm_gpu_scheduler	*sched;
+#ifdef BPM_DMA_FENCE_NAME_HELPERS_NOT_PRESENT
+        /**
+         * @timeline_name: fence-owned timeline name for legacy name callbacks.
+         */
+	char				timeline_name[32];
+#endif
         /**
          * @lock: the lock used by the scheduled and the finished fences.
          */

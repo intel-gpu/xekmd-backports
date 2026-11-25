@@ -40,6 +40,9 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.9_261118.15` | | | |
+| | oot-backport/main | [`7dfddbedc`](<https://github.com/intel-gpu/xekmd-backports/commit/7dfddbedc1a090dbc1c5ebd8da8f18db11aaadfa>) | drm/sched: keep fence names safe on legacy kernels |
+| | | `97e79823f` | README: Update branch with kernel info |
 | `xebr_v7.3.8_261118.14` | | | |
 | | oot-backport/main | [`d8ff8f895`](<https://github.com/intel-gpu/xekmd-backports/commit/d8ff8f89542655831c700cf395c138722399b711>) | Reapply OOT THP changes |
 | `xebr_v7.3.8_261118.13` | | | |

@@ -40,6 +40,8 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.8_261118.14` | | | |
+| | oot-backport/main | [`d8ff8f895`](<https://github.com/intel-gpu/xekmd-backports/commit/d8ff8f89542655831c700cf395c138722399b711>) | Reapply OOT THP changes |
 | `xebr_v7.3.8_261118.13` | | | |
 | | oot-backport/main | [`f6de8b2f1`](<https://github.com/intel-gpu/xekmd-backports/commit/f6de8b2f1990681e3526044ef8aefb38f1b7873b>) | drm/xe: Backport client-name ioctl for older kernels |
 | | oot-backport/main | [`b82d1cc33`](<https://github.com/intel-gpu/xekmd-backports/commit/b82d1cc33ed760abb31af7dd4582d11139d93bb7>) | drm/xe: Restore fdinfo memory reporting on 5.15 |

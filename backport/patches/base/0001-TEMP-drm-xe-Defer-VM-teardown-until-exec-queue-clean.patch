@@ -45,15 +45,15 @@ Tested-by: Sanjay Yadav <sanjay.kumar.yadav@intel.com>
 (cherry-picked from https://patchwork.freedesktop.org/series/174252/#rev2)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
- drivers/gpu/drm/xe/xe_device.c     |  20 +++-
+ drivers/gpu/drm/xe/xe_device.c     |  21 +++-
  drivers/gpu/drm/xe/xe_exec_queue.c |  22 ++--
  drivers/gpu/drm/xe/xe_vm.c         | 176 +++++++++++++++++++++++++----
  drivers/gpu/drm/xe/xe_vm.h         |   5 +
  drivers/gpu/drm/xe/xe_vm_types.h   |  15 +++
- 5 files changed, 209 insertions(+), 29 deletions(-)
+ 5 files changed, 210 insertions(+), 29 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 87a704cd1..bdf98f94b 100644
+index bb115d945..e4ec78e7d 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
 @@ -8,6 +8,7 @@
@@ -73,10 +73,11 @@ index 87a704cd1..bdf98f94b 100644
  	unsigned long idx;
  
  	guard(xe_pm_runtime)(xe);
-@@ -203,8 +206,23 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -198,8 +201,24 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+ 		xe_exec_queue_kill(q);
  		xe_exec_queue_put(q);
  	}
- 
++
 +	/* Start all bind queue teardown before spending the shared wait budget. */
  	xa_for_each(&xef->vm.xa, idx, vm)
 -		xe_vm_close_and_put(vm);
@@ -94,12 +95,12 @@ index 87a704cd1..bdf98f94b 100644
 +
 +	if (close_deferred)
 +		drm_dbg(&xe->drm,
-+			"VM teardown deferred while exec queues are being stopped\n");
++				"VM teardown deferred while exec queues are being stopped\n");
  
  	xe_file_put(xef);
  }
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index 6d6453f2d..6f1bc5e96 100644
+index b56da21cc..fc6eb8c5d 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
 @@ -156,9 +156,16 @@ static void __xe_exec_queue_free(struct xe_exec_queue *q)

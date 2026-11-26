@@ -1,31 +1,21 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 17e26de51b8c7c732e9f705562f04e4fc107a994 Mon Sep 17 00:00:00 2001
 From: Daniel Charles <daniel.charles@intel.com>
-Date: Fri, 16 Oct 2026 12:59:04 -0700
+Date: Thu, 19 Nov 2026 09:46:21 -0800
 Subject: [PATCH] [TEMP] drm/xe: Synchronously wait for queue kill on FD close
 
-The early KILL message disables GuC scheduling outside the serialized
-TDR path, but xe_file_close() does not wait for it to complete before
-dropping queue references. GuC may still schedule contexts whose page
-tables are being torn down, producing CAT errors and engine resets.
+GuC may still schedule contexts while FD close tears down their page
+tables, producing CAT errors and engine resets. Split FD close into
+two passes: kill every queue, then wait for each queue before dropping
+its reference.
 
-Split FD close teardown into two passes: first kill every queue so all
-KILL messages are queued in parallel, then call the new
-xe_exec_queue_kill_sync() and drop the reference for each queue.
+Require the KILL handler to acknowledge processing before accepting a
+single scheduling-state snapshot. For multi-queue groups, all members
+wait for the primary KILL acknowledgement and scheduling state on the
+primary state waitqueue.
 
-The GuC backend implementation waits, with a timeout, for scheduling to
-be disabled with no pending enable/disable. The wait also completes when
-GuC submission is stopped, VF recovery is in progress, or the queue is
-wedged. If GuC does not respond within the timeout, a GT reset is
-triggered to stop GuC scheduling.
-
-The waiters sleep on a dedicated kill_wq rather than ct.wq. ct.wq is
-shared with every exec queue deregistration waiting for a pending
-enable/disable, and a workload destroying thousands of queues can have
-thousands of such waiters. Waking ct.wq for each scheduling-disable
-SCHED_DONE wakes all of them while the CT lock is held, stalling G2H
-processing until deregistration waits time out and trigger a GT reset.
-kill_wq is woken from SCHED_DONE handling, and on submission stop, wedge
-and VF migration recovery, only when it has sleepers.
+The wait also exits on GuC submission stop, VF recovery, or wedge. On
+timeout, request a GT reset asynchronously; the wait does not establish
+hardware quiescence on those paths.
 
 v2:
  - Bound the wait with a timeout, GT reset on timeout (Sashiko, Matt B)
@@ -35,48 +25,43 @@ v2:
 v3:
  - Wait on a dedicated kill_wq instead of waking ct.wq on every
    scheduling-disable SCHED_DONE (CI)
-
-Bv1: Update to rev4 [Pravalika]
+v5: Rewrote the description for the primary KILL acknowledgement and
+per-queue state waitqueue.
 
 Assisted-by: LLM
 Signed-off-by: Daniel Charles <daniel.charles@intel.com>
-(backported from https://patchwork.freedesktop.org/series/175996/#rev4)
+(cherry-picked from https://patchwork.freedesktop.org/series/175996/#rev6)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
- drivers/gpu/drm/xe/xe_device.c           |  5 +++
- drivers/gpu/drm/xe/xe_exec_queue.c       | 13 +++++++
- drivers/gpu/drm/xe/xe_exec_queue.h       |  1 +
- drivers/gpu/drm/xe/xe_exec_queue_types.h |  2 +
- drivers/gpu/drm/xe/xe_gt_sriov_vf.c      |  1 +
- drivers/gpu/drm/xe/xe_guc_submit.c       | 48 ++++++++++++++++++++++++
- drivers/gpu/drm/xe/xe_guc_submit.h       |  1 +
- drivers/gpu/drm/xe/xe_guc_types.h        |  6 +++
- 8 files changed, 77 insertions(+)
+ drivers/gpu/drm/xe/xe_device.c               |  3 ++
+ drivers/gpu/drm/xe/xe_exec_queue.c           | 13 ++++++
+ drivers/gpu/drm/xe/xe_exec_queue.h           |  1 +
+ drivers/gpu/drm/xe/xe_exec_queue_types.h     |  2 +
+ drivers/gpu/drm/xe/xe_guc_exec_queue_types.h |  6 +++
+ drivers/gpu/drm/xe/xe_guc_submit.c           | 47 ++++++++++++++++++++
+ 6 files changed, 72 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 9d124800d..7856f8291 100644
+index e4505e903..f92e2c01d 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -192,8 +192,13 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -201,6 +201,9 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  		if (q->vm && q->hwe->hw_engine_group)
  			xe_hw_engine_group_del_exec_queue(q->hwe->hw_engine_group, q);
  		xe_exec_queue_kill(q);
 +	}
-+
 +	xa_for_each(&xef->exec_queue.xa, idx, q) {
 +		xe_exec_queue_kill_sync(q);
  		xe_exec_queue_put(q);
  	}
-+
- 	xa_for_each(&xef->vm.xa, idx, vm)
- 		xe_vm_close_and_put(vm);
  
 diff --git a/drivers/gpu/drm/xe/xe_exec_queue.c b/drivers/gpu/drm/xe/xe_exec_queue.c
-index b56da21cc..6d6453f2d 100644
+index 96de616b1..23ec72fcb 100644
 --- a/drivers/gpu/drm/xe/xe_exec_queue.c
 +++ b/drivers/gpu/drm/xe/xe_exec_queue.c
-@@ -1769,6 +1769,19 @@ void xe_exec_queue_kill(struct xe_exec_queue *q)
+@@ -1778,6 +1778,19 @@ void xe_exec_queue_kill(struct xe_exec_queue *q)
  	xe_vm_remove_compute_exec_queue(q->vm, q);
  }
  
@@ -121,69 +106,70 @@ index 1079191aa..25d8d16d2 100644
  	/** @fini: Undoes the init() for submission backend */
  	void (*fini)(struct xe_exec_queue *q);
  	/**
-diff --git a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
-index 2a5f2064a..a1bea4ac1 100644
---- a/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
-+++ b/drivers/gpu/drm/xe/xe_gt_sriov_vf.c
-@@ -911,6 +911,7 @@ static void vf_start_migration_recovery(struct xe_gt *gt)
- 		smp_wmb();	/* Ensure above writes visible before wake */
- 
- 		xe_guc_ct_wake_waiters(&gt->uc.guc.ct);
-+		xe_guc_submit_wake_kill_waiters(&gt->uc.guc);
- 
- 		started = queue_work(gt->ordered_wq, &gt->sriov.vf.migration.worker);
- 		xe_gt_sriov_info(gt, "VF migration recovery %s\n", started ?
+diff --git a/drivers/gpu/drm/xe/xe_guc_exec_queue_types.h b/drivers/gpu/drm/xe/xe_guc_exec_queue_types.h
+index 3f5b1950a..cb0e460f4 100644
+--- a/drivers/gpu/drm/xe/xe_guc_exec_queue_types.h
++++ b/drivers/gpu/drm/xe/xe_guc_exec_queue_types.h
+@@ -54,6 +54,12 @@ struct xe_guc_exec_queue {
+ 	wait_queue_head_t suspend_wait;
+ 	/** @state_wq: wait queue for scheduling enable/disable state changes */
+ 	wait_queue_head_t state_wq;
++	/**
++	 * @kill_processed: KILL handler has drained earlier submission work and
++	 * issued any required disable. Published with release semantics and
++	 * never cleared by repeated kill requests.
++	 */
++	bool kill_processed;
+ 	/**
+ 	 * @suspend_pending: a suspend of the exec_queue is pending.
+ 	 * Protected by @sched.msg_lock.
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index 5a87683cd..9265a872d 100644
+index 9d8ea91d8..bae87d960 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -315,6 +315,7 @@ int xe_guc_submit_init(struct xe_guc *guc, unsigned int num_ids)
- 	gt->exec_queue_ops = &guc_exec_queue_ops;
+@@ -2112,6 +2112,9 @@ static void __guc_exec_queue_process_msg_kill(struct xe_sched_msg *msg,
+ 	if (!kref_read(&q->refcount) || !bound || exec_queue_wedged(q))
+ 		return;
  
- 	xa_init(&guc->submission_state.exec_queue_lookup);
-+	init_waitqueue_head(&guc->submission_state.kill_wq);
++	if (READ_ONCE(q->guc->kill_processed))
++		return;
++
+ 	ret = wait_event_timeout(q->guc->state_wq,
+ 				 (!exec_queue_pending_enable(q) &&
+ 				  !exec_queue_pending_disable(q)) ||
+@@ -2130,6 +2133,10 @@ static void __guc_exec_queue_process_msg_kill(struct xe_sched_msg *msg,
  
- 	primelockdep(guc);
- 
-@@ -550,6 +551,26 @@ static bool vf_recovery(struct xe_guc *guc)
- 	return xe_gt_recovery_pending(guc_to_gt(guc));
+ 	if (exec_queue_enabled(q))
+ 		disable_scheduling(q, true);
++
++	/* Publish only after disable_scheduling() has established pending state. */
++	smp_store_release(&q->guc->kill_processed, true);
++	wake_up_all(&q->guc->state_wq);
  }
  
-+static void guc_wake_kill_waiters(struct xe_guc *guc)
-+{
-+	/* wq_has_sleeper() implies a full barrier, pairing with the waiter */
-+	if (wq_has_sleeper(&guc->submission_state.kill_wq))
-+		wake_up_all(&guc->submission_state.kill_wq);
-+}
-+
-+/**
-+ * xe_guc_submit_wake_kill_waiters() - Wake exec queue kill_sync waiters
-+ * @guc: the &xe_guc
-+ *
-+ * Wake any exec queue kill_sync waiters so they re-evaluate their wait
-+ * condition, e.g. after VF migration recovery has started.
-+ */
-+void xe_guc_submit_wake_kill_waiters(struct xe_guc *guc)
-+{
-+	if (guc->submission_state.initialized)
-+		guc_wake_kill_waiters(guc);
-+}
-+
- static void xe_guc_exec_queue_trigger_cleanup(struct xe_exec_queue *q)
- {
- 	struct xe_guc *guc = exec_queue_to_guc(q);
-@@ -1413,6 +1434,7 @@ void xe_guc_submit_wedge(struct xe_guc *guc)
- 			if (xe_exec_queue_get_unless_zero(q))
- 				set_exec_queue_wedged(q);
- 		mutex_unlock(&guc->submission_state.lock);
-+		guc_wake_kill_waiters(guc);
- 	} else {
- 		/* Forcefully kill any remaining exec queues, signal fences */
- 		guc_submit_reset_prepare(guc);
-@@ -2279,6 +2301,28 @@ static void guc_exec_queue_kill(struct xe_exec_queue *q)
+ #define CLEANUP				1	/* Non-zero values to catch uninitialized msg */
+@@ -2338,6 +2345,45 @@ static void guc_exec_queue_kill(struct xe_exec_queue *q)
  	xe_guc_exec_queue_trigger_cleanup(q);
  }
  
++static bool guc_exec_queue_kill_complete(struct xe_exec_queue *primary)
++{
++	unsigned int state;
++
++	/*
++	 * Pair with the primary KILL handler's release so earlier submission
++	 * work has finished and any required DISABLE has been issued.
++	 */
++	if (!smp_load_acquire(&primary->guc->kill_processed))
++		return false;
++
++	state = atomic_read(&primary->guc->state);
++
++	return !(state & (EXEC_QUEUE_STATE_ENABLED |
++			  EXEC_QUEUE_STATE_PENDING_DISABLE |
++			  EXEC_QUEUE_STATE_PENDING_ENABLE));
++}
++
 +static void guc_exec_queue_kill_sync(struct xe_exec_queue *q)
 +{
 +	struct xe_exec_queue *primary = xe_exec_queue_multi_queue_primary(q);
@@ -192,10 +178,9 @@ index 5a87683cd..9265a872d 100644
 +
 +	xe_assert(guc_to_xe(guc), exec_queue_killed(q));
 +
-+	ret = wait_event_timeout(guc->submission_state.kill_wq,
-+				 (!exec_queue_enabled(primary) &&
-+				  !exec_queue_pending_disable(primary) &&
-+				  !exec_queue_pending_enable(primary)) ||
++	/* FD close has already killed every primary before waiting on any member. */
++	ret = wait_event_timeout(primary->guc->state_wq,
++				 guc_exec_queue_kill_complete(primary) ||
 +				 xe_guc_read_stopped(guc) ||
 +				 vf_recovery(guc) ||
 +				 exec_queue_wedged(primary), HZ * 5);
@@ -209,7 +194,7 @@ index 5a87683cd..9265a872d 100644
  static void guc_exec_queue_add_msg(struct xe_exec_queue *q, struct xe_sched_msg *msg,
  				   u32 opcode)
  {
-@@ -2756,6 +2800,7 @@ static u64 guc_exec_queue_reset_status(struct xe_exec_queue *q)
+@@ -2815,6 +2861,7 @@ static u64 guc_exec_queue_reset_status(struct xe_exec_queue *q)
  static const struct xe_exec_queue_ops guc_exec_queue_ops = {
  	.init = guc_exec_queue_init,
  	.kill = guc_exec_queue_kill,
@@ -217,59 +202,6 @@ index 5a87683cd..9265a872d 100644
  	.fini = guc_exec_queue_fini,
  	.destroy = guc_exec_queue_destroy,
  	.set_priority = guc_exec_queue_set_priority,
-@@ -2837,6 +2882,7 @@ static int guc_submit_reset_prepare(struct xe_guc *guc)
- 	ret = atomic_fetch_or(1, &guc->submission_state.stopped);
- 	smp_wmb();
- 	wake_up_all(&guc->ct.wq);
-+	guc_wake_kill_waiters(guc);
- 
- 	return ret;
- }
-@@ -3371,6 +3417,7 @@ static void handle_sched_done(struct xe_guc *guc, struct xe_exec_queue *q,
- 		clear_exec_queue_pending_enable(q);
- 		smp_wmb();
- 		wake_up_all(&guc->ct.wq);
-+		guc_wake_kill_waiters(guc);
- 	} else {
- 		bool was_pending;
- 
-@@ -3416,6 +3463,7 @@ static void handle_sched_done(struct xe_guc *guc, struct xe_exec_queue *q,
- 		 */
- 		smp_wmb();
- 		wake_up_all(&guc->ct.wq);
-+		guc_wake_kill_waiters(guc);
- 	}
- }
- 
-diff --git a/drivers/gpu/drm/xe/xe_guc_submit.h b/drivers/gpu/drm/xe/xe_guc_submit.h
-index e7a24f8ec..25e323598 100644
---- a/drivers/gpu/drm/xe/xe_guc_submit.h
-+++ b/drivers/gpu/drm/xe/xe_guc_submit.h
-@@ -27,6 +27,7 @@ void xe_guc_submit_unpause(struct xe_guc *guc);
- void xe_guc_submit_unpause_vf(struct xe_guc *guc);
- void xe_guc_submit_unpause_prepare_vf(struct xe_guc *guc);
- void xe_guc_submit_wedge(struct xe_guc *guc);
-+void xe_guc_submit_wake_kill_waiters(struct xe_guc *guc);
- 
- int xe_guc_read_stopped(struct xe_guc *guc);
- int xe_guc_sched_done_handler(struct xe_guc *guc, u32 *msg, u32 len);
-diff --git a/drivers/gpu/drm/xe/xe_guc_types.h b/drivers/gpu/drm/xe/xe_guc_types.h
-index 3dbcb1331..3f3138d67 100644
---- a/drivers/gpu/drm/xe/xe_guc_types.h
-+++ b/drivers/gpu/drm/xe/xe_guc_types.h
-@@ -93,6 +93,12 @@ struct xe_guc {
- 		atomic_t reset_blocked;
- 		/** @submission_state.lock: protects submission state */
- 		struct mutex lock;
-+		/**
-+		 * @submission_state.kill_wq: wait queue for exec queue kill_sync
-+		 * waiters, kept separate from &xe_guc_ct.wq so that waking them
-+		 * from the G2H handler does not wake every CT waiter.
-+		 */
-+		wait_queue_head_t kill_wq;
- 		/** @submission_state.enabled: submission is enabled */
- 		bool enabled;
- 		/**
 -- 
 2.43.0
 

@@ -40,6 +40,9 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.11_261118.15` | | | |
+| | linux-next | [`cfbd165a7`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=cfbd165a74a5c554e2b003bb0361e9b51efd36c8>) | drm/xe/guc: Reset GuC before unmapping its post-hwconfig buffers |
+| | | `699978b31` | &#91;TEMP&#93; drm/xe/guc: Don't request cache flush on GGTT TLB invalidation on CRI |
 | `xebr_v7.3.9_261118.15` | | | |
 | | oot-backport/main | [`7dfddbedc`](<https://github.com/intel-gpu/xekmd-backports/commit/7dfddbedc1a090dbc1c5ebd8da8f18db11aaadfa>) | drm/sched: keep fence names safe on legacy kernels |
 | | | `97e79823f` | README: Update branch with kernel info |

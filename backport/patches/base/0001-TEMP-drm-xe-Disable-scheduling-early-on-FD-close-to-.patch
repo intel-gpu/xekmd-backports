@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Brost <matthew.brost@intel.com>
-Date: Fri, 16 Oct 2026 12:59:03 -0700
+Date: Thu, 19 Nov 2026 09:46:20 -0800
 Subject: [PATCH] [TEMP] drm/xe: Disable scheduling early on FD close to avoid
  CAT error cascade
 
@@ -23,22 +23,30 @@ the early disable. If the queue has no references when the KILL message
 is processed, let the following CLEANUP message handle teardown. Assert
 that the queue is referenced when kill is entered.
 
-Bv1: Update to rev4 [Pravalika]
+Early KILL waits on the per-queue scheduling-state waitqueue. Only the
+primary can issue the early DISABLE for a multi-queue group. Allow
+pending disable on killed queues in run_job and have TDR recheck whether
+scheduling is still enabled after waiting for a pending transition.
+
+v5: Updated the description for the waitqueue, primary-only group KILL,
+and the run_job and TDR fixes.
+
+v6: resolved rebase conflicts
 
 Cc: Wang Xin <x.wang@intel.com>
 Cc: Jia Yao <jia.yao@intel.com>
 Signed-off-by: Matthew Brost <matthew.brost@intel.com>
 Signed-off-by: Daniel Charles <daniel.charles@intel.com>
-(backported from https://patchwork.freedesktop.org/series/175996/#rev4)
+(cherry-picked from https://patchwork.freedesktop.org/series/175996/#rev6)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
 ---
  drivers/gpu/drm/xe/xe_guc_exec_queue_types.h |  2 +-
- drivers/gpu/drm/xe/xe_guc_submit.c           | 72 ++++++++++++++++++--
- 2 files changed, 69 insertions(+), 5 deletions(-)
+ drivers/gpu/drm/xe/xe_guc_submit.c           | 87 ++++++++++++++++++--
+ 2 files changed, 80 insertions(+), 9 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_guc_exec_queue_types.h b/drivers/gpu/drm/xe/xe_guc_exec_queue_types.h
-index 74b711abe..89397e1e6 100644
+index 2b1a40e28..3f5b1950a 100644
 --- a/drivers/gpu/drm/xe/xe_guc_exec_queue_types.h
 +++ b/drivers/gpu/drm/xe/xe_guc_exec_queue_types.h
 @@ -36,7 +36,7 @@ struct xe_guc_exec_queue {
@@ -51,34 +59,79 @@ index 74b711abe..89397e1e6 100644
  	/** @destroy_async: do final destroy async from this worker */
  	struct work_struct destroy_async;
 diff --git a/drivers/gpu/drm/xe/xe_guc_submit.c b/drivers/gpu/drm/xe/xe_guc_submit.c
-index dc09502e6..01f37bdb7 100644
+index 246093176..9d8ea91d8 100644
 --- a/drivers/gpu/drm/xe/xe_guc_submit.c
 +++ b/drivers/gpu/drm/xe/xe_guc_submit.c
-@@ -2020,6 +2020,38 @@ static void __guc_exec_queue_process_msg_set_multi_queue_priority(struct xe_sche
- 	kfree(msg);
+@@ -1310,11 +1310,15 @@ guc_exec_queue_run_job(struct drm_sched_job *drm_job)
+ 	struct xe_sched_job *job = to_xe_sched_job(drm_job);
+ 	struct xe_exec_queue *q = job->q;
+ 	struct xe_guc *guc = exec_queue_to_guc(q);
++	unsigned int state = atomic_read(&q->guc->state);
+ 	bool killed_or_banned_or_wedged =
+-		exec_queue_killed_or_banned_or_wedged(q);
++		(state & (EXEC_QUEUE_STATE_KILLED | EXEC_QUEUE_STATE_BANNED |
++			  EXEC_QUEUE_STATE_WEDGED));
+ 
+-	xe_gt_assert(guc_to_gt(guc), !(exec_queue_destroyed(q) || exec_queue_pending_disable(q)) ||
+-		     exec_queue_banned(q) || exec_queue_suspended(q));
++	xe_gt_assert(guc_to_gt(guc),
++			!(state & (EXEC_QUEUE_STATE_DESTROYED | EXEC_QUEUE_STATE_PENDING_DISABLE)) ||
++			(state & (EXEC_QUEUE_STATE_BANNED | EXEC_QUEUE_STATE_SUSPENDED)) ||
++			((state & EXEC_QUEUE_STATE_KILLED) && !(state & EXEC_QUEUE_STATE_DESTROYED)));
+ 
+ 	trace_xe_sched_job_run(job);
+ 
+@@ -1342,6 +1346,15 @@ guc_exec_queue_run_job(struct drm_sched_job *drm_job)
+ 	return job->fence;
+ }
+ 
++static bool guc_exec_queue_try_add_msg(struct xe_exec_queue *q,
++		struct xe_sched_msg *msg, u32 opcode);
++
++#define STATIC_MSG_CLEANUP	0
++#define STATIC_MSG_SUSPEND	1
++#define STATIC_MSG_RESUME	2
++#define STATIC_MSG_CGP_SYNC	3
++#define STATIC_MSG_KILL		4
++
+ static void guc_exec_queue_free_job(struct drm_sched_job *drm_job)
+ {
+ 	struct xe_sched_job *job = to_xe_sched_job(drm_job);
+@@ -1705,7 +1718,9 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
+ 			if (!ret || xe_guc_read_stopped(guc))
+ 				goto trigger_reset;
+ 
+-			disable_scheduling(primary, skip_timeout_check);
++			/* KILL may have already disabled scheduling. */
++			if (exec_queue_enabled(primary))
++				disable_scheduling(primary, skip_timeout_check);
+ 		}
+ 
+ 		/*
+@@ -2086,12 +2101,44 @@ static void __guc_exec_queue_process_msg_cgp_sync(struct xe_sched_msg *msg,
+ 		guc_exec_queue_send_cgp_sync(q, 0);
  }
  
 +static void __guc_exec_queue_process_msg_kill(struct xe_sched_msg *msg,
-+		bool bound)
++					      bool bound)
 +{
 +	struct xe_exec_queue *q = msg->private_data;
-+	struct xe_exec_queue *primary = xe_exec_queue_multi_queue_primary(q);
-+	struct xe_guc *guc = exec_queue_to_guc(primary);
++	struct xe_guc *guc = exec_queue_to_guc(q);
 +	int ret;
 +
 +	/* At zero references, the queued CLEANUP message handles disabling. */
 +	if (!kref_read(&q->refcount) || !bound || exec_queue_wedged(q))
 +		return;
 +
-+	ret = wait_event_timeout(guc->ct.wq,
-+			(!exec_queue_pending_enable(primary) &&
-+			 !exec_queue_pending_disable(primary)) ||
-+			xe_guc_read_stopped(guc) ||
-+			vf_recovery(guc), HZ * 5);
++	ret = wait_event_timeout(q->guc->state_wq,
++				 (!exec_queue_pending_enable(q) &&
++				  !exec_queue_pending_disable(q)) ||
++				 xe_guc_read_stopped(guc) ||
++				 vf_recovery(guc), HZ * 5);
 +	if (!ret && !vf_recovery(guc)) {
-+		xe_gt_warn(primary->gt, "Pending enable/disable failed to respond on kill, guc_id=%d\n",
-+				primary->guc->id);
-+		xe_gt_reset_async(primary->gt);
++		xe_gt_warn(q->gt, "Pending enable/disable failed to respond on kill, guc_id=%d\n",
++			   q->guc->id);
++		xe_gt_reset_async(q->gt);
 +		xe_sched_tdr_queue_imm(&q->guc->sched);
 +		return;
 +	}
@@ -86,14 +139,13 @@ index dc09502e6..01f37bdb7 100644
 +	if (xe_guc_read_stopped(guc) || vf_recovery(guc))
 +		return;
 +
-+	if (exec_queue_enabled(primary))
-+		disable_scheduling(primary, true);
++	if (exec_queue_enabled(q))
++		disable_scheduling(q, true);
 +}
 +
- static void __guc_exec_queue_process_msg_cgp_sync(struct xe_sched_msg *msg,
- 						  bool bound)
- {
-@@ -2040,6 +2072,7 @@ static void __guc_exec_queue_process_msg_cgp_sync(struct xe_sched_msg *msg,
+ #define CLEANUP				1	/* Non-zero values to catch uninitialized msg */
+ #define SET_SCHED_PROPS			2
+ #define SUSPEND				3
  #define RESUME				4
  #define SET_MULTI_QUEUE_PRIORITY	5
  #define CGP_SYNC_MSG			6
@@ -101,7 +153,7 @@ index dc09502e6..01f37bdb7 100644
  #define OPCODE_MASK	0xf
  #define MSG_LOCKED	BIT(8)
  #define MSG_HEAD	BIT(9)
-@@ -2074,6 +2107,9 @@ static void guc_exec_queue_process_msg(struct xe_sched_msg *msg,
+@@ -2126,6 +2173,9 @@ static void guc_exec_queue_process_msg(struct xe_sched_msg *msg,
  	case CGP_SYNC_MSG:
  		__guc_exec_queue_process_msg_cgp_sync(msg, bound);
  		break;
@@ -111,20 +163,8 @@ index dc09502e6..01f37bdb7 100644
  	default:
  		XE_WARN_ON("Unknown message type");
  	}
-@@ -2196,8 +2232,22 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
- 	return err;
- }
+@@ -2251,6 +2301,10 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
  
-+static bool guc_exec_queue_try_add_msg(struct xe_exec_queue *q,
-+   struct xe_sched_msg *msg,
-+   u32 opcode);
-+
-+#define STATIC_MSG_CLEANUP 0
-+#define STATIC_MSG_SUSPEND 1
-+#define STATIC_MSG_RESUME  2
-+#define STATIC_MSG_CGP_SYNC   3
-+#define STATIC_MSG_KILL       4
-+
  static void guc_exec_queue_kill(struct xe_exec_queue *q)
  {
 +	struct xe_sched_msg *msg = q->guc->static_msgs + STATIC_MSG_KILL;
@@ -134,21 +174,24 @@ index dc09502e6..01f37bdb7 100644
  	trace_xe_exec_queue_kill(q);
  	set_exec_queue_killed(q);
  	/*
-@@ -2207,6 +2257,24 @@ static void guc_exec_queue_kill(struct xe_exec_queue *q)
+@@ -2260,6 +2314,27 @@ static void guc_exec_queue_kill(struct xe_exec_queue *q)
  	 * stays set until the queue is torn down.
  	 */
  	suspend_wait_wake(q);
 +
-+
 +	/*
-+	* We eagerly send a message to ourselves to disable scheduling, as the
-+	* TDR is serialized (i.e., only one exec queue is processed at a time).
-+	* If an FD is closed with many exec queues, the TDR can be slower than
-+	* the GuC scheduling contexts with invalid page tables, creating a
-+	* cascade of CAT errors and engine resets, which is quite slow. Avoid
-+	* this by immediately disabling scheduling outside of the TDR.
-+	*/
-+	if (!exec_queue_wedged(q)) {
++	 * We eagerly send a message to ourselves to disable scheduling, as the
++	 * TDR is serialized (i.e., only one exec queue is processed at a time).
++	 * If an FD is closed with many exec queues, the TDR can be slower than
++	 * the GuC scheduling contexts with invalid page tables, creating a
++	 * cascade of CAT errors and engine resets, which is quite slow. Avoid
++	 * this by immediately disabling scheduling outside of the TDR.
++	 *
++	 * Only the primary's own KILL may do this for a multi-queue group.
++	 * Group jobs share its ordered submit workqueue and the killed primary
++	 * prevents later member jobs from submitting to GuC.
++	 */
++	if (!xe_exec_queue_is_multi_queue_secondary(q) && !exec_queue_wedged(q)) {
 +		struct xe_gpu_scheduler *sched = &q->guc->sched;
 +
 +		xe_sched_msg_lock(sched);
@@ -159,7 +202,7 @@ index dc09502e6..01f37bdb7 100644
  	xe_guc_exec_queue_trigger_cleanup(q);
  }
  
-@@ -2259,10 +2327,6 @@ static bool guc_exec_queue_try_add_msg(struct xe_exec_queue *q,
+@@ -2312,10 +2387,6 @@ static bool guc_exec_queue_try_add_msg(struct xe_exec_queue *q,
  	return true;
  }
  

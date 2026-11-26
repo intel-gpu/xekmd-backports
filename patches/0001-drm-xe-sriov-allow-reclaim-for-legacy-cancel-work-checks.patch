@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+Subject: [PATCH] drm/xe/sriov: mark PF restart workqueue reclaim-safe
+
+GT reset synchronously cancels PF restart work on xe-sriov-wq.
+On older kernels, check_flush_dependency() treats cancellation like a
+flush and warns when the queue lacks WQ_MEM_RECLAIM.
+Mark the queue reclaim-capable to avoid this false-positive warning.
+
+Signed-off-by: Kanaka Raju Nayana <kanaka.raju.nayana@intel.com>
+---
+ drivers/gpu/drm/xe/xe_sriov.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_sriov.c b/drivers/gpu/drm/xe/xe_sriov.c
+--- a/drivers/gpu/drm/xe/xe_sriov.c
++++ b/drivers/gpu/drm/xe/xe_sriov.c
+@@ -120,8 +120,8 @@ int xe_sriov_init(struct xe_device *xe)
+ 		xe_sriov_vf_init_early(xe);
+ 
+ 	xe_assert(xe, !xe->sriov.wq);
+-	xe->sriov.wq = alloc_workqueue("xe-sriov-wq", WQ_PERCPU, 0);
++	xe->sriov.wq = alloc_workqueue("xe-sriov-wq", WQ_PERCPU | WQ_MEM_RECLAIM, 0);
+ 	if (!xe->sriov.wq)
+ 		return -ENOMEM;
+ 
+ 	return drmm_add_action_or_reset(&xe->drm, fini_sriov, xe);
+ 

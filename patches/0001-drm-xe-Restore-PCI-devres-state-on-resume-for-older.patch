@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Pravalika Gurram <pravalika.gurram@intel.com>
+Date: Fri, 27 Nov 2026 12:00:00 +0530
+Subject: [PATCH] drm/xe: Restore PCI devres state on resume
+
+Until 77f79ac8de0f ("PCI: Remove struct pci_devres.enabled status
+bit"), pci_disable_device() clears the PCI core's "enabled" flag and
+only pcim_enable_device() sets it again. xe uses pci_enable_device() on
+resume, so the flag stays cleared. On unbind the PCI core then skips the
+final disable and the enable count leaks.
+
+On the next probe the device is not powered up. A PF still works as it
+has a PM capability to recover D0 from, but its enable count keeps
+leaking. A VF has no PM capability, so IRQ allocation fails with
+-EINVAL.
+
+Use pcim_enable_device() on resume so the flag is set again.
+
+Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
+---
+ drivers/gpu/drm/xe/xe_pci.c | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/xe/xe_pci.c b/drivers/gpu/drm/xe/xe_pci.c
+index 5f2a0b1..cd650f0 100644
+--- a/drivers/gpu/drm/xe/xe_pci.c
++++ b/drivers/gpu/drm/xe/xe_pci.c
+@@ -1347,7 +1347,11 @@ static int xe_pci_resume(struct device *dev)
+ 
+ 	pci_restore_state(pdev);
+ 
+-	err = pci_enable_device(pdev);
++#ifdef BPM_PCI_DEVRES_ENABLED_PRESENT
++	err = pcim_enable_device(pdev);
++#else
++	err = pci_enable_device(pdev);
++#endif
+ 	if (err)
+ 		return err;
+ 
+@@ -1411,7 +1415,11 @@ static int xe_pci_runtime_resume(struct device *dev)
+ 	pci_restore_state(pdev);
+ 
+ 	if (xe->d3cold.allowed) {
+-		err = pci_enable_device(pdev);
++#ifdef BPM_PCI_DEVRES_ENABLED_PRESENT
++		err = pcim_enable_device(pdev);
++#else
++		err = pci_enable_device(pdev);
++#endif
+ 		if (err)
+ 			return err;
+ 
+-- 
+2.43.0
+

@@ -1,60 +1,78 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Arvind Yadav <arvind.yadav@intel.com>
-Date: Wed, 28 Oct 2026 17:51:24 +0530
+Date: Mon, 16 Nov 2026 11:58:03 +0530
 Subject: [PATCH] [TEMP] drm/xe: Mark VMs as closing before queue cleanup
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
-Queue cleanup is asynchronous. New VM work can therefore race with file
-close or VM destroy while cleanup is starting.
+Queue cleanup is asynchronous. VM work can still run while file close
+or VM destroy is stopping the queues.
 
-Add a closing state and set it before starting queue cleanup. Treat a
-closing VM as unavailable for new exec, bind, rebind and page-fault work.
+Add a CLOSING state and set it before queue cleanup starts. Reject
+new exec, bind, rebind and page-fault work on closing VMs without
+removing their mappings yet.
 
-Keep vm->size valid while the VM is closing so SVM invalidation can still
-drain existing mappings.
+Cached faults bypass xe_pagefault_service(), so also check VM state
+at the common acknowledgment path. Hold vm->lock for read through
+successful reply submission to serialize it with the closing
+transition. Invalidate the local cache when that check fails.
 
-Also reject page faults on banned VMs, which cannot resume execution.
+Keep vm->size valid so SVM invalidation can still drain existing
+mappings, but stop adding new SVM garbage-collector work once close
+starts. Also reject page faults on banned VMs.
+
+v3:
+- Check VM state before replying to cached and chained faults (Tejas).
+- Hold vm->lock through successful reply submission and invalidate
+  the local cache when the VM lookup or state check fails. (Sashiko)
+- Report faults rejected by the final VM-state check. (Sashiko)
+- Preserve the original fault details when service replaces them with
+  the resolved range. (Sashiko)
+- Account for failed prefetches and invalidate the local cache on failure.
+  (Sashiko)
 
 Cc: Matthew Brost <matthew.brost@intel.com>
 Cc: Thomas Hellström <thomas.hellstrom@linux.intel.com>
 Cc: Himal Prasad Ghimiray <himal.prasad.ghimiray@intel.com>
 Cc: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Cc: Daniel Charles <daniel.charles@intel.com>
+Cc: Tejas Upadhyay <tejas.upadhyay@intel.com>
 Assisted-by: LLM
-Signed-off-by: Arvind Yadav <arvind.yadav@intel.com>
 Tested-by: Sanjay Yadav <sanjay.kumar.yadav@intel.com>
-(cherry-picked from https://patchwork.freedesktop.org/series/174252/#rev2)
+Signed-off-by: Arvind Yadav <arvind.yadav@intel.com>
+Reviewed-by: Tejas Upadhyay <tejas.upadhyay@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/series/174252/#rev3)
 Signed-off-by: Bommu Krishnaiah <krishnaiah.bommu@intel.com>
 ---
- drivers/gpu/drm/xe/xe_device.c    |  4 ++++
- drivers/gpu/drm/xe/xe_pagefault.c |  2 +-
- drivers/gpu/drm/xe/xe_svm.c       |  3 ++-
- drivers/gpu/drm/xe/xe_vm.c        | 15 +++++++++++++++
- drivers/gpu/drm/xe/xe_vm.h        |  9 ++++++++-
+ drivers/gpu/drm/xe/xe_device.c    |  4 ++
+ drivers/gpu/drm/xe/xe_pagefault.c | 77 ++++++++++++++++++++++++-------
+ drivers/gpu/drm/xe/xe_svm.c       |  3 +-
+ drivers/gpu/drm/xe/xe_vm.c        | 15 ++++++
+ drivers/gpu/drm/xe/xe_vm.h        |  9 +++-
  drivers/gpu/drm/xe/xe_vm_types.h  |  1 +
- 6 files changed, 31 insertions(+), 3 deletions(-)
+ 6 files changed, 91 insertions(+), 18 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index 7856f8291..87a704cd1 100644
+index 1ca4cec86..a42388cf4 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -180,6 +180,10 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
+@@ -184,6 +184,10 @@ static void xe_file_close(struct drm_device *dev, struct drm_file *file)
  
- 	guard(xe_pm_runtime)(xe);
+ 	prelim_xe_eudebug_file_close(xef);
  
 +	/* Block new VM work before starting asynchronous queue teardown. */
 +	xa_for_each(&xef->vm.xa, idx, vm)
 +		xe_vm_close_start(vm);
 +
- 	prelim_xe_eudebug_file_close(xef);
- 
  	/*
+ 	 * No need for exec_queue.lock here as there is no contention for it
+ 	 * when FD is closing as IOCTLs presumably can't be modifying the
 diff --git a/drivers/gpu/drm/xe/xe_pagefault.c b/drivers/gpu/drm/xe/xe_pagefault.c
-index 50a8c7187..49e38df0f 100644
+index 17e2a6d74..6c0695ec6 100644
 --- a/drivers/gpu/drm/xe/xe_pagefault.c
 +++ b/drivers/gpu/drm/xe/xe_pagefault.c
-@@ -240,7 +240,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
+@@ -244,7 +244,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
  
  	down_read(&vm->lock);
  
@@ -63,6 +81,116 @@ index 50a8c7187..49e38df0f 100644
  		err = -ENOENT;
  		xe_pagefault_set_error(pf, XE_PAGEFAULT_ERROR_VM_CLOSED);
  		goto unlock_vm;
+@@ -708,35 +708,36 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+ 
+ 	while (xe_pagefault_queue_pop(pf_queue, &pf, pf_work->id)) {
+ 		const struct xe_pagefault_ops *ops = pf->producer.ops;
++		struct xe_vm *ack_vm = NULL;
+ 		void *private;
+ 		struct xe_gt *gt = pf->gt;
+ 		u32 asid = FIELD_GET(XE_PAGEFAULT_ASID_MASK, pf->consumer.id);
++		struct xe_pagefault original = {
++			.gt = gt,
++			.consumer = {
++				.page_addr = pf->consumer.page_addr,
++				.access_type = pf->consumer.access_type,
++				.fault_type_level = pf->consumer.fault_type_level,
++				.engine_class_instance = pf->consumer.engine_class_instance,
++				.id = pf->consumer.id,
++			},
++			.producer = pf->producer,
++		};
++		struct xe_pagefault *report_pf = pf;
+ 		int err = 0;
+ 		bool invalidated = false;
+-
++		bool cache_hit = false;
+ 
+ 		/* Last fault same address, ack immediately */
+ 		if (xe_pagefault_match(pf, cache_start, cache_end, cache_asid)) {
+-			xe_gt_stats_incr(gt, XE_GT_STATS_ID_LAST_PAGEFAULT_COUNT, 1);
++			cache_hit = true;
+ 			prelim_xe_eudebug_pagefault_set_private(pf, NULL);
+ 			goto ack_fault;
+ 		}
+ 
+ 		err = xe_pagefault_service(pf);
+ 
+-		if (err) {
+-			if (!(pf->consumer.access_type & XE_PAGEFAULT_ACCESS_PREFETCH)) {
+-				xe_pagefault_save_to_vm(gt_to_xe(gt), pf);
+-				xe_pagefault_cache_start_invalidate(cache_start);
+-				xe_pagefault_print(pf);
+-				xe_log_err_info(pf->gt, PAGEFAULT, err, "Unsuccessful response\n");
+-			} else {
+-				xe_gt_stats_incr(pf->gt, XE_GT_STATS_ID_INVALID_PREFETCH_PAGEFAULT_COUNT, 1);
+-				xe_gt_dbg(pf->gt, "Prefetch Fault response: Unsuccessful %pe\n",
+-
+-						ERR_PTR(err));
+-			}
+-		} else {
++		if (!err) {
+ 			/* Cache valid fault locally */
+ 			cache_start = xe_pagefault_start_addr(pf);
+ 			cache_end = xe_pagefault_end_addr(pf);
+@@ -744,6 +745,45 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+ 		}
+ 
+ ack_fault:
++		/*
++		 * Cache hits bypass fault service. Serialize successful replies
++		 * with VM close, including replies to matching chained faults.
++		 */
++		if (!err) {
++			report_pf = &original;
++			ack_vm = xe_pagefault_asid_to_vm(report_pf, asid);
++			if (IS_ERR(ack_vm)) {
++				err = PTR_ERR(ack_vm);
++				ack_vm = NULL;
++			} else {
++				down_read(&ack_vm->lock);
++				if (xe_vm_is_closed_or_banned(ack_vm)) {
++					xe_pagefault_set_error(report_pf,
++								   XE_PAGEFAULT_ERROR_VM_CLOSED);
++					err = -ENOENT;
++					up_read(&ack_vm->lock);
++					xe_vm_put(ack_vm);
++					ack_vm = NULL;
++				}
++			}
++		}
++
++		if (err) {
++			xe_pagefault_cache_start_invalidate(cache_start);
++			if (!(report_pf->consumer.access_type & XE_PAGEFAULT_ACCESS_PREFETCH)) {
++				xe_pagefault_save_to_vm(gt_to_xe(gt), report_pf);
++				xe_pagefault_print(report_pf);
++				xe_log_err_info(gt, PAGEFAULT, err, "Unsuccessful response\n");
++			} else {
++				xe_gt_stats_incr(gt,
++						 XE_GT_STATS_ID_INVALID_PREFETCH_PAGEFAULT_COUNT, 1);
++				xe_gt_dbg(gt, "Prefetch Fault response: Unsuccessful %pe\n",
++					  ERR_PTR(err));
++			}
++		} else if (cache_hit) {
++			xe_gt_stats_incr(gt, XE_GT_STATS_ID_LAST_PAGEFAULT_COUNT, 1);
++		}
++
+ 		/*
+ 		 * set private after xe_pagefault_service() since eudebug could swap
+ 		 * the pf->producer.private field. Also needed when cache was hit.
+@@ -791,6 +831,11 @@ static void xe_pagefault_queue_work(struct work_struct *w)
+ 		}
+ 		ops->ack_fault_end(private, asid, err);
+ 
++		if (ack_vm) {
++			up_read(&ack_vm->lock);
++			xe_vm_put(ack_vm);
++		}
++
+ 		if (time_after(jiffies, threshold)) {
+ 			queue_work(xe->usm.pagefault_wq, w);
+ 			break;
 diff --git a/drivers/gpu/drm/xe/xe_svm.c b/drivers/gpu/drm/xe/xe_svm.c
 index dd69ff5b8..72cd93a94 100644
 --- a/drivers/gpu/drm/xe/xe_svm.c
@@ -78,10 +206,10 @@ index dd69ff5b8..72cd93a94 100644
  						   mmu_range);
  }
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index f1eb3c2ed..0099212c6 100644
+index fc81ac2aa..9d3a7cb46 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
-@@ -2086,6 +2086,20 @@ static void xe_vm_close(struct xe_vm *vm)
+@@ -2105,6 +2105,20 @@ static void xe_vm_close(struct xe_vm *vm)
  		drm_dev_exit(idx);
  }
  
@@ -102,7 +230,7 @@ index f1eb3c2ed..0099212c6 100644
  void xe_vm_close_and_put(struct xe_vm *vm)
  {
  	LIST_HEAD(contested);
-@@ -2394,6 +2408,7 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
+@@ -2413,6 +2427,7 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
  
  	if (!err) {
  		prelim_xe_eudebug_vm_destroy(xef, vm);
@@ -111,10 +239,10 @@ index f1eb3c2ed..0099212c6 100644
  	}
  
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index 7dcf5c98c..d86087814 100644
+index 750140462..bf6c9ce3e 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
-@@ -59,6 +59,11 @@ static inline bool xe_vm_is_closed(struct xe_vm *vm)
+@@ -62,6 +62,11 @@ static inline bool xe_vm_is_closed(struct xe_vm *vm)
  	return !vm->size;
  }
  
@@ -126,7 +254,7 @@ index 7dcf5c98c..d86087814 100644
  static inline bool xe_vm_is_banned(struct xe_vm *vm)
  {
  	return vm->flags & XE_VM_FLAG_BANNED;
-@@ -67,7 +72,8 @@ static inline bool xe_vm_is_banned(struct xe_vm *vm)
+@@ -70,7 +75,8 @@ static inline bool xe_vm_is_banned(struct xe_vm *vm)
  static inline bool xe_vm_is_closed_or_banned(struct xe_vm *vm)
  {
  	lockdep_assert_held(&vm->lock);
@@ -136,7 +264,7 @@ index 7dcf5c98c..d86087814 100644
  }
  
  struct xe_vma *
-@@ -214,6 +220,7 @@ int xe_vm_get_property_ioctl(struct drm_device *dev, void *data,
+@@ -217,6 +223,7 @@ int xe_vm_get_property_ioctl(struct drm_device *dev, void *data,
  			     struct drm_file *file);
  
  void xe_vm_close_and_put(struct xe_vm *vm);
@@ -145,7 +273,7 @@ index 7dcf5c98c..d86087814 100644
  static inline bool xe_vm_in_fault_mode(struct xe_vm *vm)
  {
 diff --git a/drivers/gpu/drm/xe/xe_vm_types.h b/drivers/gpu/drm/xe/xe_vm_types.h
-index e1eddf18b..997bf3421 100644
+index ac1b7404c..3c1828b5f 100644
 --- a/drivers/gpu/drm/xe/xe_vm_types.h
 +++ b/drivers/gpu/drm/xe/xe_vm_types.h
 @@ -299,6 +299,7 @@ struct xe_vm {

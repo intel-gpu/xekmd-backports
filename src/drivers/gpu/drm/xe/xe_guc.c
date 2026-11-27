@@ -906,10 +906,8 @@ int xe_guc_init_post_hwconfig(struct xe_guc *guc)
 	if (ret)
 		return ret;
 
-	ret = xe_guc_pc_init(&guc->pc);
 	ret = xe_guc_buf_cache_init_with_size(&guc->buf,
 					      guc_additional_cache_size(xe));
-
 	if (ret)
 		return ret;
 
@@ -923,7 +921,6 @@ int xe_guc_init_post_hwconfig(struct xe_guc *guc)
 	 */
 	devm_remove_action(xe->drm.dev, guc_fini_hw, guc);
 	ret = devm_add_action_or_reset(xe->drm.dev, guc_fini_hw, guc);
-
 	if (ret)
 		return ret;
 

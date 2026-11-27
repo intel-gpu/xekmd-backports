@@ -114,6 +114,9 @@ void xe_bo_notifier_unprepare_all_pinned(struct xe_device *xe)
  */
 int xe_bo_evict_all_user(struct xe_device *xe)
 {
+	struct ttm_operation_ctx ctx = {
+		.gfp_retry_mayfail = true,
+	};
 	struct ttm_device *bdev = &xe->ttm;
 	u32 mem_type;
 	int ret;
@@ -135,7 +138,7 @@ int xe_bo_evict_all_user(struct xe_device *xe)
 			continue;
 
 		if (man) {
-			ret = ttm_resource_manager_evict_all(bdev, man);
+			ret = ttm_resource_manager_evict_all_ctx(bdev, man, &ctx);
 			if (ret)
 				return ret;
 		}

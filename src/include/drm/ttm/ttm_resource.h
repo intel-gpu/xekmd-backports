@@ -42,6 +42,7 @@ struct dmem_cgroup_device;
 struct dmem_cgroup_region;
 struct drm_printer;
 struct ttm_device;
+struct ttm_operation_ctx;
 struct ttm_resource_manager;
 struct ttm_resource;
 struct ttm_place;
@@ -487,6 +488,10 @@ void ttm_resource_manager_set_dmem_region(struct ttm_resource_manager *man,
 
 int ttm_resource_manager_dmem_reclaim(struct dmem_cgroup_pool_state *pool,
 				      u64 target_bytes, void *priv);
+
+int ttm_resource_manager_evict_all_ctx(struct ttm_device *bdev,
+				       struct ttm_resource_manager *man,
+				       struct ttm_operation_ctx *ctx);
 
 int ttm_resource_manager_evict_all(struct ttm_device *bdev,
 				   struct ttm_resource_manager *man);

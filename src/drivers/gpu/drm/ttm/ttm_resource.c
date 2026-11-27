@@ -568,24 +568,26 @@ void ttm_resource_manager_init(struct ttm_resource_manager *man,
 }
 EXPORT_SYMBOL(ttm_resource_manager_init);
 
-/*
- * ttm_resource_manager_evict_all
- *
+/**
+ * ttm_resource_manager_evict_all_ctx() - Evict all objects from a manager
  * @bdev: device to use
  * @man: manager to use
+ * @ctx: operation context for the eviction
  *
  * Evict all the objects out of a memory manager until it is empty.
  * Part of memory manager cleanup sequence.
+ *
+ * Return: 0 on success, negative error code on failure.
  */
-int ttm_resource_manager_evict_all(struct ttm_device *bdev,
-				   struct ttm_resource_manager *man)
+int ttm_resource_manager_evict_all_ctx(struct ttm_device *bdev,
+				       struct ttm_resource_manager *man,
+				       struct ttm_operation_ctx *ctx)
 {
-	struct ttm_operation_ctx ctx = { };
 	struct dma_fence *fence;
 	int ret, i;
 
 	do {
-		ret = ttm_bo_evict_first(bdev, man, &ctx);
+		ret = ttm_bo_evict_first(bdev, man, ctx);
 		cond_resched();
 	} while (!ret);
 
@@ -600,7 +602,7 @@ int ttm_resource_manager_evict_all(struct ttm_device *bdev,
 		if (fence && !dma_fence_is_signaled(fence)) {
 			dma_fence_get(fence);
 			spin_unlock(&man->eviction_lock);
-			ret = dma_fence_wait(fence, false);
+			ret = dma_fence_wait(fence, ctx->interruptible);
 			dma_fence_put(fence);
 			if (ret)
 				return ret;
@@ -610,6 +612,25 @@ int ttm_resource_manager_evict_all(struct ttm_device *bdev,
 	spin_unlock(&man->eviction_lock);
 
 	return ret;
+}
+EXPORT_SYMBOL(ttm_resource_manager_evict_all_ctx);
+
+/**
+ * ttm_resource_manager_evict_all() - Evict all objects from a manager
+ * @bdev: device to use
+ * @man: manager to use
+ *
+ * Same as ttm_resource_manager_evict_all_ctx() using a default,
+ * non-interruptible operation context.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int ttm_resource_manager_evict_all(struct ttm_device *bdev,
+				   struct ttm_resource_manager *man)
+{
+	struct ttm_operation_ctx ctx = { };
+
+	return ttm_resource_manager_evict_all_ctx(bdev, man, &ctx);
 }
 EXPORT_SYMBOL(ttm_resource_manager_evict_all);
 

@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Sk Anirban <sk.anirban@intel.com>
+Date: Wed, 25 Nov 2026 18:20:13 +0530
+Subject: [PATCH] drm/xe: Skip OCODE late bind if already running
+
+OCODE keeps running across driver reloads and warm resets. Despite
+this, the late-bind worker re-uploads it on every probe and resume.
+The firmware is not expected to handle back-to-back reloads, and the
+extra delay of reloading an active OCODE can lead to firmware issues.
+
+Check the OCODE status through SysCtrl in the late-bind worker before
+uploading, and skip the upload if OCODE is already initialized. If the
+status query fails or OCODE is not ready, fall back to the existing
+upload.
+
+As a result, a newer OCODE blob is only used after the next power
+cycle. Comparing the running version against the blob is left for
+later, once firmware provides a reliable way to read it.
+
+v2: Update commit message (Rodrigo)
+
+Signed-off-by: Sk Anirban <sk.anirban@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Link: https://patch.msgid.link/20261125125011.192907-5-sk.anirban@intel.com
+Signed-off-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+(cherry-picked from 3cbb940f5470d7eeb4c3ea6c7dd80db9ff5d4adc linux-next)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_late_bind_fw.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/gpu/drm/xe/xe_late_bind_fw.c b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+index 355d7c841871..dfff1693bf1f 100644
+--- a/drivers/gpu/drm/xe/xe_late_bind_fw.c
++++ b/drivers/gpu/drm/xe/xe_late_bind_fw.c
+@@ -258,6 +258,13 @@ static void xe_late_bind_work(struct work_struct *work)
+ 
+ 	xe_device_assert_mem_access(xe);
+ 
++	/* TODO: Compare the running OCODE version at probe when available. */
++	if (lbfw->type == INTEL_LB_TYPE_OCODE && xe_sysctrl_is_oobmsm_fw_ready(xe)) {
++		drm_dbg(&xe->drm, "%s firmware already loaded, skipping\n",
++			fw_id_to_name[lbfw->id]);
++		goto out;
++	}
++
+ 	/* we can queue this before the component is bound */
+ 	for (slept = 0; slept < LB_INIT_TIMEOUT_MS; slept += 100) {
+ 		if (late_bind->component.ops)
+-- 
+2.43.0
+

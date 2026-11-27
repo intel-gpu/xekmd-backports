@@ -59,6 +59,17 @@ static int send_tlb_inval_all(struct xe_tlb_inval *tlb_inval, u32 seqno)
 	return send_tlb_inval(guc, action, ARRAY_SIZE(action));
 }
 
+/*
+ * The GuC sets Cache Flush (bit 39) in the HW TLB invalidation descriptor only
+ * when FLUSH_CACHE is requested in the H2G. On CRI, Cache Flush must not be set
+ * for the GuC (global engine) invalidation: the descriptor can stay outstanding
+ * in HW, which blocks all following descriptors and stalls the GuC CT.
+ */
+static bool ggtt_inval_needs_cache_flush(struct xe_device *xe)
+{
+	return xe->info.platform != XE_CRESCENTISLAND;
+}
+
 static int send_tlb_inval_ggtt(struct xe_tlb_inval *tlb_inval, u32 seqno)
 {
 	struct xe_guc *guc = tlb_inval->private;
@@ -74,7 +85,8 @@ static int send_tlb_inval_ggtt(struct xe_tlb_inval *tlb_inval, u32 seqno)
 		u32 action[] = {
 			XE_GUC_ACTION_TLB_INVALIDATION,
 			seqno,
-			MAKE_INVAL_OP(XE_GUC_TLB_INVAL_GUC),
+			MAKE_INVAL_OP_FLUSH(XE_GUC_TLB_INVAL_GUC,
+					    ggtt_inval_needs_cache_flush(xe)),
 		};
 
 		return send_tlb_inval(guc, action, ARRAY_SIZE(action));

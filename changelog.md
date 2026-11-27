@@ -40,6 +40,19 @@ This format provides direct traceability to the Xe KMD Backport and OOT-backport
 
 | Release version | Source | SHA | Commit header |
 |---|---|---|---|
+| `xebr_v7.3.14_261118.15` | | | |
+| | ML v3 | [Patchwork](<https://patchwork.freedesktop.org/patch/772343/?series=179104&rev=3>) | &#91;TEMP&#93; drm/xe/xe_ras: Skip gpu_health sysfs commands when wedged |
+| | linux-next | [`50da19223`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=50da192235960092901cec01225a9c723b65aeb3>) | drm/xe/hwmon: Expose powerX_cap_max |
+| | ML | [Patchwork](<https://patch.msgid.link/20261126055530.1629019-2-karthik.poosa@intel.com>) | drm/xe/hwmon: Improve mailbox power limit init and visibility |
+| | linux-next | [`0ef08c075`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=0ef08c0750b3a2c67848c2af1b837b7ba9f449d0>) | drm/xe/survivability: Fix infinite loop in aux info traversal |
+| | linux-next | [`e272e20be`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=e272e20beaaaf929b2a2e0a6ba582fd4e3616675>) | drm/xe: Add debug configfs option to force OCODE load |
+| | linux-next | [`3cbb940f5`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=3cbb940f5470d7eeb4c3ea6c7dd80db9ff5d4adc>) | drm/xe: Skip OCODE late bind if already running |
+| | linux-next | [`72f716775`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=72f716775dae43f2f6ea042bc97f6552f5240db7>) | drm/xe/pf: Reset PF scheduling defaults on auto provisioning restore |
+| | ML v1 | [Patchwork](<https://patchwork.freedesktop.org/series/176481/#rev1>) | &#91;TEMP&#93; drm/ttm, drm/xe: Don't invoke the OOM killer when evicting VRAM at suspend |
+| | linux-next | [`f37ae3a14`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=f37ae3a14cb7d3d9eca80096d86b8b71cf73718a>) | drm/xe/cper: Add GUIDs for device IDs 6753-6756 |
+| | linux-next | [`c20678d43`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=c20678d43df7666c9493832a03677e735bbc374c>) | drm/xe/guc: Reset TLB invalidation state in submit fini |
+| | linux-next | [`cfbd165a7`](<https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/commit/?id=cfbd165a74a5c554e2b003bb0361e9b51efd36c8>) | drm/xe/guc: Reset GuC before unmapping its post-hwconfig buffers |
+| | kernel-backport/main | [`699978b31`](<https://github.com/intel-gpu/xekmd-backports/commit/699978b31a64ca6b1cc95014ae4cff2be64e1a91>) | &#91;TEMP&#93; drm/xe/guc: Don't request cache flush on GGTT TLB invalidation on CRI |
 | `xebr_v7.3.9_261118.15` | | | |
 | | oot-backport/main | [`7dfddbedc`](<https://github.com/intel-gpu/xekmd-backports/commit/7dfddbedc1a090dbc1c5ebd8da8f18db11aaadfa>) | drm/sched: keep fence names safe on legacy kernels |
 | | | `97e79823f` | README: Update branch with kernel info |

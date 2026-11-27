@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Akanksha Hotta <akanksha.hotta@intel.com>
+Date: Wed, 27 Nov 2026 13:43:14 +0530
+Subject: [PATCH] [TEMP] drm/xe/xe_ras: Skip gpu_health sysfs commands when wedged
+
+Accessing the gpu_health sysfs attribute sends a command to the system
+controller. Add a guard to skip the command when the device is wedged
+and not in XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET mode.
+
+Signed-off-by: Ravi Kishore Koppuravuri <ravi.kishore.koppuravuri@intel.com>
+(cherry-picked from https://patchwork.freedesktop.org/patch/772343/?series=179104&rev=3)
+Signed-off-by: Akanksha Hotta <akanksha.hotta@intel.com>
+---
+ drivers/gpu/drm/xe/xe_ras.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+diff --git a/drivers/gpu/drm/xe/xe_ras.c b/drivers/gpu/drm/xe/xe_ras.c
+index 9b04be3405ca..0c3238cbe446 100644
+--- a/drivers/gpu/drm/xe/xe_ras.c
++++ b/drivers/gpu/drm/xe/xe_ras.c
+@@ -1298,6 +1298,9 @@ static ssize_t gpu_health_show(struct device *dev, struct device_attribute *attr
+ 	size_t rlen;
+ 	int ret;
+ 
++	if (xe_wedged(xe) && !xe_wedge_mode_is_no_reset(xe))
++		return -ECANCELED;
++
+ 	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_GET_HEALTH,
+ 				  &request, sizeof(request), &response, sizeof(response));
+ 	guard(xe_pm_runtime)(xe);
+@@ -1341,6 +1344,9 @@ static ssize_t gpu_health_store(struct device *dev, struct device_attribute *att
+ 	if (state < 0)
+ 		return -EINVAL;
+ 
++	if (xe_wedged(xe) && !xe_wedge_mode_is_no_reset(xe))
++		return -ECANCELED;
++
+ 	request.health = state;
+ 
+ 	xe_sysctrl_create_command(&command, XE_SYSCTRL_GROUP_GFSP, XE_SYSCTRL_CMD_SET_HEALTH,

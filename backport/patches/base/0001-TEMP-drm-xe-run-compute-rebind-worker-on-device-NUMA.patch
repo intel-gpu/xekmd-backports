@@ -1,4 +1,4 @@
-From 4f884108cdbbc743c8767f209af3b36fbf89ab02 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Matthew Auld <matthew.auld@intel.com>
 Date: Fri, 20 Nov 2026 13:02:21 +0000
 Subject: [PATCH] [TEMP] drm/xe: run compute rebind worker on device NUMA node
@@ -40,18 +40,18 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  4 files changed, 16 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index c88bd241d..f79edde94 100644
+index b59482260..1ca4cec86 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -11,6 +11,7 @@
- #include <linux/jiffies.h>
+@@ -10,6 +10,7 @@
+ #include <linux/fault-inject.h>
  #include <linux/nodemask.h>
  #include <linux/units.h>
 +#include <linux/workqueue.h>
  
  #include <drm/drm_client.h>
  #include <drm/drm_gem_ttm_helper.h>
-@@ -535,6 +536,9 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
+@@ -513,6 +514,9 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
  	if (xe->preempt_fence_wq)
  		destroy_workqueue(xe->preempt_fence_wq);
  
@@ -61,7 +61,7 @@ index c88bd241d..f79edde94 100644
  	if (xe->ordered_wq)
  		destroy_workqueue(xe->ordered_wq);
  
-@@ -668,10 +672,11 @@ int xe_device_init_early(struct xe_device *xe)
+@@ -646,10 +650,11 @@ int xe_device_init_early(struct xe_device *xe)
  
  	xe->preempt_fence_wq = alloc_ordered_workqueue("xe-preempt-fence-wq",
  						       WQ_MEM_RECLAIM);
@@ -91,7 +91,7 @@ index a773afc5e..285cb768a 100644
  
  	/** @unordered_wq: used to serialize unordered work */
 diff --git a/drivers/gpu/drm/xe/xe_vm.c b/drivers/gpu/drm/xe/xe_vm.c
-index dcdc77511..cf9833d18 100644
+index ac4c3d06c..b0f3b2372 100644
 --- a/drivers/gpu/drm/xe/xe_vm.c
 +++ b/drivers/gpu/drm/xe/xe_vm.c
 @@ -511,7 +511,7 @@ static bool vm_suspend_rebind_worker(struct xe_vm *vm)
@@ -104,7 +104,7 @@ index dcdc77511..cf9833d18 100644
  
  #if IS_ENABLED(CONFIG_DRM_XE_USERPTR_INVAL_INJECT)
 diff --git a/drivers/gpu/drm/xe/xe_vm.h b/drivers/gpu/drm/xe/xe_vm.h
-index d6e0e4c96..fb770475e 100644
+index 7dcf5c98c..750140462 100644
 --- a/drivers/gpu/drm/xe/xe_vm.h
 +++ b/drivers/gpu/drm/xe/xe_vm.h
 @@ -6,6 +6,9 @@
@@ -117,7 +117,7 @@ index d6e0e4c96..fb770475e 100644
  #include "xe_assert.h"
  #include "xe_bo_types.h"
  #include "xe_macros.h"
-@@ -274,7 +277,8 @@ int xe_vm_validate_protected(struct xe_vm *vm);
+@@ -262,7 +265,8 @@ int xe_vm_validate_protected(struct xe_vm *vm);
  static inline void xe_vm_queue_rebind_worker(struct xe_vm *vm)
  {
  	xe_assert(vm->xe, xe_vm_in_preempt_fence_mode(vm));

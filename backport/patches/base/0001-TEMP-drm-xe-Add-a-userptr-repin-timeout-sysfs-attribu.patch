@@ -1,4 +1,4 @@
-From b6f543fc9e1e861ef5bd527822dd583858e9798f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Thomas=20Hellstr=C3=B6m?= <thomas.hellstrom@linux.intel.com>
 Date: Fri, 20 Nov 2026 13:02:19 +0000
 Subject: [PATCH] [TEMP] drm/xe: Add a userptr repin timeout sysfs attribute
@@ -34,18 +34,18 @@ Signed-off-by: Pravalika Gurram <pravalika.gurram@intel.com>
  4 files changed, 73 insertions(+)
 
 diff --git a/drivers/gpu/drm/xe/xe_device.c b/drivers/gpu/drm/xe/xe_device.c
-index ededbe053..c88bd241d 100644
+index 7eb7e4d59..b59482260 100644
 --- a/drivers/gpu/drm/xe/xe_device.c
 +++ b/drivers/gpu/drm/xe/xe_device.c
-@@ -9,6 +9,7 @@
+@@ -8,6 +8,7 @@
+ #include <linux/aperture.h>
  #include <linux/delay.h>
  #include <linux/fault-inject.h>
- #include <linux/jiffies.h>
 +#include <linux/nodemask.h>
  #include <linux/units.h>
  
  #include <drm/drm_client.h>
-@@ -584,6 +585,10 @@ struct xe_device *xe_device_create(struct pci_dev *pdev)
+@@ -562,6 +563,10 @@ struct xe_device *xe_device_create(struct pci_dev *pdev)
  	if (err)
  		return ERR_PTR(err);
  
